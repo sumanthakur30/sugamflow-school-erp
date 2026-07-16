@@ -1,0 +1,129 @@
+<div class="page">
+  <header class="page-head">
+    <h2>Students</h2>
+    <p>
+      Config-driven student master — form <code>{{ formKey }}</code>, guardians from
+      <code>{{ parentFormKey }}</code> (FEATURE_STUDENT_MASTER).
+    </p>
+  </header>
+
+  @if (error) {
+    <p class="error panel" role="alert">{{ error }}</p>
+  }
+
+  @if (loading) {
+    <p class="panel">Loading student configuration…</p>
+  } @else if (!featureEnabled) {
+    <p class="panel">Student master is not enabled for this plan (FEATURE_STUDENT_MASTER).</p>
+  } @else {
+    <div class="student-layout">
+      <section class="panel">
+        <h3>Roster</h3>
+        @if (!students.length) {
+          <p class="muted">No students yet. Approve an admission application to enroll.</p>
+        }
+        <ul class="app-list">
+          @for (row of students; track row.id) {
+            <li>
+              <button
+                type="button"
+                class="app-row"
+                [class.active]="selected?.id === row.id"
+                (click)="select(row)"
+              >
+                <strong>{{ row.answers?.fullName || row.id }}</strong>
+                <span>
+                  {{ row.admissionNo || '-' }} · {{ row.status }} ·
+                  {{ row.guardianCount || 0 }} guardian(s)
+                </span>
+              </button>
+            </li>
+          }
+        </ul>
+      </section>
+
+      <section class="panel">
+        <h3>Detail</h3>
+        @if (!selected) {
+          <p class="muted">Select a student.</p>
+        } @else {
+          <p>
+            <strong>{{ selected.status }}</strong>
+            @if (selected.admissionNo) {
+              - {{ selected.admissionNo }}
+            }
+          </p>
+          @if (selected.sourceApplicationId) {
+            <p class="muted">
+              From admission
+              <a [routerLink]="['/admin/admission']">{{ selected.sourceApplicationId }}</a>
+            </p>
+          }
+          <pre class="answers">{{ selected.answers | json }}</pre>
+
+          <h4>Parents / Guardians</h4>
+          @if (!guardians().length) {
+            <p class="muted">No guardians linked yet.</p>
+          }
+          <ul class="guardian-list">
+            @for (g of guardians(); track $index) {
+              <li class="guardian-row">
+                <div>
+                  <strong>{{ g.fullName || 'Guardian' }}</strong>
+                  <span class="muted">
+                    {{ g.relation || '' }}
+                    @if (g.isPrimary) {
+                      · primary
+                    }
+                    @if (g.mobile) {
+                      · {{ g.mobile }}
+                    }
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  class="danger"
+                  (click)="removeGuardian($index)"
+                  [disabled]="savingGuardians"
+                >
+                  Remove
+                </button>
+              </li>
+            }
+          </ul>
+
+          <h4>Add guardian</h4>
+          <div class="grid two">
+            @for (field of parentFields; track field.key) {
+              <label>
+                {{ field.label }}
+                @if (field.mandatory) {
+                  <span class="req">*</span>
+                }
+                @if (field.type === 'CHECKBOX') {
+                  <input type="checkbox" [(ngModel)]="guardianDraft[field.key]" [name]="field.key" />
+                } @else if (field.type === 'EMAIL') {
+                  <input type="email" [(ngModel)]="guardianDraft[field.key]" [name]="field.key" />
+                } @else {
+                  <input [(ngModel)]="guardianDraft[field.key]" [name]="field.key" />
+                }
+              </label>
+            }
+          </div>
+          <div class="actions">
+            <button type="button" (click)="addGuardian()" [disabled]="savingGuardians">
+              {{ savingGuardians ? 'Saving…' : 'Add guardian' }}
+            </button>
+          </div>
+
+          <h4>History</h4>
+          <ul class="history">
+            @for (h of selected.history; track h.at) {
+              <li>{{ h.at }} — {{ h.type }}: {{ h.message }}</li>
+            }
+          </ul>
+        }
+      </section>
+    </div>
+  }
+</div>

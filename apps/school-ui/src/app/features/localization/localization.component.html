@@ -1,0 +1,29 @@
+<section class="page" *ngIf="locale as l">
+  <div class="page-head">
+    <h2>Localization Engine</h2>
+    <p>Language, currency, date/time, grades, paper size — branch overrideable.</p>
+  </div>
+  <div class="panel grid two">
+    <label>Language<input [(ngModel)]="l.language" /></label>
+    <label>Currency<input [(ngModel)]="l.currency" /></label>
+    <label>Date Format<input [(ngModel)]="l.dateFormat" /></label>
+    <label>Time Format<input [(ngModel)]="l.timeFormat" /></label>
+    <label>Time Zone<input [(ngModel)]="l.timeZone" /></label>
+    <label>Academic Year Format<input [(ngModel)]="l.academicYearFormat" /></label>
+    <label>Marks Format<input [(ngModel)]="l.marksFormat" /></label>
+    <label>Grade System<input [(ngModel)]="l.gradeSystem" /></label>
+    <label>Number Format<input [(ngModel)]="l.numberFormat" /></label>
+    <label>Address Format<input [(ngModel)]="l.addressFormat" /></label>
+    <label>Paper Size
+      <select [(ngModel)]="l.paperSize">
+        <option>A4</option>
+        <option>Letter</option>
+        <option>Legal</option>
+      </select>
+    </label>
+  </div>
+  <div class="actions">
+    <button type="button" (click)="save()">Save</button>
+    @if (status) { <span class="status">{{ status }}</span> }
+  </div>
+</section>

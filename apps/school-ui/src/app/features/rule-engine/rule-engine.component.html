@@ -1,0 +1,104 @@
+<section class="page">
+  <div class="page-head">
+    <h2>Rule Engine</h2>
+    <p>IF / THEN business rules — field, operator, value, and action — evaluated at runtime.</p>
+  </div>
+
+  @if (error) {
+    <p class="error panel" role="alert">{{ error }}</p>
+  }
+  @if (status) {
+    <p class="status panel">{{ status }}</p>
+  }
+
+  <div class="editor-layout">
+    <section class="panel">
+      <div class="actions" style="margin-top: 0">
+        <button type="button" (click)="startNew()">New rule</button>
+      </div>
+      <ul class="editor-list">
+        @for (rule of rules; track rule.id) {
+          <li>
+            <button
+              type="button"
+              class="editor-row"
+              [class.active]="!isNew && rule.id === selectedId"
+              (click)="select(rule.id)"
+            >
+              <strong>{{ rule.name || rule.id }}</strong>
+              <span>{{ rule.id }} · {{ rule.enabled === false ? 'off' : 'on' }}</span>
+            </button>
+          </li>
+        }
+      </ul>
+    </section>
+
+    <section class="panel">
+      @if (!draft) {
+        <p class="muted">Select a rule or create a new one.</p>
+      } @else {
+        <h3>{{ isNew ? 'New rule' : 'Edit rule' }}</h3>
+        <div class="grid two">
+          <label>
+            Rule id
+            <input [(ngModel)]="draft.id" name="id" [readonly]="!isNew" />
+          </label>
+          <label>
+            Name
+            <input [(ngModel)]="draft.name" name="name" />
+          </label>
+        </div>
+        <div class="toggle">
+          <span>Enabled</span>
+          <input type="checkbox" [(ngModel)]="draft.enabled" name="enabled" />
+        </div>
+
+        <h3>When</h3>
+        <div class="grid three">
+          <label>
+            Field path
+            <input [(ngModel)]="draft.when.field" name="whenField" placeholder="attendance.percent" />
+          </label>
+          <label>
+            Operator
+            <select [(ngModel)]="draft.when.op" name="whenOp">
+              @for (op of ops; track op) {
+                <option [value]="op">{{ op }}</option>
+              }
+            </select>
+          </label>
+          <label>
+            Value
+            <input [(ngModel)]="draft.when.value" name="whenValue" />
+          </label>
+        </div>
+
+        <h3>Then</h3>
+        <label>
+          Action
+          <input [(ngModel)]="draft.then.action" name="thenAction" placeholder="BLOCK_EXAM" />
+        </label>
+
+        <div class="actions">
+          <button type="button" (click)="save()" [disabled]="busy">
+            {{ busy ? 'Saving…' : 'Save rule' }}
+          </button>
+        </div>
+      }
+    </section>
+  </div>
+
+  <section class="panel">
+    <h3>Evaluate context</h3>
+    <label>
+      JSON context
+      <textarea rows="8" [(ngModel)]="evalContext" name="evalContext"></textarea>
+    </label>
+    <div class="actions">
+      <button type="button" class="secondary" (click)="evaluate()">Evaluate</button>
+    </div>
+    @if (evalResult) {
+      <pre>{{ evalResult | json }}</pre>
+    }
+  </section>
+</section>

@@ -1,0 +1,109 @@
+<section class="page" *ngIf="theme as t">
+  <div class="page-head">
+    <h2>Design Studio</h2>
+    <p>White-label branding and theme — changes apply live (preview) and persist on Save / Publish.</p>
+  </div>
+
+  <div class="panel live-swatch" aria-label="Live theme preview">
+    <span class="swatch" [style.background]="t.colors?.['primary']"></span>
+    <span class="swatch" [style.background]="t.colors?.['secondary']"></span>
+    <span class="swatch" [style.background]="t.colors?.['accent']"></span>
+    <span class="swatch" [style.background]="t.colors?.['menu']"></span>
+    <span class="hint">Live preview on this page and shell</span>
+  </div>
+
+  <div class="panel">
+    <h3>Branding</h3>
+    <div class="grid two">
+      <label>School Name<input [(ngModel)]="t.branding!['schoolName']" (ngModelChange)="preview()" /></label>
+      <label>Tagline<input [(ngModel)]="t.branding!['productTagline']" (ngModelChange)="preview()" /></label>
+      <label>School Logo URL<input [(ngModel)]="t.branding!['schoolLogo']" (ngModelChange)="preview()" /></label>
+      <label>Login Logo URL<input [(ngModel)]="t.branding!['loginLogo']" (ngModelChange)="preview()" /></label>
+      <label>Mobile Splash<input [(ngModel)]="t.branding!['mobileSplash']" /></label>
+      <label>Favicon URL<input [(ngModel)]="t.branding!['favicon']" (ngModelChange)="preview()" /></label>
+      <label>Watermark<input [(ngModel)]="t.branding!['watermark']" /></label>
+      <label>Footer<input [(ngModel)]="t.branding!['footer']" (ngModelChange)="preview()" /></label>
+      <label>Report Header<textarea rows="2" [(ngModel)]="t.branding!['reportHeader']"></textarea></label>
+      <label>Report Footer<textarea rows="2" [(ngModel)]="t.branding!['reportFooter']"></textarea></label>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h3>Colors</h3>
+    <div class="grid three">
+      @for (key of colorKeys; track key) {
+        <label
+          >{{ key }}
+          <input type="color" [(ngModel)]="t.colors![key]" (ngModelChange)="preview()" />
+        </label>
+      }
+    </div>
+    <div class="toggle">
+      <span>Dark Mode</span>
+      <input type="checkbox" [(ngModel)]="t.darkModeEnabled" />
+    </div>
+    <div class="toggle">
+      <span>Light Mode</span>
+      <input type="checkbox" [(ngModel)]="t.lightModeEnabled" />
+    </div>
+  </div>
+
+  <div class="panel">
+    <h3>Typography & Shape</h3>
+    <div class="grid two">
+      <label
+        >Font Family<input
+          [(ngModel)]="t.typography!['fontFamily']"
+          (ngModelChange)="preview()"
+      /></label>
+      <label
+        >Font Size<input [(ngModel)]="t.typography!['fontSize']" (ngModelChange)="preview()"
+      /></label>
+      <label>Heading Style<input [(ngModel)]="t.typography!['headingStyle']" /></label>
+      <label>Button Style<input [(ngModel)]="t.typography!['buttonStyle']" /></label>
+      <label
+        >Border Radius<input
+          [(ngModel)]="t.typography!['borderRadius']"
+          (ngModelChange)="preview()"
+      /></label>
+      <label>Card Style<input [(ngModel)]="t.typography!['cardStyle']" /></label>
+      <label>Spacing<input [(ngModel)]="t.typography!['spacing']" /></label>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h3>Login Screen</h3>
+    <div class="grid two">
+      <label
+        >Background Image URL<input
+          [(ngModel)]="t.loginScreen!['backgroundImage']"
+          (ngModelChange)="preview()"
+      /></label>
+      <label>Video Background<input [(ngModel)]="t.loginScreen!['videoBackground']" /></label>
+    </div>
+    <div class="toggle">
+      <span>Announcement Area</span>
+      <input type="checkbox" [(ngModel)]="t.loginScreen!['announcementArea']" (ngModelChange)="preview()" />
+    </div>
+    <div class="toggle">
+      <span>Notice Board</span>
+      <input type="checkbox" [(ngModel)]="t.loginScreen!['noticeBoard']" />
+    </div>
+    <div class="toggle">
+      <span>Holiday Banner</span>
+      <input type="checkbox" [(ngModel)]="t.loginScreen!['holidayBanner']" />
+    </div>
+    <div class="toggle">
+      <span>Admission Banner</span>
+      <input type="checkbox" [(ngModel)]="t.loginScreen!['admissionBanner']" (ngModelChange)="preview()" />
+    </div>
+  </div>
+
+  <div class="actions">
+    <button type="button" (click)="save()">Save Draft</button>
+    <button type="button" class="secondary" (click)="publish()">Publish</button>
+    @if (status) {
+      <span class="status">{{ status }}</span>
+    }
+  </div>
+</section>

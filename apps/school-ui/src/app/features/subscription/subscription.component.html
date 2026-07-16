@@ -1,0 +1,34 @@
+<section class="page">
+  <div class="page-head">
+    <h2>Subscription Configuration</h2>
+    <p>Plans, limits, and feature flags — no hardcoded entitlements in domain code.</p>
+  </div>
+
+  <div class="panel">
+    <h3>Plans</h3>
+    <div class="grid two">
+      @for (plan of plans; track plan.id) {
+        <div class="panel">
+          <h3>{{ plan.name }} <small>({{ plan.planType }})</small></h3>
+          <p>Students: {{ plan.limits.maxStudents }} · Branches: {{ plan.limits.maxBranches }}</p>
+          <div class="actions">
+            <button type="button" (click)="assign(plan.id)">Assign to school</button>
+          </div>
+        </div>
+      }
+    </div>
+  </div>
+
+  @if (entitlements) {
+    <div class="panel">
+      <h3>Current entitlements ({{ entitlements.planId }})</h3>
+      <div class="chip-list">
+        @for (entry of flagEntries(); track entry[0]) {
+          <span class="chip">{{ entry[0] }}: {{ entry[1] ? 'ON' : 'OFF' }}</span>
+        }
+      </div>
+    </div>
+  }
+
+  @if (status) { <p class="status">{{ status }}</p> }
+</section>

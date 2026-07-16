@@ -1,0 +1,49 @@
+<div class="shell portal-shell">
+  <aside class="rail">
+    <div class="brand">
+      @if (theme$ | async; as theme) {
+        @if (theme.branding?.['schoolLogo']) {
+          <img
+            class="brand-logo"
+            [src]="theme.branding?.['schoolLogo']"
+            [alt]="theme.branding?.['schoolName'] || 'School'"
+          />
+        }
+        <p class="eyebrow">{{ theme.branding?.['schoolName'] || 'SugamFlow' }}</p>
+        <h1>{{ title }}</h1>
+        <p class="tagline">{{ subtitle || theme.branding?.['productTagline'] }}</p>
+      } @else {
+        <p class="eyebrow">SugamFlow</p>
+        <h1>{{ title }}</h1>
+        <p class="tagline">{{ subtitle }}</p>
+      }
+      <sf-branch-switcher (branchChanged)="onBranchChanged()" />
+    </div>
+
+    @if (loading) {
+      <p class="nav-status">Loading…</p>
+    } @else if (!featureEnabled) {
+      <p class="nav-status">App not enabled for this plan.</p>
+    } @else {
+      <nav>
+        @for (item of nav; track item.id) {
+          <a [routerLink]="item.route" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: item.route.split('/').length <= 2 }">
+            {{ item.label }}
+          </a>
+        }
+      </nav>
+    }
+
+    <div class="session">
+      <p class="session-label">{{ sessionLabel() }}</p>
+      <button type="button" class="logout secondary-link" (click)="goAdmin()">School Admin</button>
+      <button type="button" class="logout" (click)="logout()">Sign out</button>
+    </div>
+  </aside>
+  <main>
+    @if (error) {
+      <p class="portal-error" role="alert">{{ error }}</p>
+    }
+    <router-outlet />
+  </main>
+</div>

@@ -1,0 +1,132 @@
+.shell {
+  display: grid;
+  grid-template-columns: 280px 1fr;
+  min-height: 100vh;
+}
+
+.rail {
+  display: flex;
+  flex-direction: column;
+  background: linear-gradient(
+    180deg,
+    var(--sf-menu),
+    color-mix(in srgb, var(--sf-menu) 55%, #000) 85%
+  );
+  color: #f4fbf7;
+  padding: 1.5rem 1rem;
+}
+
+.brand-logo {
+  display: block;
+  max-width: 160px;
+  max-height: 48px;
+  width: auto;
+  height: auto;
+  object-fit: contain;
+  margin-bottom: 0.75rem;
+}
+
+.brand .eyebrow {
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  font-size: 0.72rem;
+  opacity: 0.8;
+}
+
+.brand h1 {
+  font-size: 1.8rem;
+  color: #fff;
+}
+
+.tagline {
+  font-size: 0.9rem;
+  opacity: 0.75;
+  margin-bottom: 0.75rem;
+}
+
+.conn-status {
+  margin: 0 0 1.25rem;
+  font-size: 0.78rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  opacity: 0.9;
+  color: #bbf7d0;
+}
+
+.conn-status.offline {
+  color: #fdba74;
+}
+
+.queue-count {
+  text-transform: none;
+  letter-spacing: 0;
+  opacity: 0.85;
+}
+
+nav {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+nav a {
+  padding: 0.65rem 0.8rem;
+  border-radius: 8px;
+  opacity: 0.86;
+}
+
+nav a:hover,
+nav a.active {
+  background: rgba(255, 255, 255, 0.12);
+  opacity: 1;
+}
+
+.session {
+  margin-top: auto;
+  padding-top: 1.5rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.session-label {
+  margin: 0 0 0.5rem;
+  font-size: 0.8rem;
+  opacity: 0.85;
+  word-break: break-word;
+}
+
+.footer-brand {
+  margin: 0 0 0.75rem;
+  font-size: 0.72rem;
+  opacity: 0.65;
+}
+
+.logout {
+  width: 100%;
+  padding: 0.55rem 0.75rem;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+main {
+  padding: 1.5rem 1.75rem 2.5rem;
+}
+
+@media (max-width: 900px) {
+  .shell {
+    grid-template-columns: 1fr;
+  }
+
+  .rail {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+  }
+
+  nav {
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+}

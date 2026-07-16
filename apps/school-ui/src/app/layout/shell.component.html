@@ -1,0 +1,46 @@
+<div class="shell">
+  <aside class="rail">
+    <div class="brand">
+      @if (theme$ | async; as theme) {
+        @if (theme.branding?.['schoolLogo']) {
+          <img class="brand-logo" [src]="theme.branding?.['schoolLogo']" [alt]="theme.branding?.['schoolName'] || 'School'" />
+        }
+        <p class="eyebrow">{{ theme.branding?.['schoolName'] || 'SugamFlow' }}</p>
+        <h1>School Admin</h1>
+        <p class="tagline">{{ theme.branding?.['productTagline'] || 'Configuration over customization' }}</p>
+      } @else {
+        <p class="eyebrow">SugamFlow</p>
+        <h1>School Admin</h1>
+        <p class="tagline">Configuration over customization</p>
+      }
+      <sf-branch-switcher (branchChanged)="onBranchChanged()" />
+      <p class="conn-status" [class.offline]="(online$ | async) === false">
+        @if (online$ | async) {
+          Online
+        } @else {
+          Offline
+        }
+        @if (offlineItems$ | async; as items) {
+          @if (items.length) {
+            <span class="queue-count"> · {{ items.length }} queued</span>
+          }
+        }
+      </p>
+    </div>
+    <nav>
+      @for (item of nav; track item.path) {
+        <a [routerLink]="item.path" routerLinkActive="active">{{ item.label }}</a>
+      }
+    </nav>
+    <div class="session">
+      <p class="session-label">{{ sessionLabel() }}</p>
+      @if (theme$ | async; as theme) {
+        <p class="footer-brand">{{ theme.branding?.['footer'] }}</p>
+      }
+      <button type="button" class="logout" (click)="logout()">Sign out</button>
+    </div>
+  </aside>
+  <main>
+    <router-outlet />
+  </main>
+</div>

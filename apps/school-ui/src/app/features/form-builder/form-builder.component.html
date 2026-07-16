@@ -1,0 +1,124 @@
+<section class="page">
+  <div class="page-head">
+    <h2>Dynamic Form Builder</h2>
+    <p>Create and edit tenant form definitions — sections, fields, types — without code.</p>
+  </div>
+
+  @if (error) {
+    <p class="error panel" role="alert">{{ error }}</p>
+  }
+  @if (status) {
+    <p class="status panel">{{ status }}</p>
+  }
+
+  <div class="panel">
+    <h3>Supported field types</h3>
+    <div class="chip-list">
+      @for (t of fieldTypes; track t) {
+        <span class="chip">{{ t }}</span>
+      }
+    </div>
+  </div>
+
+  <div class="editor-layout">
+    <section class="panel">
+      <div class="actions" style="margin-top: 0">
+        <button type="button" (click)="startNew()">New form</button>
+      </div>
+      <ul class="editor-list">
+        @for (form of forms; track form.formKey) {
+          <li>
+            <button
+              type="button"
+              class="editor-row"
+              [class.active]="!isNew && form.formKey === selectedKey"
+              (click)="select(form.formKey)"
+            >
+              <strong>{{ form.title || form.formKey }}</strong>
+              <span>{{ form.formKey }} · {{ form.sections?.length || 0 }} sections</span>
+            </button>
+          </li>
+        }
+      </ul>
+    </section>
+
+    <section class="panel">
+      @if (!draft) {
+        <p class="muted">Select a form or create a new one.</p>
+      } @else {
+        <h3>{{ isNew ? 'New form' : 'Edit form' }}</h3>
+        <div class="grid two">
+          <label>
+            Form key
+            <input [(ngModel)]="draft.formKey" name="formKey" [readonly]="!isNew" />
+          </label>
+          <label>
+            Title
+            <input [(ngModel)]="draft.title" name="title" />
+          </label>
+        </div>
+
+        @for (section of draft.sections; track $index; let si = $index) {
+          <div class="subpanel">
+            <div class="grid two">
+              <label>
+                Section id
+                <input [(ngModel)]="section.id" [name]="'secId' + si" />
+              </label>
+              <label>
+                Section title
+                <input [(ngModel)]="section.title" [name]="'secTitle' + si" />
+              </label>
+            </div>
+            <div class="toggle">
+              <span>Repeatable</span>
+              <input type="checkbox" [(ngModel)]="section.repeatable" [name]="'rep' + si" />
+            </div>
+
+            @for (field of section.fields; track $index; let fi = $index) {
+              <div class="field-grid">
+                <label>
+                  Label
+                  <input [(ngModel)]="field.label" [name]="'fl' + si + '_' + fi" />
+                </label>
+                <label>
+                  Key
+                  <input [(ngModel)]="field.key" [name]="'fk' + si + '_' + fi" />
+                </label>
+                <label>
+                  Type
+                  <select [(ngModel)]="field.type" [name]="'ft' + si + '_' + fi">
+                    @for (t of fieldTypes; track t) {
+                      <option [value]="t">{{ t }}</option>
+                    }
+                  </select>
+                </label>
+                <label>
+                  Mandatory
+                  <input type="checkbox" [(ngModel)]="field.mandatory" [name]="'fm' + si + '_' + fi" />
+                </label>
+                <div class="actions" style="margin-top: 0">
+                  <button type="button" class="secondary" (click)="moveField(si, fi, -1)">↑</button>
+                  <button type="button" class="secondary" (click)="moveField(si, fi, 1)">↓</button>
+                  <button type="button" class="secondary danger" (click)="removeField(si, fi)">Remove</button>
+                </div>
+              </div>
+            }
+
+            <div class="actions">
+              <button type="button" class="secondary" (click)="addField(si)">Add field</button>
+              <button type="button" class="secondary danger" (click)="removeSection(si)">Remove section</button>
+            </div>
+          </div>
+        }
+
+        <div class="actions">
+          <button type="button" class="secondary" (click)="addSection()">Add section</button>
+          <button type="button" (click)="save()" [disabled]="busy">
+            {{ busy ? 'Saving…' : 'Save form' }}
+          </button>
+        </div>
+      }
+    </section>
+  </div>
+</section>

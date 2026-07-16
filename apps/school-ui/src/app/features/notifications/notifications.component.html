@@ -1,0 +1,14 @@
+<section class="page">
+  <div class="page-head">
+    <h2>Notification Engine</h2>
+    <p>Events × channels configured per school — SMS, WhatsApp, Email, Push, and more.</p>
+  </div>
+  <div class="panel">
+    <h3>Events</h3>
+    <div class="chip-list">@for (e of events; track e) { <span class="chip">{{ e }}</span> }</div>
+  </div>
+  <div class="panel">
+    <h3>Channels</h3>
+    <div class="chip-list">@for (c of channels; track c) { <span class="chip">{{ c }}</span> }</div>
+  </div>
+</section>

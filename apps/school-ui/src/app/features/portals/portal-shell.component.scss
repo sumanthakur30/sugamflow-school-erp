@@ -1,0 +1,33 @@
+.portal-shell .rail {
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--sf-primary) 88%, #0b3d2e),
+    color-mix(in srgb, var(--sf-menu) 70%, #041510)
+  );
+}
+
+.nav-status {
+  opacity: 0.8;
+  font-size: 0.9rem;
+  padding: 0.5rem 0.8rem;
+}
+
+.secondary-link {
+  margin-bottom: 0.45rem;
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+}
+
+.portal-error {
+  margin: 1rem;
+  padding: 0.85rem 1rem;
+  border-radius: var(--sf-radius);
+  background: color-mix(in srgb, var(--sf-error, #b91c1c) 12%, #fff);
+  color: var(--sf-error, #b91c1c);
+}
+
+@media (max-width: 800px) {
+  .portal-shell.shell {
+    grid-template-columns: 1fr;
+  }
+}

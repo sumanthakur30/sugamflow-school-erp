@@ -1,0 +1,56 @@
+openapi: 3.0.3
+info:
+  title: SugamFlow School Configuration APIs
+  version: 0.1.0
+  description: >
+    Configuration-driven school management contracts.
+    All endpoints require X-Tenant-Id; optional X-Branch-Id and X-Academic-Session-Id.
+paths:
+  /api/config/design-studio/theme:
+    get:
+      summary: Get Design Studio theme
+      responses:
+        '200':
+          description: Theme
+  /api/subscription/tenants/current/entitlements:
+    get:
+      summary: Resolve plan limits and feature flags
+      responses:
+        '200':
+          description: Entitlements
+  /api/forms:
+    get:
+      summary: List dynamic forms
+      responses:
+        '200':
+          description: Forms
+  /api/workflows:
+    get:
+      summary: List workflows
+      responses:
+        '200':
+          description: Workflows
+  /api/rules/evaluate:
+    post:
+      summary: Evaluate rule engine against a context
+      responses:
+        '200':
+          description: Matched actions
+  /api/reports/templates:
+    get:
+      summary: List report/certificate templates
+      responses:
+        '200':
+          description: Templates
+  /api/notifications/channels:
+    get:
+      summary: List notification channels
+      responses:
+        '200':
+          description: Channels
+  /api/audit/config-changes:
+    get:
+      summary: List configuration audit entries
+      responses:
+        '200':
+          description: Audit trail

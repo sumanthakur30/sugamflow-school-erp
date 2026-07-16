@@ -1,0 +1,115 @@
+<section class="page">
+  <div class="page-head">
+    <h2>Ops Depth</h2>
+    <p>
+      Config-driven masters and domain previews for Library, Hostel, Transport, and Payroll -
+      gated by FEATURE_OPS_DEPTH.
+    </p>
+  </div>
+
+  @if (error) {
+    <p class="error panel" role="alert">{{ error }}</p>
+  }
+  @if (status) {
+    <p class="status panel">{{ status }}</p>
+  }
+
+  <section class="panel">
+    <div class="actions">
+      <button type="button" [class.active]="tab === 'library'" (click)="setTab('library')">Library</button>
+      <button type="button" [class.active]="tab === 'hostel'" (click)="setTab('hostel')">Hostel</button>
+      <button type="button" [class.active]="tab === 'transport'" (click)="setTab('transport')">Transport</button>
+      <button type="button" [class.active]="tab === 'payroll'" (click)="setTab('payroll')">Payroll</button>
+      <button type="button" (click)="reload()" [disabled]="loading">Reload</button>
+    </div>
+  </section>
+
+  @if (loading) {
+    <p class="panel">Loading ops masters...</p>
+  } @else {
+    @if (tab === 'library') {
+      <section class="panel">
+        <h3>Library masters</h3>
+        <p class="muted">
+          Categories: {{ library?.categories?.length ?? 0 }} -
+          Fine policies: {{ library?.finePolicies?.length ?? 0 }}
+          <a routerLink="/admin/library">Open Library records</a>
+        </p>
+        <label>
+          Overdue days
+          <input type="number" [(ngModel)]="overdueDays" name="overdueDays" />
+        </label>
+        <div class="actions">
+          <button type="button" (click)="previewLibraryFine()" [disabled]="busy">Preview fine</button>
+        </div>
+      </section>
+    }
+
+    @if (tab === 'hostel') {
+      <section class="panel">
+        <h3>Hostel masters</h3>
+        <p class="muted">
+          Blocks: {{ hostel?.blocks?.length ?? 0 }} -
+          Room types: {{ hostel?.roomTypes?.length ?? 0 }}
+          <a routerLink="/admin/hostel">Open Hostel records</a>
+        </p>
+        <div class="grid two">
+          <label>
+            Beds requested
+            <input type="number" [(ngModel)]="bedsRequested" name="bedsRequested" />
+          </label>
+          <label>
+            Occupied beds (simulated)
+            <input type="number" [(ngModel)]="occupiedBeds" name="occupiedBeds" />
+          </label>
+        </div>
+        <div class="actions">
+          <button type="button" (click)="previewHostelAllocation()" [disabled]="busy">Preview allocation</button>
+        </div>
+      </section>
+    }
+
+    @if (tab === 'transport') {
+      <section class="panel">
+        <h3>Transport masters</h3>
+        <p class="muted">
+          Routes: {{ transport?.routes?.length ?? 0 }} -
+          Fare slabs: {{ transport?.fareSlabs?.length ?? 0 }}
+          <a routerLink="/admin/transport">Open Transport records</a>
+        </p>
+        <label>
+          Distance km
+          <input type="number" [(ngModel)]="distanceKm" name="distanceKm" />
+        </label>
+        <div class="actions">
+          <button type="button" (click)="previewTransportFare()" [disabled]="busy">Preview fare</button>
+        </div>
+      </section>
+    }
+
+    @if (tab === 'payroll') {
+      <section class="panel">
+        <h3>Payroll masters</h3>
+        <p class="muted">
+          Structures: {{ payroll?.structures?.length ?? 0 }} -
+          Components: {{ payroll?.components?.length ?? 0 }}
+          <a routerLink="/admin/payroll">Open Payroll records</a>
+        </p>
+        <label>
+          Basic pay
+          <input type="number" [(ngModel)]="basicPay" name="basicPay" />
+        </label>
+        <div class="actions">
+          <button type="button" (click)="previewPayrollPayslip()" [disabled]="busy">Preview payslip</button>
+        </div>
+      </section>
+    }
+
+    @if (preview) {
+      <section class="panel">
+        <h3>Preview result</h3>
+        <pre class="subpanel">{{ preview | json }}</pre>
+      </section>
+    }
+  }
+</section>

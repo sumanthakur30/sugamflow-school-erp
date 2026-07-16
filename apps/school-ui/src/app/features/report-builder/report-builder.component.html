@@ -1,0 +1,188 @@
+<section class="page report-designer-page">
+  <div class="page-head">
+    <h2>Report &amp; Certificate Designer</h2>
+    <p>
+      Drag blocks onto the canvas, position them, bind fields, then save and preview PDF —
+      template-driven (FEATURE_REPORT_BUILDER).
+    </p>
+  </div>
+
+  @if (error) {
+    <p class="error panel" role="alert">{{ error }}</p>
+  }
+
+  @if (loading) {
+    <p class="panel">Loading report designer…</p>
+  } @else if (!featureEnabled) {
+    <p class="panel">Report designer is not enabled for this plan (FEATURE_REPORT_BUILDER).</p>
+  } @else {
+    @if (status) {
+      <p class="status panel">{{ status }}</p>
+    }
+
+    <div class="designer">
+      <aside class="panel side">
+        <h3>Templates</h3>
+        <ul class="template-list">
+          @for (t of templates; track t.templateKey) {
+            <li>
+              <button
+                type="button"
+                class="template-btn"
+                [class.active]="t.templateKey === selectedKey"
+                (click)="selectTemplate(t.templateKey)"
+              >
+                <span class="t-name">{{ t.name || t.templateKey }}</span>
+                <span class="muted">{{ t.templateKey }}</span>
+              </button>
+            </li>
+          }
+        </ul>
+
+        <h3>Palette</h3>
+        <p class="muted hint">Drag onto the page</p>
+        <div class="palette">
+          @for (p of elementTypes; track p.type) {
+            <div
+              class="palette-item"
+              draggable="true"
+              (dragstart)="onPaletteDragStart(p.type, $event)"
+            >
+              {{ p.label }}
+            </div>
+          }
+        </div>
+
+        <div class="chip-list formats">
+          @for (f of formats; track f) {
+            <span class="chip">{{ f }}</span>
+          }
+        </div>
+      </aside>
+
+      <section class="canvas-wrap panel">
+        <div class="canvas-toolbar actions">
+          <label class="scale">
+            Zoom
+            <input
+              type="range"
+              min="0.45"
+              max="1"
+              step="0.05"
+              [(ngModel)]="canvasScale"
+              name="scale"
+            />
+          </label>
+          <button type="button" (click)="save()" [disabled]="busy || !draft">Save</button>
+          <button type="button" class="secondary" (click)="previewPdf()" [disabled]="busy || !draft">
+            Preview PDF
+          </button>
+          <button type="button" class="secondary" (click)="renderSaved()" [disabled]="busy || !selectedKey">
+            Render saved
+          </button>
+        </div>
+
+        @if (draft) {
+          <div
+            class="canvas-stage"
+            (pointermove)="onCanvasPointerMove($event)"
+            (pointerup)="onCanvasPointerUp()"
+            (pointerleave)="onCanvasPointerUp()"
+          >
+            <div
+              class="canvas"
+              [style.width.px]="canvasWidth"
+              [style.height.px]="canvasHeight"
+              [style.transform]="'scale(' + canvasScale + ')'"
+              (dragover)="onCanvasDragOver($event)"
+              (drop)="onCanvasDrop($event)"
+              (click)="clearSelection()"
+            >
+              @for (el of draft.elements; track el.id) {
+                <div
+                  class="el"
+                  [class.selected]="el.id === selectedId"
+                  [class.el-line]="el.type === 'line'"
+                  [class.el-box]="el.type === 'box' || el.type === 'image'"
+                  [class.el-heading]="el.type === 'heading'"
+                  [style.left.px]="el.x"
+                  [style.top.px]="el.y"
+                  [style.width.px]="el.width"
+                  [style.height.px]="el.height"
+                  [style.fontSize.px]="el.fontSize || 11"
+                  [style.fontWeight]="el.bold || el.type === 'heading' ? '700' : '500'"
+                  [style.textAlign]="el.align || 'left'"
+                  (click)="selectElement(el, $event)"
+                  (pointerdown)="onElementPointerDown(el, $event)"
+                >
+                  {{ displayLabel(el) }}
+                </div>
+              }
+            </div>
+          </div>
+        }
+      </section>
+
+      <aside class="panel side props">
+        <h3>Properties</h3>
+        @if (!selected) {
+          <p class="muted">Select an element on the canvas.</p>
+        } @else {
+          <div class="grid one">
+            <label>
+              Type
+              <input [ngModel]="selected.type" name="type" disabled />
+            </label>
+            <label>
+              Text
+              <textarea rows="3" [(ngModel)]="selected.text" name="text"></textarea>
+            </label>
+            <label>
+              Bind path
+              <input [(ngModel)]="selected.bind" name="bind" placeholder="student.name" />
+            </label>
+            <div class="grid two">
+              <label>
+                X
+                <input type="number" [(ngModel)]="selected.x" name="x" />
+              </label>
+              <label>
+                Y
+                <input type="number" [(ngModel)]="selected.y" name="y" />
+              </label>
+              <label>
+                Width
+                <input type="number" [(ngModel)]="selected.width" name="w" />
+              </label>
+              <label>
+                Height
+                <input type="number" [(ngModel)]="selected.height" name="h" />
+              </label>
+              <label>
+                Font size
+                <input type="number" [(ngModel)]="selected.fontSize" name="fs" />
+              </label>
+              <label>
+                Align
+                <select [(ngModel)]="selected.align" name="align">
+                  <option value="left">Left</option>
+                  <option value="center">Center</option>
+                  <option value="right">Right</option>
+                </select>
+              </label>
+            </div>
+            <label class="toggle">
+              <span>Bold</span>
+              <input type="checkbox" [(ngModel)]="selected.bold" name="bold" />
+            </label>
+          </div>
+          <div class="actions">
+            <button type="button" class="secondary" (click)="bringForward()">Forward</button>
+            <button type="button" class="secondary" (click)="sendBackward()">Back</button>
+            <button type="button" class="secondary" (click)="deleteSelected()">Delete</button>
+          </div>
+        }
+      </aside>
+    </div>
+  }
+</section>

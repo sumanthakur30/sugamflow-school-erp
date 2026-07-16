@@ -1,0 +1,104 @@
+<section class="page">
+  <div class="page-head">
+    <h2>Offline mode</h2>
+    <p>
+      Queue allow-listed mutations while offline, then sync when connectivity returns —
+      gated by FEATURE_OFFLINE_MODE.
+    </p>
+  </div>
+
+  @if (error) {
+    <p class="error panel" role="alert">{{ error }}</p>
+  }
+  @if (status) {
+    <p class="status panel">{{ status }}</p>
+  }
+
+  @if (loading) {
+    <p class="panel">Loading offline configuration…</p>
+  } @else if (!featureEnabled) {
+    <p class="panel">Offline mode is not enabled for this plan (FEATURE_OFFLINE_MODE).</p>
+  } @else {
+    <section class="panel connectivity">
+      <span class="chip" [class.ok]="online" [class.warn]="!online">
+        {{ online ? 'Online' : 'Offline' }}
+      </span>
+      <span class="chip">queue {{ queueItems.length }} / {{ maxQueueSize }}</span>
+      <span class="chip">batch ≤ {{ syncBatchSize }}</span>
+      <span class="chip">autoSync: {{ autoSyncOnReconnect }}</span>
+    </section>
+
+    <section class="panel">
+      <h3>Allow-listed entity types</h3>
+      <ul class="entity-list">
+        @for (e of allowedEntityTypes; track e.entityType) {
+          <li>
+            <strong>{{ e.entityType }}</strong>
+            <span class="muted"> {{ e.method }} {{ e.path }}</span>
+          </li>
+        }
+      </ul>
+    </section>
+
+    <section class="panel">
+      <h3>Local outbox</h3>
+      <div class="actions">
+        <label>
+          Sample type
+          <select [(ngModel)]="sampleEntityType" name="sampleType">
+            @for (e of allowedEntityTypes; track e.entityType) {
+              <option [value]="e.entityType">{{ e.entityType }}</option>
+            }
+          </select>
+        </label>
+        <button type="button" (click)="enqueueSample()">Enqueue sample</button>
+        <button type="button" (click)="syncNow()" [disabled]="busy || !online || !queueItems.length">
+          Sync now
+        </button>
+        <button type="button" class="secondary" (click)="clearQueue()" [disabled]="!queueItems.length">
+          Clear queue
+        </button>
+      </div>
+      @if (!queueItems.length) {
+        <p class="muted">Queue is empty.</p>
+      }
+      <ul class="queue-list">
+        @for (q of queueItems; track q.id) {
+          <li class="panel queue-item">
+            <div>
+              <strong>{{ q.label || q.entityType }}</strong>
+              <p class="muted">{{ q.createdAt }} · {{ q.method }} {{ q.path }}</p>
+            </div>
+            <button type="button" class="secondary" (click)="remove(q.id)">Remove</button>
+          </li>
+        }
+      </ul>
+    </section>
+
+    <section class="panel">
+      <h3>Cache manifest keys</h3>
+      <div class="chip-list">
+        @for (c of cacheKeys; track c.key) {
+          <span class="chip">{{ c.key }}</span>
+        }
+      </div>
+    </section>
+
+    <section class="panel">
+      <h3>Recent sync batches</h3>
+      @if (!batches.length) {
+        <p class="muted">No sync batches yet.</p>
+      }
+      <ul class="batch-list">
+        @for (b of batches; track b.id) {
+          <li>
+            <strong>{{ b.status }}</strong>
+            <span class="muted">
+              · {{ b.successCount }}/{{ b.itemCount }} · {{ b.createdAt }}
+            </span>
+          </li>
+        }
+      </ul>
+    </section>
+  }
+</section>

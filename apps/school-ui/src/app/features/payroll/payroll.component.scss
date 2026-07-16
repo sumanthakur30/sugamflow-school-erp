@@ -1,0 +1,12 @@
+.payroll-layout {
+  display: grid;
+  grid-template-columns: 1fr 1.4fr;
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+@media (max-width: 900px) {
+  .payroll-layout {
+    grid-template-columns: 1fr;
+  }
+}

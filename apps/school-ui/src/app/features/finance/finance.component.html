@@ -1,0 +1,193 @@
+<section class="page">
+  <div class="page-head">
+    <h2>Finance</h2>
+    <p>
+      Config-driven fee heads, structures, concessions, demand preview, and payment intents —
+      gated by FEATURE_FEE / FEATURE_MULTI_PAYMENT_GATEWAY.
+      <a routerLink="/admin/fee">Open Fee Collection →</a>
+    </p>
+  </div>
+
+  @if (error) {
+    <p class="error panel" role="alert">{{ error }}</p>
+  }
+  @if (status) {
+    <p class="status panel">{{ status }}</p>
+  }
+
+  @if (loading) {
+    <p class="panel">Loading finance configuration…</p>
+  } @else {
+    <section class="panel">
+      <div class="chip-list">
+        <span class="chip">payment gateway: {{ paymentGatewayEnabled ? 'on' : 'off' }}</span>
+        <span class="chip">accounting: {{ accountingEnabled ? 'on' : 'off' }}</span>
+      </div>
+    </section>
+
+    <div class="grid two">
+      <section class="panel">
+        <h3>Fee heads</h3>
+        <ul class="editor-list">
+          @for (h of heads; track h.definitionKey || h.id) {
+            <li class="subpanel" style="margin-bottom: 0.45rem">
+              <strong>{{ payload(h).label || h.definitionKey }}</strong>
+              <p class="muted">{{ payload(h).code || h.definitionKey }} · {{ payload(h).category }} · v{{ h.version }}</p>
+            </li>
+          }
+        </ul>
+        <h3>Add / update head</h3>
+        <div class="grid two">
+          <label>
+            Key
+            <input [(ngModel)]="headDraft.definitionKey" name="headKey" placeholder="LAB" />
+          </label>
+          <label>
+            Label
+            <input [(ngModel)]="headDraft.label" name="headLabel" placeholder="Lab Fee" />
+          </label>
+          <label>
+            Category
+            <input [(ngModel)]="headDraft.category" name="headCat" />
+          </label>
+        </div>
+        <div class="toggle">
+          <span>Refundable</span>
+          <input type="checkbox" [(ngModel)]="headDraft.refundable" name="refundable" />
+        </div>
+        <div class="actions">
+          <button type="button" (click)="saveHead()" [disabled]="busy">Save head</button>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h3>Fee structures</h3>
+        @for (s of structures; track s.definitionKey || s.id) {
+          <div class="subpanel">
+            <strong>{{ payload(s).name || s.definitionKey }}</strong>
+            <p class="muted">{{ s.definitionKey }} · v{{ s.version }}</p>
+            <div class="chip-list">
+              @for (line of payload(s).lines || []; track line.headKey) {
+                <span class="chip">{{ line.headKey }}: {{ line.amount }}</span>
+              }
+            </div>
+          </div>
+        }
+        <h3>Concessions</h3>
+        @for (c of concessions; track c.definitionKey || c.id) {
+          <div class="subpanel">
+            <strong>{{ payload(c).name || c.definitionKey }}</strong>
+            <p class="muted">
+              {{ payload(c).benefit?.type }} {{ payload(c).benefit?.value }}
+              @if (payload(c).benefit?.capAmount) {
+                · cap {{ payload(c).benefit.capAmount }}
+              }
+            </p>
+          </div>
+        }
+      </section>
+    </div>
+
+    <section class="panel">
+      <h3>Demand preview</h3>
+      <div class="grid two">
+        <label>
+          Structure
+          <select [(ngModel)]="structureKey" name="structureKey">
+            @for (s of structures; track s.definitionKey) {
+              <option [value]="s.definitionKey">{{ payload(s).name || s.definitionKey }}</option>
+            }
+          </select>
+        </label>
+        <label>
+          Concession (optional)
+          <select [(ngModel)]="concessionKey" name="concessionKey">
+            <option value="">None</option>
+            @for (c of concessions; track c.definitionKey) {
+              <option [value]="c.definitionKey">{{ payload(c).name || c.definitionKey }}</option>
+            }
+          </select>
+        </label>
+        <label>
+          Student ref
+          <input [(ngModel)]="studentRef" name="studentRef" />
+        </label>
+        <label>
+          Student name
+          <input [(ngModel)]="studentName" name="studentName" />
+        </label>
+        <label>
+          Class / section
+          <input [(ngModel)]="classSection" name="classSection" />
+        </label>
+      </div>
+      <div class="actions">
+        <button type="button" (click)="previewDemand()" [disabled]="busy">Preview demand</button>
+      </div>
+      @if (demand) {
+        <div class="subpanel">
+          <p>
+            <strong>Gross</strong> {{ demand.grossAmount }} · <strong>Discount</strong>
+            {{ demand.discountAmount }} · <strong>Net</strong> {{ demand.netAmount }}
+            {{ demand.currency }}
+          </p>
+          <div class="chip-list">
+            @for (line of demand.lines || []; track line.headKey) {
+              <span class="chip">{{ line.headKey }}: {{ line.amount }}</span>
+            }
+          </div>
+          <p class="muted">
+            Suggested collection answers: feeHead={{ demand.suggestedAnswers?.feeHead }}, amount={{
+              demand.suggestedAnswers?.amount
+            }}
+          </p>
+        </div>
+      }
+    </section>
+
+    <section class="panel">
+      <h3>Online payment intent</h3>
+      @if (!paymentGatewayEnabled) {
+        <p class="muted">Enable FEATURE_MULTI_PAYMENT_GATEWAY on the plan to use payment intents.</p>
+      } @else {
+        <div class="grid two">
+          <label>
+            Amount (uses demand net when available)
+            <input type="number" [(ngModel)]="intentAmount" name="intentAmount" />
+          </label>
+        </div>
+        <div class="actions">
+          <button type="button" (click)="createIntent()" [disabled]="busy">Create intent</button>
+          <button
+            type="button"
+            class="secondary"
+            (click)="simulateCapture()"
+            [disabled]="busy || !lastIntent || lastIntent.status !== 'PENDING'"
+          >
+            Simulate capture
+          </button>
+        </div>
+        @if (lastIntent) {
+          <pre>{{ lastIntent | json }}</pre>
+        }
+      }
+    </section>
+
+    <section class="panel">
+      <h3>Recent finance transactions</h3>
+      @if (!transactions.length) {
+        <p class="muted">No transactions yet.</p>
+      }
+      <ul class="editor-list">
+        @for (t of transactions; track t.id) {
+          <li class="subpanel" style="margin-bottom: 0.4rem">
+            <strong>{{ t.transactionType }} · {{ t.status }}</strong>
+            <p class="muted">
+              {{ t.referenceNo }} · {{ t.netAmount }} {{ t.currency }} · {{ t.createdAt }}
+            </p>
+          </li>
+        }
+      </ul>
+    </section>
+  }
+</section>

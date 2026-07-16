@@ -1,0 +1,161 @@
+<section class="page">
+  <div class="page-head">
+    <h2>Academic Lifecycle</h2>
+    <p>
+      Config-driven promotion maps, session rollover, transfer certificate, and status transitions —
+      gated by FEATURE_ACADEMIC_LIFECYCLE.
+      <a routerLink="/admin/students">Open Students →</a>
+      <a routerLink="/admin/reports">Report Designer →</a>
+    </p>
+  </div>
+
+  @if (error) {
+    <p class="error panel" role="alert">{{ error }}</p>
+  }
+  @if (status) {
+    <p class="status panel">{{ status }}</p>
+  }
+
+  @if (loading) {
+    <p class="panel">Loading lifecycle configuration…</p>
+  } @else {
+    <section class="panel">
+      <div class="chip-list">
+        <span class="chip">class field: {{ classFieldKey }}</span>
+        <span class="chip">report builder: {{ reportBuilderEnabled ? 'on' : 'off' }}</span>
+        <span class="chip">maps: {{ promotionMaps.length }}</span>
+        <span class="chip">sessions: {{ sessions.length }}</span>
+      </div>
+    </section>
+
+    <div class="grid two">
+      <section class="panel">
+        <h3>Promotion maps</h3>
+        @for (m of promotionMaps; track m.definitionKey || m.id) {
+          <div class="subpanel">
+            <strong>{{ payload(m).name || m.definitionKey }}</strong>
+            <p class="muted">{{ m.definitionKey }} · v{{ m.version }}</p>
+            <div class="chip-list">
+              @for (entry of payload(m).mappings | keyvalue; track entry.key) {
+                <span class="chip">{{ entry.key }} → {{ entry.value }}</span>
+              }
+            </div>
+          </div>
+        }
+        <h3>Edit map</h3>
+        <label>
+          Key
+          <input [(ngModel)]="mapDraftKey" name="mapDraftKey" />
+        </label>
+        <label>
+          Mappings (JSON)
+          <textarea [(ngModel)]="mapDraftJson" name="mapDraftJson" rows="6"></textarea>
+        </label>
+        <div class="actions">
+          <button type="button" (click)="savePromotionMap()" [disabled]="busy">Save map</button>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h3>Academic sessions</h3>
+        @for (s of sessions; track s.definitionKey || s.id) {
+          <div class="subpanel">
+            <strong>{{ payload(s).name || s.definitionKey }}</strong>
+            <p class="muted">
+              {{ s.definitionKey }}
+              @if (payload(s).nextSessionKey) {
+                · next {{ payload(s).nextSessionKey }}
+              }
+              @if (payload(s).current) {
+                · current
+              }
+            </p>
+          </div>
+        }
+        <h3>TC policies</h3>
+        @for (t of tcPolicies; track t.definitionKey || t.id) {
+          <div class="subpanel">
+            <strong>{{ payload(t).name || t.definitionKey }}</strong>
+            <p class="muted">template {{ payload(t).templateKey }} · v{{ t.version }}</p>
+          </div>
+        }
+      </section>
+    </div>
+
+    <section class="panel">
+      <h3>Actions</h3>
+      <div class="grid two">
+        <label>
+          Student
+          <select [(ngModel)]="selectedStudentId" name="selectedStudentId">
+            @for (s of students; track s.id) {
+              <option [value]="s.id">{{ studentLabel(s) }} · {{ s.status }}</option>
+            }
+          </select>
+        </label>
+        <label>
+          Class filter
+          <input [(ngModel)]="classValue" name="classValue" placeholder="Grade 8-A" />
+        </label>
+        <label>
+          Promotion map
+          <input [(ngModel)]="promotionMapKey" name="promotionMapKey" />
+        </label>
+        <label>
+          Rollover target session
+          <input [(ngModel)]="targetSessionId" name="targetSessionId" />
+        </label>
+      </div>
+      <div class="toggle">
+        <span>Rollover also promote</span>
+        <input type="checkbox" [(ngModel)]="alsoPromote" name="alsoPromote" />
+      </div>
+      <div class="actions">
+        <button type="button" (click)="promoteStudent()" [disabled]="busy">Promote student</button>
+        <button type="button" (click)="promoteByClass()" [disabled]="busy">Promote class</button>
+        <button type="button" (click)="rolloverClass()" [disabled]="busy">Rollover class</button>
+      </div>
+      <h3>Transfer certificate</h3>
+      <div class="grid two">
+        <label>
+          Reason
+          <input [(ngModel)]="tcReason" name="tcReason" />
+        </label>
+        <label>
+          Remarks
+          <input [(ngModel)]="tcRemarks" name="tcRemarks" />
+        </label>
+      </div>
+      <div class="actions">
+        <button type="button" (click)="previewTcClearance()" [disabled]="busy">Preview clearance</button>
+        <button type="button" (click)="issueTc()" [disabled]="busy">Issue TC</button>
+      </div>
+      @if (clearance) {
+        <div class="subpanel">
+          <p class="muted">cleared={{ clearance.cleared }} · fees dues={{ clearance.fees?.hasDues }} · library outstanding={{ clearance.library?.hasOutstanding }}</p>
+          @if (clearance.matchedActions?.length) {
+            <p class="muted">rules: {{ clearance.matchedActions.join(', ') }}</p>
+          }
+        </div>
+      }
+    </section>
+
+    <section class="panel">
+      <h3>Recent events</h3>
+      @if (!events.length) {
+        <p class="muted">No lifecycle events yet.</p>
+      } @else {
+        <ul class="editor-list">
+          @for (e of events; track e.id) {
+            <li class="subpanel" style="margin-bottom: 0.45rem">
+              <strong>{{ e.eventType }}</strong>
+              <p class="muted">
+                {{ e.referenceNo }} · student {{ e.studentId }} · {{ e.createdAt }}
+              </p>
+            </li>
+          }
+        </ul>
+      }
+    </section>
+  }
+</section>

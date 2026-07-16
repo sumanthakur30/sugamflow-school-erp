@@ -1,0 +1,19 @@
+<label class="branch-switcher" [class.single]="!featureEnabled || branches.length <= 1">
+  <span class="bs-label">Campus</span>
+  @if (loading) {
+    <span class="bs-loading">…</span>
+  } @else {
+    <select
+      [ngModel]="currentKey"
+      (ngModelChange)="onChange($event)"
+      name="branchKey"
+      [disabled]="branches.length <= 1"
+    >
+      @for (b of branches; track b.branchKey) {
+        <option [value]="b.branchKey" [disabled]="b.status === 'INACTIVE'">
+          {{ b.name }}@if (b.city) { · {{ b.city }} }
+        </option>
+      }
+    </select>
+  }
+</label>

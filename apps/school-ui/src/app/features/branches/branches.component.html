@@ -1,0 +1,123 @@
+<section class="page">
+  <div class="page-head">
+    <h2>Campuses / Branches</h2>
+    <p>
+      First-class multi-campus configuration — switch context via
+      <code>X-Branch-Id</code>, gated by FEATURE_MULTI_BRANCH and plan
+      <code>maxBranches</code>.
+    </p>
+  </div>
+
+  @if (error) {
+    <p class="error panel" role="alert">{{ error }}</p>
+  }
+  @if (status) {
+    <p class="status panel">{{ status }}</p>
+  }
+
+  @if (loading) {
+    <p class="panel">Loading campuses…</p>
+  } @else if (!featureEnabled) {
+    <p class="panel">Multi-branch is not enabled for this plan (FEATURE_MULTI_BRANCH).</p>
+  } @else {
+    <section class="panel">
+      <p>
+        Active campus: <strong>{{ currentKey }}</strong> · {{ branchCount }} /
+        {{ maxBranches === -1 ? '∞' : maxBranches }} used
+        @if (canAdd) {
+          <span class="chip">can add</span>
+        }
+      </p>
+    </section>
+
+    <div class="branch-grid">
+      @for (b of branches; track b.branchKey) {
+        <article class="panel branch-card" [class.active]="b.branchKey === currentKey">
+          <div class="card-head">
+            <h3>{{ b.name }}</h3>
+            @if (b.isDefault) {
+              <span class="chip">default</span>
+            }
+            @if (b.branchKey === currentKey) {
+              <span class="chip ok">active</span>
+            }
+          </div>
+          <p class="muted"><code>{{ b.branchKey }}</code> · {{ b.code || '—' }} · {{ b.status }}</p>
+          <div class="grid two">
+            <label>
+              Name
+              <input [(ngModel)]="b.name" [name]="'n-' + b.branchKey" />
+            </label>
+            <label>
+              Code
+              <input [(ngModel)]="b.code" [name]="'c-' + b.branchKey" />
+            </label>
+            <label>
+              City
+              <input [(ngModel)]="b.city" [name]="'city-' + b.branchKey" />
+            </label>
+            <label>
+              Status
+              <select [(ngModel)]="b.status" [name]="'s-' + b.branchKey">
+                <option value="ACTIVE">ACTIVE</option>
+                <option value="INACTIVE">INACTIVE</option>
+              </select>
+            </label>
+          </div>
+          <label>
+            Address
+            <input [(ngModel)]="b.address" [name]="'a-' + b.branchKey" />
+          </label>
+          <div class="actions">
+            <button type="button" (click)="switchTo(b.branchKey)" [disabled]="b.branchKey === currentKey">
+              Switch here
+            </button>
+            <button type="button" class="secondary" (click)="saveMeta(b)" [disabled]="busy">Save</button>
+            @if (!b.isDefault) {
+              <button type="button" class="secondary" (click)="setDefault(b.branchKey)" [disabled]="busy">
+                Make default
+              </button>
+            }
+          </div>
+        </article>
+      }
+    </div>
+
+    @if (canAdd) {
+      <section class="panel">
+        <h3>Add campus</h3>
+        <div class="grid two">
+          <label>
+            Branch key
+            <input [(ngModel)]="draft.branchKey" name="branchKey" placeholder="north" />
+          </label>
+          <label>
+            Name
+            <input [(ngModel)]="draft.name" name="name" placeholder="North Campus" />
+          </label>
+          <label>
+            Code
+            <input [(ngModel)]="draft.code" name="code" placeholder="NORTH" />
+          </label>
+          <label>
+            City
+            <input [(ngModel)]="draft.city" name="city" placeholder="Bengaluru" />
+          </label>
+        </div>
+        <label>
+          Address
+          <input [(ngModel)]="draft.address" name="address" />
+        </label>
+        <label class="toggle">
+          <span>Set as default</span>
+          <input type="checkbox" [(ngModel)]="draft.isDefault" name="isDefault" />
+        </label>
+        <div class="actions">
+          <button type="button" (click)="create()" [disabled]="busy">Create campus</button>
+        </div>
+      </section>
+    } @else {
+      <p class="panel muted">Branch limit reached for this plan — upgrade to add more campuses.</p>
+    }
+  }
+</section>

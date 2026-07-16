@@ -1,0 +1,107 @@
+<div class="page">
+  <header class="page-head">
+    <h2>Attendance</h2>
+    <p>
+      Config-driven vertical slice — form <code>{{ formKey }}</code>, workflow
+      <code>{{ workflowKey }}</code>, rules &amp; FEATURE_ATTENDANCE.
+    </p>
+  </header>
+
+  @if (error) {
+    <p class="error panel" role="alert">{{ error }}</p>
+  }
+
+  @if (loading) {
+    <p class="panel">Loading attendance configuration…</p>
+  } @else if (!featureEnabled) {
+    <p class="panel">Attendance is not enabled for this plan (FEATURE_ATTENDANCE).</p>
+  } @else {
+    <section class="panel">
+      <h3>New record</h3>
+      <div class="grid two">
+        @for (field of fields; track field.key) {
+          <label>
+            {{ field.label }}
+            @if (field.mandatory) {
+              <span class="req">*</span>
+            }
+            @if (field.type === 'CHECKBOX') {
+              <input type="checkbox" [(ngModel)]="answers[field.key]" [name]="field.key" />
+            } @else if (field.type === 'NUMBER') {
+              <input type="number" [(ngModel)]="answers[field.key]" [name]="field.key" />
+            } @else {
+              <input [(ngModel)]="answers[field.key]" [name]="field.key" />
+            }
+          </label>
+        }
+      </div>
+      <div class="actions">
+        <button type="button" (click)="submit()" [disabled]="submitting">
+          {{ submitting ? 'Submitting…' : 'Submit record' }}
+        </button>
+      </div>
+    </section>
+
+    <div class="attendance-layout">
+      <section class="panel">
+        <h3>Inbox</h3>
+        @if (!records.length) {
+          <p class="muted">No records yet.</p>
+        }
+        <ul class="app-list">
+          @for (row of records; track row.id) {
+            <li>
+              <button
+                type="button"
+                class="app-row"
+                [class.active]="row.id === selectedId"
+                (click)="select(row)"
+              >
+                <strong>{{ row.answers?.studentName || row.id }}</strong>
+                <span>{{ row.status }} · {{ row.currentStepName }} · {{ row.answers?.attendancePercent }}%</span>
+              </button>
+            </li>
+          }
+        </ul>
+      </section>
+
+      <section class="panel">
+        <h3>Detail</h3>
+        @if (!selected) {
+          <p class="muted">Select a record.</p>
+        } @else {
+          <p>
+            <strong>{{ selected.status }}</strong> — step {{ selected.currentStepSequence }}
+            {{ selected.currentStepName }} ({{ selected.assigneeRole }})
+          </p>
+          <pre class="answers">{{ selected.answers | json }}</pre>
+          <label>
+            Comment
+            <input [(ngModel)]="actionComment" name="actionComment" />
+          </label>
+          <div class="actions">
+            <button type="button" (click)="act('APPROVE')" [disabled]="submitting">Approve step</button>
+            <button type="button" class="secondary" (click)="act('REQUEST_INFO')" [disabled]="submitting">
+              Request info
+            </button>
+            <button type="button" class="danger" (click)="act('REJECT')" [disabled]="submitting">Reject</button>
+          </div>
+          @if (latestApproveDelivery().length) {
+            <h4>Notifications</h4>
+            <ul class="history">
+              @for (d of latestApproveDelivery(); track d.at) {
+                <li>{{ d.channel }} → {{ d.status }}{{ d.recipient ? ' · ' + d.recipient : '' }}</li>
+              }
+            </ul>
+          }
+          <h4>History</h4>
+          <ul class="history">
+            @for (h of selected.history; track h.at) {
+              <li>{{ h.at }} — {{ h.type }}: {{ h.message }}</li>
+            }
+          </ul>
+        }
+      </section>
+    </div>
+  }
+</div>

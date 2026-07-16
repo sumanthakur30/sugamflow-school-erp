@@ -1,0 +1,87 @@
+<section class="page">
+  <div class="page-head">
+    <h2>Universal Module Settings</h2>
+    <p>
+      Edit every module setting key — booleans, numbers, strings, string lists, and advanced JSON —
+      without code changes.
+    </p>
+  </div>
+
+  @if (error) {
+    <p class="error panel" role="alert">{{ error }}</p>
+  }
+  @if (status) {
+    <p class="status panel">{{ status }}</p>
+  }
+
+  <div class="chip-list" style="margin-bottom: 1rem">
+    @for (m of modules; track m) {
+      <button type="button" class="secondary" [class.active]="m === selected" (click)="load(m)">
+        {{ m }}
+      </button>
+    }
+  </div>
+
+  @if (settingsDoc) {
+    <div class="panel">
+      <h3>{{ selected }} settings</h3>
+      <p class="muted">
+        Branch {{ settingsDoc.branchId || '—' }} · session
+        {{ settingsDoc.academicSessionId || '—' }}
+      </p>
+
+      @for (row of rows; track row.key; let i = $index) {
+        <div class="subpanel">
+          <div class="grid two">
+            <label>
+              Key
+              <input [value]="row.key" readonly />
+            </label>
+            <label>
+              Type
+              <input [value]="row.kind" readonly />
+            </label>
+          </div>
+
+          @if (row.kind === 'boolean') {
+            <div class="toggle">
+              <span>{{ row.key }}</span>
+              <input type="checkbox" [(ngModel)]="row.value" [name]="row.key" />
+            </div>
+          } @else if (row.kind === 'number') {
+            <label>
+              Value
+              <input type="number" [(ngModel)]="row.value" [name]="row.key" />
+            </label>
+          } @else if (row.kind === 'string') {
+            <label>
+              Value
+              <input [(ngModel)]="row.text" [name]="row.key" />
+            </label>
+          } @else if (row.kind === 'string[]') {
+            <label>
+              Values (comma-separated)
+              <input [(ngModel)]="row.text" [name]="row.key" />
+            </label>
+          } @else {
+            <label>
+              JSON
+              <textarea rows="6" [(ngModel)]="row.text" [name]="row.key"></textarea>
+            </label>
+          }
+
+          <div class="actions">
+            <button type="button" class="secondary danger" (click)="removeRow(i)">Remove key</button>
+          </div>
+        </div>
+      }
+
+      <div class="actions">
+        <button type="button" class="secondary" (click)="addKey()">Add key</button>
+        <button type="button" (click)="save()" [disabled]="busy">
+          {{ busy ? 'Saving…' : 'Save' }}
+        </button>
+      </div>
+    </div>
+  }
+</section>

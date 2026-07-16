@@ -1,0 +1,25 @@
+<section class="page">
+  <div class="page-head">
+    <h2>{{ title }}</h2>
+    <p>Config-driven portal section — data from module settings API path.</p>
+  </div>
+
+  @if (error) {
+    <p class="error panel" role="alert">{{ error }}</p>
+  }
+
+  @if (loading) {
+    <p class="panel">Loading…</p>
+  } @else if (!rows.length) {
+    <p class="panel muted">{{ emptyMessage }}</p>
+  } @else {
+    <ul class="record-list">
+      @for (row of rows; track row.id || $index) {
+        <li class="panel record">
+          <strong>{{ rowTitle(row) }}</strong>
+          <p class="muted">{{ rowMeta(row) }}</p>
+        </li>
+      }
+    </ul>
+  }
+</section>

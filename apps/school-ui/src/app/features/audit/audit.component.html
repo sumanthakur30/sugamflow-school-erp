@@ -1,0 +1,147 @@
+<section class="page">
+  <div class="page-head">
+    <h2>Config audit &amp; rollback</h2>
+    <p>
+      Version control for configuration — who changed what, old/new values, approval, and rollback
+      that restores settings (FEATURE_AUDIT_LOGS).
+    </p>
+  </div>
+
+  @if (error) {
+    <p class="error panel" role="alert">{{ error }}</p>
+  }
+
+  @if (loading) {
+    <p class="panel">Loading audit configuration…</p>
+  } @else if (!featureEnabled) {
+    <p class="panel">Config audit is not enabled for this plan (FEATURE_AUDIT_LOGS).</p>
+  } @else {
+    @if (statusMsg) {
+      <p class="status panel">{{ statusMsg }}</p>
+    }
+
+    <section class="panel">
+      <h3>Filters</h3>
+      <div class="grid three">
+        <label>
+          Entity type
+          <select [(ngModel)]="filterEntityType" name="entityType" (change)="reload()">
+            <option value="">All</option>
+            @for (t of entityTypes; track t) {
+              <option [value]="t">{{ t }}</option>
+            }
+          </select>
+        </label>
+        <label>
+          Status
+          <select [(ngModel)]="filterStatus" name="status" (change)="reload()">
+            <option value="">All</option>
+            @for (s of statuses; track s) {
+              <option [value]="s">{{ s }}</option>
+            }
+          </select>
+        </label>
+        <label>
+          Entity key
+          <input
+            [(ngModel)]="filterEntityKey"
+            name="entityKey"
+            placeholder="e.g. theme, admission"
+            (keyup.enter)="reload()"
+          />
+        </label>
+      </div>
+      <div class="actions">
+        <button type="button" (click)="reload()">Apply</button>
+        <button type="button" class="secondary" (click)="clearFilters()">Clear</button>
+        <button type="button" class="secondary" (click)="seedSample()" [disabled]="busy">
+          Record sample change
+        </button>
+      </div>
+    </section>
+
+    <div class="audit-layout">
+      <section class="panel">
+        <h3>Change log ({{ entries.length }})</h3>
+        @if (!entries.length) {
+          <p class="muted">No config changes yet. Save Design Studio, module settings, menus, or localization — or record a sample.</p>
+        }
+        <ul class="audit-list">
+          @for (e of entries; track e.id) {
+            <li>
+              <button
+                type="button"
+                class="audit-row"
+                [class.active]="e.id === selectedId"
+                (click)="select(e)"
+              >
+                <span class="row-title">{{ e.entityType }} / {{ e.entityKey }}</span>
+                <span [class]="statusClass(e.status)">{{ e.status }}</span>
+                <span class="muted row-meta"
+                  >{{ e.changedBy }} · {{ e.timestamp }}
+                  @if (e.rollbackOf) {
+                    · rollback of {{ e.rollbackOf }}
+                  }
+                </span>
+                <span class="row-reason">{{ e.reason }}</span>
+              </button>
+            </li>
+          }
+        </ul>
+      </section>
+
+      <section class="panel detail">
+        <h3>Detail</h3>
+        @if (!selected) {
+          <p class="muted">Select a change to inspect old/new values and take action.</p>
+        } @else {
+          <p>
+            <strong>{{ selected.entityType }}</strong> /
+            <code>{{ selected.entityKey }}</code>
+            <span [class]="statusClass(selected.status)">{{ selected.status }}</span>
+          </p>
+          <p class="muted">
+            {{ selected.changedBy }} · {{ selected.timestamp }}
+            @if (selected.approvedAt) {
+              · approved {{ selected.approvedAt }}
+            }
+            @if (selected.rollbackOf) {
+              · rollback of <code>{{ selected.rollbackOf }}</code>
+            }
+          </p>
+          <p>{{ selected.reason }}</p>
+
+          <div class="diff-grid">
+            <div>
+              <h4>Old value</h4>
+              <pre>{{ json(selected.oldValue) }}</pre>
+            </div>
+            <div>
+              <h4>New value</h4>
+              <pre>{{ json(selected.newValue) }}</pre>
+            </div>
+          </div>
+
+          <div class="actions">
+            @if (selected.canApprove) {
+              <button type="button" (click)="approve()" [disabled]="busy">Approve</button>
+            }
+            @if (selected.canRollback) {
+              <label class="rollback-reason">
+                Rollback reason
+                <input
+                  [(ngModel)]="rollbackReason"
+                  name="rollbackReason"
+                  placeholder="Optional reason"
+                />
+              </label>
+              <button type="button" class="secondary" (click)="rollback()" [disabled]="busy">
+                Rollback &amp; restore
+              </button>
+            }
+          </div>
+        }
+      </section>
+    </div>
+  }
+</section>
