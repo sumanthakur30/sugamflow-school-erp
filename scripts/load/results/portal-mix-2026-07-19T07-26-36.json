@@ -1,0 +1,473 @@
+{
+  "root_group": {
+    "name": "",
+    "path": "",
+    "id": "d41d8cd98f00b204e9800998ecf8427e",
+    "groups": [
+      {
+        "name": "setup",
+        "path": "::setup",
+        "id": "5c0f8025f7e0b6654089e5b00e950f1a",
+        "groups": [],
+        "checks": [
+            {
+              "name": "login 200",
+              "path": "::setup::login 200",
+              "id": "647055af8ffe21e58084ae4b140cdda0",
+              "passes": 12,
+              "fails": 0
+            },
+            {
+              "fails": 0,
+              "name": "login token",
+              "path": "::setup::login token",
+              "id": "c50caa093e0fd4b1a28108e7449453f2",
+              "passes": 12
+            }
+          ]
+      }
+    ],
+    "checks": [
+      {
+        "name": "parent-bootstrap not 5xx",
+        "path": "::parent-bootstrap not 5xx",
+        "id": "1c0c78c8326e08445bebd28054b1f3f3",
+        "passes": 18,
+        "fails": 0
+      },
+      {
+        "name": "parent-bootstrap not 401",
+        "path": "::parent-bootstrap not 401",
+        "id": "214ea4865d91521cbd4e15b4fd997b46",
+        "passes": 18,
+        "fails": 0
+      },
+      {
+        "path": "::parent-access-scope not 5xx",
+        "id": "c3f3ab950a49bc7c739806223a3d6d0f",
+        "passes": 18,
+        "fails": 0,
+        "name": "parent-access-scope not 5xx"
+      },
+      {
+        "fails": 0,
+        "name": "parent-access-scope not 401",
+        "path": "::parent-access-scope not 401",
+        "id": "376deb57443c498286125cbfeb7cdd0c",
+        "passes": 18
+      },
+      {
+        "path": "::parent-students not 5xx",
+        "id": "90dc9435b4ad735e54b1895418a70220",
+        "passes": 18,
+        "fails": 0,
+        "name": "parent-students not 5xx"
+      },
+      {
+        "name": "parent-students not 401",
+        "path": "::parent-students not 401",
+        "id": "f6a984f0d0a94275f3df138e1b5fbb17",
+        "passes": 18,
+        "fails": 0
+      },
+      {
+        "name": "parent-homework-mine not 5xx",
+        "path": "::parent-homework-mine not 5xx",
+        "id": "9c2a1118a3e424c59a31038ad77377bf",
+        "passes": 18,
+        "fails": 0
+      },
+      {
+        "name": "parent-homework-mine not 401",
+        "path": "::parent-homework-mine not 401",
+        "id": "0312dccb525e83715acc0e52f96d5ea3",
+        "passes": 18,
+        "fails": 0
+      },
+      {
+        "id": "8e70c9a3440461ee3683c56e78381810",
+        "passes": 24,
+        "fails": 0,
+        "name": "teacher-bootstrap not 5xx",
+        "path": "::teacher-bootstrap not 5xx"
+      },
+      {
+        "path": "::teacher-bootstrap not 401",
+        "id": "17212cfea562c71935d5c440de698c48",
+        "passes": 24,
+        "fails": 0,
+        "name": "teacher-bootstrap not 401"
+      },
+      {
+        "name": "parent-fees not 5xx",
+        "path": "::parent-fees not 5xx",
+        "id": "395ac43b92db4617c44e8e63d2241529",
+        "passes": 17,
+        "fails": 0
+      },
+      {
+        "fails": 0,
+        "name": "parent-fees not 401",
+        "path": "::parent-fees not 401",
+        "id": "f51cf819c9e15a814ffd166f9c008196",
+        "passes": 17
+      },
+      {
+        "name": "teacher-access-scope not 5xx",
+        "path": "::teacher-access-scope not 5xx",
+        "id": "c3b18f5e069c32e5635fff97e1d4d311",
+        "passes": 24,
+        "fails": 0
+      },
+      {
+        "fails": 0,
+        "name": "teacher-access-scope not 401",
+        "path": "::teacher-access-scope not 401",
+        "id": "dde25f33a23d18af17514daa104cad4c",
+        "passes": 24
+      },
+      {
+        "name": "teacher-students not 5xx",
+        "path": "::teacher-students not 5xx",
+        "id": "4b7acbfe6909d21832b92a9c0fd93d45",
+        "passes": 24,
+        "fails": 0
+      },
+      {
+        "passes": 24,
+        "fails": 0,
+        "name": "teacher-students not 401",
+        "path": "::teacher-students not 401",
+        "id": "8c61b9f917cfd6ff8175866601b89e5e"
+      },
+      {
+        "path": "::teacher-homework not 5xx",
+        "id": "e08af7e0cb4a0d1d8cbc1199430c169b",
+        "passes": 24,
+        "fails": 0,
+        "name": "teacher-homework not 5xx"
+      },
+      {
+        "passes": 24,
+        "fails": 0,
+        "name": "teacher-homework not 401",
+        "path": "::teacher-homework not 401",
+        "id": "f68917c171b07a7525c1e97ab8a694a6"
+      },
+      {
+        "name": "teacher-scope not 5xx",
+        "path": "::teacher-scope not 5xx",
+        "id": "e04b53af175b7e8db3462b88f62f27fb",
+        "passes": 24,
+        "fails": 0
+      },
+      {
+        "name": "teacher-scope not 401",
+        "path": "::teacher-scope not 401",
+        "id": "c3a65f7ebf2107587441bc22c8e51886",
+        "passes": 24,
+        "fails": 0
+      },
+      {
+        "path": "::parent-student-360 not 5xx",
+        "id": "dc94659f81a32e901fe77482d93957c0",
+        "passes": 12,
+        "fails": 0,
+        "name": "parent-student-360 not 5xx"
+      },
+      {
+        "name": "parent-student-360 not 401",
+        "path": "::parent-student-360 not 401",
+        "id": "a8a1b6d878ed5a6ef4352e8ea0720b20",
+        "passes": 12,
+        "fails": 0
+      }
+    ]
+  },
+  "options": {
+    "summaryTrendStats": [
+      "avg",
+      "min",
+      "med",
+      "max",
+      "p(90)",
+      "p(95)"
+    ],
+    "summaryTimeUnit": "",
+    "noColor": true
+  },
+  "state": {
+    "isStdOutTTY": false,
+    "isStdErrTTY": false,
+    "testRunDurationMs": 106167.2394
+  },
+  "metrics": {
+    "http_req_duration{expected_response:true}": {
+      "contains": "time",
+      "values": {
+        "avg": 1886.828434848485,
+        "min": 2.4231,
+        "med": 69.50325000000001,
+        "max": 19853.6488,
+        "p(90)": 10009.07343,
+        "p(95)": 19572.549554999998
+      },
+      "type": "trend"
+    },
+    "vus_max": {
+      "type": "gauge",
+      "contains": "default",
+      "values": {
+        "value": 12,
+        "min": 12,
+        "max": 12
+      }
+    },
+    "http_req_blocked": {
+      "contains": "time",
+      "values": {
+        "p(95)": 2.207894999999998,
+        "avg": 0.6012205128205128,
+        "min": 0,
+        "med": 0,
+        "max": 38.1463,
+        "p(90)": 0.9939900000000005
+      },
+      "type": "trend"
+    },
+    "data_sent": {
+      "type": "counter",
+      "contains": "data",
+      "values": {
+        "count": 126918,
+        "rate": 1195.4535195345768
+      }
+    },
+    "http_req_duration": {
+      "values": {
+        "avg": 4673.561545726496,
+        "min": 2.4231,
+        "med": 96.48079999999999,
+        "max": 20006.1525,
+        "p(90)": 20000.25547,
+        "p(95)": 20000.7932
+      },
+      "type": "trend",
+      "contains": "time"
+    },
+    "http_req_sending": {
+      "contains": "time",
+      "values": {
+        "avg": 0.6470551282051282,
+        "min": 0,
+        "med": 0,
+        "max": 40.6612,
+        "p(90)": 0,
+        "p(95)": 0.5364999999999995
+      },
+      "type": "trend"
+    },
+    "data_received": {
+      "type": "counter",
+      "contains": "data",
+      "values": {
+        "count": 426760,
+        "rate": 4019.695740529917
+      }
+    },
+    "iteration_duration": {
+      "type": "trend",
+      "contains": "time",
+      "values": {
+        "p(95)": 50552.622774999996,
+        "avg": 25118.686050000004,
+        "min": 973.9894,
+        "med": 25833.4211,
+        "max": 50574.9646,
+        "p(90)": 45475.0414
+      }
+    },
+    "http_req_receiving": {
+      "type": "trend",
+      "contains": "time",
+      "values": {
+        "avg": 5.780326495726497,
+        "min": 0,
+        "med": 0.8795,
+        "max": 111.5796,
+        "p(90)": 15.915370000000005,
+        "p(95)": 29.485049999999994
+      }
+    },
+    "checks": {
+      "type": "rate",
+      "contains": "default",
+      "values": {
+        "rate": 1,
+        "passes": 466,
+        "fails": 0
+      }
+    },
+    "iterations": {
+      "type": "counter",
+      "contains": "default",
+      "values": {
+        "count": 36,
+        "rate": 0.3390876526831873
+      }
+    },
+    "http_reqs": {
+      "type": "counter",
+      "contains": "default",
+      "values": {
+        "count": 234,
+        "rate": 2.2040697424407174
+      }
+    },
+    "portal_login_ms": {
+      "contains": "time",
+      "values": {
+        "max": 139,
+        "p(90)": 110.10000000000001,
+        "p(95)": 123.59999999999998,
+        "avg": 96.16666666666667,
+        "min": 75,
+        "med": 93.5
+      },
+      "thresholds": {
+        "p(95)<3000": {
+          "ok": true
+        }
+      },
+      "type": "trend"
+    },
+    "http_req_waiting": {
+      "type": "trend",
+      "contains": "time",
+      "values": {
+        "max": 20006.1525,
+        "p(90)": 20000.25547,
+        "p(95)": 20000.7932,
+        "avg": 4667.134164102567,
+        "min": 1.5131,
+        "med": 92.108
+      }
+    },
+    "portal_tenant_leak": {
+      "type": "counter",
+      "contains": "default",
+      "values": {
+        "count": 0,
+        "rate": 0
+      },
+      "thresholds": {
+        "count==0": {
+          "ok": true
+        }
+      }
+    },
+    "http_req_tls_handshaking": {
+      "type": "trend",
+      "contains": "time",
+      "values": {
+        "avg": 0,
+        "min": 0,
+        "med": 0,
+        "max": 0,
+        "p(90)": 0,
+        "p(95)": 0
+      }
+    },
+    "vus": {
+      "values": {
+        "min": 0,
+        "max": 12,
+        "value": 6
+      },
+      "type": "gauge",
+      "contains": "default"
+    },
+    "portal_by_role": {
+      "type": "counter",
+      "contains": "default",
+      "values": {
+        "count": 221,
+        "rate": 2.0816214234162334
+      }
+    },
+    "portal_fail_rate": {
+      "type": "rate",
+      "contains": "default",
+      "values": {
+        "rate": 0,
+        "passes": 0,
+        "fails": 233
+      },
+      "thresholds": {
+        "rate<0.15": {
+          "ok": true
+        }
+      }
+    },
+    "http_req_failed": {
+      "type": "rate",
+      "contains": "default",
+      "values": {
+        "rate": 0.15384615384615385,
+        "passes": 36,
+        "fails": 198
+      },
+      "thresholds": {
+        "rate<0.12": {
+          "ok": false
+        }
+      }
+    },
+    "portal_read_ms": {
+      "contains": "time",
+      "values": {
+        "p(90)": 20001,
+        "p(95)": 20002,
+        "avg": 4944.538461538462,
+        "min": 3,
+        "med": 100,
+        "max": 20009
+      },
+      "thresholds": {
+        "p(95)<2500": {
+          "ok": false
+        }
+      },
+      "type": "trend"
+    },
+    "http_req_connecting": {
+      "type": "trend",
+      "contains": "time",
+      "values": {
+        "avg": 0.3294478632478633,
+        "min": 0,
+        "med": 0,
+        "max": 14.189,
+        "p(90)": 0.7845500000000001,
+        "p(95)": 1.58188
+      }
+    }
+  },
+  "setup_data": {
+    "schoolCount": 6,
+    "tokens": {
+      "load-school-02:teacher": "eyJhbGciOiJIUzI1NiJ9.eyJzaG9wSWQiOiJsb2FkLXNjaG9vbC0wMiIsInRlbmFudElkIjoyMDIsInJvbGUiOiJURUFDSEVSIiwicGVybWlzc2lvbnMiOltdLCJzdWIiOiJ0ZWFjaGVyX2xvYWQtc2Nob29sLTAyIiwiaWF0IjoxNzg0NDQ1ODkwLCJleHAiOjE3ODQ0NzQ2OTB9.CNJrEvdACHJwi2ryVnhruePnr-47cri_ku-zzZ--pX0",
+      "load-school-03:parent": "eyJhbGciOiJIUzI1NiJ9.eyJzaG9wSWQiOiJsb2FkLXNjaG9vbC0wMyIsInRlbmFudElkIjoyMDMsInJvbGUiOiJQQVJFTlQiLCJwZXJtaXNzaW9ucyI6W10sInN1YiI6InBhcmVudF9sb2FkLXNjaG9vbC0wMyIsImlhdCI6MTc4NDQ0NTg5MCwiZXhwIjoxNzg0NDc0NjkwfQ._AKIvLXTn41pc1oJD8EONJmagXmlZwlcqAOz28EKtjA",
+      "load-school-04:parent": "eyJhbGciOiJIUzI1NiJ9.eyJzaG9wSWQiOiJsb2FkLXNjaG9vbC0wNCIsInRlbmFudElkIjoyMDQsInJvbGUiOiJQQVJFTlQiLCJwZXJtaXNzaW9ucyI6W10sInN1YiI6InBhcmVudF9sb2FkLXNjaG9vbC0wNCIsImlhdCI6MTc4NDQ0NTg5MCwiZXhwIjoxNzg0NDc0NjkwfQ.MK2UjcrpRD--plHx9sgou4lA_LkNlI9U4IrNqTLJKuU",
+      "load-school-04:teacher": "eyJhbGciOiJIUzI1NiJ9.eyJzaG9wSWQiOiJsb2FkLXNjaG9vbC0wNCIsInRlbmFudElkIjoyMDQsInJvbGUiOiJURUFDSEVSIiwicGVybWlzc2lvbnMiOltdLCJzdWIiOiJ0ZWFjaGVyX2xvYWQtc2Nob29sLTA0IiwiaWF0IjoxNzg0NDQ1ODkwLCJleHAiOjE3ODQ0NzQ2OTB9.1qggPeLbuzYzvEQnSTTe7qJJ5IPmyPVMHZ2-4mLLjCM",
+      "load-school-05:parent": "eyJhbGciOiJIUzI1NiJ9.eyJzaG9wSWQiOiJsb2FkLXNjaG9vbC0wNSIsInRlbmFudElkIjoyMDUsInJvbGUiOiJQQVJFTlQiLCJwZXJtaXNzaW9ucyI6W10sInN1YiI6InBhcmVudF9sb2FkLXNjaG9vbC0wNSIsImlhdCI6MTc4NDQ0NTg5MSwiZXhwIjoxNzg0NDc0NjkxfQ.Zuy-PnS198CAI4Mwxw_9aNqcW3_La5No1uWcMuWM-wU",
+      "load-school-05:teacher": "eyJhbGciOiJIUzI1NiJ9.eyJzaG9wSWQiOiJsb2FkLXNjaG9vbC0wNSIsInRlbmFudElkIjoyMDUsInJvbGUiOiJURUFDSEVSIiwicGVybWlzc2lvbnMiOltdLCJzdWIiOiJ0ZWFjaGVyX2xvYWQtc2Nob29sLTA1IiwiaWF0IjoxNzg0NDQ1ODkwLCJleHAiOjE3ODQ0NzQ2OTB9.eXnXMvKiB6uuzCSpbqP1PnynQMBwZ0wAXOpCDkVZeXo",
+      "demo-school:teacher": "eyJhbGciOiJIUzI1NiJ9.eyJzaG9wSWQiOiJkZW1vLXNjaG9vbCIsInRlbmFudElkIjoxMDAsInJvbGUiOiJURUFDSEVSIiwicGVybWlzc2lvbnMiOltdLCJzdWIiOiJ0ZWFjaGVyX2RlbW8tc2Nob29sIiwiaWF0IjoxNzg0NDQ1ODkwLCJleHAiOjE3ODQ0NzQ2OTB9.ptc0YVSV_F_fH8usMrg2MRWv0d-NB47Pq06c0xGHvS0",
+      "load-school-01:parent": "eyJhbGciOiJIUzI1NiJ9.eyJzaG9wSWQiOiJsb2FkLXNjaG9vbC0wMSIsInRlbmFudElkIjoyMDEsInJvbGUiOiJQQVJFTlQiLCJwZXJtaXNzaW9ucyI6W10sInN1YiI6InBhcmVudF9sb2FkLXNjaG9vbC0wMSIsImlhdCI6MTc4NDQ0NTg5MCwiZXhwIjoxNzg0NDc0NjkwfQ.66Rar1JxCFD-4sbzHkuN5cXcpN8E0pxffcdIgRRNXsg",
+      "load-school-02:parent": "eyJhbGciOiJIUzI1NiJ9.eyJzaG9wSWQiOiJsb2FkLXNjaG9vbC0wMiIsInRlbmFudElkIjoyMDIsInJvbGUiOiJQQVJFTlQiLCJwZXJtaXNzaW9ucyI6W10sInN1YiI6InBhcmVudF9sb2FkLXNjaG9vbC0wMiIsImlhdCI6MTc4NDQ0NTg5MCwiZXhwIjoxNzg0NDc0NjkwfQ.W5MXJaFEPikUrOFvPACKQ2oRWSDJsMJKE5e2golUsxU",
+      "load-school-03:teacher": "eyJhbGciOiJIUzI1NiJ9.eyJzaG9wSWQiOiJsb2FkLXNjaG9vbC0wMyIsInRlbmFudElkIjoyMDMsInJvbGUiOiJURUFDSEVSIiwicGVybWlzc2lvbnMiOltdLCJzdWIiOiJ0ZWFjaGVyX2xvYWQtc2Nob29sLTAzIiwiaWF0IjoxNzg0NDQ1ODkwLCJleHAiOjE3ODQ0NzQ2OTB9.omroO38hO2yqMBF6-sSced98mhfHUwRntpU77EE_w3Y",
+      "demo-school:parent": "eyJhbGciOiJIUzI1NiJ9.eyJzaG9wSWQiOiJkZW1vLXNjaG9vbCIsInRlbmFudElkIjoxMDAsInJvbGUiOiJQQVJFTlQiLCJwZXJtaXNzaW9ucyI6W10sInN1YiI6InBhcmVudF9kZW1vLXNjaG9vbCIsImlhdCI6MTc4NDQ0NTg5MCwiZXhwIjoxNzg0NDc0NjkwfQ.M3h0bA7NDCYO40doFkABkcytU9eHAC6vGwcK8gZ2ZD0",
+      "load-school-01:teacher": "eyJhbGciOiJIUzI1NiJ9.eyJzaG9wSWQiOiJsb2FkLXNjaG9vbC0wMSIsInRlbmFudElkIjoyMDEsInJvbGUiOiJURUFDSEVSIiwicGVybWlzc2lvbnMiOltdLCJzdWIiOiJ0ZWFjaGVyX2xvYWQtc2Nob29sLTAxIiwiaWF0IjoxNzg0NDQ1ODkwLCJleHAiOjE3ODQ0NzQ2OTB9.y_OlRc-vwwUewsAIAE9FTZzxbPVwLcwFd0uw9BfTl5k"
+    }
+  }
+}

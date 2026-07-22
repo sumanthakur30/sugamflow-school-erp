@@ -1,15 +1,15 @@
 # Starts school DOMAIN microservices and registers them with SugamFlow Eureka (:8761).
 # Prefer: .\scripts\start-platform.ps1 first (discovery + gateway).
 param(
-  [switch]$Restart  # stop listeners on 8181-8197 before build/start
+  [switch]$Restart  # stop listeners on 8181-8199 before build/start
 )
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
 Set-Location "$root\services"
 
 if ($Restart) {
-  Write-Host 'Stopping school services on :8181-8197...'
-  foreach ($port in 8181..8197) {
+  Write-Host 'Stopping school services on :8181-8199...'
+  foreach ($port in 8181..8199) {
     Get-NetTCPConnection -LocalPort $port -State Listen -EA SilentlyContinue | ForEach-Object {
       Stop-Process -Id $_.OwningProcess -Force -EA SilentlyContinue
     }
@@ -71,7 +71,9 @@ $modules = @(
   @{ Name = 'library-service'; Port = 8194 },
   @{ Name = 'hostel-service'; Port = 8195 },
   @{ Name = 'transport-service'; Port = 8196 },
-  @{ Name = 'payroll-service'; Port = 8197 }
+  @{ Name = 'payroll-service'; Port = 8197 },
+  @{ Name = 'staff-service'; Port = 8198 },
+  @{ Name = 'academic-structure-service'; Port = 8199 }
 )
 
 foreach ($m in $modules) {
@@ -91,7 +93,16 @@ foreach ($m in $modules) {
     '--eureka.client.register-with-eureka=true',
     '--eureka.instance.prefer-ip-address=true',
     '--eureka.instance.hostname=localhost',
-    '--eureka.instance.ip-address=127.0.0.1'
+    '--eureka.instance.ip-address=127.0.0.1',
+    # Phase 23 operational readiness defaults (also shipped via school-ops.defaults.properties)
+    '--management.endpoints.web.exposure.include=health,info,prometheus,metrics',
+    '--management.endpoint.health.probes.enabled=true',
+    '--management.health.livenessstate.enabled=true',
+    '--management.health.readinessstate.enabled=true',
+    '--management.endpoint.health.group.liveness.include=livenessState',
+    '--management.endpoint.health.group.readiness.include=readinessState,db',
+    '--server.shutdown=graceful',
+    '--spring.lifecycle.timeout-per-shutdown-phase=30s'
   ) -WindowStyle Minimized
 }
 

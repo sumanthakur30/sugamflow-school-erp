@@ -15,6 +15,8 @@ CREATE USER school_library WITH PASSWORD 'school_library';
 CREATE USER school_hostel WITH PASSWORD 'school_hostel';
 CREATE USER school_transport WITH PASSWORD 'school_transport';
 CREATE USER school_payroll WITH PASSWORD 'school_payroll';
+CREATE USER school_staff WITH PASSWORD 'school_staff';
+CREATE USER school_academic WITH PASSWORD 'school_academic';
 
 CREATE DATABASE school_settings_db OWNER school_settings;
 CREATE DATABASE school_subscription_db OWNER school_subscription;
@@ -33,3 +35,5 @@ CREATE DATABASE school_library_db OWNER school_library;
 CREATE DATABASE school_hostel_db OWNER school_hostel;
 CREATE DATABASE school_transport_db OWNER school_transport;
 CREATE DATABASE school_payroll_db OWNER school_payroll;
+CREATE DATABASE school_staff_db OWNER school_staff;
+CREATE DATABASE school_academic_db OWNER school_academic;

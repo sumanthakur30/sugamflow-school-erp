@@ -1,0 +1,72 @@
+{
+    "generatedAt":  "2026-07-19T12:44:57.3311951+05:30",
+    "gateway":  "http://localhost:9090",
+    "schools":  [
+                    {
+                        "shopId":  "demo-school",
+                        "admin":  "admin_demo-school",
+                        "teacher":  "teacher_demo-school",
+                        "parent":  "parent_demo-school",
+                        "password":  "password",
+                        "studentId":  "9aed8c1c-c713-449a-964e-69ff7748dd64",
+                        "admissionNo":  "ADM-2026-MAIN-629B05",
+                        "sectionId":  "0b0d21c7-35fb-4052-8249-a602e008559d",
+                        "homeworkId":  "51a4e097-55f0-44c0-aa86-ddc3a6f727c9"
+                    },
+                    {
+                        "shopId":  "load-school-01",
+                        "admin":  "admin_load-school-01",
+                        "teacher":  "teacher_load-school-01",
+                        "parent":  "parent_load-school-01",
+                        "password":  "password",
+                        "studentId":  "84aad7f8-6471-49d7-9ced-fbae99454110",
+                        "admissionNo":  "ADM-2026-MAIN-3F32C7",
+                        "sectionId":  "bffcc186-6192-4452-bc05-ddc211d94e66",
+                        "homeworkId":  "b78e091b-4bc8-427a-b8ea-14a4b0f840c3"
+                    },
+                    {
+                        "shopId":  "load-school-02",
+                        "admin":  "admin_load-school-02",
+                        "teacher":  "teacher_load-school-02",
+                        "parent":  "parent_load-school-02",
+                        "password":  "password",
+                        "studentId":  "431158a7-00d7-4825-a61d-a71a47bd5ca9",
+                        "admissionNo":  "ADM-2026-MAIN-F8D246",
+                        "sectionId":  "3f8c02ca-8c77-46c3-a7e0-99b68424b4d2",
+                        "homeworkId":  "0521446d-1f1e-4171-bab9-113b76df61f3"
+                    },
+                    {
+                        "shopId":  "load-school-03",
+                        "admin":  "admin_load-school-03",
+                        "teacher":  "teacher_load-school-03",
+                        "parent":  "parent_load-school-03",
+                        "password":  "password",
+                        "studentId":  "c2337084-83c1-491f-853a-75a7c2981758",
+                        "admissionNo":  "ADM-2026-MAIN-678EA4",
+                        "sectionId":  "d36fd43e-9093-4bb8-ae0a-2b78ee823064",
+                        "homeworkId":  "bc1f3ffd-2be2-4326-95b5-ec0054cfd1cc"
+                    },
+                    {
+                        "shopId":  "load-school-04",
+                        "admin":  "admin_load-school-04",
+                        "teacher":  "teacher_load-school-04",
+                        "parent":  "parent_load-school-04",
+                        "password":  "password",
+                        "studentId":  "3a100b87-53f4-4dbf-a786-f813940c544b",
+                        "admissionNo":  "ADM-2026-MAIN-AAE44D",
+                        "sectionId":  "70d0b0e4-fab9-44a8-ac7d-250b086d3569",
+                        "homeworkId":  "895f3a1e-2f8b-4bee-9f48-7ed0f42ddd72"
+                    },
+                    {
+                        "shopId":  "load-school-05",
+                        "admin":  "admin_load-school-05",
+                        "teacher":  "teacher_load-school-05",
+                        "parent":  "parent_load-school-05",
+                        "password":  "password",
+                        "studentId":  "10d28d30-9d1f-44ae-9dc4-2a8075a7b865",
+                        "admissionNo":  "ADM-2026-MAIN-9207CE",
+                        "sectionId":  "84854e3b-35f5-4ce8-9661-b1ba2b8493e8",
+                        "homeworkId":  "f02f2aaa-44c1-493d-b2e3-2947d79a247c"
+                    }
+                ]
+}

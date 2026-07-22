@@ -111,6 +111,12 @@ BEGIN
   IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'school_payroll') THEN
     CREATE USER school_payroll WITH PASSWORD 'school_payroll';
   END IF;
+  IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'school_staff') THEN
+    CREATE USER school_staff WITH PASSWORD 'school_staff';
+  END IF;
+  IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'school_academic') THEN
+    CREATE USER school_academic WITH PASSWORD 'school_academic';
+  END IF;
 END
 `$`$;
 "@
@@ -136,7 +142,9 @@ $dbs = @(
   @{ Db = 'school_library_db'; Owner = 'school_library' },
   @{ Db = 'school_hostel_db'; Owner = 'school_hostel' },
   @{ Db = 'school_transport_db'; Owner = 'school_transport' },
-  @{ Db = 'school_payroll_db'; Owner = 'school_payroll' }
+  @{ Db = 'school_payroll_db'; Owner = 'school_payroll' },
+  @{ Db = 'school_staff_db'; Owner = 'school_staff' },
+  @{ Db = 'school_academic_db'; Owner = 'school_academic' }
 )
 
 foreach ($d in $dbs) {
