@@ -27,7 +27,11 @@ public class BranchController {
 
   @GetMapping("/bootstrap")
   public ApiResponse<Map<String, Object>> bootstrap() {
-    return ApiResponse.ok(service.bootstrap());
+    try {
+      return ApiResponse.ok(service.bootstrap());
+    } catch (SecurityException ex) {
+      throw new ResponseStatusException(HttpStatus.FORBIDDEN, ex.getMessage());
+    }
   }
 
   @GetMapping
@@ -49,6 +53,8 @@ public class BranchController {
   public ApiResponse<Map<String, Object>> create(@RequestBody Map<String, Object> body) {
     try {
       return ApiResponse.ok(service.create(TenantContext.require().organizationId(), body));
+    } catch (SecurityException ex) {
+      throw new ResponseStatusException(HttpStatus.FORBIDDEN, ex.getMessage());
     } catch (IllegalStateException | IllegalArgumentException ex) {
       throw new ResponseStatusException(HttpStatus.BAD_REQUEST, ex.getMessage());
     }
@@ -60,6 +66,8 @@ public class BranchController {
     try {
       return ApiResponse.ok(
           service.update(TenantContext.require().organizationId(), branchKey, body));
+    } catch (SecurityException ex) {
+      throw new ResponseStatusException(HttpStatus.FORBIDDEN, ex.getMessage());
     } catch (IllegalArgumentException ex) {
       throw new ResponseStatusException(HttpStatus.BAD_REQUEST, ex.getMessage());
     }

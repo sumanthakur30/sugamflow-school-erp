@@ -42,12 +42,17 @@ public class SubscriptionPlanSeeder implements ApplicationRunner {
     ensureAdmissionFlagOnAllPlans();
     ensureFlagOnAllPlans("FEATURE_FEE");
     ensureFlagOnAllPlans("FEATURE_STUDENT_MASTER");
+    ensureFlagOnAllPlans("FEATURE_IMPORT_WORKBENCH");
+    ensureFlagOnAllPlans("FEATURE_COMMS_HUB");
+    ensureFlagOnAllPlans("FEATURE_LMS");
     ensureFlagOnAllPlans("FEATURE_ATTENDANCE");
     ensureFlagOnAllPlans("FEATURE_EXAM");
     ensureFlagOnAllPlans("FEATURE_LIBRARY");
     ensureFlagOnAllPlans("FEATURE_HOSTEL");
     ensureFlagOnAllPlans("FEATURE_TRANSPORT");
     ensureFlagOnAllPlans("FEATURE_PAYROLL");
+    ensureFlagOnAllPlans("FEATURE_STAFF_MASTER");
+    ensureFlagOnAllPlans("FEATURE_HR");
     ensureFlagOnAllPlans("FEATURE_AUDIT_LOGS");
     ensureFlagOnAllPlans("FEATURE_REPORT_BUILDER");
     ensureFlagOnAllPlans("FEATURE_PARENT_APP");

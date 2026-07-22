@@ -1,5 +1,6 @@
 package com.sugamflow.school.settings.service;
 
+import com.sugamflow.school.common.security.BranchAccess;
 import com.sugamflow.school.common.tenant.TenantContext;
 import com.sugamflow.school.common.tenant.TenantScope;
 import com.sugamflow.school.settings.integration.AuditClient;
@@ -37,24 +38,39 @@ public class BranchRegistryService {
     ensureDefaultBranch(scope.organizationId());
     boolean multiEnabled = subscription.isFeatureEnabled(scope, FEATURE_MULTI_BRANCH);
     long maxBranches = subscription.getMaxBranches(scope);
-    List<Map<String, Object>> branches = list(scope.organizationId());
-    String currentKey =
-        scope.branchId() == null || scope.branchId().isBlank() ? "main" : scope.branchId();
+    boolean canManage = BranchAccess.canManageBranches(scope);
+    List<Map<String, Object>> branches = listForCaller(scope);
+    String requestedKey =
+        scope.branchId() == null || scope.branchId().isBlank() ? "main" : scope.branchId().trim();
+    String currentKey = requestedKey;
     Map<String, Object> current =
         branches.stream()
-            .filter(b -> currentKey.equals(b.get("branchKey")))
+            .filter(b -> requestedKey.equalsIgnoreCase(String.valueOf(b.get("branchKey"))))
             .findFirst()
-            .orElse(branches.isEmpty() ? null : branches.get(0));
+            .orElse(null);
+    if (current == null) {
+      // Unknown / inactive campus for this caller — fall back to default active campus.
+      current =
+          branches.stream()
+              .filter(b -> Boolean.TRUE.equals(b.get("isDefault")))
+              .findFirst()
+              .orElse(branches.isEmpty() ? null : branches.get(0));
+      if (current != null) {
+        currentKey = String.valueOf(current.get("branchKey"));
+      }
+    } else if (!canManage && !"ACTIVE".equalsIgnoreCase(String.valueOf(current.get("status")))) {
+      throw new SecurityException("Campus is not active: " + requestedKey);
+    }
 
     boolean unlimited = maxBranches < 0;
-    boolean canAdd =
-        multiEnabled && (unlimited || branches.size() < maxBranches);
+    boolean canAdd = canManage && multiEnabled && (unlimited || branches.size() < maxBranches);
 
     Map<String, Object> out = new LinkedHashMap<>();
     out.put("featureEnabled", multiEnabled);
     out.put("requiredFeatureFlag", FEATURE_MULTI_BRANCH);
     out.put("maxBranches", maxBranches);
     out.put("branchCount", branches.size());
+    out.put("canManage", canManage);
     out.put("canAdd", canAdd);
     out.put("currentBranchKey", current != null ? current.get("branchKey") : currentKey);
     out.put("currentBranch", current);
@@ -64,8 +80,14 @@ public class BranchRegistryService {
 
   @Transactional
   public List<Map<String, Object>> list(String org) {
-    ensureDefaultBranch(org);
-    List<OrgBranchEntity> entities = new ArrayList<>(repo.findByOrganizationIdOrderByNameAsc(org));
+    TenantScope scope = TenantContext.require();
+    return listForCaller(scope);
+  }
+
+  private List<Map<String, Object>> listForCaller(TenantScope scope) {
+    ensureDefaultBranch(scope.organizationId());
+    List<OrgBranchEntity> entities =
+        new ArrayList<>(repo.findByOrganizationIdOrderByNameAsc(scope.organizationId()));
     entities.sort(
         (a, b) -> {
           if (a.isDefault() == b.isDefault()) {
@@ -73,8 +95,12 @@ public class BranchRegistryService {
           }
           return a.isDefault() ? -1 : 1;
         });
+    boolean canManage = BranchAccess.canManageBranches(scope);
     List<Map<String, Object>> out = new ArrayList<>();
     for (OrgBranchEntity e : entities) {
+      if (!canManage && !"ACTIVE".equalsIgnoreCase(e.getStatus())) {
+        continue;
+      }
       out.add(toMap(e));
     }
     return out;
@@ -88,6 +114,7 @@ public class BranchRegistryService {
   @Transactional
   public Map<String, Object> create(String org, Map<String, Object> body) {
     TenantScope scope = TenantContext.require();
+    BranchAccess.requireElevatedBranchAdmin(scope);
     ensureDefaultBranch(org);
     if (!subscription.isFeatureEnabled(scope, FEATURE_MULTI_BRANCH)) {
       throw new IllegalStateException(
@@ -127,6 +154,13 @@ public class BranchRegistryService {
 
   @Transactional
   public Map<String, Object> update(String org, String branchKey, Map<String, Object> body) {
+    TenantScope scope = TenantContext.require();
+    BranchAccess.requireElevatedBranchAdmin(scope);
+    if (!subscription.isFeatureEnabled(scope, FEATURE_MULTI_BRANCH)
+        && !"main".equalsIgnoreCase(branchKey)) {
+      // Allow editing the default campus metadata even when multi-branch is off.
+      // Creating additional campuses remains gated by FEATURE_MULTI_BRANCH.
+    }
     OrgBranchEntity e =
         repo.findByOrganizationIdAndBranchKey(org, branchKey)
             .orElseThrow(() -> new IllegalArgumentException("Branch not found: " + branchKey));
@@ -141,6 +175,20 @@ public class BranchRegistryService {
     auditClient.recordChange(
         "ORG_BRANCH", branchKey, before, saved, "Branch updated: " + branchKey);
     return saved;
+  }
+
+  /** Idempotent: creates Main Campus when the org has no campuses yet. */
+  @Transactional
+  public Map<String, Object> ensureMainCampus(String org) {
+    ensureDefaultBranch(org);
+    return repo.findByOrganizationIdAndBranchKey(org, "main")
+        .map(this::toMap)
+        .orElseGet(
+            () ->
+                repo.findByOrganizationIdOrderByNameAsc(org).stream()
+                    .findFirst()
+                    .map(this::toMap)
+                    .orElse(null));
   }
 
   private void ensureDefaultBranch(String org) {

@@ -28,8 +28,10 @@ import com.sugamflow.school.settings.persistence.repo.UiScreenConfigRepository;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -38,7 +40,8 @@ public class SettingsConfigService {
 
   public static final List<String> MODULE_KEYS =
       List.of(
-          "admission", "attendance", "fee", "student", "payroll", "transport", "hostel", "exam", "library",
+          "admission", "attendance", "fee", "student", "staff", "payroll", "transport", "hostel", "exam", "library",
+          "lms",
           "parent_portal", "teacher_portal", "offline",
           "communication", "inventory", "notification", "security", "ai", "dashboard", "workflow",
           "printing");
@@ -86,6 +89,19 @@ public class SettingsConfigService {
             });
   }
 
+  /**
+   * Public login white-label: return stored theme if present, otherwise an in-memory platform
+   * default. Does <strong>not</strong> persist — avoids creating orphan rows while users type an
+   * organization id on the login screen.
+   */
+  @Transactional(readOnly = true)
+  public DesignTheme findThemeOrPlatformDefault(String org, String branch) {
+    return designThemeRepository
+        .findByOrganizationIdAndBranchId(org, branch)
+        .map(this::toTheme)
+        .orElseGet(() -> DesignTheme.platformDefault(org, branch));
+  }
+
   @Transactional
   public DesignTheme saveTheme(DesignTheme theme) {
     DesignThemeEntity entity =
@@ -129,6 +145,9 @@ public class SettingsConfigService {
               if ("student".equals(moduleKey)) {
                 applyStudentDefaults(settings);
               }
+              if ("staff".equals(moduleKey)) {
+                applyStaffDefaults(settings);
+              }
               if ("attendance".equals(moduleKey)) {
                 applyAttendanceDefaults(settings);
               }
@@ -146,6 +165,9 @@ public class SettingsConfigService {
               }
               if ("payroll".equals(moduleKey)) {
                 applyPayrollDefaults(settings);
+              }
+              if ("lms".equals(moduleKey)) {
+                applyLmsDefaults(settings);
               }
               if (PortalCatalog.MODULE_PARENT.equals(moduleKey)) {
                 settings.putAll(PortalCatalog.defaultParentSettings());
@@ -189,6 +211,15 @@ public class SettingsConfigService {
       }
       return changed;
     }
+    if ("staff".equals(ms.getModuleKey())) {
+      Map<String, Object> settings =
+          ms.getSettings() != null ? new LinkedHashMap<>(ms.getSettings()) : new LinkedHashMap<>();
+      boolean changed = applyStaffDefaults(settings);
+      if (changed) {
+        ms.setSettings(settings);
+      }
+      return changed;
+    }
     if ("attendance".equals(ms.getModuleKey())) {
       Map<String, Object> settings =
           ms.getSettings() != null ? new LinkedHashMap<>(ms.getSettings()) : new LinkedHashMap<>();
@@ -211,6 +242,15 @@ public class SettingsConfigService {
       Map<String, Object> settings =
           ms.getSettings() != null ? new LinkedHashMap<>(ms.getSettings()) : new LinkedHashMap<>();
       boolean changed = applyLibraryDefaults(settings);
+      if (changed) {
+        ms.setSettings(settings);
+      }
+      return changed;
+    }
+    if ("lms".equals(ms.getModuleKey())) {
+      Map<String, Object> settings =
+          ms.getSettings() != null ? new LinkedHashMap<>(ms.getSettings()) : new LinkedHashMap<>();
+      boolean changed = applyLmsDefaults(settings);
       if (changed) {
         ms.setSettings(settings);
       }
@@ -282,19 +322,110 @@ public class SettingsConfigService {
   }
 
   private static boolean applyParentPortalDefaults(Map<String, Object> settings) {
+    return mergePortalDefaults(settings, PortalCatalog.defaultParentSettings());
+  }
+
+  private static boolean applyTeacherPortalDefaults(Map<String, Object> settings) {
+    return mergePortalDefaults(settings, PortalCatalog.defaultTeacherSettings());
+  }
+
+  /**
+   * Portal catalogs evolve (new nav items / section apiPaths). Top-level putIfAbsent alone leaves
+   * stale nested nav/sections in the DB — merge missing nav ids and section keys, and refresh known
+   * legacy apiPaths to the roster/gradebook/parent endpoints.
+   */
+  @SuppressWarnings("unchecked")
+  private static boolean mergePortalDefaults(Map<String, Object> settings, Map<String, Object> defaults) {
     boolean changed = false;
-    for (Map.Entry<String, Object> e : PortalCatalog.defaultParentSettings().entrySet()) {
+    for (Map.Entry<String, Object> e : defaults.entrySet()) {
+      if ("nav".equals(e.getKey()) || "sections".equals(e.getKey())) {
+        continue;
+      }
       changed |= putIfAbsent(settings, e.getKey(), e.getValue());
+    }
+
+    Object defNav = defaults.get("nav");
+    if (defNav instanceof List<?> wantNav) {
+      List<Map<String, Object>> normalized = new ArrayList<>();
+      Object curNav = settings.get("nav");
+      if (curNav instanceof List<?> list) {
+        for (Object item : list) {
+          if (item instanceof Map<?, ?> m) {
+            @SuppressWarnings("unchecked")
+            Map<String, Object> copy = new LinkedHashMap<>((Map<String, Object>) m);
+            normalized.add(copy);
+          }
+        }
+      }
+      Set<String> have = new LinkedHashSet<>();
+      for (Map<String, Object> item : normalized) {
+        Object id = item.get("id");
+        if (id != null) {
+          have.add(String.valueOf(id));
+        }
+      }
+      for (Object item : wantNav) {
+        if (!(item instanceof Map<?, ?> m)) {
+          continue;
+        }
+        @SuppressWarnings("unchecked")
+        Map<String, Object> want = (Map<String, Object>) m;
+        String id = String.valueOf(want.get("id"));
+        if (!have.contains(id)) {
+          normalized.add(new LinkedHashMap<>(want));
+          have.add(id);
+          changed = true;
+        }
+      }
+      settings.put("nav", normalized);
+    }
+
+    Object defSections = defaults.get("sections");
+    if (defSections instanceof Map<?, ?> wantSections) {
+      Map<String, Object> sections =
+          settings.get("sections") instanceof Map<?, ?> cur
+              ? new LinkedHashMap<>((Map<String, Object>) cur)
+              : new LinkedHashMap<>();
+      for (Map.Entry<?, ?> e : wantSections.entrySet()) {
+        String key = String.valueOf(e.getKey());
+        if (!sections.containsKey(key)) {
+          sections.put(key, e.getValue());
+          changed = true;
+          continue;
+        }
+        if (e.getValue() instanceof Map<?, ?> wantSec && sections.get(key) instanceof Map<?, ?> curSec) {
+          Map<String, Object> merged = new LinkedHashMap<>((Map<String, Object>) curSec);
+          String wantPath = String.valueOf(((Map<?, ?>) wantSec).get("apiPath"));
+          String curPath = String.valueOf(merged.get("apiPath"));
+          if (isLegacyPortalApiPath(curPath) && !wantPath.equals(curPath) && !"null".equals(wantPath)) {
+            merged.put("apiPath", wantPath);
+            if (((Map<?, ?>) wantSec).get("emptyMessage") != null) {
+              merged.put("emptyMessage", ((Map<?, ?>) wantSec).get("emptyMessage"));
+            }
+            if (((Map<?, ?>) wantSec).get("title") != null) {
+              merged.put("title", ((Map<?, ?>) wantSec).get("title"));
+            }
+            sections.put(key, merged);
+            changed = true;
+          }
+        }
+      }
+      settings.put("sections", sections);
     }
     return changed;
   }
 
-  private static boolean applyTeacherPortalDefaults(Map<String, Object> settings) {
-    boolean changed = false;
-    for (Map.Entry<String, Object> e : PortalCatalog.defaultTeacherSettings().entrySet()) {
-      changed |= putIfAbsent(settings, e.getKey(), e.getValue());
+  private static boolean isLegacyPortalApiPath(String path) {
+    if (path == null) {
+      return true;
     }
-    return changed;
+    return switch (path) {
+      case "/api/attendance/records",
+          "/api/exam/records",
+          "/api/exam/marks",
+          "/api/attendance/marks" -> true;
+      default -> false;
+    };
   }
 
   /** Returns true if any key was added. */
@@ -340,6 +471,14 @@ public class SettingsConfigService {
     return changed;
   }
 
+  private static boolean applyStaffDefaults(Map<String, Object> settings) {
+    boolean changed = false;
+    changed |= putIfAbsent(settings, "formKey", "employee_master");
+    changed |= putIfAbsent(settings, "requiredFeatureFlag", "FEATURE_STAFF_MASTER");
+    changed |= putIfAbsent(settings, "directoryEnabled", true);
+    return changed;
+  }
+
   private static boolean applyFeeDefaults(Map<String, Object> settings) {
     boolean changed = false;
     changed |= putIfAbsent(settings, "formKey", "fee_collection");
@@ -349,6 +488,10 @@ public class SettingsConfigService {
     changed |= putIfAbsent(settings, "notifyOnApprove", true);
     changed |= putIfAbsent(settings, "approveNotificationChannels", List.of("EMAIL", "IN_APP"));
     changed |= putIfAbsent(settings, "approveNotificationTemplateId", "fee_approved");
+    changed |= putIfAbsent(settings, "notifyOnDue", true);
+    changed |= putIfAbsent(settings, "dueReminderChannels", List.of("IN_APP", "EMAIL", "SMS"));
+    changed |= putIfAbsent(settings, "dueReminderMinPendingDays", 1);
+    changed |= putIfAbsent(settings, "dueReminderTemplateId", "fee_due_reminder");
     changed |= putIfAbsent(settings, "financeMastersEnabled", true);
     changed |= putIfAbsent(settings, "defaultStructureKey", "grade_8_annual");
     changed |= putIfAbsent(settings, "defaultCurrency", "INR");
@@ -368,6 +511,20 @@ public class SettingsConfigService {
             settings,
             "acceptedAdapterTypes",
             List.of("BIOMETRIC", "FACE", "GPS", "AI_CAMERA"));
+    changed |= putIfAbsent(settings, "notifyOnRosterSubmit", true);
+    changed |= putIfAbsent(settings, "rosterAlertStatuses", List.of("ABSENT", "LATE"));
+    Object channels = settings.get("rosterNotificationChannels");
+    if (channels == null) {
+      settings.put("rosterNotificationChannels", List.of("SMS", "EMAIL", "IN_APP"));
+      changed = true;
+    } else if (channels instanceof List<?> list
+        && list.size() == 2
+        && list.stream().map(String::valueOf).map(String::toUpperCase).collect(java.util.stream.Collectors.toSet())
+            .equals(Set.of("SMS", "EMAIL"))) {
+      // Upgrade only the legacy default; preserve explicitly customized channel lists.
+      settings.put("rosterNotificationChannels", List.of("SMS", "EMAIL", "IN_APP"));
+      changed = true;
+    }
     return changed;
   }
 
@@ -393,6 +550,20 @@ public class SettingsConfigService {
     changed |= putIfAbsent(settings, "mastersEnabled", true);
     changed |= putIfAbsent(settings, "defaultFinePolicyKey", "default_fine");
     changed |= putIfAbsent(settings, "defaultCirculationPolicyKey", "default_circ");
+    return changed;
+  }
+
+  private static boolean applyLmsDefaults(Map<String, Object> settings) {
+    boolean changed = false;
+    changed |= putIfAbsent(settings, "requiredFeatureFlag", "FEATURE_LMS");
+    changed |= putIfAbsent(settings, "mode", "NATIVE_HOMEWORK");
+    changed |= putIfAbsent(settings, "externalProvider", "NONE");
+    changed |= putIfAbsent(settings, "externalBaseUrl", "");
+    changed |= putIfAbsent(settings, "ssoEnabled", false);
+    changed |= putIfAbsent(settings, "homeworkEnabled", true);
+    changed |= putIfAbsent(settings, "parentSubmissionEnabled", true);
+    changed |= putIfAbsent(settings, "assignmentNotifyChannels", List.of("IN_APP", "EMAIL"));
+    changed |= putIfAbsent(settings, "notes", "Phase 24: native homework MVP; Moodle/Google Classroom later");
     return changed;
   }
 

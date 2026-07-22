@@ -40,6 +40,7 @@ public class SubscriptionPlan {
     p.featureFlags.put("FEATURE_HOSTEL", true);
     p.featureFlags.put("FEATURE_TRANSPORT", true);
     p.featureFlags.put("FEATURE_PAYROLL", true);
+    p.featureFlags.put("FEATURE_STAFF_MASTER", true);
     p.featureFlags.put("FEATURE_PARENT_APP", true);
     p.featureFlags.put("FEATURE_TEACHER_APP", true);
     p.featureFlags.put("FEATURE_MULTI_BRANCH", true);
@@ -129,6 +130,7 @@ public class SubscriptionPlan {
       "FEATURE_ADMISSION",
       "FEATURE_FEE",
       "FEATURE_STUDENT_MASTER",
+      "FEATURE_STAFF_MASTER",
       "FEATURE_ACADEMIC_LIFECYCLE",
       "FEATURE_OPS_DEPTH",
       "FEATURE_ATTENDANCE",

@@ -93,6 +93,8 @@ public final class PortalCatalog {
     nav.add(navItem("attendance", "Attendance", "/parent/attendance", "FEATURE_ATTENDANCE"));
     nav.add(navItem("fees", "Fees", "/parent/fees", "FEATURE_FEE"));
     nav.add(navItem("exams", "Results", "/parent/exams", "FEATURE_EXAM"));
+    nav.add(navItem("report-cards", "Report cards", "/parent/report-cards", "FEATURE_EXAM"));
+    nav.add(navItem("homework", "Homework", "/parent/homework", "FEATURE_LMS"));
     return nav;
   }
 
@@ -102,6 +104,8 @@ public final class PortalCatalog {
     nav.add(navItem("students", "Students", "/teacher/students", "FEATURE_STUDENT_MASTER"));
     nav.add(navItem("attendance", "Attendance", "/teacher/attendance", "FEATURE_ATTENDANCE"));
     nav.add(navItem("gradebook", "Gradebook", "/teacher/gradebook", "FEATURE_EXAM"));
+    nav.add(navItem("report-cards", "Report cards", "/teacher/report-cards", "FEATURE_EXAM"));
+    nav.add(navItem("homework", "Homework", "/teacher/homework", "FEATURE_LMS"));
     return nav;
   }
 
@@ -162,9 +166,17 @@ public final class PortalCatalog {
     Map<String, Object> sections = new LinkedHashMap<>();
     sections.put(
         "attendance",
-        section("Attendance", "/api/attendance/records", "No attendance records yet."));
-    sections.put("fees", section("Fee payments", "/api/fee/records", "No fee records yet."));
-    sections.put("exams", section("Exam results", "/api/exam/records", "No exam records yet."));
+        section("Attendance", "/api/attendance/marks/mine", "No submitted attendance yet."));
+    sections.put("fees", section("Fee payments", "/api/fee/collections", "No fee records yet."));
+    sections.put(
+        "exams",
+        section("Exam results", "/api/exam/marks/published", "No published results yet."));
+    sections.put(
+        "report-cards",
+        section("Report cards", "/api/exam/report-cards/mine", "No published report cards yet."));
+    sections.put(
+        "homework",
+        section("Homework", "/api/exam/homework/mine", "No homework assigned yet."));
     return sections;
   }
 
@@ -175,9 +187,16 @@ public final class PortalCatalog {
         section("Class roster", "/api/student/students", "No students enrolled yet."));
     sections.put(
         "attendance",
-        section("Attendance inbox", "/api/attendance/records", "No attendance records yet."));
+        section("Class attendance", "/api/attendance/roster", "Pick a section to mark attendance."));
     sections.put(
-        "gradebook", section("Gradebook", "/api/exam/records", "No exam records yet."));
+        "gradebook",
+        section("Gradebook", "/api/exam/definitions", "Create an exam to enter marks."));
+    sections.put(
+        "report-cards",
+        section("Report cards", "/api/exam/report-cards", "Assemble report cards from grades."));
+    sections.put(
+        "homework",
+        section("Homework", "/api/exam/homework", "Publish homework for your sections."));
     return sections;
   }
 
