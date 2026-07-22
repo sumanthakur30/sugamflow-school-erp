@@ -1,79 +1,577 @@
+.fee-page {
+  max-width: 1280px;
+}
+
+.fee-page .form-page {
+  position: relative;
+  z-index: 0;
+}
+
+.fee-page .form-section-student {
+  position: relative;
+  z-index: 5;
+  overflow: visible;
+}
+
+.fee-page .form-section-details {
+  position: relative;
+  z-index: 1;
+}
+
+.status {
+  color: #166534;
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+}
+
 .error {
   color: #b91c1c;
   background: #fef2f2;
 }
 
-.req {
-  color: #b91c1c;
+.money {
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
 }
 
-.muted {
+.read-field.highlight {
+  padding: 0.55rem 0.65rem;
+  border-radius: var(--sf-radius);
+  background: color-mix(in srgb, var(--sf-primary) 8%, #fff);
+  border: 1px solid color-mix(in srgb, var(--sf-primary) 18%, transparent);
+}
+
+.linkish {
+  display: inline;
+  margin-left: 0.35rem;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--sf-primary);
+  font-weight: 700;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.student-loading,
+.form-hint {
+  margin: 0.5rem 0 0;
+  font-size: 0.9rem;
+}
+
+.student-card {
+  display: flex;
+  gap: 0.9rem;
+  margin-top: 0.85rem;
+  padding: 0.9rem 1rem;
+  border-radius: var(--sf-radius);
+  border: 1px solid color-mix(in srgb, var(--sf-primary) 20%, transparent);
+  background: color-mix(in srgb, var(--sf-primary) 5%, #fff);
+}
+
+.student-card-avatar {
+  flex: 0 0 auto;
+  width: 3.2rem;
+  height: 3.2rem;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  font-size: 1.25rem;
+  font-weight: 800;
+  color: var(--sf-primary);
+  background: color-mix(in srgb, var(--sf-primary) 14%, #fff);
+  border: 1px solid color-mix(in srgb, var(--sf-primary) 22%, transparent);
+}
+
+.student-card-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.student-card-name {
+  font-size: 1.05rem;
+  font-weight: 800;
+  margin-bottom: 0.45rem;
+}
+
+.student-card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(9.5rem, 1fr));
+  gap: 0.45rem 0.85rem;
+  font-size: 0.9rem;
+}
+
+.student-card-grid span {
+  display: block;
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #64748b;
+  margin-bottom: 0.1rem;
+}
+
+.student-card-hint {
+  margin: 0.55rem 0 0;
+  font-size: 0.85rem;
+}
+
+.crumb-sep {
+  margin: 0 0.35rem;
+  color: #94a3b8;
+}
+
+.crumb-current {
+  color: #334155;
+  font-weight: 700;
+}
+
+a.crumb-link {
+  text-decoration: underline;
+  color: var(--sf-primary);
+  font-weight: 700;
+}
+
+.detail-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 1rem;
+  align-items: start;
+  margin-bottom: 1rem;
+}
+
+.detail-student-card {
+  display: flex;
+  gap: 1rem;
+  padding: 1rem 1.1rem;
+  border-radius: 12px;
+  border: 1px solid color-mix(in srgb, var(--sf-primary) 20%, transparent);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--sf-primary) 6%, #fff), #fff 50%);
+}
+
+.detail-avatar {
+  flex: 0 0 auto;
+  width: 4.25rem;
+  height: 4.25rem;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  font-size: 1.5rem;
+  font-weight: 800;
+  color: var(--sf-primary);
+  background: color-mix(in srgb, var(--sf-primary) 14%, #fff);
+  border: 1px solid color-mix(in srgb, var(--sf-primary) 22%, transparent);
+}
+
+.detail-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.detail-student-body h2 {
+  margin: 0 0 0.55rem;
+  font-size: 1.45rem;
+}
+
+.detail-student-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(10.5rem, 1fr));
+  gap: 0.5rem 0.85rem;
+}
+
+.detail-student-grid span {
+  display: block;
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: #64748b;
+  margin-bottom: 0.1rem;
+}
+
+.detail-student-grid strong {
+  font-size: 0.92rem;
+}
+
+.detail-student-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: center;
+  margin-top: 0.85rem;
+}
+
+.tiny-link {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--sf-primary);
+  text-decoration: none;
+}
+
+.detail-note {
+  margin: 0.55rem 0 0;
+  font-size: 0.85rem;
+}
+
+.detail-hero-side {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.55rem;
+  min-width: 10rem;
+}
+
+.detail-hero-side p {
+  margin: 0;
+  text-align: right;
+  font-size: 0.88rem;
+}
+
+.mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.86rem;
+}
+
+.fee-filters {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  margin-bottom: 0.75rem;
+}
+
+.order-list-card {
+  position: relative;
+  z-index: 1;
+  /* Do not use isolation:isolate here — it + panel backdrop-filter trap fixed menus. */
+}
+
+.fee-filter-grid {
+  display: grid;
+  grid-template-columns: minmax(12rem, 1.6fr) minmax(6rem, 0.55fr) minmax(6rem, 0.55fr) auto;
+  gap: 0.55rem 0.75rem;
+  align-items: end;
+  margin-bottom: 0.65rem;
+}
+
+.fee-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  margin: 0;
+  min-width: 0;
+}
+
+.fee-field > span {
+  font-size: 0.75rem;
+  font-weight: 650;
   color: #64748b;
 }
 
-.fee-layout {
-  display: grid;
-  grid-template-columns: 1fr 1.2fr;
-  gap: 1rem;
+.fee-field input {
+  width: 100%;
+  min-height: 2.1rem;
+  font-size: 0.875rem;
+}
+
+.fee-field-clear {
+  justify-self: end;
+}
+
+.fee-field-spacer {
+  display: block;
+  line-height: 1;
+  font-size: 0.75rem;
+}
+
+.fee-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  align-items: center;
+  margin-bottom: 0.45rem;
+}
+
+.fee-chip-label {
+  min-width: 3.5rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #64748b;
+}
+
+.fee-chip {
+  border: 1px solid color-mix(in srgb, var(--sf-primary) 35%, #cbd5e1);
+  background: #fff;
+  color: var(--sf-primary);
+  border-radius: 6px;
+  padding: 0.28rem 0.65rem;
+  font-size: 0.8rem;
+  font-weight: 650;
+  line-height: 1.1;
+  min-height: 0;
+}
+
+.fee-chip.is-on {
+  border-color: var(--sf-primary);
+  background: var(--sf-primary);
+  color: #fff;
+}
+
+.fee-table-wrap {
+  overflow-x: auto;
+}
+
+.fee-orders-table.order-table {
+  table-layout: auto;
+  font-size: 0.85rem;
+  min-width: 44rem;
+}
+
+.fee-orders-table th,
+.fee-orders-table td {
+  padding: 0.45rem 0.55rem;
+  vertical-align: middle;
+}
+
+.fee-orders-table th.sortable {
+  cursor: pointer;
+  user-select: none;
+}
+
+.order-col-student {
+  min-width: 9rem;
+  max-width: 14rem;
+}
+
+.order-col-items {
+  min-width: 9rem;
+  max-width: 16rem;
+}
+
+.student-link,
+.order-patient-link {
+  display: inline;
+  padding: 0;
+  margin: 0;
+  border: 0;
+  background: none;
+  color: var(--sf-primary);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+  text-align: left;
+  text-decoration: none;
+}
+
+.student-link:hover,
+.order-patient-link:hover {
+  text-decoration: underline;
+}
+
+.order-order-number {
+  font-size: 0.75rem;
+  letter-spacing: 0.01em;
+}
+
+.items-preview {
+  display: block;
+  width: 100%;
+  padding: 0;
+  margin: 0;
+  border: 0;
+  background: none;
+  text-align: left;
+  cursor: pointer;
+  line-height: 1.35;
+  white-space: normal;
+}
+
+.items-preview__primary {
+  color: inherit;
+  font-weight: 550;
+}
+
+.items-preview:hover .items-preview__primary {
+  text-decoration: underline;
+  color: var(--sf-primary);
+}
+
+.order-type-badge {
+  font-size: 0.68rem;
+  line-height: 1;
+  padding: 0.22rem 0.5rem;
+}
+
+.order-payment-cell {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  align-items: center;
+  font-size: 0.78rem;
+}
+
+.due-hint {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #c2410c;
+}
+
+.fee-orders-table tbody td:not(.order-col-actions) {
+  position: relative;
+  z-index: 0;
+}
+
+.fee-table-wrap.is-more-open,
+.order-list-card.is-more-open.panel {
+  overflow: visible !important;
+}
+
+.more-wrap {
+  position: relative;
+  display: inline-flex;
+  vertical-align: middle;
+}
+
+.fee-actions-flyout.more-menu.more-menu-anchored {
+  position: absolute !important;
+  top: calc(100% + 0.25rem);
+  right: 0;
+  left: auto;
+  z-index: 6000 !important;
+  min-width: 11.5rem;
+  max-width: min(15rem, calc(100vw - 1rem));
+  margin: 0;
+  padding: 0.35rem;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+  background: #fff;
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.18);
+}
+
+.fee-orders-table .order-col-actions {
+  position: sticky;
+  right: 0;
+  z-index: 4;
+  width: 10.5rem;
+  min-width: 10.5rem;
+  white-space: nowrap;
+  text-align: center;
+  background: #fff;
+  box-shadow: -0.35rem 0 0.65rem rgba(15, 23, 42, 0.08);
+  padding-left: 0.35rem;
+  overflow: visible;
+}
+
+.fee-orders-table thead .order-col-actions {
+  z-index: 5;
+  background: #f8fafc;
+}
+
+.fee-orders-table tbody tr:has(.more-menu-anchored) .order-col-actions {
+  z-index: 30;
+}
+
+.order-actions-inline {
+  display: inline-flex;
+  gap: 0.25rem;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  z-index: 1;
+  pointer-events: auto;
+}
+
+.order-action-btn {
+  font-size: 0.78rem;
+  padding: 0.22rem 0.45rem;
+  white-space: nowrap;
+  min-height: 2rem;
+  pointer-events: auto;
+}
+
+.order-action-btn.is-on {
+  border-color: var(--sf-primary);
+  color: var(--sf-primary);
+  background: color-mix(in srgb, var(--sf-primary) 8%, #fff);
+}
+
+.fee-actions-flyout.more-menu button {
+  display: block;
+  width: 100%;
+  padding: 0.45rem 0.55rem;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  text-align: left;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: #334155;
+  cursor: pointer;
+}
+
+.fee-actions-flyout.more-menu button:hover {
+  background: color-mix(in srgb, var(--sf-primary) 8%, #fff);
+  color: var(--sf-primary);
+}
+
+.more-menu-divider {
+  margin: 0.3rem 0.25rem;
+  border: 0;
+  border-top: 1px solid #e2e8f0;
+}
+
+.fee-actions-flyout.more-menu button.danger-item {
+  color: #b91c1c;
+}
+
+.fee-actions-flyout.more-menu button.danger-item:hover {
+  background: #fef2f2;
+  color: #991b1b;
 }
 
 @media (max-width: 900px) {
-  .fee-layout {
+  .fee-filter-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .fee-field-clear {
+    grid-column: 1 / -1;
+    justify-self: stretch;
+  }
+
+  .fee-field-clear button {
+    width: 100%;
+  }
+}
+
+@media (max-width: 800px) {
+  .detail-hero {
     grid-template-columns: 1fr;
   }
-}
 
-.app-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: grid;
-  gap: 0.35rem;
-}
-
-.app-row {
-  width: 100%;
-  text-align: left;
-  display: grid;
-  gap: 0.15rem;
-  padding: 0.65rem 0.75rem;
-  border: 1px solid rgba(11, 61, 46, 0.15);
-  border-radius: var(--sf-radius);
-  background: #fff;
-  cursor: pointer;
-  color: inherit;
-  font: inherit;
-
-  &.active {
-    border-color: var(--sf-accent, #0b3d2e);
-    background: color-mix(in srgb, var(--sf-panel) 70%, #fff);
+  .detail-hero-side {
+    align-items: stretch;
   }
 
-  span {
-    font-size: 0.85rem;
-    opacity: 0.8;
+  .detail-hero-side p {
+    text-align: left;
   }
 }
 
-.answers {
-  background: #f8fafc;
-  padding: 0.75rem;
-  border-radius: var(--sf-radius);
-  overflow: auto;
-  font-size: 0.85rem;
+@media (max-width: 640px) {
+  .student-card,
+  .detail-student-card {
+    flex-direction: column;
+  }
 }
 
-.history {
-  margin: 0.5rem 0 0;
-  padding-left: 1.1rem;
-  font-size: 0.85rem;
-  color: #334155;
-}
-
-button.secondary {
-  background: #64748b;
-}
-
-button.danger {
-  background: #b91c1c;
+@media print {
+  .head-actions,
+  .form-actions,
+  .crumb,
+  .detail-hero-side button,
+  .detail-student-actions {
+    display: none !important;
+  }
 }

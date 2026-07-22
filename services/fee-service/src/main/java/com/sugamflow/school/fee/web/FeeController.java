@@ -4,6 +4,7 @@ import com.sugamflow.school.common.api.ApiResponse;
 import com.sugamflow.school.common.api.PageResult;
 import com.sugamflow.school.fee.service.FeeClearanceService;
 import com.sugamflow.school.fee.service.FeeCollectionService;
+import com.sugamflow.school.fee.service.FeeDueReminderService;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -24,10 +25,15 @@ public class FeeController {
 
   private final FeeCollectionService service;
   private final FeeClearanceService clearanceService;
+  private final FeeDueReminderService dueReminders;
 
-  public FeeController(FeeCollectionService service, FeeClearanceService clearanceService) {
+  public FeeController(
+      FeeCollectionService service,
+      FeeClearanceService clearanceService,
+      FeeDueReminderService dueReminders) {
     this.service = service;
     this.clearanceService = clearanceService;
+    this.dueReminders = dueReminders;
   }
 
   @GetMapping("/bootstrap")
@@ -69,5 +75,31 @@ public class FeeController {
   @GetMapping("/clearance/{admissionNo}")
   public ApiResponse<Map<String, Object>> clearance(@PathVariable("admissionNo") String admissionNo) {
     return ApiResponse.ok(clearanceService.snapshot(admissionNo));
+  }
+
+  /** Alias for collection UIs: fee dues snapshot by admission number. */
+  @GetMapping("/students/{admissionNo}/fee-summary")
+  public ApiResponse<Map<String, Object>> feeSummary(
+      @PathVariable("admissionNo") String admissionNo) {
+    return ApiResponse.ok(clearanceService.snapshot(admissionNo));
+  }
+
+  /** Alias for pending/open fee items by admission number. */
+  @GetMapping("/students/{admissionNo}/pending-fees")
+  public ApiResponse<Map<String, Object>> pendingFees(
+      @PathVariable("admissionNo") String admissionNo) {
+    return ApiResponse.ok(clearanceService.snapshot(admissionNo));
+  }
+
+  @PostMapping("/due-reminders/run")
+  public ApiResponse<Map<String, Object>> runDueReminders(
+      @RequestBody(required = false) Map<String, Object> body) {
+    return ApiResponse.ok(dueReminders.run(body == null ? Map.of() : body));
+  }
+
+  @GetMapping("/due-reminders/history")
+  public ApiResponse<List<Map<String, Object>>> dueReminderHistory(
+      @RequestParam(value = "admissionNo", required = false) String admissionNo) {
+    return ApiResponse.ok(dueReminders.history(admissionNo));
   }
 }

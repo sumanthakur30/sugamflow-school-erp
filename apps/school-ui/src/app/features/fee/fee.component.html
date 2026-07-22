@@ -1,110 +1,685 @@
-<div class="page">
-  <header class="page-head">
-    <h2>Fee Collection</h2>
-    <p>
-      Config-driven vertical slice — form <code>{{ formKey }}</code>, workflow
-      <code>{{ workflowKey }}</code>, rules &amp; FEATURE_FEE.
-    </p>
-  </header>
+<div class="page fee-page">
+  <sf-student-fee-history
+    [open]="historyOpen"
+    [admissionNo]="historyAdmissionNo"
+    (closed)="closeHistory()"
+    (collect)="onHistoryCollect($event)"
+    (openCollection)="onHistoryOpenCollection($event)"
+  />
 
-  @if (error) {
-    <p class="error panel" role="alert">{{ error }}</p>
-  }
-
-  @if (loading) {
-    <p class="panel">Loading fee configuration…</p>
-  } @else if (!featureEnabled) {
-    <p class="panel">Fee is not enabled for this plan (FEATURE_FEE).</p>
-  } @else {
-    <section class="panel">
-      <h3>New collection</h3>
-      <div class="grid two">
-        @for (field of fields; track field.key) {
-          <label>
-            {{ field.label }}
-            @if (field.mandatory) {
-              <span class="req">*</span>
-            }
-            @if (field.type === 'CHECKBOX') {
-              <input type="checkbox" [(ngModel)]="answers[field.key]" [name]="field.key" />
-            } @else if (field.type === 'NUMBER') {
-              <input type="number" [(ngModel)]="answers[field.key]" [name]="field.key" />
-            } @else {
-              <input [(ngModel)]="answers[field.key]" [name]="field.key" />
-            }
-          </label>
-        }
-      </div>
-      <div class="actions">
-        <button type="button" (click)="submit()" [disabled]="submitting">
-          {{ submitting ? 'Submitting…' : 'Submit collection' }}
+  @if (formOpen && featureEnabled && !loading) {
+    <div class="form-page" [class.is-busy]="submitting">
+      <p class="crumb">
+        <button type="button" class="crumb-link" (click)="closeForm()" [disabled]="submitting">
+          Fee Collection
         </button>
-      </div>
-    </section>
+        / New
+      </p>
+      <header class="page-head list-head">
+        <div>
+          <h2>New Collection</h2>
+          <p>Search and select a student, then enter fee details and submit for approval.</p>
+        </div>
+      </header>
 
-    <div class="fee-layout">
-      <section class="panel">
-        <h3>Inbox</h3>
-        @if (!collections.length) {
-          <p class="muted">No collections yet.</p>
+      @if (error) {
+        <p class="error panel" role="alert">{{ error }}</p>
+      }
+      @if (statusMsg) {
+        <p class="status panel" role="status" aria-live="polite">{{ statusMsg }}</p>
+      }
+
+      <section class="form-section panel form-section-student">
+        <h3 class="form-section-title">Student</h3>
+        @for (_ of [lookupNonce]; track lookupNonce) {
+          <sf-student-lookup
+            label="Find student"
+            [disabled]="submitting"
+            [initialQuery]="lookupSeed"
+            [autoSelectAdmissionNo]="lookupSeed"
+            [includeApplicants]="true"
+            (studentSelected)="onStudentSelected($event)"
+            (cleared)="onStudentCleared()"
+          />
         }
-        <ul class="app-list">
-          @for (row of collections; track row.id) {
-            <li>
-              <button
-                type="button"
-                class="app-row"
-                [class.active]="row.id === selectedId"
-                (click)="select(row)"
-              >
-                <strong>{{ row.answers?.studentName || row.id }}</strong>
-                <span>{{ row.status }} · {{ row.currentStepName }} · {{ row.answers?.amount }}</span>
-              </button>
-            </li>
-          }
-        </ul>
+
+        @if (studentLoading) {
+          <p class="muted student-loading">Loading student &amp; fee details…</p>
+        }
+
+        @if (selectedStudent) {
+          <div class="student-card" aria-live="polite">
+            <div class="student-card-avatar" aria-hidden="true">
+              {{ (selectedStudent.fullName || '?').charAt(0).toUpperCase() }}
+            </div>
+            <div class="student-card-body">
+              <div class="student-card-name">{{ selectedStudent.fullName || '—' }}</div>
+              <div class="student-card-grid">
+                <div><span>Admission No</span>{{ selectedStudent.admissionNo || '—' }}</div>
+                <div><span>Class</span>{{ cardValue('classSection') }}</div>
+                <div><span>Roll No</span>{{ cardValue('rollNo') }}</div>
+                <div><span>Parent</span>{{ cardValue('parentName') }}</div>
+                <div><span>Mobile</span>{{ cardValue('mobile') }}</div>
+                <div><span>Email</span>{{ cardValue('email') }}</div>
+                <div>
+                  <span>Status</span>
+                  <span [class]="statusClass(selectedStudent.status)">{{
+                    selectedStudent.status || '—'
+                  }}</span>
+                </div>
+                <div>
+                  <span>Outstanding</span>
+                  <strong class="money">{{
+                    formatMoney(feeSummary?.pendingAmount ?? 0)
+                  }}</strong>
+                </div>
+              </div>
+              @if (feeSummary?.openCollections) {
+                <p class="student-card-hint muted">
+                  {{ feeSummary.openCollections }} open collection(s) · pending
+                  {{ feeSummary.pendingDays || 0 }} day(s)
+                </p>
+              }
+              @if (selectedStudent.source === 'ADMISSION') {
+                <p class="student-card-hint muted">
+                  Admission applicant (not enrolled in Student Master yet). You can still collect
+                  fees; enroll after the application is approved for full student records.
+                </p>
+              }
+            </div>
+          </div>
+        } @else {
+          <p class="muted form-hint">Search and select a student to continue.</p>
+        }
       </section>
 
-      <section class="panel">
-        <h3>Detail</h3>
-        @if (!selected) {
-          <p class="muted">Select a collection.</p>
-        } @else {
-          <p>
-            <strong>{{ selected.status }}</strong> — step {{ selected.currentStepSequence }}
-            {{ selected.currentStepName }} ({{ selected.assigneeRole }})
-          </p>
-          <pre class="answers">{{ selected.answers | json }}</pre>
-          <label>
-            Comment
-            <input [(ngModel)]="actionComment" name="actionComment" />
-          </label>
-          <div class="actions">
-            <button type="button" (click)="act('APPROVE')" [disabled]="submitting">Approve step</button>
-            <button type="button" class="secondary" (click)="act('REQUEST_INFO')" [disabled]="submitting">
-              Request info
-            </button>
-            <button type="button" class="danger" (click)="act('REJECT')" [disabled]="submitting">Reject</button>
-            @if (selected.hasFeeReceipt) {
-              <button type="button" class="secondary" (click)="downloadReceipt()">Download receipt</button>
+      @if (selectedStudent) {
+        <section class="form-section panel form-section-details">
+          <h3 class="form-section-title">Collection details</h3>
+          <div class="grid three" [attr.aria-busy]="submitting">
+            @for (field of collectionFields; track field.key) {
+              <label>
+                <span class="field-title">
+                  {{ field.label }}
+                  @if (field.mandatory) {
+                    <span class="req">*</span>
+                  }
+                </span>
+                @if (field.type === 'CHECKBOX') {
+                  <input
+                    type="checkbox"
+                    [(ngModel)]="answers[field.key]"
+                    [name]="field.key"
+                    [disabled]="submitting"
+                  />
+                } @else if (field.key === 'feeHead' && feeHeads.length) {
+                  <select
+                    [(ngModel)]="answers[field.key]"
+                    [name]="field.key"
+                    [disabled]="submitting"
+                  >
+                    <option value="">Select fee head</option>
+                    @for (h of feeHeads; track h.key) {
+                      <option [value]="h.key">{{ h.label }}</option>
+                    }
+                  </select>
+                } @else if (field.key === 'paymentMode') {
+                  <select
+                    [(ngModel)]="answers[field.key]"
+                    [name]="field.key"
+                    [disabled]="submitting"
+                  >
+                    <option value="">Select payment mode</option>
+                    @for (m of paymentModes; track m.key) {
+                      <option [value]="m.key">{{ m.label }}</option>
+                    }
+                  </select>
+                } @else if (field.type === 'NUMBER') {
+                  <input
+                    type="number"
+                    [(ngModel)]="answers[field.key]"
+                    [name]="field.key"
+                    [disabled]="submitting"
+                  />
+                } @else {
+                  <input
+                    [(ngModel)]="answers[field.key]"
+                    [name]="field.key"
+                    [disabled]="submitting"
+                  />
+                }
+              </label>
             }
           </div>
-          @if (latestApproveDelivery().length) {
-            <h4>Notifications</h4>
-            <ul class="history">
-              @for (d of latestApproveDelivery(); track d.at) {
-                <li>{{ d.channel }} → {{ d.status }}{{ d.recipient ? ' · ' + d.recipient : '' }}</li>
+        </section>
+      }
+
+      <div class="form-actions actions">
+        <button
+          type="button"
+          (click)="submit()"
+          [disabled]="submitting || !selectedStudent || studentLoading"
+        >
+          {{ submitting ? 'Saving…' : 'Submit collection' }}
+        </button>
+        <button type="button" class="secondary" (click)="closeForm()" [disabled]="submitting">
+          Cancel
+        </button>
+      </div>
+    </div>
+  } @else if (selected && featureEnabled && !loading) {
+    <div class="form-page detail-page" [class.is-busy]="submitting">
+      <p class="crumb">
+        <a routerLink="/admin/finance" class="crumb-link">Finance</a>
+        <span class="crumb-sep">/</span>
+        <button type="button" class="crumb-link" (click)="closeDetail()" [disabled]="submitting">
+          Fee Collection
+        </button>
+        <span class="crumb-sep">/</span>
+        <span class="crumb-current">{{ crumbLabel(selected) }}</span>
+      </p>
+
+      <header class="detail-hero">
+        <div class="detail-student-card">
+          <div class="detail-avatar" aria-hidden="true">
+            @if (studentField('photoUrl') !== '—') {
+              <img [src]="studentField('photoUrl')" alt="" />
+            } @else {
+              {{ (studentField('fullName', 'studentName') || '?').charAt(0).toUpperCase() }}
+            }
+          </div>
+          <div class="detail-student-body">
+            <h2>{{ studentField('fullName', 'studentName') }}</h2>
+            <div class="detail-student-grid">
+              <div>
+                <span>Admission No</span>
+                <strong class="mono">{{ studentField('admissionNo', 'admissionNo') }}</strong>
+              </div>
+              <div>
+                <span>Roll No</span>
+                <strong>{{ studentField('rollNo') }}</strong>
+              </div>
+              <div>
+                <span>Class</span>
+                <strong>{{ classDisplay() }}</strong>
+              </div>
+              <div>
+                <span>Father</span>
+                <strong>{{ studentField('fatherName') }}</strong>
+              </div>
+              <div>
+                <span>Mobile</span>
+                <strong>{{ studentField('mobile', 'mobile') }}</strong>
+              </div>
+              <div>
+                <span>Academic Year</span>
+                <strong>{{
+                  studentField('academicSessionId') !== '—'
+                    ? studentField('academicSessionId')
+                    : selected.academicSessionId || '—'
+                }}</strong>
+              </div>
+              <div>
+                <span>Campus</span>
+                <strong>{{
+                  studentField('branchId') !== '—'
+                    ? studentField('branchId')
+                    : selected.branchId || '—'
+                }}</strong>
+              </div>
+              <div>
+                <span>Status</span>
+                <span [class]="statusClass(studentField('status') !== '—' ? studentField('status') : '—')">
+                  {{ studentField('status') !== '—' ? studentField('status') : '—' }}
+                </span>
+              </div>
+            </div>
+            <div class="detail-student-actions">
+              @if (detailStudent().id) {
+                <a
+                  class="tiny-link"
+                  [routerLink]="['/admin/students']"
+                  [queryParams]="{ id: detailStudent().id }"
+                >
+                  View student profile
+                </a>
+                <a class="tiny-link" [routerLink]="['/admin/students', detailStudent().id, '360']">
+                  Student ledger / 360
+                </a>
               }
-            </ul>
+              <button type="button" class="tiny-link" (click)="openHistoryForRow(selected)">
+                Fee history
+              </button>
+              <button type="button" class="tiny secondary" (click)="printStudentCard()">
+                Print student details
+              </button>
+            </div>
+            @if (detailStudent().fromAnswersOnly) {
+              <p class="muted detail-note">
+                Student Master record not found for this admission no — showing collection answers
+                only.
+              </p>
+            }
+          </div>
+        </div>
+        <div class="detail-hero-side">
+          <span [class]="statusClass(selected.status)">{{ selected.status }}</span>
+          <p class="muted">
+            Step {{ selected.currentStepSequence || '—' }}
+            · {{ selected.currentStepName || '—' }}
+            @if (selected.assigneeRole) {
+              ({{ selected.assigneeRole }})
+            }
+          </p>
+          <button type="button" class="secondary" (click)="closeDetail()" [disabled]="submitting">
+            Back to list
+          </button>
+        </div>
+      </header>
+
+      @if (error) {
+        <p class="error panel" role="alert">{{ error }}</p>
+      }
+      @if (statusMsg) {
+        <p class="status panel" role="status" aria-live="polite">{{ statusMsg }}</p>
+      }
+
+      <section class="form-section panel">
+        <h3 class="form-section-title">Collection</h3>
+        <div class="read-grid">
+          @for (field of collectionMeta(); track field.label) {
+            <div class="read-field" [class.highlight]="field.money">
+              <span class="read-label">{{ field.label }}</span>
+              <span class="read-value" [class.money]="field.money">{{ field.value }}</span>
+            </div>
           }
-          <h4>History</h4>
+          @for (field of detailFields(); track field.key) {
+            <div class="read-field">
+              <span class="read-label">{{ field.label }}</span>
+              <span class="read-value">{{ field.value }}</span>
+            </div>
+          }
+        </div>
+      </section>
+
+      <section class="form-section panel">
+        <h3 class="form-section-title">Workflow action</h3>
+        <label>
+          Comment
+          <input
+            [(ngModel)]="actionComment"
+            name="actionComment"
+            placeholder="Optional note for this step"
+            [disabled]="submitting"
+          />
+        </label>
+        <div class="form-actions actions">
+          <button type="button" (click)="act('APPROVE')" [disabled]="submitting">
+            Approve step
+          </button>
+          <button
+            type="button"
+            class="secondary"
+            (click)="act('REQUEST_INFO')"
+            [disabled]="submitting"
+          >
+            Request info
+          </button>
+          <button type="button" class="danger" (click)="act('REJECT')" [disabled]="submitting">
+            Reject
+          </button>
+          @if (canPrint(selected)) {
+            <button type="button" class="secondary" (click)="printReceipt()">
+              Print receipt
+            </button>
+          }
+        </div>
+      </section>
+
+      @if (latestApproveDelivery().length) {
+        <section class="form-section panel">
+          <h3 class="form-section-title">Notifications</h3>
           <ul class="history">
-            @for (h of selected.history; track h.at) {
-              <li>{{ h.at }} — {{ h.type }}: {{ h.message }}</li>
+            @for (d of latestApproveDelivery(); track d.at) {
+              <li>{{ d.channel }} → {{ d.status }}{{ d.recipient ? ' · ' + d.recipient : '' }}</li>
             }
           </ul>
+        </section>
+      }
+
+      <section class="form-section panel">
+        <h3 class="form-section-title">History</h3>
+        @if (!selected.history?.length) {
+          <p class="muted">No history yet.</p>
+        } @else {
+          <ol class="timeline">
+            @for (h of selected.history; track h.at) {
+              <li>
+                <div class="timeline-title">{{ h.type || 'EVENT' }}</div>
+                <div class="timeline-msg">{{ h.message }}</div>
+                <div class="timeline-at">{{ formatWhen(h.at) }}</div>
+              </li>
+            }
+          </ol>
         }
       </section>
     </div>
+  } @else {
+    <header class="page-head list-head">
+      <div>
+        <h2>Fee Collection</h2>
+        <p>Search collections, review dues, and collect — same layout as Orders.</p>
+      </div>
+      @if (featureEnabled && !loading) {
+        <div class="head-actions">
+          <button type="button" class="secondary" (click)="openHistory()">Student history</button>
+          <button type="button" (click)="openForm()">+ New Collection</button>
+        </div>
+      }
+    </header>
+
+    @if (error) {
+      <p class="error panel" role="alert">{{ error }}</p>
+    }
+    @if (statusMsg) {
+      <p class="status panel" role="status" aria-live="polite">{{ statusMsg }}</p>
+    }
+
+    @if (loading) {
+      <p class="panel">Loading fee configuration…</p>
+    } @else if (!featureEnabled) {
+      <p class="panel">Fee is not enabled for this plan (FEATURE_FEE).</p>
+    } @else {
+      <section
+        class="panel inbox-panel fee-inbox order-list-card"
+        [class.is-more-open]="!!moreMenuRow"
+      >
+        <div class="fee-filters">
+          <div class="fee-filter-grid">
+            <label class="fee-field">
+              <span>Search</span>
+              <input
+                type="search"
+                [(ngModel)]="listQ"
+                name="listQ"
+                placeholder="Search collection #, student, admission no, mobile, fee head, status…"
+                (input)="pageIndex = 0; applyListFilters()"
+                (keyup.enter)="pageIndex = 0; applyListFilters()"
+              />
+            </label>
+            <label class="fee-field">
+              <span>Due min</span>
+              <input
+                type="number"
+                min="0"
+                placeholder="0"
+                [(ngModel)]="dueAmountMin"
+                name="dueAmountMin"
+                (ngModelChange)="onDueRangeChange()"
+              />
+            </label>
+            <label class="fee-field">
+              <span>Due max</span>
+              <input
+                type="number"
+                min="0"
+                placeholder="Any"
+                [(ngModel)]="dueAmountMax"
+                name="dueAmountMax"
+                (ngModelChange)="onDueRangeChange()"
+              />
+            </label>
+            <div class="fee-field fee-field-clear">
+              <span class="fee-field-spacer" aria-hidden="true">&nbsp;</span>
+              <button
+                type="button"
+                class="secondary"
+                (click)="clearListFilters()"
+                [disabled]="!listClearEnabled"
+              >
+                Clear
+              </button>
+            </div>
+          </div>
+
+          <div class="fee-chip-row order-quick-filters" aria-label="Date filters">
+            <span class="fee-chip-label">Date:</span>
+            @for (p of datePresets; track p.id) {
+              <button
+                type="button"
+                class="fee-chip"
+                [class.is-on]="datePreset === p.id"
+                (click)="setDatePreset(p.id)"
+              >
+                {{ p.label }}
+              </button>
+            }
+          </div>
+
+          <div class="fee-chip-row order-quick-filters" aria-label="Payment filters">
+            <span class="fee-chip-label">Payment:</span>
+            <button
+              type="button"
+              class="fee-chip"
+              [class.is-on]="listStatus === 'IN_PROGRESS'"
+              (click)="listStatus = listStatus === 'IN_PROGRESS' ? '' : 'IN_PROGRESS'; pageIndex = 0; applyListFilters()"
+            >
+              Pending only
+            </button>
+            @for (s of statusOptions; track s.value) {
+              @if (s.value !== 'IN_PROGRESS') {
+                <button
+                  type="button"
+                  class="fee-chip"
+                  [class.is-on]="listStatus === s.value"
+                  (click)="listStatus = listStatus === s.value ? '' : s.value; pageIndex = 0; applyListFilters()"
+                >
+                  {{ s.label }}
+                </button>
+              }
+            }
+          </div>
+
+          <div class="fee-chip-row order-quick-filters" aria-label="Due filters">
+            <span class="fee-chip-label">Due:</span>
+            @for (d of dueFilters; track d.id) {
+              <button
+                type="button"
+                class="fee-chip"
+                [class.is-on]="dueFilter === d.id"
+                (click)="setDueFilter(d.id)"
+              >
+                {{ d.label }}
+              </button>
+            }
+          </div>
+        </div>
+
+        <div class="table-wrap fee-table-wrap" [class.is-more-open]="!!moreMenuRow">
+          <table class="inbox-table fee-orders-table order-table">
+            <thead>
+              <tr>
+                <th
+                  class="order-col-student sortable"
+                  role="button"
+                  (click)="setSort('studentName')"
+                >
+                  Student{{ sortIndicator('studentName') }}
+                </th>
+                <th class="order-col-items">Fee head</th>
+                <th
+                  class="sortable text-nowrap"
+                  role="button"
+                  (click)="setSort('updatedAt')"
+                >
+                  Date{{ sortIndicator('updatedAt') }}
+                </th>
+                <th class="text-nowrap">Type</th>
+                <th
+                  class="sortable"
+                  role="button"
+                  (click)="setSort('status')"
+                >
+                  Payment{{ sortIndicator('status') }}
+                </th>
+                <th
+                  class="sortable text-end"
+                  role="button"
+                  (click)="setSort('amount')"
+                >
+                  Total{{ sortIndicator('amount') }}
+                </th>
+                <th class="col-actions order-col-actions">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              @if (!collections.length) {
+                <tr>
+                  <td colspan="7" class="muted empty-row">
+                    No collections match.
+                    <button type="button" class="linkish" (click)="openForm()">
+                      Create a collection
+                    </button>
+                  </td>
+                </tr>
+              }
+              @for (row of collections; track row.id) {
+                <tr
+                  class="inbox-row"
+                  [class.selected]="row.id === selectedId"
+                  (click)="select(row)"
+                  tabindex="0"
+                  (keyup.enter)="select(row)"
+                >
+                  <td class="order-col-student">
+                    <button
+                      type="button"
+                      class="student-link order-patient-link"
+                      (click)="openHistoryForRow(row, $event)"
+                      [title]="'Show fee history for ' + studentName(row)"
+                    >
+                      {{ studentName(row) }}
+                    </button>
+                    @if (answer(row, 'mobile') !== '—') {
+                      <div class="cell-sub">{{ answer(row, 'mobile') }}</div>
+                    }
+                    <div class="cell-sub mono order-order-number">
+                      {{ collectionIdShort(row) }}
+                    </div>
+                  </td>
+                  <td class="order-col-items">
+                    <button
+                      type="button"
+                      class="items-preview"
+                      (click)="select(row); $event.stopPropagation()"
+                    >
+                      <span class="items-preview__primary">{{ answer(row, 'feeHead') }}</span>
+                      @if (answer(row, 'paymentMode') !== '—') {
+                        <span class="cell-sub">{{ answer(row, 'paymentMode') }}</span>
+                      }
+                    </button>
+                  </td>
+                  <td class="muted-cell text-nowrap">
+                    {{ formatWhen(row.updatedAt || row.createdAt) }}
+                  </td>
+                  <td class="text-nowrap">
+                    <span class="badge badge-progress order-type-badge">Collection</span>
+                  </td>
+                  <td class="text-nowrap">
+                    <div class="order-payment-cell">
+                      <span [class]="paymentBadgeClass(row)">{{ paymentLabel(row) }}</span>
+                      @if (dueAmountValue(row) > 0) {
+                        <span class="due-hint">Due {{ formatMoney(dueAmountValue(row)) }}</span>
+                      }
+                    </div>
+                  </td>
+                  <td class="money text-end">{{ formatMoney(row.answers?.amount) }}</td>
+                  <td class="col-actions order-col-actions" (click)="$event.stopPropagation()">
+                    <div class="order-actions-inline">
+                      <button type="button" class="tiny order-action-btn" (click)="select(row)">
+                        View
+                      </button>
+                      <button
+                        type="button"
+                        class="tiny secondary order-action-btn"
+                        (click)="downloadReceiptFor(row, $event)"
+                        title="Print receipt"
+                      >
+                        Print
+                      </button>
+                      <div class="more-wrap">
+                        <button
+                          type="button"
+                          class="tiny secondary order-action-btn"
+                          data-fee-more-btn
+                          [class.is-on]="moreMenuId === row.id"
+                          (click)="toggleMoreMenu(row, $event); $event.stopPropagation()"
+                        >
+                          More
+                        </button>
+                        @if (moreMenuId === row.id && moreMenuRow) {
+                          <div
+                            class="fee-actions-flyout more-menu more-menu-anchored"
+                            role="menu"
+                            (click)="$event.stopPropagation()"
+                          >
+                            <button
+                              type="button"
+                              role="menuitem"
+                              (click)="editCollection(moreMenuRow)"
+                            >
+                              Edit
+                            </button>
+                            <button
+                              type="button"
+                              role="menuitem"
+                              (click)="printThermalReceipt(moreMenuRow)"
+                            >
+                              Thermal print
+                            </button>
+                            <button
+                              type="button"
+                              role="menuitem"
+                              (click)="openStudentProfile(moreMenuRow)"
+                            >
+                              Student profile
+                            </button>
+                            <button
+                              type="button"
+                              role="menuitem"
+                              (click)="openHistoryForRow(moreMenuRow, $event); closeMoreMenu()"
+                            >
+                              Fee history
+                            </button>
+                            <hr class="more-menu-divider" />
+                            <button
+                              type="button"
+                              role="menuitem"
+                              class="danger-item"
+                              (click)="deleteCollection(moreMenuRow)"
+                            >
+                              Delete
+                            </button>
+                          </div>
+                        }
+                      </div>
+                    </div>
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+
+        <sf-list-pager
+          [pageIndex]="pageIndex"
+          [pageSize]="pageSize"
+          [totalElements]="filteredTotal"
+          [hasNext]="page.hasNext"
+          itemLabel="collections"
+          (pageChange)="onPageChange($event)"
+        />
+      </section>
+    }
   }
 </div>

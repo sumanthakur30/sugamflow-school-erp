@@ -83,6 +83,12 @@ public class FinanceController {
     return ApiResponse.ok(wrap(() -> service.simulateCapture(id)));
   }
 
+  @PostMapping("/payments/intents/{id}/confirm")
+  public ApiResponse<Map<String, Object>> confirmCapture(
+      @PathVariable("id") UUID id, @RequestBody(required = false) Map<String, Object> body) {
+    return ApiResponse.ok(wrap(() -> service.confirmCapture(id, body == null ? Map.of() : body)));
+  }
+
   @GetMapping("/transactions")
   public ApiResponse<List<Map<String, Object>>> transactions() {
     return ApiResponse.ok(wrap(service::listTransactions));

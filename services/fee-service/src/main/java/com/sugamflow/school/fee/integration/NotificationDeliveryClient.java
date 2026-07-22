@@ -26,12 +26,25 @@ public class NotificationDeliveryClient {
 
   public Map<String, Object> queue(
       String shopId, String channel, String recipient, String subject, String body) {
+    return queue(shopId, channel, recipient, subject, body, null);
+  }
+
+  public Map<String, Object> queue(
+      String shopId,
+      String channel,
+      String recipient,
+      String subject,
+      String body,
+      String idempotencyKey) {
     Map<String, Object> payload = new LinkedHashMap<>();
     payload.put("shopId", shopId);
     payload.put("channel", channel);
     payload.put("recipient", recipient);
     payload.put("subject", subject != null && !subject.isBlank() ? subject : channel);
     payload.put("body", body != null && !body.isBlank() ? body : subject);
+    if (idempotencyKey != null && !idempotencyKey.isBlank()) {
+      payload.put("idempotencyKey", idempotencyKey);
+    }
 
     String url =
         properties.getIntegrations().getNotificationDeliveryBaseUrl() + "/api/v1/notifications";

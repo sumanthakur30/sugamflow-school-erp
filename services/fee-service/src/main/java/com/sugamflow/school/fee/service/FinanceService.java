@@ -1,9 +1,16 @@
 package com.sugamflow.school.fee.service;
 
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sugamflow.school.common.tenant.TenantContext;
 import com.sugamflow.school.common.tenant.TenantScope;
+import com.sugamflow.school.fee.config.FeeProperties;
 import com.sugamflow.school.fee.finance.FinanceCatalog;
 import com.sugamflow.school.fee.integration.ConfigEngineClient;
+import com.sugamflow.school.fee.payment.GatewayOrderResult;
+import com.sugamflow.school.fee.payment.PaymentGatewayAdapter;
+import com.sugamflow.school.fee.payment.PaymentGatewayRegistry;
+import com.sugamflow.school.fee.payment.RazorpayPaymentAdapter;
 import com.sugamflow.school.fee.persistence.entity.FinanceDefinitionEntity;
 import com.sugamflow.school.fee.persistence.entity.FinanceTransactionEntity;
 import com.sugamflow.school.fee.persistence.repo.FinanceDefinitionRepository;
@@ -17,23 +24,40 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class FinanceService {
 
+  private static final Logger log = LoggerFactory.getLogger(FinanceService.class);
+
   private final FinanceDefinitionRepository definitionRepo;
   private final FinanceTransactionRepository transactionRepo;
   private final ConfigEngineClient engines;
+  private final FeeProperties properties;
+  private final PaymentGatewayRegistry gatewayRegistry;
+  private final FeeCollectionService feeCollections;
+  private final ObjectMapper objectMapper;
 
   public FinanceService(
       FinanceDefinitionRepository definitionRepo,
       FinanceTransactionRepository transactionRepo,
-      ConfigEngineClient engines) {
+      ConfigEngineClient engines,
+      FeeProperties properties,
+      PaymentGatewayRegistry gatewayRegistry,
+      @Lazy FeeCollectionService feeCollections,
+      ObjectMapper objectMapper) {
     this.definitionRepo = definitionRepo;
     this.transactionRepo = transactionRepo;
     this.engines = engines;
+    this.properties = properties;
+    this.gatewayRegistry = gatewayRegistry;
+    this.feeCollections = feeCollections;
+    this.objectMapper = objectMapper;
   }
 
   @Transactional
@@ -45,6 +69,8 @@ public class FinanceService {
     out.put("featureEnabled", true);
     out.put("paymentGatewayEnabled", engines.isFeatureEnabled(scope, FinanceCatalog.FEATURE_MULTI_PAYMENT_GATEWAY));
     out.put("accountingEnabled", engines.isFeatureEnabled(scope, FinanceCatalog.FEATURE_ACCOUNTING));
+    out.put("paymentMode", properties.getPayment().getMode());
+    out.put("availableAdapters", gatewayRegistry.availableAdapters());
     out.put("heads", listDefinitions(FinanceCatalog.TYPE_FEE_HEAD));
     out.put("structures", listDefinitions(FinanceCatalog.TYPE_FEE_STRUCTURE));
     out.put("concessions", listDefinitions(FinanceCatalog.TYPE_CONCESSION));
@@ -198,9 +224,28 @@ public class FinanceService {
     String providerKey = stringOr(body.get("providerKey"), "simulated");
     Map<String, Object> provider =
         requireDefinition(scope, FinanceCatalog.TYPE_PAYMENT_PROVIDER, providerKey);
+    PaymentGatewayAdapter adapter = gatewayRegistry.resolve(provider);
 
     UUID id = UUID.randomUUID();
     String reference = "PI-" + id.toString().substring(0, 8).toUpperCase();
+    UUID collectionId = parseUuid(body.get("collectionId"));
+
+    Map<String, Object> notes = new LinkedHashMap<>();
+    notes.put("organizationId", scope.organizationId());
+    notes.put("intentReference", reference);
+    notes.put("studentRef", stringOr(body.get("studentRef"), ""));
+    if (collectionId != null) {
+      notes.put("collectionId", collectionId.toString());
+    }
+
+    GatewayOrderResult order =
+        adapter.createOrder(
+            reference,
+            amount,
+            stringOr(body.get("currency"), "INR"),
+            stringOr(body.get("studentRef"), null),
+            notes);
+
     FinanceTransactionEntity txn = new FinanceTransactionEntity();
     txn.setId(id);
     txn.setOrganizationId(scope.organizationId());
@@ -214,15 +259,27 @@ public class FinanceService {
     txn.setNetAmount(amount);
     txn.setReferenceNo(reference);
     txn.setIdempotencyKey(idempotencyKey);
+    txn.setSourceCollectionId(collectionId);
     Map<String, Object> payload = new LinkedHashMap<>();
     payload.put("providerKey", providerKey);
     payload.put("provider", provider);
+    payload.put("adapter", order.adapter());
     payload.put("mode", stringOr(body.get("mode"), "UPI"));
     payload.put("demand", body.get("demand"));
-    payload.put("redirectUrl", "/admin/fee?intent=" + id);
+    payload.put("gatewayOrderId", order.gatewayOrderId());
+    payload.put("checkoutMode", order.checkoutMode());
+    payload.put("checkout", order.checkout());
+    if (order.publicKey() != null) {
+      payload.put("publicKey", order.publicKey());
+    }
+    if (order.providerMeta() != null) {
+      payload.putAll(order.providerMeta());
+    }
     payload.put(
-        "simulatedCheckoutUrl",
-        "https://pay.example.local/checkout/" + reference + "?amount=" + amount);
+        "redirectUrl",
+        collectionId != null
+            ? "/parent/fees?intent=" + id
+            : "/admin/finance?intent=" + id);
     txn.setPayload(payload);
     txn.setCreatedAt(Instant.now());
     txn.setUpdatedAt(Instant.now());
@@ -241,22 +298,116 @@ public class FinanceService {
         transactionRepo
             .findByIdAndOrganizationId(intentId, scope.organizationId())
             .orElseThrow(() -> new FeeException("NOT_FOUND", "Payment intent not found"));
+    String adapter = stringOr(intent.getPayload().get("adapter"), "SIMULATED");
+    if (!"SIMULATED".equalsIgnoreCase(adapter)
+        && !"simulate".equalsIgnoreCase(properties.getPayment().getMode())) {
+      throw new FeeException(
+          "VALIDATION", "simulate-capture is only allowed for SIMULATED intents (or fee.payment.mode=simulate)");
+    }
+    return captureIntent(
+        intent, "SIM-" + UUID.randomUUID().toString().substring(0, 8), "simulate-capture");
+  }
+
+  /**
+   * Client-side confirm after Razorpay checkout success (webhook remains authoritative). Safe to
+   * call repeatedly.
+   */
+  @Transactional
+  public Map<String, Object> confirmCapture(UUID intentId, Map<String, Object> body) {
+    TenantScope scope = TenantContext.require();
+    requireFee(scope);
+    FinanceTransactionEntity intent =
+        transactionRepo
+            .findByIdAndOrganizationId(intentId, scope.organizationId())
+            .orElseThrow(() -> new FeeException("NOT_FOUND", "Payment intent not found"));
+    String gatewayTxnId =
+        stringOr(body == null ? null : body.get("gatewayTxnId"), stringOr(body == null ? null : body.get("razorpayPaymentId"), null));
+    if (gatewayTxnId == null || gatewayTxnId.isBlank()) {
+      gatewayTxnId = "CONF-" + UUID.randomUUID().toString().substring(0, 8);
+    }
+    return captureIntent(intent, gatewayTxnId, "client-confirm");
+  }
+
+  /** Razorpay / simulated webhook entry — no JWT tenant required (org resolved from order). */
+  @Transactional
+  public Map<String, Object> handleWebhook(
+      String adapterKey, String rawBody, String signatureHeader) {
+    PaymentGatewayAdapter adapter = gatewayRegistry.byKey(adapterKey);
+    if (!adapter.verifyWebhook(rawBody, signatureHeader)) {
+      throw new FeeException("WEBHOOK_INVALID", "Invalid webhook signature");
+    }
+    Map<String, Object> body;
+    try {
+      body = objectMapper.readValue(rawBody, new TypeReference<Map<String, Object>>() {});
+    } catch (Exception ex) {
+      throw new FeeException("WEBHOOK_INVALID", "Webhook body is not valid JSON");
+    }
+    if (adapter instanceof RazorpayPaymentAdapter rzp && !rzp.isCaptureEvent(body)) {
+      return Map.of("ignored", true, "event", body.get("event"));
+    }
+    String orderId = adapter.extractOrderId(body);
+    if (orderId == null || orderId.isBlank()) {
+      throw new FeeException("WEBHOOK_INVALID", "Webhook missing gateway order id");
+    }
+    FinanceTransactionEntity intent =
+        transactionRepo
+            .findPaymentIntentByGatewayOrderId(orderId)
+            .orElseThrow(() -> new FeeException("NOT_FOUND", "No payment intent for order " + orderId));
+
+    TenantScope previous = TenantContext.get().orElse(null);
+    try {
+      TenantContext.set(
+          new TenantScope(
+              intent.getOrganizationId(),
+              intent.getBranchId(),
+              intent.getAcademicSessionId(),
+              "gateway",
+              "SYSTEM"));
+      String paymentId = adapter.extractPaymentId(body);
+      if (paymentId == null || paymentId.isBlank()) {
+        paymentId = "WH-" + UUID.randomUUID().toString().substring(0, 8);
+      }
+      return captureIntent(intent, paymentId, "webhook");
+    } finally {
+      if (previous != null) {
+        TenantContext.set(previous);
+      } else {
+        TenantContext.clear();
+      }
+    }
+  }
+
+  private Map<String, Object> captureIntent(
+      FinanceTransactionEntity intent, String gatewayTxnId, String source) {
     if (!"PAYMENT_INTENT".equals(intent.getTransactionType())) {
       throw new FeeException("VALIDATION", "Not a payment intent");
     }
     if (!"PENDING".equals(intent.getStatus())) {
       return toTxnDto(intent);
     }
+
     intent.setStatus("CAPTURED");
     intent.setUpdatedAt(Instant.now());
     intent.getPayload().put("capturedAt", Instant.now().toString());
-    intent.getPayload().put("gatewayTxnId", "SIM-" + UUID.randomUUID().toString().substring(0, 8));
+    intent.getPayload().put("gatewayTxnId", gatewayTxnId);
+    intent.getPayload().put("captureSource", source);
+
+    String captureIdem =
+        intent.getIdempotencyKey() == null ? null : intent.getIdempotencyKey() + ":capture";
+    if (captureIdem != null) {
+      var existingCapture =
+          transactionRepo.findByOrganizationIdAndIdempotencyKey(
+              intent.getOrganizationId(), captureIdem);
+      if (existingCapture.isPresent()) {
+        return toTxnDto(transactionRepo.save(intent));
+      }
+    }
 
     FinanceTransactionEntity capture = new FinanceTransactionEntity();
     capture.setId(UUID.randomUUID());
-    capture.setOrganizationId(scope.organizationId());
-    capture.setBranchId(scope.branchId());
-    capture.setAcademicSessionId(scope.academicSessionId());
+    capture.setOrganizationId(intent.getOrganizationId());
+    capture.setBranchId(intent.getBranchId());
+    capture.setAcademicSessionId(intent.getAcademicSessionId());
     capture.setTransactionType("PAYMENT_CAPTURE");
     capture.setStatus("CAPTURED");
     capture.setStudentRef(intent.getStudentRef());
@@ -264,15 +415,40 @@ public class FinanceService {
     capture.setGrossAmount(intent.getGrossAmount());
     capture.setNetAmount(intent.getNetAmount());
     capture.setReferenceNo("CAP-" + intent.getReferenceNo());
-    capture.setIdempotencyKey(intent.getIdempotencyKey() == null ? null : intent.getIdempotencyKey() + ":capture");
+    capture.setIdempotencyKey(captureIdem);
+    capture.setSourceCollectionId(intent.getSourceCollectionId());
     Map<String, Object> payload = new LinkedHashMap<>();
     payload.put("intentId", intent.getId().toString());
     payload.put("providerKey", intent.getPayload().get("providerKey"));
+    payload.put("adapter", intent.getPayload().get("adapter"));
+    payload.put("gatewayTxnId", gatewayTxnId);
+    payload.put("captureSource", source);
     capture.setPayload(payload);
     capture.setCreatedAt(Instant.now());
     capture.setUpdatedAt(Instant.now());
     transactionRepo.save(capture);
-    return toTxnDto(transactionRepo.save(intent));
+
+    FinanceTransactionEntity saved = transactionRepo.save(intent);
+    settleCollection(saved, gatewayTxnId);
+    return toTxnDto(saved);
+  }
+
+  private void settleCollection(FinanceTransactionEntity intent, String gatewayTxnId) {
+    if (intent.getSourceCollectionId() == null) {
+      return;
+    }
+    try {
+      feeCollections.markPaidFromGateway(
+          intent.getSourceCollectionId(),
+          gatewayTxnId,
+          intent.getReferenceNo(),
+          stringOr(intent.getPayload().get("providerKey"), null));
+    } catch (Exception ex) {
+      log.warn(
+          "Could not settle fee collection {} after capture: {}",
+          intent.getSourceCollectionId(),
+          ex.getMessage());
+    }
   }
 
   @Transactional(readOnly = true)
@@ -309,6 +485,21 @@ public class FinanceService {
         scope.organizationId(), FinanceCatalog.TYPE_PAYMENT_PROVIDER)) {
       for (Map<String, Object> p : FinanceCatalog.defaultProviders()) {
         saveSeed(scope, FinanceCatalog.TYPE_PAYMENT_PROVIDER, p);
+      }
+    } else {
+      // Backfill Razorpay provider definition when older orgs only have "simulated".
+      boolean hasRazorpay =
+          definitionRepo
+              .findFirstByOrganizationIdAndDefinitionTypeAndDefinitionKeyAndStatusOrderByVersionDesc(
+                  scope.organizationId(),
+                  FinanceCatalog.TYPE_PAYMENT_PROVIDER,
+                  "razorpay",
+                  "ACTIVE")
+              .isPresent();
+      if (!hasRazorpay) {
+        FinanceCatalog.defaultProviders().stream()
+            .filter(p -> "razorpay".equalsIgnoreCase(String.valueOf(p.get("definitionKey"))))
+            .forEach(p -> saveSeed(scope, FinanceCatalog.TYPE_PAYMENT_PROVIDER, p));
       }
     }
   }
@@ -405,9 +596,34 @@ public class FinanceService {
     m.put("netAmount", e.getNetAmount());
     m.put("referenceNo", e.getReferenceNo());
     m.put("idempotencyKey", e.getIdempotencyKey());
+    m.put(
+        "sourceCollectionId",
+        e.getSourceCollectionId() == null ? null : e.getSourceCollectionId().toString());
     m.put("payload", e.getPayload());
+    if (e.getPayload() != null) {
+      m.put("checkoutMode", e.getPayload().get("checkoutMode"));
+      m.put("checkout", e.getPayload().get("checkout"));
+      m.put("adapter", e.getPayload().get("adapter"));
+      m.put("gatewayOrderId", e.getPayload().get("gatewayOrderId"));
+      m.put("publicKey", e.getPayload().get("publicKey"));
+    }
     m.put("createdAt", e.getCreatedAt() == null ? null : e.getCreatedAt().toString());
     return m;
+  }
+
+  private static UUID parseUuid(Object raw) {
+    if (raw == null) {
+      return null;
+    }
+    String s = String.valueOf(raw).trim();
+    if (s.isEmpty() || "null".equalsIgnoreCase(s)) {
+      return null;
+    }
+    try {
+      return UUID.fromString(s);
+    } catch (IllegalArgumentException ex) {
+      throw new FeeException("VALIDATION", "Invalid collectionId: " + s);
+    }
   }
 
   private static BigDecimal toDecimal(Object raw) {

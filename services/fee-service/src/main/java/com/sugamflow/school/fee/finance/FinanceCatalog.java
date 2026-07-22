@@ -59,14 +59,25 @@ public final class FinanceCatalog {
 
   public static List<Map<String, Object>> defaultProviders() {
     List<Map<String, Object>> list = new ArrayList<>();
-    Map<String, Object> p = new LinkedHashMap<>();
-    p.put("definitionKey", "simulated");
-    p.put("name", "Simulated Gateway");
-    p.put("adapter", "SIMULATED");
-    p.put("enabledModes", List.of("UPI", "CARD", "NETBANKING"));
-    p.put("requiredFeatureFlag", FEATURE_MULTI_PAYMENT_GATEWAY);
-    p.put("notes", "Dev/demo provider — replace with Razorpay/Stripe adapter via config.");
-    list.add(p);
+    Map<String, Object> simulated = new LinkedHashMap<>();
+    simulated.put("definitionKey", "simulated");
+    simulated.put("name", "Simulated Gateway");
+    simulated.put("adapter", "SIMULATED");
+    simulated.put("enabledModes", List.of("UPI", "CARD", "NETBANKING"));
+    simulated.put("requiredFeatureFlag", FEATURE_MULTI_PAYMENT_GATEWAY);
+    simulated.put("notes", "Dev/demo provider — capture via simulate-capture API.");
+    list.add(simulated);
+
+    Map<String, Object> razorpay = new LinkedHashMap<>();
+    razorpay.put("definitionKey", "razorpay");
+    razorpay.put("name", "Razorpay");
+    razorpay.put("adapter", "RAZORPAY");
+    razorpay.put("enabledModes", List.of("UPI", "CARD", "NETBANKING"));
+    razorpay.put("requiredFeatureFlag", FEATURE_MULTI_PAYMENT_GATEWAY);
+    razorpay.put(
+        "notes",
+        "Production India gateway. Requires fee.payment.razorpay.key-id / key-secret / webhook-secret.");
+    list.add(razorpay);
     return list;
   }
 

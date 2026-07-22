@@ -4,9 +4,14 @@ import com.sugamflow.school.common.tenant.TenantContext;
 import com.sugamflow.school.common.tenant.TenantScope;
 import com.sugamflow.school.common.api.PageQuery;
 import com.sugamflow.school.common.api.PageResult;
+import com.sugamflow.school.common.api.PageResults;
+import com.sugamflow.school.common.security.AccessScope;
+import com.sugamflow.school.common.security.PersonaRoles;
 import com.sugamflow.school.fee.config.FeeProperties;
 import com.sugamflow.school.fee.integration.ConfigEngineClient;
 import com.sugamflow.school.fee.integration.NotificationDeliveryClient;
+import com.sugamflow.school.fee.integration.StudentAccessClient;
+import com.sugamflow.school.fee.integration.StudentProfileClient;
 import com.sugamflow.school.fee.persistence.entity.FeeCollectionEntity;
 import com.sugamflow.school.fee.persistence.repo.FeeCollectionRepository;
 import com.sugamflow.school.fee.web.FeeException;
@@ -38,18 +43,24 @@ public class FeeCollectionService {
   private final NotificationDeliveryClient notificationDelivery;
   private final FeeProperties properties;
   private final FinanceService financeService;
+  private final StudentAccessClient studentAccess;
+  private final StudentProfileClient studentProfile;
 
   public FeeCollectionService(
       FeeCollectionRepository repository,
       ConfigEngineClient engines,
       NotificationDeliveryClient notificationDelivery,
       FeeProperties properties,
-      FinanceService financeService) {
+      FinanceService financeService,
+      StudentAccessClient studentAccess,
+      StudentProfileClient studentProfile) {
     this.repository = repository;
     this.engines = engines;
     this.notificationDelivery = notificationDelivery;
     this.properties = properties;
     this.financeService = financeService;
+    this.studentAccess = studentAccess;
+    this.studentProfile = studentProfile;
   }
 
   @Transactional(readOnly = true)
@@ -87,6 +98,20 @@ public class FeeCollectionService {
     TenantScope scope = TenantContext.require();
     requireFeature(scope);
     PageQuery q = PageQuery.of(page, size);
+    AccessScope access = studentAccess.resolve(scope);
+
+    if (access.restricted()) {
+      List<FeeCollectionEntity> all = loadCandidates(scope);
+      List<Map<String, Object>> dtos = new ArrayList<>();
+      for (FeeCollectionEntity e : all) {
+        Map<String, Object> dto = toDto(e);
+        if (access.allowsStudentDto(dto)) {
+          dtos.add(dto);
+        }
+      }
+      return PageResults.filterThenPage(dtos, d -> true, q.page(), q.size());
+    }
+
     Pageable pageable = PageRequest.of(q.page(), q.size());
     Page<FeeCollectionEntity> result;
     if (scope.branchId() != null && !scope.branchId().isBlank()
@@ -103,12 +128,22 @@ public class FeeCollectionService {
   public Map<String, Object> get(UUID id) {
     TenantScope scope = TenantContext.require();
     requireFeature(scope);
-    return toDto(requireCollection(id, scope.organizationId()));
+    Map<String, Object> dto = toDetailDto(requireCollection(id, scope.organizationId()));
+    AccessScope access = studentAccess.resolve(scope);
+    if (!access.allowsStudentDto(dto)) {
+      throw new FeeException("NOT_FOUND", "Fee collection not found");
+    }
+    return dto;
   }
 
   @Transactional
   public Map<String, Object> submit(Map<String, Object> body) {
     TenantScope scope = TenantContext.require();
+    try {
+      PersonaRoles.requireStaffWrite(scope);
+    } catch (SecurityException ex) {
+      throw new FeeException("FORBIDDEN", ex.getMessage());
+    }
     requireFeature(scope);
     requireModuleEnabled(scope);
 
@@ -176,7 +211,7 @@ public class FeeCollectionService {
       intents.add(recordNotification(scope, entity, "FEE_RULE_NOTIFY"));
     }
     entity.setNotificationIntents(intents);
-    return toDto(repository.save(entity));
+    return toDetailDto(repository.save(entity));
   }
 
   @Transactional
@@ -216,7 +251,7 @@ public class FeeCollectionService {
                 entity.getCurrentStepSequence(),
                 entity.getCurrentStepName()));
     entity.getNotificationIntents().add(recordNotification(scope, entity, "FEE_REJECTED"));
-    return toDto(repository.save(entity));
+    return toDetailDto(repository.save(entity));
   }
 
   private Map<String, Object> requestInfo(
@@ -233,7 +268,7 @@ public class FeeCollectionService {
                 entity.getCurrentStepSequence(),
                 entity.getCurrentStepName()));
     entity.getNotificationIntents().add(recordNotification(scope, entity, "FEE_INFO_REQUESTED"));
-    return toDto(repository.save(entity));
+    return toDetailDto(repository.save(entity));
   }
 
   private Map<String, Object> approve(
@@ -292,7 +327,7 @@ public class FeeCollectionService {
       entity.getNotificationIntents().add(recordNotification(scope, entity, "FEE_STEP_ADVANCED"));
     }
     entity.setUpdatedAt(Instant.now());
-    return toDto(repository.save(entity));
+    return toDetailDto(repository.save(entity));
   }
 
   @Transactional(readOnly = true)
@@ -309,6 +344,66 @@ public class FeeCollectionService {
     } catch (IllegalArgumentException ex) {
       throw new FeeException("FEE_RECEIPT_CORRUPT", "Stored fee receipt is not valid base64");
     }
+  }
+
+  /**
+   * Gateway settlement: stamp ONLINE payment details and force APPROVED + receipt when the
+   * collection is still open. Idempotent if already APPROVED.
+   */
+  @Transactional
+  public Map<String, Object> markPaidFromGateway(
+      UUID collectionId, String gatewayTxnId, String receiptRef, String providerKey) {
+    TenantScope scope = TenantContext.require();
+    requireFeature(scope);
+    FeeCollectionEntity entity = requireCollection(collectionId, scope.organizationId());
+    Map<String, Object> answers =
+        entity.getAnswers() == null
+            ? new LinkedHashMap<>()
+            : new LinkedHashMap<>(entity.getAnswers());
+    answers.put("paymentMode", "ONLINE");
+    if (providerKey != null && !providerKey.isBlank()) {
+      answers.put("paymentProvider", providerKey);
+    }
+    if (gatewayTxnId != null && !gatewayTxnId.isBlank()) {
+      answers.put("gatewayTxnId", gatewayTxnId);
+    }
+    if (receiptRef != null && !receiptRef.isBlank()) {
+      answers.put("receiptRef", receiptRef);
+    }
+    entity.setAnswers(answers);
+
+    if ("APPROVED".equals(entity.getStatus())) {
+      entity.setUpdatedAt(Instant.now());
+      return toDto(repository.save(entity));
+    }
+    if ("REJECTED".equals(entity.getStatus())) {
+      throw new FeeException("TERMINAL", "Cannot mark a rejected collection as paid");
+    }
+
+    entity.setStatus("APPROVED");
+    entity.setUpdatedAt(Instant.now());
+    entity
+        .getHistory()
+        .add(
+            event(
+                "GATEWAY_PAID",
+                scope.userId() == null ? "gateway" : scope.userId(),
+                scope.roleCode() == null ? "SYSTEM" : scope.roleCode(),
+                "Paid online via " + (providerKey == null ? "gateway" : providerKey),
+                entity.getCurrentStepSequence(),
+                entity.getCurrentStepName()));
+    entity
+        .getHistory()
+        .add(
+            event(
+                "APPROVED",
+                "gateway",
+                "SYSTEM",
+                "Fee collection approved after online capture",
+                entity.getCurrentStepSequence(),
+                entity.getCurrentStepName()));
+    onFinalApprove(entity, scope);
+    return toDto(repository.save(entity));
   }
 
   private void onFinalApprove(FeeCollectionEntity entity, TenantScope scope) {
@@ -538,6 +633,17 @@ public class FeeCollectionService {
     return module;
   }
 
+  private List<FeeCollectionEntity> loadCandidates(TenantScope scope) {
+    if (scope.branchId() != null
+        && !scope.branchId().isBlank()
+        && scope.academicSessionId() != null
+        && !scope.academicSessionId().isBlank()) {
+      return repository.findByOrganizationIdAndBranchIdAndAcademicSessionIdOrderByUpdatedAtDesc(
+          scope.organizationId(), scope.branchId(), scope.academicSessionId());
+    }
+    return repository.findByOrganizationIdOrderByUpdatedAtDesc(scope.organizationId());
+  }
+
   private FeeCollectionEntity requireCollection(UUID id, String org) {
     return repository
         .findByIdAndOrganizationId(id, org)
@@ -647,6 +753,85 @@ public class FeeCollectionService {
     dto.put("createdAt", e.getCreatedAt().toString());
     dto.put("updatedAt", e.getUpdatedAt().toString());
     return dto;
+  }
+
+  /** Detail payload includes live Student Master identity (no duplicated student storage). */
+  private Map<String, Object> toDetailDto(FeeCollectionEntity e) {
+    Map<String, Object> dto = toDto(e);
+    attachStudentIdentity(dto, e);
+    return dto;
+  }
+
+  private void attachStudentIdentity(Map<String, Object> dto, FeeCollectionEntity e) {
+    Map<String, Object> answers = e.getAnswers() != null ? e.getAnswers() : Map.of();
+    String admissionNo = stringOr(answers.get("admissionNo"), "");
+    Map<String, Object> student = Map.of();
+    if (!admissionNo.isBlank()) {
+      student = studentProfile.identityByAdmissionNo(TenantContext.require(), admissionNo);
+    }
+    if (student == null || student.isEmpty()) {
+      student = identityFromAnswers(e, answers);
+    } else {
+      // Fill gaps from fee answers when master field is blank (legacy collections).
+      student = new LinkedHashMap<>(student);
+      mergeBlank(student, "fullName", stringOr(answers.get("studentName"), ""));
+      mergeBlank(student, "mobile", stringOr(answers.get("mobile"), ""));
+      mergeBlank(student, "email", stringOr(answers.get("email"), ""));
+      mergeBlank(student, "admissionNo", admissionNo);
+    }
+    dto.put("student", student);
+    dto.put("studentId", student.get("id"));
+    dto.put(
+        "displayTitle",
+        buildDisplayTitle(student, stringOr(answers.get("studentName"), "Collection")));
+  }
+
+  private static Map<String, Object> identityFromAnswers(
+      FeeCollectionEntity e, Map<String, Object> answers) {
+    Map<String, Object> out = new LinkedHashMap<>();
+    out.put("id", null);
+    out.put("admissionNo", stringOr(answers.get("admissionNo"), ""));
+    out.put("fullName", stringOr(answers.get("studentName"), ""));
+    out.put("rollNo", stringOr(answers.get("rollNo"), ""));
+    out.put(
+        "classSection",
+        stringOr(answers.get("classSection"), stringOr(answers.get("classApplied"), "")));
+    out.put("className", "");
+    out.put("section", "");
+    out.put("fatherName", stringOr(answers.get("fatherName"), stringOr(answers.get("parentName"), "")));
+    out.put("motherName", stringOr(answers.get("motherName"), ""));
+    out.put("guardianName", stringOr(answers.get("guardianName"), ""));
+    out.put("mobile", stringOr(answers.get("mobile"), ""));
+    out.put("email", stringOr(answers.get("email"), ""));
+    out.put("photoUrl", "");
+    out.put("status", "");
+    out.put("branchId", e.getBranchId());
+    out.put("academicSessionId", e.getAcademicSessionId());
+    out.put("fromAnswersOnly", true);
+    return out;
+  }
+
+  private static void mergeBlank(Map<String, Object> target, String key, String value) {
+    Object existing = target.get(key);
+    if ((existing == null || String.valueOf(existing).isBlank()) && value != null && !value.isBlank()) {
+      target.put(key, value);
+    }
+  }
+
+  private static String buildDisplayTitle(Map<String, Object> student, String fallbackName) {
+    String adm = stringOr(student.get("admissionNo"), "");
+    String name = stringOr(student.get("fullName"), fallbackName);
+    String cls =
+        stringOr(
+            student.get("classSection"),
+            stringOr(student.get("className"), ""));
+    if (!adm.isBlank() && !cls.isBlank()) {
+      return adm + " — " + name + " (" + cls + ")";
+    }
+    if (!adm.isBlank()) {
+      return adm + " — " + name;
+    }
+    return name;
   }
 
   private static List<Map<String, Object>> documentsForDto(FeeCollectionEntity e) {

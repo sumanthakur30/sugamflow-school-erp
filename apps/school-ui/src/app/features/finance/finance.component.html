@@ -1,193 +1,724 @@
-<section class="page">
-  <div class="page-head">
-    <h2>Finance</h2>
-    <p>
-      Config-driven fee heads, structures, concessions, demand preview, and payment intents —
-      gated by FEATURE_FEE / FEATURE_MULTI_PAYMENT_GATEWAY.
-      <a routerLink="/admin/fee">Open Fee Collection →</a>
-    </p>
-  </div>
+<div class="page finance-page" [class.is-loading]="loading">
+  <header class="fin-sticky-head">
+    <div class="page-head list-head">
+      <div>
+        <h2>Finance</h2>
+        <p>Operational dashboard for collections, dues, structures, and payments.</p>
+      </div>
+      <div class="head-actions">
+        <button type="button" (click)="runQuick({ label: 'Collect', link: ['/admin/fee'], query: { new: '1' } })">
+          Collect fee
+        </button>
+        <button type="button" class="secondary" (click)="setTab('demand')">Generate demand</button>
+        <button type="button" class="secondary" (click)="reload()" [disabled]="loading || busy">
+          Refresh
+        </button>
+      </div>
+    </div>
+
+    <div class="fin-search-bar">
+      <input
+        type="search"
+        [(ngModel)]="globalQ"
+        name="globalQ"
+        placeholder="Search student, admission no, receipt, fee head, mobile…"
+        (keyup.enter)="applyGlobalSearch()"
+      />
+      <button type="button" class="secondary" (click)="applyGlobalSearch()">Search</button>
+    </div>
+
+    <nav class="fin-tabs" aria-label="Finance sections">
+      @for (t of tabs; track t.id) {
+        <button
+          type="button"
+          class="fin-tab"
+          [class.is-active]="tab === t.id"
+          (click)="setTab(t.id)"
+        >
+          {{ t.label }}
+        </button>
+      }
+    </nav>
+  </header>
 
   @if (error) {
     <p class="error panel" role="alert">{{ error }}</p>
   }
   @if (status) {
-    <p class="status panel">{{ status }}</p>
+    <p class="status panel" role="status" aria-live="polite">{{ status }}</p>
   }
 
   @if (loading) {
-    <p class="panel">Loading finance configuration…</p>
-  } @else {
-    <section class="panel">
-      <div class="chip-list">
-        <span class="chip">payment gateway: {{ paymentGatewayEnabled ? 'on' : 'off' }}</span>
-        <span class="chip">accounting: {{ accountingEnabled ? 'on' : 'off' }}</span>
+    <div class="fin-skeleton panel" aria-busy="true">
+      <div class="sk sk-row"></div>
+      <div class="sk-grid">
+        @for (_ of [1, 2, 3, 4, 5, 6]; track _) {
+          <div class="sk sk-card"></div>
+        }
       </div>
-    </section>
+      <p class="muted">Loading finance dashboard…</p>
+    </div>
+  } @else {
+    @if (tab === 'overview') {
+      <section class="fin-kpi-grid" aria-label="Finance summary">
+        @for (k of kpis; track k.key) {
+          <sf-finance-kpi-card [kpi]="k" (action)="onKpiAction($event)" />
+        }
+      </section>
 
-    <div class="grid two">
-      <section class="panel">
-        <h3>Fee heads</h3>
-        <ul class="editor-list">
-          @for (h of heads; track h.definitionKey || h.id) {
-            <li class="subpanel" style="margin-bottom: 0.45rem">
-              <strong>{{ payload(h).label || h.definitionKey }}</strong>
-              <p class="muted">{{ payload(h).code || h.definitionKey }} · {{ payload(h).category }} · v{{ h.version }}</p>
-            </li>
+      <section class="panel fin-quick" aria-label="Quick actions">
+        <h3 class="form-section-title">Quick actions</h3>
+        <div class="fin-quick-row">
+          @for (a of quickActions; track a.label) {
+            <button type="button" class="fin-chip-btn" (click)="runQuick(a)">{{ a.label }}</button>
           }
-        </ul>
-        <h3>Add / update head</h3>
-        <div class="grid two">
-          <label>
-            Key
-            <input [(ngModel)]="headDraft.definitionKey" name="headKey" placeholder="LAB" />
-          </label>
-          <label>
-            Label
-            <input [(ngModel)]="headDraft.label" name="headLabel" placeholder="Lab Fee" />
-          </label>
-          <label>
-            Category
-            <input [(ngModel)]="headDraft.category" name="headCat" />
-          </label>
-        </div>
-        <div class="toggle">
-          <span>Refundable</span>
-          <input type="checkbox" [(ngModel)]="headDraft.refundable" name="refundable" />
-        </div>
-        <div class="actions">
-          <button type="button" (click)="saveHead()" [disabled]="busy">Save head</button>
         </div>
       </section>
 
+      <div class="fin-overview-grid">
+        <section class="panel fin-panel-link" role="button" tabindex="0" (click)="openDestination({ link: ['/admin/fee'] })" (keyup.enter)="openDestination({ link: ['/admin/fee'] })">
+          <sf-finance-bar-chart title="Monthly fee collection" [slices]="monthlySeries" />
+          <span class="fin-panel-cta">Open fee list →</span>
+        </section>
+        <section class="panel fin-panel-link" role="button" tabindex="0" (click)="setTab('payments')" (keyup.enter)="setTab('payments')">
+          <sf-finance-donut-chart
+            title="Payment mode distribution"
+            [slices]="modeSlices"
+            [centerLabel]="modeSlices.length ? 'Modes' : ''"
+          />
+          <span class="fin-panel-cta">Open payments →</span>
+        </section>
+        <section class="panel fin-panel-link" role="button" tabindex="0" (click)="setTab('heads')" (keyup.enter)="setTab('heads')">
+          <sf-finance-bar-chart title="Collection by fee head" [slices]="headSlices" />
+          <span class="fin-panel-cta">Open fee heads →</span>
+        </section>
+        <section class="panel fin-panel-link" role="button" tabindex="0" (click)="setTab('collections')" (keyup.enter)="setTab('collections')">
+          <sf-finance-bar-chart title="Pending by class" [slices]="pendingClassSlices" fill="#c2410c" />
+          <span class="fin-panel-cta">Review dues →</span>
+        </section>
+      </div>
+
+      <div class="fin-overview-grid two">
+        <section class="panel">
+          <h3 class="form-section-title">Finance alerts</h3>
+          <ul class="fin-alert-list">
+            @for (a of alerts; track a.id) {
+              <li
+                [class]="'fin-alert tone-' + a.tone"
+                [class.is-clickable]="!!(a.actionTab || a.actionLink)"
+                (click)="a.actionTab || a.actionLink ? onAlertAction(a) : null"
+              >
+                <div>
+                  <strong>{{ a.title }}</strong>
+                  <p>{{ a.detail }}</p>
+                </div>
+                @if (a.actionLabel || a.actionTab || a.actionLink) {
+                  <button
+                    type="button"
+                    class="tiny"
+                    (click)="$event.stopPropagation(); onAlertAction(a)"
+                  >
+                    {{ a.actionLabel || 'Open' }}
+                  </button>
+                }
+              </li>
+            }
+          </ul>
+        </section>
+        <section class="panel">
+          <h3 class="form-section-title">Recent activity</h3>
+          <ol class="fin-timeline">
+            @for (ev of activity; track ev.id) {
+              <li
+                class="fin-timeline-item"
+                [class]="'tone-' + ev.tone"
+                [class.is-clickable]="ev.id.startsWith('c-') || ev.id.startsWith('t-') || ev.id.startsWith('h-')"
+                role="button"
+                tabindex="0"
+                (click)="openActivity(ev)"
+                (keyup.enter)="openActivity(ev)"
+              >
+                <div class="fin-timeline-title">{{ ev.title }}</div>
+                <div class="fin-timeline-detail">{{ ev.detail }}</div>
+                <div class="fin-timeline-at">{{ formatWhen(ev.at) }}</div>
+              </li>
+            }
+          </ol>
+        </section>
+      </div>
+
       <section class="panel">
-        <h3>Fee structures</h3>
-        @for (s of structures; track s.definitionKey || s.id) {
-          <div class="subpanel">
-            <strong>{{ payload(s).name || s.definitionKey }}</strong>
-            <p class="muted">{{ s.definitionKey }} · v{{ s.version }}</p>
-            <div class="chip-list">
-              @for (line of payload(s).lines || []; track line.headKey) {
-                <span class="chip">{{ line.headKey }}: {{ line.amount }}</span>
+        <h3 class="form-section-title">Payment mode summary</h3>
+        <div class="fin-mode-grid">
+          @for (m of modeCards; track m.mode) {
+            <article
+              class="fin-mode-card is-clickable"
+              role="button"
+              tabindex="0"
+              (click)="openModeCard(m)"
+              (keyup.enter)="openModeCard(m)"
+            >
+              <h4>{{ m.mode }}</h4>
+              <div class="fin-mode-metrics">
+                <div>
+                  <span>Today</span>
+                  <strong>{{ formatMoney(m.today) }}</strong>
+                </div>
+                <div>
+                  <span>Month</span>
+                  <strong>{{ formatMoney(m.month) }}</strong>
+                </div>
+                <div>
+                  <span>Count</span>
+                  <strong>{{ m.count }}</strong>
+                </div>
+              </div>
+              <span class="fin-mode-open">Open receipts →</span>
+            </article>
+          }
+        </div>
+      </section>
+    }
+
+    @if (tab === 'collections') {
+      <section class="panel inbox-panel">
+        <div class="fin-section-head">
+          <h3 class="form-section-title">Outstanding fees</h3>
+          <input
+            class="fin-inline-search"
+            type="search"
+            [(ngModel)]="dueQ"
+            name="dueQ"
+            placeholder="Search student, admission, class, mobile…"
+            (ngModelChange)="duePageIndex = 0"
+          />
+        </div>
+        <div class="table-wrap">
+          <table class="inbox-table">
+            <thead>
+              <tr>
+                <th>Student</th>
+                <th>Admission No</th>
+                <th>Class</th>
+                <th>Mobile</th>
+                <th>Due</th>
+                <th>Pending days</th>
+                <th>Status</th>
+                <th class="col-actions">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              @if (!filteredOutstanding.length) {
+                <tr>
+                  <td colspan="8" class="muted empty-row">No outstanding collections.</td>
+                </tr>
               }
+              @for (row of filteredOutstanding; track row.id) {
+                <tr class="inbox-row" [class]="'due-' + dueTone(row.pendingDays)">
+                  <td>
+                    <div class="cell-primary">{{ row.studentName }}</div>
+                    <div class="cell-sub">{{ row.parent }}</div>
+                  </td>
+                  <td class="mono">{{ row.admissionNo }}</td>
+                  <td>{{ row.classSection }}</td>
+                  <td>{{ row.mobile }}</td>
+                  <td class="money">{{ formatMoney(row.dueAmount) }}</td>
+                  <td>{{ row.pendingDays }}</td>
+                  <td><span [class]="statusClass(row.status)">{{ row.status }}</span></td>
+                  <td class="col-actions" (click)="$event.stopPropagation()">
+                    <button type="button" class="tiny" (click)="collectFor(row)">Collect</button>
+                    <button type="button" class="tiny secondary" (click)="openCollection(row)">
+                      Open
+                    </button>
+                    <button type="button" class="tiny secondary" (click)="reminderStub(row, 'WhatsApp')" title="WhatsApp">
+                      WA
+                    </button>
+                    <button type="button" class="tiny secondary" (click)="reminderStub(row, 'SMS')" title="SMS">
+                      SMS
+                    </button>
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+        <sf-list-pager
+          [pageIndex]="duePageIndex"
+          [pageSize]="duePageSize"
+          [totalElements]="outstandingTotal"
+          [hasNext]="(duePageIndex + 1) * duePageSize < outstandingTotal"
+          itemLabel="dues"
+          (pageChange)="onDuePageChange($event)"
+        />
+      </section>
+
+      <section class="panel inbox-panel">
+        <h3 class="form-section-title">Recent approved collections</h3>
+        <div class="table-wrap">
+          <table class="inbox-table">
+            <thead>
+              <tr>
+                <th>Student</th>
+                <th>Fee head</th>
+                <th>Amount</th>
+                <th>Mode</th>
+                <th>Date</th>
+                <th class="col-actions">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (c of recentApproved(); track c.id) {
+                <tr class="inbox-row">
+                  <td>
+                    <div class="cell-primary">{{ c.answers?.studentName || '—' }}</div>
+                    <div class="cell-sub mono">{{ c.answers?.admissionNo || '—' }}</div>
+                  </td>
+                  <td>{{ c.answers?.feeHead || '—' }}</td>
+                  <td class="money">{{ formatMoney(c.answers?.amount) }}</td>
+                  <td>{{ c.answers?.paymentMode || '—' }}</td>
+                  <td class="muted-cell">{{ formatWhen(c.updatedAt || c.createdAt) }}</td>
+                  <td class="col-actions">
+                    <a class="tiny-link" [routerLink]="['/admin/fee']" [queryParams]="{ id: c.id }">
+                      View
+                    </a>
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      </section>
+    }
+
+    @if (tab === 'heads') {
+      <div class="fin-split">
+        <section class="panel inbox-panel">
+          <div class="fin-section-head">
+            <h3 class="form-section-title">Fee heads</h3>
+            <div class="fin-section-tools">
+              <input
+                class="fin-inline-search"
+                type="search"
+                [(ngModel)]="headsQ"
+                name="headsQ"
+                placeholder="Search heads…"
+              />
+              <button type="button" class="secondary tiny" (click)="exportHeadsCsv()">Export</button>
             </div>
           </div>
-        }
-        <h3>Concessions</h3>
-        @for (c of concessions; track c.definitionKey || c.id) {
-          <div class="subpanel">
-            <strong>{{ payload(c).name || c.definitionKey }}</strong>
-            <p class="muted">
-              {{ payload(c).benefit?.type }} {{ payload(c).benefit?.value }}
-              @if (payload(c).benefit?.capAmount) {
-                · cap {{ payload(c).benefit.capAmount }}
-              }
-            </p>
+          <div class="table-wrap">
+            <table class="inbox-table">
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Code</th>
+                  <th>Category</th>
+                  <th>Status</th>
+                  <th>Version</th>
+                  <th class="col-actions">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                @if (!filteredHeads.length) {
+                  <tr>
+                    <td colspan="6" class="muted empty-row">No fee heads match.</td>
+                  </tr>
+                }
+                @for (h of filteredHeads; track h.definitionKey || h.id) {
+                  <tr class="inbox-row">
+                    <td>
+                      <div class="cell-primary">{{ payload(h).label || h.definitionKey }}</div>
+                    </td>
+                    <td class="mono">{{ payload(h).code || h.definitionKey }}</td>
+                    <td><span class="step-chip">{{ payload(h).category || '—' }}</span></td>
+                    <td><span class="badge badge-ok">{{ h.status || 'ACTIVE' }}</span></td>
+                    <td class="muted-cell">v{{ h.version || 1 }}</td>
+                    <td class="col-actions">
+                      <button type="button" class="tiny" (click)="editHead(h)">Edit</button>
+                      <button type="button" class="tiny secondary" (click)="duplicateHead(h)">
+                        Duplicate
+                      </button>
+                    </td>
+                  </tr>
+                }
+              </tbody>
+            </table>
           </div>
-        }
-      </section>
-    </div>
+        </section>
 
-    <section class="panel">
-      <h3>Demand preview</h3>
-      <div class="grid two">
-        <label>
-          Structure
-          <select [(ngModel)]="structureKey" name="structureKey">
-            @for (s of structures; track s.definitionKey) {
-              <option [value]="s.definitionKey">{{ payload(s).name || s.definitionKey }}</option>
-            }
-          </select>
-        </label>
-        <label>
-          Concession (optional)
-          <select [(ngModel)]="concessionKey" name="concessionKey">
-            <option value="">None</option>
-            @for (c of concessions; track c.definitionKey) {
-              <option [value]="c.definitionKey">{{ payload(c).name || c.definitionKey }}</option>
-            }
-          </select>
-        </label>
-        <label>
-          Student ref
-          <input [(ngModel)]="studentRef" name="studentRef" />
-        </label>
-        <label>
-          Student name
-          <input [(ngModel)]="studentName" name="studentName" />
-        </label>
-        <label>
-          Class / section
-          <input [(ngModel)]="classSection" name="classSection" />
-        </label>
-      </div>
-      <div class="actions">
-        <button type="button" (click)="previewDemand()" [disabled]="busy">Preview demand</button>
-      </div>
-      @if (demand) {
-        <div class="subpanel">
-          <p>
-            <strong>Gross</strong> {{ demand.grossAmount }} · <strong>Discount</strong>
-            {{ demand.discountAmount }} · <strong>Net</strong> {{ demand.netAmount }}
-            {{ demand.currency }}
-          </p>
-          <div class="chip-list">
-            @for (line of demand.lines || []; track line.headKey) {
-              <span class="chip">{{ line.headKey }}: {{ line.amount }}</span>
-            }
+        <section class="panel" id="fin-head-form">
+          <h3 class="form-section-title">
+            {{ editingHeadKey ? 'Update fee head' : 'Create fee head' }}
+          </h3>
+          <div class="grid two">
+            <label>
+              Key
+              <input
+                [(ngModel)]="headDraft.definitionKey"
+                name="headKey"
+                placeholder="LAB"
+                [disabled]="!!editingHeadKey"
+              />
+            </label>
+            <label>
+              Label
+              <input [(ngModel)]="headDraft.label" name="headLabel" placeholder="Lab Fee" />
+            </label>
+            <label>
+              Category
+              <select [(ngModel)]="headDraft.category" name="headCat">
+                <option value="ACADEMIC">Academic</option>
+                <option value="TRANSPORT">Transport</option>
+                <option value="HOSTEL">Hostel</option>
+                <option value="OPTIONAL">Optional</option>
+                <option value="FINE">Fine</option>
+                <option value="OTHER">Other</option>
+              </select>
+            </label>
           </div>
-          <p class="muted">
-            Suggested collection answers: feeHead={{ demand.suggestedAnswers?.feeHead }}, amount={{
-              demand.suggestedAnswers?.amount
-            }}
-          </p>
-        </div>
-      }
-    </section>
-
-    <section class="panel">
-      <h3>Online payment intent</h3>
-      @if (!paymentGatewayEnabled) {
-        <p class="muted">Enable FEATURE_MULTI_PAYMENT_GATEWAY on the plan to use payment intents.</p>
-      } @else {
-        <div class="grid two">
-          <label>
-            Amount (uses demand net when available)
-            <input type="number" [(ngModel)]="intentAmount" name="intentAmount" />
+          <label class="fin-check">
+            <input type="checkbox" [(ngModel)]="headDraft.refundable" name="refundable" />
+            Refundable
           </label>
-        </div>
-        <div class="actions">
-          <button type="button" (click)="createIntent()" [disabled]="busy">Create intent</button>
-          <button
-            type="button"
-            class="secondary"
-            (click)="simulateCapture()"
-            [disabled]="busy || !lastIntent || lastIntent.status !== 'PENDING'"
-          >
-            Simulate capture
-          </button>
-        </div>
-        @if (lastIntent) {
-          <pre>{{ lastIntent | json }}</pre>
-        }
-      }
-    </section>
+          <div class="form-actions actions">
+            <button type="button" (click)="saveHead()" [disabled]="busy">
+              {{ editingHeadKey ? 'Update head' : 'Save head' }}
+            </button>
+            @if (editingHeadKey) {
+              <button type="button" class="secondary" (click)="resetHeadDraft()">Cancel</button>
+            }
+          </div>
+        </section>
+      </div>
+    }
 
-    <section class="panel">
-      <h3>Recent finance transactions</h3>
-      @if (!transactions.length) {
-        <p class="muted">No transactions yet.</p>
-      }
-      <ul class="editor-list">
-        @for (t of transactions; track t.id) {
-          <li class="subpanel" style="margin-bottom: 0.4rem">
-            <strong>{{ t.transactionType }} · {{ t.status }}</strong>
-            <p class="muted">
-              {{ t.referenceNo }} · {{ t.netAmount }} {{ t.currency }} · {{ t.createdAt }}
-            </p>
-          </li>
-        }
-      </ul>
-    </section>
+    @if (tab === 'structures') {
+      <section class="panel">
+        <div class="fin-section-head">
+          <h3 class="form-section-title">Fee structures</h3>
+          <input
+            class="fin-inline-search"
+            type="search"
+            [(ngModel)]="structuresQ"
+            name="structuresQ"
+            placeholder="Search structures…"
+          />
+        </div>
+        <div class="fin-structure-grid">
+          @for (s of filteredStructures; track s.definitionKey || s.id) {
+            <article class="fin-structure-card">
+              <div class="fin-structure-top">
+                <div>
+                  <h4>{{ payload(s).name || s.definitionKey }}</h4>
+                  <p class="muted mono">{{ s.definitionKey }} · v{{ s.version || 1 }}</p>
+                </div>
+                <div class="fin-structure-total money">{{ formatMoney(structureTotal(s)) }}</div>
+              </div>
+              <div class="fin-line-list">
+                @for (line of payload(s).lines || []; track line.headKey) {
+                  <div class="fin-line">
+                    <span>{{ line.headKey }}</span>
+                    <strong class="money">{{ formatMoney(line.amount) }}</strong>
+                  </div>
+                }
+              </div>
+              <div class="fin-structure-actions">
+                <span class="badge badge-ok">Active</span>
+                <button type="button" class="tiny" (click)="structureKey = s.definitionKey; setTab('demand')">
+                  Use in demand
+                </button>
+              </div>
+            </article>
+          } @empty {
+            <p class="muted">No fee structures configured.</p>
+          }
+        </div>
+      </section>
+    }
+
+    @if (tab === 'concessions') {
+      <section class="panel">
+        <h3 class="form-section-title">Concessions &amp; scholarships</h3>
+        <div class="fin-structure-grid">
+          @for (c of concessions; track c.definitionKey || c.id) {
+            <article class="fin-structure-card concession">
+              <h4>{{ payload(c).name || c.definitionKey }}</h4>
+              <p class="muted mono">{{ c.definitionKey }}</p>
+              <div class="fin-concession-meta">
+                <div>
+                  <span>Benefit</span>
+                  <strong>
+                    {{ payload(c).benefit?.type || '—' }}
+                    {{ payload(c).benefit?.value ?? '' }}
+                  </strong>
+                </div>
+                <div>
+                  <span>Cap</span>
+                  <strong>{{ formatMoney(payload(c).benefit?.capAmount || 0) }}</strong>
+                </div>
+                <div>
+                  <span>Status</span>
+                  <strong>{{ c.status || 'ACTIVE' }}</strong>
+                </div>
+              </div>
+            </article>
+          } @empty {
+            <p class="muted">No concessions configured.</p>
+          }
+        </div>
+      </section>
+    }
+
+    @if (tab === 'demand') {
+      <div class="fin-split">
+        <section class="panel">
+          <h3 class="form-section-title">Generate / preview demand</h3>
+          <sf-student-lookup
+            label="Student (optional)"
+            [includeApplicants]="true"
+            (studentSelected)="onStudentSelected($event)"
+            (cleared)="onStudentCleared()"
+          />
+          <div class="grid two">
+            <label>
+              Structure
+              <select [(ngModel)]="structureKey" name="structureKey">
+                @for (s of structures; track s.definitionKey) {
+                  <option [value]="s.definitionKey">
+                    {{ payload(s).name || s.definitionKey }}
+                  </option>
+                }
+              </select>
+            </label>
+            <label>
+              Concession
+              <select [(ngModel)]="concessionKey" name="concessionKey">
+                <option value="">None</option>
+                @for (c of concessions; track c.definitionKey) {
+                  <option [value]="c.definitionKey">
+                    {{ payload(c).name || c.definitionKey }}
+                  </option>
+                }
+              </select>
+            </label>
+            <label>
+              Student ref
+              <input [(ngModel)]="studentRef" name="studentRef" placeholder="Admission no" />
+            </label>
+            <label>
+              Student name
+              <input [(ngModel)]="studentName" name="studentName" />
+            </label>
+            <label>
+              Class / section
+              <input [(ngModel)]="classSection" name="classSection" />
+            </label>
+          </div>
+          <div class="form-actions actions">
+            <button type="button" (click)="previewDemand()" [disabled]="busy">
+              {{ busy ? 'Working…' : 'Preview demand' }}
+            </button>
+            <a routerLink="/admin/fee" [queryParams]="{ new: '1' }" class="btn-link-inline">
+              Collect fee →
+            </a>
+          </div>
+          @if (demand) {
+            <div class="fin-demand">
+              <div class="fin-demand-metrics">
+                <div>
+                  <span>Gross</span>
+                  <strong class="money">{{ formatMoney(demand.grossAmount) }}</strong>
+                </div>
+                <div>
+                  <span>Discount</span>
+                  <strong class="money">{{ formatMoney(demand.discountAmount) }}</strong>
+                </div>
+                <div class="is-net">
+                  <span>Net due</span>
+                  <strong class="money">{{ formatMoney(demand.netAmount) }}</strong>
+                </div>
+              </div>
+              <div class="fin-line-list">
+                @for (line of demand.lines || []; track line.headKey) {
+                  <div class="fin-line">
+                    <span>{{ line.headKey }}</span>
+                    <strong class="money">{{ formatMoney(line.amount) }}</strong>
+                  </div>
+                }
+              </div>
+            </div>
+          }
+        </section>
+
+        <section class="panel">
+          <h3 class="form-section-title">Online payment intent</h3>
+          @if (!paymentGatewayEnabled) {
+            <p class="muted">Enable FEATURE_MULTI_PAYMENT_GATEWAY to create payment intents.</p>
+          } @else {
+            <div class="grid two">
+              <label>
+                Amount
+                <input type="number" [(ngModel)]="intentAmount" name="intentAmount" />
+              </label>
+              <label>
+                Provider
+                <select [(ngModel)]="providerKey" name="providerKey">
+                  @for (p of providers; track p.definitionKey || p.id) {
+                    <option [value]="p.definitionKey || payload(p).definitionKey">
+                      {{ payload(p).name || p.definitionKey }} ({{ payload(p).adapter }})
+                    </option>
+                  }
+                </select>
+              </label>
+            </div>
+            <div class="form-actions actions">
+              <button type="button" (click)="createIntent()" [disabled]="busy">Create intent</button>
+              <button
+                type="button"
+                class="secondary"
+                (click)="simulateCapture()"
+                [disabled]="
+                  busy ||
+                  !lastIntent ||
+                  lastIntent.status !== 'PENDING' ||
+                  (lastIntent.adapter && lastIntent.adapter !== 'SIMULATED')
+                "
+              >
+                Simulate capture
+              </button>
+            </div>
+            @if (lastIntent) {
+              <div class="fin-intent">
+                <div class="fin-intent-row">
+                  <span>Reference</span>
+                  <strong class="mono">{{ lastIntent.referenceNo || '—' }}</strong>
+                </div>
+                <div class="fin-intent-row">
+                  <span>Status</span>
+                  <span [class]="statusClass(lastIntent.status)">{{ lastIntent.status }}</span>
+                </div>
+                <div class="fin-intent-row">
+                  <span>Adapter</span>
+                  <strong>{{ lastIntent.adapter || '—' }}</strong>
+                </div>
+              </div>
+            }
+          }
+        </section>
+      </div>
+    }
+
+    @if (tab === 'payments') {
+      <section class="panel inbox-panel">
+        <h3 class="form-section-title">Finance transactions</h3>
+        <sf-list-toolbar
+          searchPlaceholder="Search type, status, reference, student ref…"
+          [(q)]="listQ"
+          [(sortBy)]="sortBy"
+          [(sortDir)]="sortDir"
+          [pageSize]="pageSize"
+          [sortOptions]="sortOptions"
+          [clearEnabled]="listClearEnabled"
+          (pageSizeChange)="pageSize = $event; pageIndex = 0"
+          (search)="pageIndex = 0"
+          (clear)="clearListFilters()"
+        />
+        <div class="table-wrap">
+          <table class="inbox-table">
+            <thead>
+              <tr>
+                <th>Type</th>
+                <th>Reference</th>
+                <th>Student</th>
+                <th>Amount</th>
+                <th>Status</th>
+                <th>Created</th>
+              </tr>
+            </thead>
+            <tbody>
+              @if (!filteredTransactions.length) {
+                <tr>
+                  <td colspan="6" class="muted empty-row">No transactions yet.</td>
+                </tr>
+              }
+              @for (t of filteredTransactions; track t.id) {
+                <tr class="inbox-row">
+                  <td>
+                    <div class="cell-primary">{{ t.transactionType || '—' }}</div>
+                    <div class="cell-sub">{{ t.adapter || t.payload?.adapter || '—' }}</div>
+                  </td>
+                  <td class="mono">{{ t.referenceNo || '—' }}</td>
+                  <td class="mono">{{ t.studentRef || '—' }}</td>
+                  <td class="money">
+                    {{ formatMoney(t.netAmount) }}
+                    <span class="muted">{{ t.currency || '' }}</span>
+                  </td>
+                  <td><span [class]="statusClass(t.status)">{{ t.status || '—' }}</span></td>
+                  <td class="muted-cell">{{ formatWhen(t.createdAt) }}</td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+        <sf-list-pager
+          [pageIndex]="pageIndex"
+          [pageSize]="pageSize"
+          [totalElements]="filteredTransactionsTotal"
+          [hasNext]="(pageIndex + 1) * pageSize < filteredTransactionsTotal"
+          itemLabel="transactions"
+          (pageChange)="onPageChange($event)"
+        />
+      </section>
+    }
+
+    @if (tab === 'settings') {
+      <section class="panel fin-status" aria-label="Finance settings">
+        <div class="fin-stat">
+          <span class="fin-stat-label">Payment gateway</span>
+          <strong [class.on]="paymentGatewayEnabled" [class.off]="!paymentGatewayEnabled">
+            {{ paymentGatewayEnabled ? 'On' : 'Off' }}
+          </strong>
+        </div>
+        <div class="fin-stat">
+          <span class="fin-stat-label">Accounting</span>
+          <strong [class.on]="accountingEnabled" [class.off]="!accountingEnabled">
+            {{ accountingEnabled ? 'On' : 'Off' }}
+          </strong>
+        </div>
+        <div class="fin-stat">
+          <span class="fin-stat-label">Mode</span>
+          <strong>{{ paymentMode }}</strong>
+        </div>
+        <div class="fin-stat">
+          <span class="fin-stat-label">Adapters</span>
+          <strong>{{ availableAdapters.length ? availableAdapters.join(', ') : '—' }}</strong>
+        </div>
+        <div class="fin-stat">
+          <span class="fin-stat-label">Fee heads</span>
+          <strong>{{ heads.length }}</strong>
+        </div>
+        <div class="fin-stat">
+          <span class="fin-stat-label">Structures</span>
+          <strong>{{ structures.length }}</strong>
+        </div>
+      </section>
+      <section class="panel">
+        <h3 class="form-section-title">Providers</h3>
+        <div class="fin-structure-grid">
+          @for (p of providers; track p.definitionKey || p.id) {
+            <article class="fin-structure-card">
+              <h4>{{ payload(p).name || p.definitionKey }}</h4>
+              <p class="muted">Adapter: {{ payload(p).adapter || '—' }}</p>
+            </article>
+          } @empty {
+            <p class="muted">No payment providers configured.</p>
+          }
+        </div>
+        <p class="muted fin-hint">
+          Feature flags and gateway keys are managed via subscription / fee service config. This tab
+          surfaces live status without changing backend contracts.
+        </p>
+      </section>
+    }
   }
-</section>
+</div>

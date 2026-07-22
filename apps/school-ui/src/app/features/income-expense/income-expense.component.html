@@ -1,0 +1,1029 @@
+<section class="page ie-page" id="incomeExpenseReport">
+  <header class="page-head ie-head">
+    <div>
+      <p class="eyebrow">Finance</p>
+      <h2>Income &amp; Expense Report</h2>
+      <p>
+        Executive cash view across fee collections, operating expenses, and payroll — filtered by
+        branch, session, and date range.
+      </p>
+    </div>
+    <div class="ie-head-actions">
+      @if (activeTab === 'overview') {
+        <button type="button" class="secondary" (click)="exportCsv()">CSV</button>
+        <button type="button" class="secondary" (click)="exportExcel()">Excel</button>
+        <button type="button" class="secondary" (click)="exportPdf()">PDF</button>
+        <button type="button" class="secondary" (click)="printReport()">Print</button>
+      } @else if (activeTab === 'income' && report?.canWrite) {
+        <button type="button" (click)="newIncome()">+ Add income</button>
+      } @else if (activeTab === 'expense' && report?.canWrite) {
+        <button type="button" (click)="newExpense()">+ Add expense</button>
+      }
+    </div>
+  </header>
+
+  @if (error) {
+    <p class="error panel" role="alert">{{ error }}</p>
+  }
+  @if (status) {
+    <p class="status panel" role="status">{{ status }}</p>
+  }
+
+  <nav class="finance-tabs" aria-label="Income and expense sections">
+    <button type="button" [class.active]="activeTab === 'overview'" (click)="selectTab('overview')">
+      Overview
+    </button>
+    <button type="button" [class.active]="activeTab === 'income'" (click)="selectTab('income')">
+      Income
+    </button>
+    <button type="button" [class.active]="activeTab === 'expense'" (click)="selectTab('expense')">
+      Expenses
+    </button>
+  </nav>
+
+  @if (activeTab === 'overview') {
+  <section class="panel ie-filters sticky-filters">
+    <div class="filter-grid">
+      <label>
+        Branch
+        <select [(ngModel)]="branchIds" name="branchIds" [disabled]="!canViewAllBranches">
+          @if (canViewAllBranches) {
+            <option value="ALL">All Branches</option>
+          }
+          @for (b of branches; track b.branchKey) {
+            <option [value]="b.branchKey">{{ b.name }}</option>
+          }
+        </select>
+      </label>
+      <label>
+        Date range
+        <select [(ngModel)]="datePreset" name="datePreset">
+          @for (p of datePresets; track p.value) {
+            <option [value]="p.value">{{ p.label }}</option>
+          }
+        </select>
+      </label>
+      @if (datePreset === 'CUSTOM') {
+        <label>
+          From
+          <input type="date" [(ngModel)]="fromDate" name="fromDate" />
+        </label>
+        <label>
+          To
+          <input type="date" [(ngModel)]="toDate" name="toDate" />
+        </label>
+      }
+      <label>
+        Academic session
+        <input
+          [(ngModel)]="academicSessionId"
+          name="academicSessionId"
+          placeholder="e.g. 2025-26"
+        />
+      </label>
+      <label>
+        Fee type
+        <input [(ngModel)]="feeType" name="feeType" list="feeTypeOptions" placeholder="All" />
+        <datalist id="feeTypeOptions">
+          @for (r of incomeRows; track r.key) {
+            <option [value]="r.label"></option>
+          }
+        </datalist>
+      </label>
+      <label>
+        Expense category
+        <select [(ngModel)]="expenseCategory" name="expenseCategory">
+          <option value="">All</option>
+          @for (c of report?.expenseCategories || []; track c) {
+            <option [value]="c">{{ c }}</option>
+          }
+        </select>
+      </label>
+      <label>
+        Payment mode
+        <select [(ngModel)]="paymentMode" name="paymentMode">
+          <option value="">All</option>
+          @for (m of paymentModes; track m) {
+            <option [value]="m">{{ m }}</option>
+          }
+        </select>
+      </label>
+      <label>
+        Collected by
+        <input [(ngModel)]="collectedBy" name="collectedBy" placeholder="User id" />
+      </label>
+      <div class="filter-actions">
+        <button type="button" (click)="applyFilters()" [disabled]="loading">
+          {{ loading ? 'Loading…' : 'Apply filters' }}
+        </button>
+      </div>
+    </div>
+    @if (report) {
+      <p class="filter-meta">
+        Showing <strong>{{ report.fromDate }}</strong> to <strong>{{ report.toDate }}</strong>
+        · {{ report.branchScope === 'ALL' ? 'All branches' : 'Selected branch(es)' }}
+        · Currency INR
+      </p>
+    }
+  </section>
+  }
+
+  @if (activeTab === 'income' && showIncomeForm) {
+    <section class="panel expense-form ledger-form">
+      <div class="section-head-row">
+        <div>
+          <p class="eyebrow">New entry</p>
+          <h3>Record other income</h3>
+          <p class="muted">Use this for non-fee income. Student fee receipts are added automatically.</p>
+        </div>
+        <button type="button" class="secondary" (click)="showIncomeForm = false">Close</button>
+      </div>
+      <div class="grid four">
+        <label>
+          <span class="field-title">Income source <span class="req">*</span></span>
+          <select [(ngModel)]="incomeDraft['source']" name="incomeSource">
+            @for (source of report?.incomeSources || []; track source) {
+              <option [value]="source">{{ source }}</option>
+            }
+          </select>
+        </label>
+        <label>
+          <span class="field-title">Amount <span class="req">*</span></span>
+          <input type="number" min="1" step="0.01" [(ngModel)]="incomeDraft['amount']" name="incomeAmount" />
+        </label>
+        <label>
+          Income date
+          <input type="date" [(ngModel)]="incomeDraft['incomeDate']" name="incomeDate" />
+        </label>
+        <label>
+          Payment mode
+          <select [(ngModel)]="incomeDraft['paymentMode']" name="incomeMode">
+            @for (m of paymentModes; track m) {
+              <option [value]="m">{{ m }}</option>
+            }
+          </select>
+        </label>
+      </div>
+      <label>
+        Description
+        <input [(ngModel)]="incomeDraft['description']" name="incomeDesc" placeholder="What was this income received for?" />
+      </label>
+      <div class="actions">
+        <button type="button" (click)="saveIncome()" [disabled]="savingIncome">
+          {{ savingIncome ? 'Saving…' : 'Save income' }}
+        </button>
+        <button type="button" class="secondary" (click)="showIncomeForm = false">Cancel</button>
+      </div>
+    </section>
+  }
+
+  @if (activeTab === 'expense' && showExpenseForm) {
+    <section class="panel expense-form">
+      <h3>Record an expense</h3>
+      <div class="grid four">
+        <label>
+          <span class="field-title">Category <span class="req">*</span></span>
+          <select [(ngModel)]="expenseDraft['category']" name="expCategory">
+            @for (c of report?.expenseCategories || []; track c) {
+              <option [value]="c">{{ c }}</option>
+            }
+          </select>
+        </label>
+        <label>
+          <span class="field-title">Amount <span class="req">*</span></span>
+          <input type="number" min="1" step="0.01" [(ngModel)]="expenseDraft['amount']" name="expAmount" />
+        </label>
+        <label>
+          Date
+          <input type="date" [(ngModel)]="expenseDraft['expenseDate']" name="expDate" />
+        </label>
+        <label>
+          Payment mode
+          <select [(ngModel)]="expenseDraft['paymentMode']" name="expMode">
+            @for (m of paymentModes; track m) {
+              <option [value]="m">{{ m }}</option>
+            }
+          </select>
+        </label>
+      </div>
+      <label>
+        Description
+        <input [(ngModel)]="expenseDraft['description']" name="expDesc" placeholder="What was this expense for?" />
+      </label>
+      <div class="actions">
+        <button type="button" (click)="saveExpense()" [disabled]="savingExpense">
+          {{ savingExpense ? 'Saving…' : 'Save expense' }}
+        </button>
+        <button type="button" class="secondary" (click)="showExpenseForm = false">Cancel</button>
+      </div>
+    </section>
+  }
+
+  @if (activeTab === 'overview') {
+  @if (loading && !report) {
+    <div class="panel loading-state">Building financial summary…</div>
+  } @else if (report) {
+    <section class="ie-kpi-grid">
+      @for (kpi of kpis; track kpi.key) {
+        <sf-finance-kpi-card
+          [kpi]="kpi"
+          [selected]="kpiFocus === kpi.key"
+          (action)="onKpiAction($event)"
+        />
+      }
+    </section>
+
+    @if (kpiFocus) {
+      <section class="panel focus-banner">
+        <div>
+          <p class="eyebrow">Focused view</p>
+          <h3>{{ focusLabel }}</h3>
+          <p class="muted">Showing only this metric. Click the same card again or Clear to restore the full report.</p>
+        </div>
+        <div class="focus-banner-side">
+          <strong [class.pos]="kpiFocus === 'income' || kpiFocus === 'fee'" [class.neg]="kpiFocus === 'expense' || kpiFocus === 'pending' || kpiFocus === 'salary'" [class.warn]="kpiFocus === 'pending'">
+            {{ focusAmount }}
+          </strong>
+          <button type="button" class="secondary" (click)="clearKpiFocus()">Clear focus</button>
+        </div>
+      </section>
+
+      @if (focusLoading) {
+        <div class="panel loading-state">Loading {{ focusLabel.toLowerCase() }}…</div>
+      } @else if (kpiFocus === 'pending') {
+        <section class="panel">
+          <div class="section-head-row">
+            <h3>Pending fee collections</h3>
+            <span class="muted">{{ pendingFeeRows.length }} dues · {{ money(pendingTotal) }}</span>
+          </div>
+          <div class="table-scroll">
+            <table class="ie-table wide">
+              <thead>
+                <tr>
+                  <th>Updated</th>
+                  <th>Student</th>
+                  <th>Admission No</th>
+                  <th>Class</th>
+                  <th>Fee type</th>
+                  <th>Status</th>
+                  <th class="num">Pending amount</th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (row of pendingFeeRows; track row.id) {
+                  <tr class="clickable" (click)="openPendingFee(row)">
+                    <td>{{ fmtDate(row.date) }}</td>
+                    <td>{{ row.studentName }}</td>
+                    <td>{{ row.admissionNo }}</td>
+                    <td>{{ row.classSection }}</td>
+                    <td>{{ row.category }}</td>
+                    <td><span class="type-chip expense">{{ row.status }}</span></td>
+                    <td class="num warn">{{ money(row.amount) }}</td>
+                  </tr>
+                } @empty {
+                  <tr>
+                    <td colspan="7" class="muted">No pending fees right now.</td>
+                  </tr>
+                }
+              </tbody>
+              <tfoot>
+                <tr>
+                  <th colspan="6">Total pending</th>
+                  <th class="num">{{ money(pendingTotal) }}</th>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        </section>
+      } @else if (kpiFocus === 'fee') {
+        <section class="panel">
+          <div class="section-head-row">
+            <h3>Approved fee collections</h3>
+            <span class="muted">{{ approvedFeeRows.length }} receipts · {{ money(report?.kpis?.feeIncome) }}</span>
+          </div>
+          <div class="table-scroll">
+            <table class="ie-table wide">
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Voucher</th>
+                  <th>Student</th>
+                  <th>Fee type</th>
+                  <th>Payment mode</th>
+                  <th class="num">Amount</th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (row of approvedFeeRows; track row.id) {
+                  <tr class="clickable" (click)="openPendingFee(row)">
+                    <td>{{ fmtDate(row.date) }}</td>
+                    <td>{{ row.voucherNo }}</td>
+                    <td>{{ row.studentName }}</td>
+                    <td>{{ row.category }}</td>
+                    <td>{{ row.paymentMode }}</td>
+                    <td class="num pos">{{ money(row.amount) }}</td>
+                  </tr>
+                } @empty {
+                  <tr>
+                    <td colspan="6" class="muted">No approved fee collections in this list.</td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        </section>
+        <section class="panel">
+          <sf-finance-bar-chart title="Fee type breakdown" [slices]="feeTypeBars" />
+        </section>
+      } @else if (kpiFocus === 'salary') {
+        <section class="panel">
+          <div class="mini-kpi-grid">
+            <div><span>Teaching staff salary</span><strong>{{ money(salaryAnalysis.teachingStaffSalary) }}</strong></div>
+            <div><span>Non teaching salary</span><strong>{{ money(salaryAnalysis.nonTeachingSalary) }}</strong></div>
+            <div><span>Pending salary</span><strong class="warn">{{ money(salaryAnalysis.pendingSalary) }}</strong></div>
+            <div><span>Bonus / allowances</span><strong>{{ money(salaryAnalysis.bonus) }}</strong></div>
+            <div><span>Overtime</span><strong>{{ money(salaryAnalysis.overtime) }}</strong></div>
+            <div><span>Salary deduction</span><strong class="neg">{{ money(salaryAnalysis.salaryDeduction) }}</strong></div>
+          </div>
+        </section>
+        <section class="panel">
+          <div class="section-head-row">
+            <h3>Salary payments</h3>
+            <span class="muted">{{ salaryRows.length }} records · {{ money(salaryTotal) }}</span>
+          </div>
+          <div class="table-scroll">
+            <table class="ie-table wide">
+              <thead>
+                <tr>
+                  <th>Date / Month</th>
+                  <th>Employee</th>
+                  <th>Month</th>
+                  <th>Payment mode</th>
+                  <th>Status</th>
+                  <th class="num">Net pay</th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (row of salaryRows; track row.id) {
+                  <tr class="clickable" (click)="openSalaryRow(row)">
+                    <td>{{ fmtDate(row.date) }}</td>
+                    <td>{{ row.employeeName }}</td>
+                    <td>{{ row.month }}</td>
+                    <td>{{ row.paymentMode }}</td>
+                    <td>{{ row.status }}</td>
+                    <td class="num neg">{{ money(row.netPay) }}</td>
+                  </tr>
+                } @empty {
+                  <tr>
+                    <td colspan="6" class="muted">No salary payments found.</td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        </section>
+      } @else if (kpiFocus === 'income') {
+        <div class="ie-two">
+          <section class="panel">
+            <h3>Income sources</h3>
+            <table class="ie-table">
+              <thead>
+                <tr>
+                  <th>Income source</th>
+                  <th class="num">Amount</th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (row of incomeRows; track row.key) {
+                  <tr>
+                    <td>{{ row.label }}</td>
+                    <td class="num pos">{{ money(row.amount) }}</td>
+                  </tr>
+                } @empty {
+                  <tr><td colspan="2" class="muted">No income in this period.</td></tr>
+                }
+              </tbody>
+              <tfoot>
+                <tr>
+                  <th>Total Income</th>
+                  <th class="num">{{ money(profitSummary.income) }}</th>
+                </tr>
+              </tfoot>
+            </table>
+          </section>
+          <section class="panel">
+            <sf-finance-donut-chart title="Income by payment mode" [slices]="incomeModeSlices" centerLabel="Income" />
+          </section>
+        </div>
+        <section class="panel">
+          <div class="section-head-row">
+            <h3>Income transactions</h3>
+            <button type="button" class="secondary" (click)="selectTab('income')">Open Income tab</button>
+          </div>
+          <div class="table-scroll">
+            <table class="ie-table wide">
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Voucher No</th>
+                  <th>Description</th>
+                  <th>Category</th>
+                  <th class="num">Amount</th>
+                  <th>Payment Mode</th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (row of focusedTransactions; track row.id) {
+                  <tr class="clickable" (click)="openTxn(row)">
+                    <td>{{ fmtDate(row.date) }}</td>
+                    <td>{{ row.voucherNo || '—' }}</td>
+                    <td>{{ row.description || '—' }}</td>
+                    <td>{{ row.category || '—' }}</td>
+                    <td class="num pos">{{ money(row.amount) }}</td>
+                    <td>{{ row.paymentMode || '—' }}</td>
+                  </tr>
+                } @empty {
+                  <tr><td colspan="6" class="muted">No income transactions in this period.</td></tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        </section>
+      } @else if (kpiFocus === 'expense') {
+        <div class="ie-two">
+          <section class="panel">
+            <h3>Expense categories</h3>
+            <table class="ie-table">
+              <thead>
+                <tr>
+                  <th>Expense</th>
+                  <th class="num">Amount</th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (row of expenseRows; track row.key) {
+                  <tr>
+                    <td>{{ row.label }}</td>
+                    <td class="num neg">{{ money(row.amount) }}</td>
+                  </tr>
+                } @empty {
+                  <tr><td colspan="2" class="muted">No expenses in this period.</td></tr>
+                }
+              </tbody>
+              <tfoot>
+                <tr>
+                  <th>Total Expenses</th>
+                  <th class="num">{{ money(profitSummary.expense) }}</th>
+                </tr>
+              </tfoot>
+            </table>
+          </section>
+          <section class="panel">
+            <sf-finance-donut-chart title="Expense by category" [slices]="expenseSlices" [centerLabel]="money(profitSummary.expense)" />
+          </section>
+        </div>
+        <section class="panel">
+          <div class="section-head-row">
+            <h3>Expense transactions</h3>
+            <button type="button" class="secondary" (click)="selectTab('expense')">Open Expenses tab</button>
+          </div>
+          <div class="table-scroll">
+            <table class="ie-table wide">
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Voucher No</th>
+                  <th>Description</th>
+                  <th>Category</th>
+                  <th class="num">Amount</th>
+                  <th>Payment Mode</th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (row of focusedTransactions; track row.id) {
+                  <tr class="clickable" (click)="openTxn(row)">
+                    <td>{{ fmtDate(row.date) }}</td>
+                    <td>{{ row.voucherNo || '—' }}</td>
+                    <td>{{ row.description || '—' }}</td>
+                    <td>{{ row.category || '—' }}</td>
+                    <td class="num neg">{{ money(row.amount) }}</td>
+                    <td>{{ row.paymentMode || '—' }}</td>
+                  </tr>
+                } @empty {
+                  <tr><td colspan="6" class="muted">No expense transactions in this period.</td></tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        </section>
+      } @else if (kpiFocus === 'profit') {
+        <section class="panel profit-panel">
+          <h3>Profit summary</h3>
+          <div class="profit-grid">
+            <div>
+              <span>Income</span>
+              <strong class="pos">{{ money(profitSummary.income) }}</strong>
+            </div>
+            <div>
+              <span>Expenses</span>
+              <strong class="neg">{{ money(profitSummary.expense) }}</strong>
+            </div>
+            <div>
+              <span>{{ profitSummary.net >= 0 ? 'Net Profit' : 'Net Deficit' }}</span>
+              <strong [class.pos]="profitSummary.net >= 0" [class.neg]="profitSummary.net < 0">
+                {{ money(abs(profitSummary.net)) }}
+              </strong>
+            </div>
+            <div>
+              <span>Profit %</span>
+              <strong [class.pos]="profitSummary.pct >= 0" [class.neg]="profitSummary.pct < 0">
+                {{ profitSummary.pct.toFixed(2) }}%
+              </strong>
+            </div>
+          </div>
+        </section>
+        <section class="panel">
+          <sf-finance-column-chart title="Monthly income vs expense" [points]="monthlyPoints" />
+        </section>
+      } @else if (kpiFocus === 'cash' || kpiFocus === 'bank') {
+        <section class="panel">
+          <div class="section-head-row">
+            <h3>{{ kpiFocus === 'cash' ? 'Cash transactions' : 'Bank / digital transactions' }}</h3>
+            <span class="muted">Filtered by payment mode</span>
+          </div>
+          <div class="table-scroll">
+            <table class="ie-table wide">
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Voucher No</th>
+                  <th>Description</th>
+                  <th>Type</th>
+                  <th>Category</th>
+                  <th class="num">Amount</th>
+                  <th>Payment Mode</th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (row of focusedTransactions; track row.id) {
+                  <tr class="clickable" (click)="openTxn(row)">
+                    <td>{{ fmtDate(row.date) }}</td>
+                    <td>{{ row.voucherNo || '—' }}</td>
+                    <td>{{ row.description || '—' }}</td>
+                    <td>
+                      <span class="type-chip" [class.income]="row.type === 'INCOME'" [class.expense]="row.type === 'EXPENSE'">
+                        {{ row.type === 'INCOME' ? 'Income' : 'Expense' }}
+                      </span>
+                    </td>
+                    <td>{{ row.category || '—' }}</td>
+                    <td class="num" [class.pos]="row.type === 'INCOME'" [class.neg]="row.type === 'EXPENSE'">
+                      {{ money(row.amount) }}
+                    </td>
+                    <td>{{ row.paymentMode || '—' }}</td>
+                  </tr>
+                } @empty {
+                  <tr>
+                    <td colspan="7" class="muted">No matching transactions in this period.</td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        </section>
+      }
+    } @else {
+    <section class="panel profit-panel">
+      <h3>Profit summary</h3>
+      <div class="profit-grid">
+        <div>
+          <span>Income</span>
+          <strong class="pos">{{ money(profitSummary.income) }}</strong>
+        </div>
+        <div>
+          <span>Expenses</span>
+          <strong class="neg">{{ money(profitSummary.expense) }}</strong>
+        </div>
+        <div>
+          <span>{{ profitSummary.net >= 0 ? 'Net Profit' : 'Net Deficit' }}</span>
+          <strong [class.pos]="profitSummary.net >= 0" [class.neg]="profitSummary.net < 0">
+            {{ money(abs(profitSummary.net)) }}
+          </strong>
+        </div>
+        <div>
+          <span>Profit %</span>
+          <strong [class.pos]="profitSummary.pct >= 0" [class.neg]="profitSummary.pct < 0">
+            {{ profitSummary.pct.toFixed(2) }}%
+          </strong>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <sf-finance-column-chart title="Monthly income vs expense" [points]="monthlyPoints" />
+    </section>
+
+    <div class="ie-two">
+      <section class="panel">
+        <button type="button" class="section-toggle" (click)="openIncome = !openIncome">
+          <strong>Income sources</strong>
+          <span>{{ openIncome ? 'Hide' : 'Show' }}</span>
+        </button>
+        @if (openIncome) {
+          <table class="ie-table">
+            <thead>
+              <tr>
+                <th>Income source</th>
+                <th class="num">Amount</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (row of incomeRows; track row.key) {
+                <tr class="clickable" (click)="feeType = row.label; applyFilters()">
+                  <td>{{ row.label }}</td>
+                  <td class="num pos">{{ money(row.amount) }}</td>
+                </tr>
+              } @empty {
+                <tr>
+                  <td colspan="2" class="muted">No income recorded in this period.</td>
+                </tr>
+              }
+            </tbody>
+            <tfoot>
+              <tr>
+                <th>Total Income</th>
+                <th class="num">{{ money(profitSummary.income) }}</th>
+              </tr>
+            </tfoot>
+          </table>
+        }
+      </section>
+
+      <section class="panel">
+        <button type="button" class="section-toggle" (click)="openExpense = !openExpense">
+          <strong>Expense categories</strong>
+          <span>{{ openExpense ? 'Hide' : 'Show' }}</span>
+        </button>
+        @if (openExpense) {
+          <table class="ie-table">
+            <thead>
+              <tr>
+                <th>Expense</th>
+                <th class="num">Amount</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (row of expenseRows; track row.key) {
+                <tr
+                  class="clickable"
+                  (click)="expenseCategory = row.label === 'Staff Salary' ? '' : row.label; applyFilters()"
+                >
+                  <td>{{ row.label }}</td>
+                  <td class="num neg">{{ money(row.amount) }}</td>
+                </tr>
+              } @empty {
+                <tr>
+                  <td colspan="2" class="muted">No expenses recorded in this period.</td>
+                </tr>
+              }
+            </tbody>
+            <tfoot>
+              <tr>
+                <th>Total Expenses</th>
+                <th class="num">{{ money(profitSummary.expense) }}</th>
+              </tr>
+            </tfoot>
+          </table>
+        }
+      </section>
+    </div>
+
+    <div class="ie-two">
+      <section class="panel">
+        <sf-finance-donut-chart
+          title="Expense analysis by category"
+          [slices]="expenseSlices"
+          [centerLabel]="money(profitSummary.expense)"
+        />
+      </section>
+      <section class="panel">
+        <sf-finance-bar-chart title="Fee type analysis" [slices]="feeTypeBars" />
+      </section>
+    </div>
+
+    <div class="ie-two">
+      <section class="panel">
+        <button type="button" class="section-toggle" (click)="openFee = !openFee">
+          <strong>Fee collection analysis</strong>
+          <span>{{ openFee ? 'Hide' : 'Show' }}</span>
+        </button>
+        @if (openFee) {
+          <div class="mini-kpi-grid">
+            <div><span>Collected today</span><strong>{{ money(feeAnalysis.collectedToday) }}</strong></div>
+            <div><span>Collected this month</span><strong>{{ money(feeAnalysis.collectedThisMonth) }}</strong></div>
+            <div><span>Collected this year</span><strong>{{ money(feeAnalysis.collectedThisYear) }}</strong></div>
+            <div><span>Pending fees</span><strong class="warn">{{ money(feeAnalysis.pendingFees) }}</strong></div>
+            <div><span>Overdue fees</span><strong class="neg">{{ money(feeAnalysis.overdueFees) }}</strong></div>
+            <div><span>Advance collection</span><strong>{{ money(feeAnalysis.advanceCollection) }}</strong></div>
+            <div><span>Scholarship discount</span><strong>{{ money(feeAnalysis.scholarshipDiscount) }}</strong></div>
+            <div><span>Fine collected</span><strong>{{ money(feeAnalysis.fineCollected) }}</strong></div>
+            <div><span>Refund amount</span><strong>{{ money(feeAnalysis.refundAmount) }}</strong></div>
+          </div>
+          <p class="muted drill-hint">
+            Drill down:
+            <a routerLink="/admin/fee">Fee receipts</a>
+            ·
+            <a routerLink="/admin/finance">Payment ledger</a>
+          </p>
+        }
+      </section>
+
+      <section class="panel">
+        <button type="button" class="section-toggle" (click)="openSalary = !openSalary">
+          <strong>Staff salary analysis</strong>
+          <span>{{ openSalary ? 'Hide' : 'Show' }}</span>
+        </button>
+        @if (openSalary) {
+          <div class="mini-kpi-grid">
+            <div><span>Teaching staff salary</span><strong>{{ money(salaryAnalysis.teachingStaffSalary) }}</strong></div>
+            <div><span>Non teaching salary</span><strong>{{ money(salaryAnalysis.nonTeachingSalary) }}</strong></div>
+            <div><span>Pending salary</span><strong class="warn">{{ money(salaryAnalysis.pendingSalary) }}</strong></div>
+            <div><span>Bonus / allowances</span><strong>{{ money(salaryAnalysis.bonus) }}</strong></div>
+            <div><span>Overtime</span><strong>{{ money(salaryAnalysis.overtime) }}</strong></div>
+            <div><span>Salary deduction</span><strong class="neg">{{ money(salaryAnalysis.salaryDeduction) }}</strong></div>
+          </div>
+          <p class="muted drill-hint">
+            Drill down:
+            <a routerLink="/admin/payroll">Payroll runs</a>
+            ·
+            <a routerLink="/admin/staff-directory">Staff directory</a>
+          </p>
+        }
+      </section>
+    </div>
+
+    <div class="ie-two">
+      <section class="panel">
+        <h3>Payment mode — Income</h3>
+        <sf-finance-donut-chart [slices]="incomeModeSlices" centerLabel="Income" />
+      </section>
+      <section class="panel">
+        <h3>Top expenses</h3>
+        <table class="ie-table">
+          <thead>
+            <tr>
+              <th>Category</th>
+              <th>Description</th>
+              <th class="num">Amount</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (row of topExpenses; track row.id) {
+              <tr>
+                <td>{{ row.category }}</td>
+                <td>{{ row.description || '—' }}</td>
+                <td class="num neg">{{ money(row.amount) }}</td>
+              </tr>
+            } @empty {
+              <tr>
+                <td colspan="3" class="muted">No expense rows yet.</td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </section>
+    </div>
+
+    @if (branchRows.length > 1 || (canViewAllBranches && branchRows.length)) {
+      <section class="panel">
+        <h3>Branch comparison</h3>
+        <table class="ie-table">
+          <thead>
+            <tr>
+              <th>Branch</th>
+              <th class="num">Income</th>
+              <th class="num">Expense</th>
+              <th class="num">Profit</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (row of branchRows; track row.branchId) {
+              <tr class="clickable" (click)="branchIds = row.branchId; applyFilters()">
+                <td>{{ row.branchName || row.branchId }}</td>
+                <td class="num pos">{{ money(row.income) }}</td>
+                <td class="num neg">{{ money(row.expense) }}</td>
+                <td class="num" [class.pos]="row.profit >= 0" [class.neg]="row.profit < 0">
+                  {{ money(row.profit) }}
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </section>
+    }
+
+    <section class="panel">
+      <div class="section-head-row">
+        <h3>Recent transactions</h3>
+        <span class="muted">Latest 20 income &amp; expense entries</span>
+      </div>
+      <div class="table-scroll">
+        <table class="ie-table wide">
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Voucher No</th>
+              <th>Description</th>
+              <th>Type</th>
+              <th>Category</th>
+              <th class="num">Amount</th>
+              <th>Payment Mode</th>
+              <th>Created By</th>
+              <th>Branch</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (row of recent; track row.id) {
+              <tr class="clickable" (click)="openTxn(row)">
+                <td>{{ fmtDate(row.date) }}</td>
+                <td>{{ row.voucherNo || '—' }}</td>
+                <td>{{ row.description || '—' }}</td>
+                <td>
+                  <span class="type-chip" [class.income]="row.type === 'INCOME'" [class.expense]="row.type === 'EXPENSE'">
+                    {{ row.type === 'INCOME' ? 'Income' : 'Expense' }}
+                  </span>
+                </td>
+                <td>{{ row.category || '—' }}</td>
+                <td class="num" [class.pos]="row.type === 'INCOME'" [class.neg]="row.type === 'EXPENSE'">
+                  {{ money(row.amount) }}
+                </td>
+                <td>{{ row.paymentMode || '—' }}</td>
+                <td>{{ row.createdBy || '—' }}</td>
+                <td>{{ row.branchId || '—' }}</td>
+              </tr>
+            } @empty {
+              <tr>
+                <td colspan="9" class="muted">No transactions in this period.</td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    </section>
+    }
+  }
+  }
+
+  @if (activeTab === 'income') {
+    <section class="ledger-summary">
+      <article class="panel ledger-summary-card income-card">
+        <span>Total income in selected report period</span>
+        <strong>{{ money(report?.kpis?.totalIncome) }}</strong>
+        <small>Student fees plus other income</small>
+      </article>
+      <article class="panel ledger-summary-card">
+        <span>Student fee income</span>
+        <strong>{{ money(report?.kpis?.feeIncome) }}</strong>
+        <a routerLink="/admin/fee">Open fee receipts →</a>
+      </article>
+      <article class="panel ledger-summary-card">
+        <span>Other income</span>
+        <strong>{{ money(report?.kpis?.otherIncome) }}</strong>
+        <small>Manually recorded below</small>
+      </article>
+    </section>
+
+    <section class="panel ledger-panel">
+      <div class="section-head-row ledger-head">
+        <div>
+          <h3>Other income entries</h3>
+          <p class="muted">Donations, sales, grants, interest, events, and other non-fee receipts.</p>
+        </div>
+        @if (report?.canWrite) {
+          <button type="button" (click)="newIncome()">+ Add income</button>
+        }
+      </div>
+      <div class="table-scroll">
+        <table class="ie-table wide">
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Voucher No</th>
+              <th>Source</th>
+              <th>Description</th>
+              <th>Payment Mode</th>
+              <th class="num">Amount</th>
+              @if (report?.canWrite) { <th class="actions-col">Actions</th> }
+            </tr>
+          </thead>
+          <tbody>
+            @for (row of incomePage.items; track row.id) {
+              <tr>
+                <td>{{ fmtDate(row.incomeDate || row.date) }}</td>
+                <td>{{ row.voucherNo || '—' }}</td>
+                <td><span class="type-chip income">{{ row.source }}</span></td>
+                <td>{{ row.description || '—' }}</td>
+                <td>{{ row.paymentMode || '—' }}</td>
+                <td class="num pos">{{ money(row.amount) }}</td>
+                @if (report?.canWrite) {
+                  <td><button type="button" class="danger-link" (click)="deleteIncome(row)">Delete</button></td>
+                }
+              </tr>
+            } @empty {
+              <tr>
+                <td [attr.colspan]="report?.canWrite ? 7 : 6" class="empty-ledger">
+                  <strong>No other income recorded</strong>
+                  <span>Fee income is automatic. Add donations, sales, grants, or other receipts here.</span>
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+      <div class="ledger-pager">
+        <span>{{ incomePage.totalElements }} entries</span>
+        <div>
+          <button type="button" class="secondary" [disabled]="incomePage.page === 0 || ledgerLoading" (click)="loadIncome(incomePage.page - 1)">Previous</button>
+          <span>Page {{ incomePage.page + 1 }} of {{ incomePage.totalPages || 1 }}</span>
+          <button type="button" class="secondary" [disabled]="!incomePage.hasNext || ledgerLoading" (click)="loadIncome(incomePage.page + 1)">Next</button>
+        </div>
+      </div>
+    </section>
+  }
+
+  @if (activeTab === 'expense') {
+    <section class="ledger-summary">
+      <article class="panel ledger-summary-card expense-card">
+        <span>Total expenses in selected report period</span>
+        <strong>{{ money(profitSummary.expense) }}</strong>
+        <small>Operating expenses plus payroll</small>
+      </article>
+      <article class="panel ledger-summary-card">
+        <span>Operating expenses</span>
+        <strong>{{ money(report?.kpis?.operatingExpense) }}</strong>
+        <small>Manually recorded below</small>
+      </article>
+      <article class="panel ledger-summary-card">
+        <span>Salary paid</span>
+        <strong>{{ money(salary?.salaryPaid) }}</strong>
+        <a routerLink="/admin/payroll">Open payroll →</a>
+      </article>
+    </section>
+
+    <section class="panel ledger-panel">
+      <div class="section-head-row ledger-head">
+        <div>
+          <h3>Expense entries</h3>
+          <p class="muted">Day-to-day operating costs. Payroll remains managed in the Payroll module.</p>
+        </div>
+        @if (report?.canWrite) {
+          <button type="button" (click)="newExpense()">+ Add expense</button>
+        }
+      </div>
+      <div class="table-scroll">
+        <table class="ie-table wide">
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Voucher No</th>
+              <th>Category</th>
+              <th>Description</th>
+              <th>Payment Mode</th>
+              <th class="num">Amount</th>
+              @if (report?.canWrite) { <th class="actions-col">Actions</th> }
+            </tr>
+          </thead>
+          <tbody>
+            @for (row of expensePage.items; track row.id) {
+              <tr>
+                <td>{{ fmtDate(row.expenseDate || row.date) }}</td>
+                <td>{{ row.voucherNo || '—' }}</td>
+                <td><span class="type-chip expense">{{ row.category }}</span></td>
+                <td>{{ row.description || '—' }}</td>
+                <td>{{ row.paymentMode || '—' }}</td>
+                <td class="num neg">{{ money(row.amount) }}</td>
+                @if (report?.canWrite) {
+                  <td><button type="button" class="danger-link" (click)="deleteExpense(row)">Delete</button></td>
+                }
+              </tr>
+            } @empty {
+              <tr>
+                <td [attr.colspan]="report?.canWrite ? 7 : 6" class="empty-ledger">
+                  <strong>No expenses recorded</strong>
+                  <span>Add utilities, purchases, maintenance, transport, and other operating costs here.</span>
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+      <div class="ledger-pager">
+        <span>{{ expensePage.totalElements }} entries</span>
+        <div>
+          <button type="button" class="secondary" [disabled]="expensePage.page === 0 || ledgerLoading" (click)="loadExpenses(expensePage.page - 1)">Previous</button>
+          <span>Page {{ expensePage.page + 1 }} of {{ expensePage.totalPages || 1 }}</span>
+          <button type="button" class="secondary" [disabled]="!expensePage.hasNext || ledgerLoading" (click)="loadExpenses(expensePage.page + 1)">Next</button>
+        </div>
+      </div>
+    </section>
+  }
+</section>

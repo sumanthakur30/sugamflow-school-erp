@@ -7,6 +7,7 @@ public class FeeProperties {
 
   private final Defaults defaults = new Defaults();
   private final Integrations integrations = new Integrations();
+  private final Payment payment = new Payment();
 
   public Defaults getDefaults() {
     return defaults;
@@ -14,6 +15,61 @@ public class FeeProperties {
 
   public Integrations getIntegrations() {
     return integrations;
+  }
+
+  public Payment getPayment() {
+    return payment;
+  }
+
+  /**
+   * Gateway mode: {@code simulate} (default, local/dev), {@code razorpay} (force), or {@code auto}
+   * (use Razorpay when keys are present).
+   */
+  public static class Payment {
+    private String mode = "simulate";
+    private final Razorpay razorpay = new Razorpay();
+
+    public String getMode() {
+      return mode;
+    }
+
+    public void setMode(String mode) {
+      this.mode = mode;
+    }
+
+    public Razorpay getRazorpay() {
+      return razorpay;
+    }
+
+    public static class Razorpay {
+      private String keyId = "";
+      private String keySecret = "";
+      private String webhookSecret = "";
+
+      public String getKeyId() {
+        return keyId;
+      }
+
+      public void setKeyId(String keyId) {
+        this.keyId = keyId;
+      }
+
+      public String getKeySecret() {
+        return keySecret;
+      }
+
+      public void setKeySecret(String keySecret) {
+        this.keySecret = keySecret;
+      }
+
+      public String getWebhookSecret() {
+        return webhookSecret;
+      }
+
+      public void setWebhookSecret(String webhookSecret) {
+        this.webhookSecret = webhookSecret;
+      }
+    }
   }
 
   public static class Defaults {
@@ -56,6 +112,7 @@ public class FeeProperties {
     private String reportsBaseUrl = "http://localhost:8186";
     private String notificationDeliveryBaseUrl = "http://localhost:8087";
     private String publicApiBaseUrl = "http://localhost:9090";
+    private String studentBaseUrl = "http://localhost:8191";
 
     public String getFormsBaseUrl() {
       return formsBaseUrl;
@@ -127,6 +184,14 @@ public class FeeProperties {
 
     public void setPublicApiBaseUrl(String publicApiBaseUrl) {
       this.publicApiBaseUrl = publicApiBaseUrl;
+    }
+
+    public String getStudentBaseUrl() {
+      return studentBaseUrl;
+    }
+
+    public void setStudentBaseUrl(String studentBaseUrl) {
+      this.studentBaseUrl = studentBaseUrl;
     }
   }
 }
