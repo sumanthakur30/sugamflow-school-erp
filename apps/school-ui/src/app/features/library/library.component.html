@@ -1,14 +1,28 @@
-<div class="page">
-  <header class="page-head">
-    <h2>Library / Book Issue</h2>
-    <p>
-      Config-driven vertical slice — form <code>{{ formKey }}</code>, workflow
-      <code>{{ workflowKey }}</code>, rules &amp; FEATURE_LIBRARY.
-    </p>
+<div class="page library-page">
+  <header class="page-head lib-head">
+    <div>
+      <nav class="breadcrumb" aria-label="Breadcrumb">
+        <span>Library</span>
+        <span class="crumb-sep" aria-hidden="true">›</span>
+        <span class="crumb-current">Book Issue</span>
+      </nav>
+      <h2>Library / Book Issue</h2>
+      <p>Manage the book catalog, issue and return books, and track who has what.</p>
+    </div>
+    @if (featureEnabled && view === 'catalog') {
+      <div class="lib-head-actions">
+        <button type="button" (click)="showBookForm = !showBookForm; statusMsg = ''">
+          {{ showBookForm ? 'Close form' : '+ Add New Book' }}
+        </button>
+      </div>
+    }
   </header>
 
   @if (error) {
     <p class="error panel" role="alert">{{ error }}</p>
+  }
+  @if (statusMsg) {
+    <p class="status panel" role="status" aria-live="polite">{{ statusMsg }}</p>
   }
 
   @if (loading) {
@@ -16,92 +30,616 @@
   } @else if (!featureEnabled) {
     <p class="panel">Library is not enabled for this plan (FEATURE_LIBRARY).</p>
   } @else {
-    <section class="panel">
-      <h3>New record</h3>
-      <div class="grid two">
-        @for (field of fields; track field.key) {
-          <label>
-            {{ field.label }}
-            @if (field.mandatory) {
-              <span class="req">*</span>
-            }
-            @if (field.type === 'CHECKBOX') {
-              <input type="checkbox" [(ngModel)]="answers[field.key]" [name]="field.key" />
-            } @else if (field.type === 'NUMBER') {
-              <input type="number" [(ngModel)]="answers[field.key]" [name]="field.key" />
-            } @else {
-              <input [(ngModel)]="answers[field.key]" [name]="field.key" />
-            }
-          </label>
+    <nav class="lib-tabs" aria-label="Library sections">
+      <button type="button" [class.active]="view === 'catalog'" (click)="selectView('catalog')">
+        Catalog
+      </button>
+      <button type="button" [class.active]="view === 'issue'" (click)="selectView('issue')">
+        Issue / Return
+      </button>
+      <button type="button" [class.active]="view === 'issued'" (click)="selectView('issued')">
+        Issued Books
+        @if (issues.length) {
+          <span class="tab-badge" [class.warn]="overdueCount > 0">
+            {{ overdueCount > 0 ? overdueCount + ' overdue' : issues.length }}
+          </span>
         }
-      </div>
-      <div class="actions">
-        <button type="button" (click)="submit()" [disabled]="submitting">
-          {{ submitting ? 'Submitting…' : 'Submit record' }}
-        </button>
-      </div>
-    </section>
+      </button>
+      <button type="button" [class.active]="view === 'workflow'" (click)="selectView('workflow')">
+        Workflow inbox
+      </button>
+    </nav>
 
-    <div class="library-layout">
-      <section class="panel">
-        <h3>Inbox</h3>
-        @if (!records.length) {
-          <p class="muted">No records yet.</p>
-        }
-        <ul class="app-list">
-          @for (row of records; track row.id) {
-            <li>
-              <button
-                type="button"
-                class="app-row"
-                [class.active]="row.id === selectedId"
-                (click)="select(row)"
-              >
-                <strong>{{ row.answers?.studentName || row.id }}</strong>
-                <span>{{ row.status }} · {{ row.currentStepName }} · {{ row.answers?.bookTitle }}</span>
-              </button>
-            </li>
-          }
-        </ul>
-      </section>
-
-      <section class="panel">
-        <h3>Detail</h3>
-        @if (!selected) {
-          <p class="muted">Select a record.</p>
-        } @else {
-          <p>
-            <strong>{{ selected.status }}</strong> — step {{ selected.currentStepSequence }}
-            {{ selected.currentStepName }} ({{ selected.assigneeRole }})
-          </p>
-          <pre class="answers">{{ selected.answers | json }}</pre>
-          <label>
-            Comment
-            <input [(ngModel)]="actionComment" name="actionComment" />
-          </label>
-          <div class="actions">
-            <button type="button" (click)="act('APPROVE')" [disabled]="submitting">Approve step</button>
-            <button type="button" class="secondary" (click)="act('REQUEST_INFO')" [disabled]="submitting">
-              Request info
-            </button>
-            <button type="button" class="danger" (click)="act('REJECT')" [disabled]="submitting">Reject</button>
+    <!-- ============ CATALOG ============ -->
+    @if (view === 'catalog') {
+      @if (showBookForm) {
+        <section class="panel book-form">
+          <h3>Add a new book</h3>
+          <div class="grid two">
+            <label>
+              <span class="field-title">Title <span class="req">*</span></span>
+              <input [(ngModel)]="bookDraft.title" name="bookTitle" placeholder="e.g. Wings of Fire" />
+            </label>
+            <label>
+              Author
+              <input [(ngModel)]="bookDraft.author" name="bookAuthor" placeholder="e.g. A.P.J. Abdul Kalam" />
+            </label>
+            <label>
+              ISBN
+              <input [(ngModel)]="bookDraft.isbn" name="bookIsbn" placeholder="Optional" />
+            </label>
+            <label>
+              Copies
+              <input type="number" min="1" [(ngModel)]="bookDraft.copiesTotal" name="bookCopies" />
+            </label>
           </div>
-          @if (latestApproveDelivery().length) {
-            <h4>Notifications</h4>
-            <ul class="history">
-              @for (d of latestApproveDelivery(); track d.at) {
-                <li>{{ d.channel }} → {{ d.status }}{{ d.recipient ? ' · ' + d.recipient : '' }}</li>
+          <div class="actions">
+            <button type="button" (click)="saveBook()" [disabled]="submitting || !bookDraft.title">
+              {{ submitting ? 'Saving…' : 'Save book' }}
+            </button>
+            <button type="button" class="secondary" (click)="showBookForm = false">Cancel</button>
+          </div>
+        </section>
+      }
+
+      <section class="panel table-panel">
+        <div class="table-toolbar">
+          <input
+            class="table-search"
+            [(ngModel)]="bookQ"
+            name="bookQ"
+            placeholder="Search title, author, ISBN…"
+            (ngModelChange)="bookPageIndex = 0"
+          />
+          <label class="inline-filter">
+            Availability
+            <select [(ngModel)]="bookAvailability" name="bookAvailability" (ngModelChange)="bookPageIndex = 0">
+              <option value="">All books</option>
+              <option value="AVAILABLE">Available now</option>
+              <option value="OUT">All copies issued</option>
+            </select>
+          </label>
+          <button type="button" class="secondary" (click)="clearBookFilters()">Clear</button>
+          <span class="table-meta">{{ bookPageLabel }}</span>
+        </div>
+
+        <div class="table-scroll">
+          <table class="lib-table">
+            <thead>
+              <tr>
+                <th>
+                  <button type="button" class="th-sort" (click)="sortBooksBy('title')">
+                    Title <span class="sort-icon">{{ bookSortIcon('title') }}</span>
+                  </button>
+                </th>
+                <th>
+                  <button type="button" class="th-sort" (click)="sortBooksBy('author')">
+                    Author <span class="sort-icon">{{ bookSortIcon('author') }}</span>
+                  </button>
+                </th>
+                <th>ISBN</th>
+                <th class="num">
+                  <button type="button" class="th-sort" (click)="sortBooksBy('copiesAvailable')">
+                    Availability <span class="sort-icon">{{ bookSortIcon('copiesAvailable') }}</span>
+                  </button>
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (b of filteredBooks; track b.id) {
+                <tr>
+                  <td class="cell-strong">{{ b.title }}</td>
+                  <td>{{ b.author || '—' }}</td>
+                  <td>{{ b.isbn || '—' }}</td>
+                  <td class="num">
+                    <span
+                      class="avail-chip"
+                      [class.ok]="b.copiesAvailable > 0"
+                      [class.out]="b.copiesAvailable <= 0"
+                    >
+                      {{ b.copiesAvailable }}/{{ b.copiesTotal }}
+                      {{ b.copiesAvailable > 0 ? 'available' : 'issued out' }}
+                    </span>
+                  </td>
+                </tr>
+              } @empty {
+                <tr>
+                  <td colspan="4" class="empty-cell">
+                    <strong>No books found</strong>
+                    <span>Try a different search, or add a new book to the catalog.</span>
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+
+        <div class="table-pager">
+          <button
+            type="button"
+            class="secondary"
+            [disabled]="bookPageIndex <= 0"
+            (click)="bookPageIndex = bookPageIndex - 1"
+          >
+            Previous
+          </button>
+          <button
+            type="button"
+            class="secondary"
+            [disabled]="(bookPageIndex + 1) * bookPageSize >= filteredBooksTotal"
+            (click)="bookPageIndex = bookPageIndex + 1"
+          >
+            Next
+          </button>
+        </div>
+      </section>
+    }
+
+    <!-- ============ ISSUE / RETURN ============ -->
+    @if (view === 'issue') {
+      <div class="issue-layout">
+        <section class="panel issue-panel">
+          <h3>Issue a book</h3>
+          <p class="muted step-hint">1 · Find the student</p>
+          @for (_ of [lookupNonce]; track lookupNonce) {
+            <sf-student-lookup
+              label="Find student"
+              placeholder="Search student name, admission no, class, parent…"
+              [disabled]="submitting"
+              [showFilters]="true"
+              (studentSelected)="onStudentSelected($event)"
+              (cleared)="onStudentCleared()"
+            />
+          }
+
+          @if (selectedStudent) {
+            <div class="selected-student" aria-live="polite">
+              <div class="student-avatar" aria-hidden="true">
+                {{ (selectedStudent.fullName || '?').charAt(0).toUpperCase() }}
+              </div>
+              <div class="student-summary">
+                <strong>{{ selectedStudent.fullName || 'Student' }}</strong>
+                <div>
+                  <span>Admission No <b>{{ selectedStudent.admissionNo || '—' }}</b></span>
+                  <span>Class <b>{{ selectedStudent.classSection || '—' }}</b></span>
+                  <span>Parent <b>{{ selectedStudent.parentName || '—' }}</b></span>
+                </div>
+              </div>
+            </div>
+          }
+
+          <p class="muted step-hint">2 · Pick the book and loan period</p>
+          <div class="grid two">
+            <label>
+              <span class="field-title">Book <span class="req">*</span></span>
+              <select [(ngModel)]="issueDraft.bookId" name="issueBookId" [disabled]="submitting">
+                <option value="">Select a book…</option>
+                @for (b of availableBooks; track b.id) {
+                  <option [value]="b.id">{{ b.title }} — {{ b.copiesAvailable }} available</option>
+                }
+              </select>
+            </label>
+            <label>
+              Loan days
+              <input type="number" min="1" [(ngModel)]="issueDraft.loanDays" name="issueDays" />
+            </label>
+          </div>
+          <div class="actions">
+            <button
+              type="button"
+              (click)="issueBook()"
+              [disabled]="submitting || !issueDraft.bookId || !selectedStudent"
+            >
+              {{ submitting ? 'Working…' : 'Issue book' }}
+            </button>
+          </div>
+        </section>
+
+        <section class="panel issue-panel">
+          <h3>Return a book</h3>
+          @if (!selectedStudent) {
+            <p class="muted">
+              Select a student on the left to see their issued books — or use the
+              <button type="button" class="link-btn" (click)="selectView('issued')">Issued Books</button>
+              list to return any book.
+            </p>
+          } @else if (!studentOpenIssues.length) {
+            <p class="muted">
+              {{ selectedStudent.fullName || 'This student' }} has no books issued right now.
+            </p>
+          } @else {
+            <ul class="return-list">
+              @for (i of studentOpenIssues; track i.id) {
+                <li [class.overdue-row]="isOverdue(i)">
+                  <div>
+                    <strong>{{ bookTitle(i.bookId, i.bookTitle) }}</strong>
+                    <span>
+                      Due {{ fmtDate(i.dueAt) }}
+                      @if (isOverdue(i)) {
+                        · <b class="overdue-text">{{ overdueDays(i) }} days overdue</b>
+                      }
+                    </span>
+                  </div>
+                  <button type="button" class="secondary" (click)="returnBook(i.id)" [disabled]="submitting">
+                    Return
+                  </button>
+                </li>
               }
             </ul>
           }
-          <h4>History</h4>
-          <ul class="history">
-            @for (h of selected.history; track h.at) {
-              <li>{{ h.at }} — {{ h.type }}: {{ h.message }}</li>
-            }
-          </ul>
-        }
+        </section>
+      </div>
+    }
+
+    <!-- ============ ISSUED BOOKS ============ -->
+    @if (view === 'issued') {
+      <section class="panel table-panel">
+        <div class="table-toolbar">
+          <input
+            class="table-search"
+            [(ngModel)]="issueQ"
+            name="issueQ"
+            placeholder="Search student, admission no, class, book…"
+            (ngModelChange)="issuePageIndex = 0"
+          />
+          <label class="inline-filter">
+            Class
+            <select [(ngModel)]="issueClass" name="issueClass" (ngModelChange)="issuePageIndex = 0">
+              <option value="">All classes</option>
+              @for (c of issueClassOptions; track c) {
+                <option [value]="c">{{ c }}</option>
+              }
+            </select>
+          </label>
+          <label class="inline-filter check-filter">
+            <input type="checkbox" [(ngModel)]="overdueOnly" name="overdueOnly" (ngModelChange)="issuePageIndex = 0" />
+            Overdue only
+          </label>
+          <button type="button" class="secondary" (click)="clearIssueFilters()">Clear</button>
+          <span class="table-meta">{{ issuePageLabel }}</span>
+        </div>
+
+        <div class="table-scroll">
+          <table class="lib-table">
+            <thead>
+              <tr>
+                <th>
+                  <button type="button" class="th-sort" (click)="sortIssuesBy('studentName')">
+                    Student <span class="sort-icon">{{ issueSortIcon('studentName') }}</span>
+                  </button>
+                </th>
+                <th>
+                  <button type="button" class="th-sort" (click)="sortIssuesBy('admissionNo')">
+                    Admission No <span class="sort-icon">{{ issueSortIcon('admissionNo') }}</span>
+                  </button>
+                </th>
+                <th>
+                  <button type="button" class="th-sort" (click)="sortIssuesBy('classSection')">
+                    Class / Section <span class="sort-icon">{{ issueSortIcon('classSection') }}</span>
+                  </button>
+                </th>
+                <th>
+                  <button type="button" class="th-sort" (click)="sortIssuesBy('bookTitle')">
+                    Book Title <span class="sort-icon">{{ issueSortIcon('bookTitle') }}</span>
+                  </button>
+                </th>
+                <th>
+                  <button type="button" class="th-sort" (click)="sortIssuesBy('dueAt')">
+                    Due Date <span class="sort-icon">{{ issueSortIcon('dueAt') }}</span>
+                  </button>
+                </th>
+                <th>Status</th>
+                <th class="actions-col">Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (i of filteredIssues; track i.id) {
+                <tr [class.overdue-row]="isOverdue(i)">
+                  <td class="cell-strong">{{ i.studentName || 'Student' }}</td>
+                  <td>{{ i.admissionNo || '—' }}</td>
+                  <td>{{ i.classSection || '—' }}</td>
+                  <td>{{ bookTitle(i.bookId, i.bookTitle) }}</td>
+                  <td>{{ fmtDate(i.dueAt) }}</td>
+                  <td>
+                    @if (isOverdue(i)) {
+                      <span class="status-chip overdue">Overdue · {{ overdueDays(i) }}d</span>
+                    } @else {
+                      <span class="status-chip issued">Issued</span>
+                    }
+                  </td>
+                  <td>
+                    <button type="button" class="secondary row-action" (click)="returnBook(i.id)" [disabled]="submitting">
+                      Return
+                    </button>
+                  </td>
+                </tr>
+              } @empty {
+                <tr>
+                  <td colspan="7" class="empty-cell">
+                    <strong>No issued books</strong>
+                    <span>Books issued to students will appear here with due dates and status.</span>
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+
+        <div class="table-pager">
+          <button
+            type="button"
+            class="secondary"
+            [disabled]="issuePageIndex <= 0"
+            (click)="issuePageIndex = issuePageIndex - 1"
+          >
+            Previous
+          </button>
+          <button
+            type="button"
+            class="secondary"
+            [disabled]="(issuePageIndex + 1) * issuePageSize >= filteredIssuesTotal"
+            (click)="issuePageIndex = issuePageIndex + 1"
+          >
+            Next
+          </button>
+        </div>
       </section>
-    </div>
+    }
+
+    <!-- ============ WORKFLOW INBOX ============ -->
+    @if (view === 'workflow') {
+      <section class="panel">
+        <h3>New record</h3>
+        <div class="workflow-assisted-fields">
+          <div>
+            @for (_ of [workflowLookupNonce]; track workflowLookupNonce) {
+              <sf-student-lookup
+                label="Search Student Name"
+                placeholder="Search name, admission no, class, parent…"
+                [disabled]="submitting"
+                [showFilters]="true"
+                (studentSelected)="onWorkflowStudentSelected($event)"
+                (cleared)="onWorkflowStudentCleared()"
+              />
+            }
+          </div>
+          <label>
+            Select book
+            <select
+              [(ngModel)]="workflowBookId"
+              name="workflowBookId"
+              (ngModelChange)="onWorkflowBookSelected($event)"
+            >
+              <option value="">Select a book…</option>
+              @for (b of availableBooks; track b.id) {
+                <option [value]="b.id">{{ b.title }} — {{ b.copiesAvailable }} available</option>
+              }
+            </select>
+          </label>
+        </div>
+
+        @if (workflowStudent) {
+          <div class="selected-student workflow-student-card" aria-live="polite">
+            <div class="student-avatar" aria-hidden="true">
+              {{ (workflowStudent.fullName || '?').charAt(0).toUpperCase() }}
+            </div>
+            <div class="student-summary">
+              <strong>{{ workflowStudent.fullName || 'Student' }}</strong>
+              <div>
+                <span>Admission No <b>{{ workflowStudent.admissionNo || '—' }}</b></span>
+                <span>Class <b>{{ workflowStudent.classSection || '—' }}</b></span>
+                <span>Email <b>{{ workflowStudent.email || '—' }}</b></span>
+                <span>Mobile <b>{{ workflowStudent.mobile || '—' }}</b></span>
+              </div>
+            </div>
+          </div>
+        }
+
+        <div class="grid two">
+          @for (field of fields; track field.key) {
+            <label>
+              <span class="field-title">
+                {{ field.label }}
+                @if (field.mandatory) {
+                  <span class="req">*</span>
+                }
+              </span>
+              @if (field.type === 'CHECKBOX') {
+                <input type="checkbox" [(ngModel)]="answers[field.key]" [name]="field.key" />
+              } @else if (field.type === 'NUMBER') {
+                <input type="number" [(ngModel)]="answers[field.key]" [name]="field.key" />
+              } @else if (isDateField(field)) {
+                <input type="date" [(ngModel)]="answers[field.key]" [name]="field.key" />
+              } @else {
+                <input
+                  [(ngModel)]="answers[field.key]"
+                  [name]="field.key"
+                  [readonly]="isWorkflowAutoField(field.key)"
+                  [class.auto-filled]="isWorkflowAutoField(field.key) && answers[field.key]"
+                  [placeholder]="isWorkflowAutoField(field.key) ? 'Auto-filled after selection' : ''"
+                />
+              }
+            </label>
+          }
+        </div>
+        <div class="actions">
+          <button type="button" (click)="submit()" [disabled]="submitting || !workflowStudent">
+            {{ submitting ? 'Submitting…' : 'Submit record' }}
+          </button>
+        </div>
+      </section>
+
+      <div class="library-layout">
+        <section class="panel table-panel inbox-panel">
+          <div class="inbox-head">
+            <div>
+              <h3>Approval inbox</h3>
+              <p class="muted">Requests submitted below that still need staff approval — not the same as currently issued books.</p>
+            </div>
+            <span class="table-meta">
+              @if (page.totalElements) {
+                {{ showingFrom }}–{{ showingTo }} of {{ page.totalElements }}
+              } @else {
+                0 records
+              }
+            </span>
+          </div>
+
+          @if (issues.length) {
+            <div class="inbox-callout">
+              <div>
+                <strong>{{ issues.length }} open loan{{ issues.length === 1 ? '' : 's' }}</strong>
+                <span>
+                  Currently issued books (e.g.
+                  {{ openLoanNames }}) are tracked under
+                  <button type="button" class="link-btn" (click)="selectView('issued')">Issued Books</button>,
+                  not in this approval list.
+                </span>
+              </div>
+              <button type="button" class="secondary" (click)="selectView('issued')">View Issued Books</button>
+            </div>
+          }
+
+          <div class="table-toolbar">
+            <input
+              class="table-search"
+              [(ngModel)]="listQ"
+              name="listQ"
+              placeholder="Search student, status…"
+              (keyup.enter)="pageIndex = 0; loadRecords()"
+            />
+            <button type="button" class="secondary" (click)="pageIndex = 0; loadRecords()" [disabled]="searching">
+              {{ searching ? 'Searching…' : 'Search' }}
+            </button>
+            <button type="button" class="secondary" (click)="clearListFilters()" [disabled]="!listClearEnabled">
+              Clear
+            </button>
+          </div>
+
+          <div class="table-scroll">
+            <table class="lib-table inbox-table">
+              <thead>
+                <tr>
+                  <th>
+                    <button type="button" class="th-sort" (click)="sortInboxBy('studentName')">
+                      Student <span class="sort-icon">{{ inboxSortIcon('studentName') }}</span>
+                    </button>
+                  </th>
+                  <th>Book</th>
+                  <th>
+                    <button type="button" class="th-sort" (click)="sortInboxBy('status')">
+                      Status <span class="sort-icon">{{ inboxSortIcon('status') }}</span>
+                    </button>
+                  </th>
+                  <th>Step</th>
+                  <th>
+                    <button type="button" class="th-sort" (click)="sortInboxBy('updatedAt')">
+                      Updated <span class="sort-icon">{{ inboxSortIcon('updatedAt') }}</span>
+                    </button>
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (row of records; track row.id) {
+                  <tr
+                    class="inbox-row"
+                    [class.selected]="row.id === selectedId"
+                    tabindex="0"
+                    (click)="select(row)"
+                    (keyup.enter)="select(row)"
+                  >
+                    <td class="cell-strong">{{ row.answers?.studentName || 'Student' }}</td>
+                    <td>{{ row.answers?.bookTitle || '—' }}</td>
+                    <td>
+                      <span class="status-chip" [class]="'status-chip ' + recordStatusClass(row.status)">
+                        {{ recordStatusLabel(row.status) }}
+                      </span>
+                    </td>
+                    <td>{{ row.currentStepName || '—' }}</td>
+                    <td class="muted-cell">{{ fmtDate(row.updatedAt || row.createdAt) }}</td>
+                  </tr>
+                } @empty {
+                  <tr>
+                    <td colspan="5" class="empty-cell">
+                      <strong>No records yet</strong>
+                      <span>Submitted book issue requests will appear here for approval.</span>
+                    </td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+
+          <div class="table-pager">
+            <button
+              type="button"
+              class="secondary"
+              [disabled]="pageIndex <= 0"
+              (click)="pageIndex = pageIndex - 1; loadRecords()"
+            >
+              Previous
+            </button>
+            <button
+              type="button"
+              class="secondary"
+              [disabled]="!page.hasNext"
+              (click)="pageIndex = pageIndex + 1; loadRecords()"
+            >
+              Next
+            </button>
+          </div>
+        </section>
+
+        <section class="panel">
+          <h3>Detail</h3>
+          @if (!selected) {
+            <p class="muted">Select a record from the inbox to review and approve it.</p>
+          } @else {
+            <p class="detail-status">
+              <span class="status-chip" [class]="'status-chip ' + recordStatusClass(selected.status)">
+                {{ recordStatusLabel(selected.status) }}
+              </span>
+              <span class="muted">
+                Step {{ selected.currentStepSequence }} · {{ selected.currentStepName }}
+                ({{ selected.assigneeRole }})
+              </span>
+            </p>
+            <dl class="detail-fields">
+              @for (entry of answerEntries(selected.answers); track entry.label) {
+                <div>
+                  <dt>{{ entry.label }}</dt>
+                  <dd>{{ entry.value }}</dd>
+                </div>
+              }
+            </dl>
+            <label>
+              Comment
+              <input [(ngModel)]="actionComment" name="actionComment" />
+            </label>
+            <div class="actions">
+              <button type="button" (click)="act('APPROVE')" [disabled]="submitting">Approve step</button>
+              <button type="button" class="secondary" (click)="act('REQUEST_INFO')" [disabled]="submitting">
+                Request info
+              </button>
+              <button type="button" class="danger" (click)="act('REJECT')" [disabled]="submitting">Reject</button>
+            </div>
+            @if (latestApproveDelivery().length) {
+              <h4>Notifications</h4>
+              <ul class="history">
+                @for (d of latestApproveDelivery(); track d.at) {
+                  <li>{{ d.channel }} → {{ d.status }}{{ d.recipient ? ' · ' + d.recipient : '' }}</li>
+                }
+              </ul>
+            }
+            <h4>History</h4>
+            <ul class="history">
+              @for (h of selected.history; track h.at) {
+                <li>{{ h.at }} — {{ h.type }}: {{ h.message }}</li>
+              }
+            </ul>
+          }
+        </section>
+      </div>
+    }
   }
 </div>

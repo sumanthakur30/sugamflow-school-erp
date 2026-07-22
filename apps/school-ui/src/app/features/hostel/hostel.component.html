@@ -1,14 +1,28 @@
-<div class="page">
-  <header class="page-head">
-    <h2>Hostel Allocation</h2>
-    <p>
-      Config-driven vertical slice — form <code>{{ formKey }}</code>, workflow
-      <code>{{ workflowKey }}</code>, rules &amp; FEATURE_HOSTEL.
-    </p>
+<div class="page hostel-page">
+  <header class="page-head hostel-head">
+    <div>
+      <nav class="breadcrumb" aria-label="Breadcrumb">
+        <span>Operations</span>
+        <span class="crumb-sep" aria-hidden="true">›</span>
+        <span class="crumb-current">Hostel</span>
+      </nav>
+      <h2>Hostel / Bed Allocation</h2>
+      <p>Manage the bed inventory, allocate beds to students, and track current residents.</p>
+    </div>
+    @if (featureEnabled && view === 'beds') {
+      <div class="head-actions">
+        <button type="button" (click)="showBedForm = !showBedForm; statusMsg = ''">
+          {{ showBedForm ? 'Close form' : '+ Add Bed' }}
+        </button>
+      </div>
+    }
   </header>
 
   @if (error) {
     <p class="error panel" role="alert">{{ error }}</p>
+  }
+  @if (statusMsg) {
+    <p class="status panel" role="status" aria-live="polite">{{ statusMsg }}</p>
   }
 
   @if (loading) {
@@ -16,92 +30,643 @@
   } @else if (!featureEnabled) {
     <p class="panel">Hostel is not enabled for this plan (FEATURE_HOSTEL).</p>
   } @else {
-    <section class="panel">
-      <h3>New record</h3>
-      <div class="grid two">
-        @for (field of fields; track field.key) {
-          <label>
-            {{ field.label }}
-            @if (field.mandatory) {
-              <span class="req">*</span>
-            }
-            @if (field.type === 'CHECKBOX') {
-              <input type="checkbox" [(ngModel)]="answers[field.key]" [name]="field.key" />
-            } @else if (field.type === 'NUMBER') {
-              <input type="number" [(ngModel)]="answers[field.key]" [name]="field.key" />
-            } @else {
-              <input [(ngModel)]="answers[field.key]" [name]="field.key" />
-            }
+    <div class="stat-cards">
+      <button
+        type="button"
+        class="stat-card"
+        [class.active]="view === 'beds' && !bedStatusFilter"
+        (click)="openBedSummary('')"
+        aria-label="View all beds"
+      >
+        <span class="stat-value">{{ beds.length }}</span>
+        <span class="stat-label">Total beds</span>
+        <span class="stat-action">View all →</span>
+      </button>
+      <button
+        type="button"
+        class="stat-card ok"
+        [class.active]="view === 'beds' && bedStatusFilter === 'VACANT'"
+        (click)="openBedSummary('VACANT')"
+        aria-label="View vacant beds"
+      >
+        <span class="stat-value">{{ vacantCount }}</span>
+        <span class="stat-label">Vacant</span>
+        <span class="stat-action">View vacant →</span>
+      </button>
+      <button
+        type="button"
+        class="stat-card info"
+        [class.active]="view === 'beds' && bedStatusFilter === 'OCCUPIED'"
+        (click)="openBedSummary('OCCUPIED')"
+        aria-label="View occupied beds"
+      >
+        <span class="stat-value">{{ occupiedCount }}</span>
+        <span class="stat-label">Occupied</span>
+        <span class="stat-action">View occupied →</span>
+      </button>
+      <button
+        type="button"
+        class="stat-card"
+        [class.active]="view === 'occupancies'"
+        (click)="openResidents()"
+        aria-label="View current residents"
+      >
+        <span class="stat-value">{{ occupancyPercent }}%</span>
+        <span class="stat-label">Occupancy</span>
+        <span class="stat-action">View residents →</span>
+      </button>
+    </div>
+
+    <nav class="hostel-tabs" aria-label="Hostel sections">
+      <button type="button" [class.active]="view === 'beds'" (click)="selectView('beds')">
+        Beds &amp; Rooms
+      </button>
+      <button type="button" [class.active]="view === 'allocate'" (click)="selectView('allocate')">
+        Allocate Bed
+      </button>
+      <button type="button" [class.active]="view === 'occupancies'" (click)="selectView('occupancies')">
+        Residents
+        @if (occupancies.length) {
+          <span class="tab-badge">{{ occupancies.length }}</span>
+        }
+      </button>
+      <button type="button" [class.active]="view === 'workflow'" (click)="selectView('workflow')">
+        Workflow inbox
+      </button>
+    </nav>
+
+    <!-- ============ BEDS & ROOMS ============ -->
+    @if (view === 'beds') {
+      @if (showBedForm) {
+        <section class="panel bed-form">
+          <h3>Add a new bed</h3>
+          <div class="grid three">
+            <label>
+              Block
+              <input [(ngModel)]="bedDraft.blockKey" name="bedBlock" placeholder="e.g. main_block" />
+            </label>
+            <label>
+              <span class="field-title">Room <span class="req">*</span></span>
+              <input [(ngModel)]="bedDraft.roomNo" name="bedRoom" placeholder="e.g. 101" />
+            </label>
+            <label>
+              Bed no
+              <input type="number" min="1" [(ngModel)]="bedDraft.bedNo" name="bedNo" />
+            </label>
+          </div>
+          <div class="actions">
+            <button type="button" (click)="saveBed()" [disabled]="submitting || !bedDraft.roomNo">
+              {{ submitting ? 'Saving…' : 'Save bed' }}
+            </button>
+            <button type="button" class="secondary" (click)="showBedForm = false">Cancel</button>
+          </div>
+        </section>
+      }
+
+      <section class="panel table-panel">
+        <div class="table-toolbar">
+          <input
+            class="table-search"
+            [(ngModel)]="bedQ"
+            name="bedQ"
+            placeholder="Search block, room, occupant…"
+            (ngModelChange)="bedPageIndex = 0"
+          />
+          <label class="inline-filter">
+            Status
+            <select [(ngModel)]="bedStatusFilter" name="bedStatusFilter" (ngModelChange)="bedPageIndex = 0">
+              <option value="">All beds</option>
+              <option value="VACANT">Vacant</option>
+              <option value="OCCUPIED">Occupied</option>
+            </select>
           </label>
-        }
-      </div>
-      <div class="actions">
-        <button type="button" (click)="submit()" [disabled]="submitting">
-          {{ submitting ? 'Submitting…' : 'Submit record' }}
-        </button>
-      </div>
-    </section>
+          <button type="button" class="secondary" (click)="clearBedFilters()">Clear</button>
+          <span class="table-meta">{{ bedPageLabel }}</span>
+        </div>
 
-    <div class="hostel-layout">
-      <section class="panel">
-        <h3>Inbox</h3>
-        @if (!records.length) {
-          <p class="muted">No records yet.</p>
-        }
-        <ul class="app-list">
-          @for (row of records; track row.id) {
-            <li>
-              <button
-                type="button"
-                class="app-row"
-                [class.active]="row.id === selectedId"
-                (click)="select(row)"
-              >
-                <strong>{{ row.answers?.studentName || row.id }}</strong>
-                <span>{{ row.status }} · {{ row.currentStepName }} · room {{ row.answers?.roomNo }}/{{ row.answers?.bedNo }}</span>
-              </button>
-            </li>
-          }
-        </ul>
+        <div class="table-scroll">
+          <table class="hostel-table">
+            <thead>
+              <tr>
+                <th>
+                  <button type="button" class="th-sort" (click)="sortBedsBy('blockKey')">
+                    Block <span class="sort-icon">{{ bedSortIcon('blockKey') }}</span>
+                  </button>
+                </th>
+                <th>
+                  <button type="button" class="th-sort" (click)="sortBedsBy('roomNo')">
+                    Room <span class="sort-icon">{{ bedSortIcon('roomNo') }}</span>
+                  </button>
+                </th>
+                <th>
+                  <button type="button" class="th-sort" (click)="sortBedsBy('bedNo')">
+                    Bed <span class="sort-icon">{{ bedSortIcon('bedNo') }}</span>
+                  </button>
+                </th>
+                <th>
+                  <button type="button" class="th-sort" (click)="sortBedsBy('status')">
+                    Status <span class="sort-icon">{{ bedSortIcon('status') }}</span>
+                  </button>
+                </th>
+                <th>Occupant</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (b of filteredBeds; track b.id) {
+                <tr>
+                  <td>{{ b.blockKey }}</td>
+                  <td class="cell-strong">Room {{ b.roomNo }}</td>
+                  <td>Bed {{ b.bedNo }}</td>
+                  <td>
+                    <span
+                      class="status-chip"
+                      [class.ok]="b.status === 'VACANT'"
+                      [class.info]="b.status === 'OCCUPIED'"
+                    >
+                      {{ b.status === 'VACANT' ? 'Vacant' : b.status === 'OCCUPIED' ? 'Occupied' : b.status }}
+                    </span>
+                  </td>
+                  <td>
+                    @if (occupantOf(b.id); as occ) {
+                      <span class="cell-strong">{{ occ.studentName || occ.admissionNo }}</span>
+                      @if (occ.studentName) {
+                        <span class="muted-cell"> · {{ occ.admissionNo }}</span>
+                      }
+                    } @else {
+                      <span class="muted-cell">—</span>
+                    }
+                  </td>
+                </tr>
+              } @empty {
+                <tr>
+                  <td colspan="5" class="empty-cell">
+                    <strong>No beds found</strong>
+                    <span>Try a different search, or add a new bed to the inventory.</span>
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+
+        <div class="table-pager">
+          <button
+            type="button"
+            class="secondary"
+            [disabled]="bedPageIndex <= 0"
+            (click)="bedPageIndex = bedPageIndex - 1"
+          >
+            Previous
+          </button>
+          <button
+            type="button"
+            class="secondary"
+            [disabled]="(bedPageIndex + 1) * bedPageSize >= filteredBedsTotal"
+            (click)="bedPageIndex = bedPageIndex + 1"
+          >
+            Next
+          </button>
+        </div>
       </section>
+    }
 
-      <section class="panel">
-        <h3>Detail</h3>
-        @if (!selected) {
-          <p class="muted">Select a record.</p>
-        } @else {
-          <p>
-            <strong>{{ selected.status }}</strong> — step {{ selected.currentStepSequence }}
-            {{ selected.currentStepName }} ({{ selected.assigneeRole }})
-          </p>
-          <pre class="answers">{{ selected.answers | json }}</pre>
+    <!-- ============ ALLOCATE ============ -->
+    @if (view === 'allocate') {
+      <div class="allocate-layout">
+        <section class="panel allocate-panel">
+          <h3>Allocate a bed</h3>
+          <p class="muted step-hint">1 · Find the student</p>
+          @for (_ of [lookupNonce]; track lookupNonce) {
+            <sf-student-lookup
+              label="Find student"
+              placeholder="Search student name, admission no, class, parent…"
+              [disabled]="submitting"
+              [showFilters]="true"
+              (studentSelected)="onStudentSelected($event)"
+              (cleared)="onStudentCleared()"
+            />
+          }
+
+          @if (selectedStudent) {
+            <div class="selected-student" aria-live="polite">
+              <div class="student-avatar" aria-hidden="true">
+                {{ (selectedStudent.fullName || '?').charAt(0).toUpperCase() }}
+              </div>
+              <div class="student-summary">
+                <strong>{{ selectedStudent.fullName || 'Student' }}</strong>
+                <div>
+                  <span>Admission No <b>{{ selectedStudent.admissionNo || '—' }}</b></span>
+                  <span>Class <b>{{ selectedStudent.classSection || '—' }}</b></span>
+                  <span>Parent <b>{{ selectedStudent.parentName || '—' }}</b></span>
+                </div>
+              </div>
+            </div>
+            @if (selectedStudentOccupancy) {
+              <p class="already-allocated" role="alert">
+                {{ selectedStudent.fullName || 'This student' }} already has a bed —
+                <b>{{ occBedLabel(selectedStudentOccupancy) }}</b>. Release it first to move them.
+              </p>
+            }
+          }
+
+          <p class="muted step-hint">2 · Pick a vacant bed</p>
           <label>
-            Comment
-            <input [(ngModel)]="actionComment" name="actionComment" />
+            <span class="field-title">Bed <span class="req">*</span></span>
+            <select [(ngModel)]="allocDraft.bedId" name="allocBed" [disabled]="submitting">
+              <option value="">Select a vacant bed… ({{ vacantBeds.length }} available)</option>
+              @for (b of vacantBeds; track b.id) {
+                <option [value]="b.id">{{ bedLabel(b) }}</option>
+              }
+            </select>
           </label>
           <div class="actions">
-            <button type="button" (click)="act('APPROVE')" [disabled]="submitting">Approve step</button>
-            <button type="button" class="secondary" (click)="act('REQUEST_INFO')" [disabled]="submitting">
-              Request info
+            <button
+              type="button"
+              (click)="allocate()"
+              [disabled]="submitting || !allocDraft.bedId || !selectedStudent || !!selectedStudentOccupancy"
+            >
+              {{ submitting ? 'Working…' : 'Allocate bed' }}
             </button>
-            <button type="button" class="danger" (click)="act('REJECT')" [disabled]="submitting">Reject</button>
           </div>
-          @if (latestApproveDelivery().length) {
-            <h4>Notifications</h4>
+        </section>
+
+        <section class="panel allocate-panel">
+          <h3>Release a bed</h3>
+          @if (!selectedStudent) {
+            <p class="muted">
+              Select a student on the left to see their current bed — or use the
+              <button type="button" class="link-btn" (click)="selectView('occupancies')">Residents</button>
+              list to release any bed.
+            </p>
+          } @else if (!selectedStudentOccupancy) {
+            <p class="muted">
+              {{ selectedStudent.fullName || 'This student' }} has no bed allocated right now.
+            </p>
+          } @else {
+            <ul class="release-list">
+              <li>
+                <div>
+                  <strong>{{ occBedLabel(selectedStudentOccupancy) }}</strong>
+                  <span>Allocated {{ fmtDate(selectedStudentOccupancy.allocatedAt) }}</span>
+                </div>
+                <button
+                  type="button"
+                  class="secondary"
+                  (click)="release(selectedStudentOccupancy)"
+                  [disabled]="submitting"
+                >
+                  Release
+                </button>
+              </li>
+            </ul>
+          }
+        </section>
+      </div>
+    }
+
+    <!-- ============ RESIDENTS ============ -->
+    @if (view === 'occupancies') {
+      <section class="panel table-panel">
+        <div class="table-toolbar">
+          <input
+            class="table-search"
+            [(ngModel)]="occQ"
+            name="occQ"
+            placeholder="Search student, admission no, block, room…"
+            (ngModelChange)="occPageIndex = 0"
+          />
+          <button type="button" class="secondary" (click)="clearOccFilters()">Clear</button>
+          <span class="table-meta">{{ occPageLabel }}</span>
+        </div>
+
+        <div class="table-scroll">
+          <table class="hostel-table">
+            <thead>
+              <tr>
+                <th>
+                  <button type="button" class="th-sort" (click)="sortOccBy('studentName')">
+                    Student <span class="sort-icon">{{ occSortIcon('studentName') }}</span>
+                  </button>
+                </th>
+                <th>
+                  <button type="button" class="th-sort" (click)="sortOccBy('admissionNo')">
+                    Admission No <span class="sort-icon">{{ occSortIcon('admissionNo') }}</span>
+                  </button>
+                </th>
+                <th>Bed</th>
+                <th>
+                  <button type="button" class="th-sort" (click)="sortOccBy('allocatedAt')">
+                    Allocated <span class="sort-icon">{{ occSortIcon('allocatedAt') }}</span>
+                  </button>
+                </th>
+                <th class="actions-col"></th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (o of filteredOccupancies; track o.id) {
+                <tr>
+                  <td class="cell-strong">{{ o.studentName || '—' }}</td>
+                  <td>{{ o.admissionNo }}</td>
+                  <td>{{ occBedLabel(o) }}</td>
+                  <td class="muted-cell">{{ fmtDate(o.allocatedAt) }}</td>
+                  <td class="actions-col">
+                    <button
+                      type="button"
+                      class="secondary row-action"
+                      (click)="release(o)"
+                      [disabled]="submitting"
+                    >
+                      Release
+                    </button>
+                  </td>
+                </tr>
+              } @empty {
+                <tr>
+                  <td colspan="5" class="empty-cell">
+                    <strong>No residents yet</strong>
+                    <span>Allocate a bed from the Allocate Bed tab to see residents here.</span>
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+
+        <div class="table-pager">
+          <button
+            type="button"
+            class="secondary"
+            [disabled]="occPageIndex <= 0"
+            (click)="occPageIndex = occPageIndex - 1"
+          >
+            Previous
+          </button>
+          <button
+            type="button"
+            class="secondary"
+            [disabled]="(occPageIndex + 1) * occPageSize >= filteredOccupanciesTotal"
+            (click)="occPageIndex = occPageIndex + 1"
+          >
+            Next
+          </button>
+        </div>
+      </section>
+    }
+
+    <!-- ============ WORKFLOW INBOX ============ -->
+    @if (view === 'workflow') {
+      <section class="panel">
+        <h3>New allocation request</h3>
+        <p class="muted form-hint">
+          Pick the student and bed — the form fields below fill in automatically.
+        </p>
+        <div class="workflow-assisted-fields">
+          <div>
+            @for (_ of [workflowLookupNonce]; track workflowLookupNonce) {
+              <sf-student-lookup
+                label="Search Student"
+                placeholder="Search name, admission no, class, parent…"
+                [disabled]="submitting"
+                [showFilters]="true"
+                (studentSelected)="onWorkflowStudentSelected($event)"
+                (cleared)="onWorkflowStudentCleared()"
+              />
+            }
+          </div>
+          <label>
+            Select bed
+            <select
+              [(ngModel)]="workflowBedId"
+              name="workflowBedId"
+              (ngModelChange)="onWorkflowBedSelected($event)"
+            >
+              <option value="">Select a vacant bed… ({{ vacantBeds.length }} available)</option>
+              @for (b of vacantBeds; track b.id) {
+                <option [value]="b.id">{{ bedLabel(b) }}</option>
+              }
+            </select>
+          </label>
+        </div>
+
+        @if (workflowStudent) {
+          <div class="selected-student workflow-student-card" aria-live="polite">
+            <div class="student-avatar" aria-hidden="true">
+              {{ (workflowStudent.fullName || '?').charAt(0).toUpperCase() }}
+            </div>
+            <div class="student-summary">
+              <strong>{{ workflowStudent.fullName || 'Student' }}</strong>
+              <div>
+                <span>Admission No <b>{{ workflowStudent.admissionNo || '—' }}</b></span>
+                <span>Class <b>{{ workflowStudent.classSection || '—' }}</b></span>
+                <span>Email <b>{{ workflowStudent.email || '—' }}</b></span>
+                <span>Mobile <b>{{ workflowStudent.mobile || '—' }}</b></span>
+              </div>
+            </div>
+          </div>
+        }
+
+        <div class="grid two">
+          @for (field of fields; track field.key) {
+            <label>
+              <span class="field-title">
+                {{ field.label }}
+                @if (field.mandatory) {
+                  <span class="req">*</span>
+                }
+              </span>
+              @if (field.type === 'CHECKBOX') {
+                <input type="checkbox" [(ngModel)]="answers[field.key]" [name]="field.key" />
+              } @else if (field.type === 'NUMBER') {
+                <input
+                  type="number"
+                  [(ngModel)]="answers[field.key]"
+                  [name]="field.key"
+                  [readonly]="isWorkflowAutoField(field.key)"
+                  [class.auto-filled]="isWorkflowAutoField(field.key) && answers[field.key]"
+                />
+              } @else if (isDateField(field)) {
+                <input type="date" [(ngModel)]="answers[field.key]" [name]="field.key" />
+              } @else {
+                <input
+                  [(ngModel)]="answers[field.key]"
+                  [name]="field.key"
+                  [readonly]="isWorkflowAutoField(field.key)"
+                  [class.auto-filled]="isWorkflowAutoField(field.key) && answers[field.key]"
+                  [placeholder]="isWorkflowAutoField(field.key) ? 'Auto-filled after selection' : ''"
+                />
+              }
+            </label>
+          }
+        </div>
+        <div class="actions">
+          <button type="button" (click)="submit()" [disabled]="submitting || !workflowStudent">
+            {{ submitting ? 'Submitting…' : 'Submit request' }}
+          </button>
+        </div>
+      </section>
+
+      <div class="hostel-layout">
+        <section class="panel table-panel inbox-panel">
+          <div class="inbox-head">
+            <div>
+              <h3>Approval inbox</h3>
+              <p class="muted">Allocation requests waiting for staff approval.</p>
+            </div>
+            <span class="table-meta">
+              @if (page.totalElements) {
+                {{ showingFrom }}–{{ showingTo }} of {{ page.totalElements }}
+              } @else {
+                0 records
+              }
+            </span>
+          </div>
+
+          <div class="table-toolbar">
+            <input
+              class="table-search"
+              [(ngModel)]="listQ"
+              name="listQ"
+              placeholder="Search student, status…"
+              (keyup.enter)="pageIndex = 0; loadRecords()"
+            />
+            <button type="button" class="secondary" (click)="pageIndex = 0; loadRecords()" [disabled]="searching">
+              {{ searching ? 'Searching…' : 'Search' }}
+            </button>
+            <button type="button" class="secondary" (click)="clearListFilters()" [disabled]="!listClearEnabled">
+              Clear
+            </button>
+          </div>
+
+          <div class="table-scroll">
+            <table class="hostel-table inbox-table">
+              <thead>
+                <tr>
+                  <th>
+                    <button type="button" class="th-sort" (click)="sortInboxBy('studentName')">
+                      Student <span class="sort-icon">{{ inboxSortIcon('studentName') }}</span>
+                    </button>
+                  </th>
+                  <th>Room / Bed</th>
+                  <th>
+                    <button type="button" class="th-sort" (click)="sortInboxBy('status')">
+                      Status <span class="sort-icon">{{ inboxSortIcon('status') }}</span>
+                    </button>
+                  </th>
+                  <th>Step</th>
+                  <th>
+                    <button type="button" class="th-sort" (click)="sortInboxBy('updatedAt')">
+                      Updated <span class="sort-icon">{{ inboxSortIcon('updatedAt') }}</span>
+                    </button>
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (row of records; track row.id) {
+                  <tr
+                    class="inbox-row"
+                    [class.selected]="row.id === selectedId"
+                    tabindex="0"
+                    (click)="select(row)"
+                    (keyup.enter)="select(row)"
+                  >
+                    <td class="cell-strong">{{ row.answers?.studentName || 'Student' }}</td>
+                    <td>
+                      @if (row.answers?.roomNo || row.answers?.bedNo) {
+                        Room {{ row.answers?.roomNo || '?' }} · Bed {{ row.answers?.bedNo || '?' }}
+                      } @else {
+                        <span class="muted-cell">—</span>
+                      }
+                    </td>
+                    <td>
+                      <span class="status-chip" [class]="'status-chip ' + recordStatusClass(row.status)">
+                        {{ recordStatusLabel(row.status) }}
+                      </span>
+                    </td>
+                    <td>{{ row.currentStepName || '—' }}</td>
+                    <td class="muted-cell">{{ fmtDate(row.updatedAt || row.createdAt) }}</td>
+                  </tr>
+                } @empty {
+                  <tr>
+                    <td colspan="5" class="empty-cell">
+                      <strong>No requests yet</strong>
+                      <span>Submitted allocation requests will appear here for approval.</span>
+                    </td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+
+          <div class="table-pager">
+            <button
+              type="button"
+              class="secondary"
+              [disabled]="pageIndex <= 0"
+              (click)="pageIndex = pageIndex - 1; loadRecords()"
+            >
+              Previous
+            </button>
+            <button
+              type="button"
+              class="secondary"
+              [disabled]="!page.hasNext"
+              (click)="pageIndex = pageIndex + 1; loadRecords()"
+            >
+              Next
+            </button>
+          </div>
+        </section>
+
+        <section class="panel">
+          <h3>Detail</h3>
+          @if (!selected) {
+            <p class="muted">Select a request from the inbox to review and approve it.</p>
+          } @else {
+            <p class="detail-status">
+              <span class="status-chip" [class]="'status-chip ' + recordStatusClass(selected.status)">
+                {{ recordStatusLabel(selected.status) }}
+              </span>
+              <span class="muted">
+                Step {{ selected.currentStepSequence }} · {{ selected.currentStepName }}
+                ({{ selected.assigneeRole }})
+              </span>
+            </p>
+            <dl class="detail-fields">
+              @for (entry of answerEntries(selected.answers); track entry.label) {
+                <div>
+                  <dt>{{ entry.label }}</dt>
+                  <dd>{{ entry.value }}</dd>
+                </div>
+              }
+            </dl>
+            <label>
+              Comment
+              <input [(ngModel)]="actionComment" name="actionComment" />
+            </label>
+            <div class="actions">
+              <button type="button" (click)="act('APPROVE')" [disabled]="submitting">Approve step</button>
+              <button type="button" class="secondary" (click)="act('REQUEST_INFO')" [disabled]="submitting">
+                Request info
+              </button>
+              <button type="button" class="danger" (click)="act('REJECT')" [disabled]="submitting">Reject</button>
+            </div>
+            @if (latestApproveDelivery().length) {
+              <h4>Notifications</h4>
+              <ul class="history">
+                @for (d of latestApproveDelivery(); track d.at) {
+                  <li>{{ d.channel }} → {{ d.status }}{{ d.recipient ? ' · ' + d.recipient : '' }}</li>
+                }
+              </ul>
+            }
+            <h4>History</h4>
             <ul class="history">
-              @for (d of latestApproveDelivery(); track d.at) {
-                <li>{{ d.channel }} → {{ d.status }}{{ d.recipient ? ' · ' + d.recipient : '' }}</li>
+              @for (h of selected.history; track h.at) {
+                <li>{{ h.at }} — {{ h.type }}: {{ h.message }}</li>
               }
             </ul>
           }
-          <h4>History</h4>
-          <ul class="history">
-            @for (h of selected.history; track h.at) {
-              <li>{{ h.at }} — {{ h.type }}: {{ h.message }}</li>
-            }
-          </ul>
-        }
-      </section>
-    </div>
+        </section>
+      </div>
+    }
   }
 </div>

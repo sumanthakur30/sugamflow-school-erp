@@ -1,107 +1,701 @@
-<div class="page">
-  <header class="page-head">
-    <h2>Transport Route</h2>
-    <p>
-      Config-driven vertical slice — form <code>{{ formKey }}</code>, workflow
-      <code>{{ workflowKey }}</code>, rules &amp; FEATURE_TRANSPORT.
-    </p>
+<div class="page transport-page">
+  <header class="page-head transport-head">
+    <div>
+      <nav class="breadcrumb" aria-label="Breadcrumb">
+        <span>Operations</span>
+        <span class="crumb-sep" aria-hidden="true">›</span>
+        <span class="crumb-current">Transport</span>
+      </nav>
+      <h2>Transport / Route Management</h2>
+      <p>Manage routes, assign students, monitor seats, and process transport requests.</p>
+    </div>
+    @if (featureEnabled && view === 'routes') {
+      <button type="button" (click)="showRouteForm = !showRouteForm; statusMsg = ''">
+        {{ showRouteForm ? 'Close form' : '+ Add Route' }}
+      </button>
+    }
   </header>
 
   @if (error) {
     <p class="error panel" role="alert">{{ error }}</p>
   }
+  @if (statusMsg) {
+    <p class="status panel" role="status" aria-live="polite">{{ statusMsg }}</p>
+  }
 
   @if (loading) {
-    <p class="panel">Loading transport configuration…</p>
+    <p class="panel loading-state" role="status">Loading transport configuration…</p>
   } @else if (!featureEnabled) {
     <p class="panel">Transport is not enabled for this plan (FEATURE_TRANSPORT).</p>
   } @else {
-    <section class="panel">
-      <h3>New record</h3>
-      <div class="grid two">
-        @for (field of fields; track field.key) {
-          <label>
-            {{ field.label }}
-            @if (field.mandatory) {
-              <span class="req">*</span>
-            }
-            @if (field.type === 'CHECKBOX') {
-              <input type="checkbox" [(ngModel)]="answers[field.key]" [name]="field.key" />
-            } @else if (field.type === 'NUMBER') {
-              <input type="number" [(ngModel)]="answers[field.key]" [name]="field.key" />
-            } @else {
-              <input [(ngModel)]="answers[field.key]" [name]="field.key" />
-            }
-          </label>
-        }
-      </div>
-      <div class="actions">
-        <button type="button" (click)="submit()" [disabled]="submitting">
-          {{ submitting ? 'Submitting…' : 'Submit record' }}
-        </button>
-      </div>
-    </section>
+    <div class="stat-cards" aria-label="Transport summary">
+      <button
+        type="button"
+        class="stat-card"
+        [class.active]="view === 'routes'"
+        (click)="openRouteSummary()"
+        aria-label="View all routes"
+      >
+        <span class="stat-value">{{ routes.length }}</span>
+        <span class="stat-label">Active routes</span>
+        <span class="stat-action">View routes →</span>
+      </button>
+      <button
+        type="button"
+        class="stat-card info"
+        [class.active]="view === 'assignments'"
+        (click)="openAssignments()"
+        aria-label="View active student assignments"
+      >
+        <span class="stat-value">{{ assignments.length }}</span>
+        <span class="stat-label">Assigned students</span>
+        <span class="stat-action">View assignments →</span>
+      </button>
+      <button
+        type="button"
+        class="stat-card ok"
+        [class.active]="view === 'assign'"
+        (click)="openAssignStudent()"
+        aria-label="Assign a student to an available seat"
+      >
+        <span class="stat-value">{{ availableSeats }}</span>
+        <span class="stat-label">Seats available</span>
+        <span class="stat-action">Assign student →</span>
+      </button>
+      <button
+        type="button"
+        class="stat-card"
+        [class.active]="view === 'routes' && routesAtCapacity > 0"
+        (click)="openRouteSummary()"
+        aria-label="View route capacity"
+      >
+        <span class="stat-value">{{ totalCapacity }}</span>
+        <span class="stat-label">Total capacity</span>
+        <span class="stat-action">{{ routesAtCapacity }} at capacity · View →</span>
+      </button>
+    </div>
 
-    <div class="transport-layout">
-      <section class="panel">
-        <h3>Inbox</h3>
-        @if (!records.length) {
-          <p class="muted">No records yet.</p>
+    <nav class="transport-tabs" aria-label="Transport sections" role="tablist">
+      <button
+        type="button"
+        role="tab"
+        [attr.aria-selected]="view === 'routes'"
+        [class.active]="view === 'routes'"
+        (click)="selectView('routes')"
+      >
+        Routes
+      </button>
+      <button
+        type="button"
+        role="tab"
+        [attr.aria-selected]="view === 'assign'"
+        [class.active]="view === 'assign'"
+        (click)="selectView('assign')"
+      >
+        Assign Student
+      </button>
+      <button
+        type="button"
+        role="tab"
+        [attr.aria-selected]="view === 'assignments'"
+        [class.active]="view === 'assignments'"
+        (click)="selectView('assignments')"
+      >
+        Assignments
+        @if (assignments.length) {
+          <span class="tab-badge">{{ assignments.length }}</span>
         }
-        <ul class="app-list">
-          @for (row of records; track row.id) {
-            <li>
-              <button
-                type="button"
-                class="app-row"
-                [class.active]="row.id === selectedId"
-                (click)="select(row)"
-              >
-                <strong>{{ row.answers?.studentName || row.id }}</strong>
-                <span>{{ row.status }} · {{ row.currentStepName }} · {{ row.answers?.routeName }}/{{ row.answers?.stopName }}</span>
-              </button>
-            </li>
+      </button>
+      <button
+        type="button"
+        role="tab"
+        [attr.aria-selected]="view === 'workflow'"
+        [class.active]="view === 'workflow'"
+        (click)="selectView('workflow')"
+      >
+        Workflow
+      </button>
+    </nav>
+
+    @if (view === 'routes') {
+      @if (showRouteForm) {
+        <section class="panel accent-form">
+          <h3>Add a route</h3>
+          <div class="grid two">
+            <label>
+              Route key
+              <input [(ngModel)]="routeDraft.routeKey" name="routeKey" placeholder="e.g. route_north" />
+            </label>
+            <label>
+              <span class="field-title">Route name <span class="req">*</span></span>
+              <input [(ngModel)]="routeDraft.routeName" name="routeName" placeholder="e.g. North City Route" />
+            </label>
+            <label>
+              Vehicle number
+              <input [(ngModel)]="routeDraft.vehicleNo" name="vehicleNo" placeholder="e.g. BR 01 AB 1234" />
+            </label>
+            <label>
+              Capacity
+              <input type="number" min="1" [(ngModel)]="routeDraft.capacity" name="capacity" />
+            </label>
+          </div>
+          <div class="actions">
+            <button
+              type="button"
+              (click)="saveRoute()"
+              [disabled]="submitting || !routeDraft.routeName || routeDraft.capacity < 1"
+            >
+              {{ submitting ? 'Saving…' : 'Save route' }}
+            </button>
+            <button type="button" class="secondary" (click)="showRouteForm = false">Cancel</button>
+          </div>
+        </section>
+      }
+
+      <section class="panel table-panel" role="tabpanel">
+        <div class="table-toolbar">
+          <input
+            class="table-search"
+            [(ngModel)]="routeQ"
+            name="routeQ"
+            aria-label="Search routes"
+            placeholder="Search route name, key, vehicle…"
+            (ngModelChange)="routePageIndex = 0"
+          />
+          <button type="button" class="secondary" (click)="clearRouteFilters()">Clear</button>
+          <span class="table-meta">{{ routePageLabel }}</span>
+        </div>
+        <div class="table-scroll">
+          <table class="transport-table">
+            <thead>
+              <tr>
+                <th>
+                  <button type="button" class="th-sort" (click)="sortRoutesBy('routeName')">
+                    Route <span class="sort-icon">{{ routeSortIcon('routeName') }}</span>
+                  </button>
+                </th>
+                <th>
+                  <button type="button" class="th-sort" (click)="sortRoutesBy('vehicleNo')">
+                    Vehicle <span class="sort-icon">{{ routeSortIcon('vehicleNo') }}</span>
+                  </button>
+                </th>
+                <th>
+                  <button type="button" class="th-sort" (click)="sortRoutesBy('capacity')">
+                    Capacity <span class="sort-icon">{{ routeSortIcon('capacity') }}</span>
+                  </button>
+                </th>
+                <th>
+                  <button type="button" class="th-sort" (click)="sortRoutesBy('occupancy')">
+                    Occupancy <span class="sort-icon">{{ routeSortIcon('occupancy') }}</span>
+                  </button>
+                </th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (route of filteredRoutes; track route.id) {
+                <tr>
+                  <td>
+                    <span class="cell-strong">{{ route.routeName }}</span>
+                    <span class="cell-sub">{{ route.routeKey }}</span>
+                  </td>
+                  <td>{{ route.vehicleNo || 'Not assigned' }}</td>
+                  <td>{{ route.capacity }} seats</td>
+                  <td>
+                    {{ routeOccupancy(route.id) }} / {{ route.capacity }}
+                    <span class="cell-sub">{{ route.capacity - routeOccupancy(route.id) }} available</span>
+                  </td>
+                  <td>
+                    <span
+                      class="status-chip"
+                      [class.ok]="routeOccupancy(route.id) < route.capacity"
+                      [class.warn]="routeOccupancy(route.id) >= route.capacity"
+                    >
+                      {{ routeOccupancy(route.id) >= route.capacity ? 'At capacity' : 'Active' }}
+                    </span>
+                  </td>
+                </tr>
+              } @empty {
+                <tr>
+                  <td colspan="5" class="empty-cell">
+                    <strong>No routes found</strong>
+                    <span>Try another search, or add the first route to the transport network.</span>
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+        <div class="table-pager">
+          <button
+            type="button"
+            class="secondary"
+            [disabled]="routePageIndex <= 0"
+            (click)="routePageIndex = routePageIndex - 1"
+          >
+            Previous
+          </button>
+          <button
+            type="button"
+            class="secondary"
+            [disabled]="(routePageIndex + 1) * routePageSize >= filteredRoutesTotal"
+            (click)="routePageIndex = routePageIndex + 1"
+          >
+            Next
+          </button>
+        </div>
+      </section>
+    }
+
+    @if (view === 'assign') {
+      <section class="panel assign-panel" role="tabpanel">
+        <h3>Assign a student to a route</h3>
+        <p class="muted form-hint">Select a student from Student Master, then choose their route and pickup details.</p>
+        <p class="muted step-hint">1 · Find the student</p>
+        @for (_ of [lookupNonce]; track lookupNonce) {
+          <sf-student-lookup
+            label="Find student"
+            placeholder="Search student name, admission no, class, parent…"
+            [disabled]="submitting"
+            [showFilters]="true"
+            (studentSelected)="onStudentSelected($event)"
+            (cleared)="onStudentCleared()"
+          />
+        }
+
+        @if (selectedStudent) {
+          <div class="selected-student" aria-live="polite">
+            <div class="student-avatar" aria-hidden="true">
+              {{ (selectedStudent.fullName || '?').charAt(0).toUpperCase() }}
+            </div>
+            <div class="student-summary">
+              <strong>{{ selectedStudent.fullName || 'Student' }}</strong>
+              <div>
+                <span>Admission No <b>{{ selectedStudent.admissionNo || '—' }}</b></span>
+                <span>Class <b>{{ selectedStudent.classSection || '—' }}</b></span>
+                <span>Parent <b>{{ selectedStudent.parentName || '—' }}</b></span>
+              </div>
+            </div>
+          </div>
+          @if (selectedStudentAssignment) {
+            <p class="assignment-warning" role="alert">
+              This student is already assigned to <b>{{ routeLabel(selectedStudentAssignment.routeId) }}</b>.
+              End that assignment before creating another.
+            </p>
           }
-        </ul>
+        }
+
+        <p class="muted step-hint">2 · Choose route and pickup</p>
+        <div class="grid two">
+          <label>
+            <span class="field-title">Route <span class="req">*</span></span>
+            <select [(ngModel)]="assignDraft.routeId" name="assignRoute" [disabled]="submitting">
+              <option value="">Select a route…</option>
+              @for (route of routes; track route.id) {
+                <option [value]="route.id" [disabled]="routeOccupancy(route.id) >= route.capacity">
+                  {{ route.routeName }} — {{ route.vehicleNo || 'No vehicle' }} ·
+                  {{ route.capacity - routeOccupancy(route.id) }} seats
+                </option>
+              }
+            </select>
+          </label>
+          <label>
+            Stop name
+            <input [(ngModel)]="assignDraft.stopName" name="assignStop" placeholder="e.g. Gandhi Chowk" />
+          </label>
+          <label>
+            Pickup time
+            <input type="time" [(ngModel)]="assignDraft.pickupTime" name="assignPickup" />
+          </label>
+        </div>
+        <div class="actions">
+          <button
+            type="button"
+            (click)="assignStudent()"
+            [disabled]="submitting || !assignDraft.routeId || !selectedStudent || !!selectedStudentAssignment"
+          >
+            {{ submitting ? 'Assigning…' : 'Assign route' }}
+          </button>
+        </div>
+      </section>
+    }
+
+    @if (view === 'assignments') {
+      <section class="panel table-panel" role="tabpanel">
+        <div class="table-toolbar">
+          <input
+            class="table-search"
+            [(ngModel)]="assignQ"
+            name="assignQ"
+            aria-label="Search assignments"
+            placeholder="Search student, admission no, stop, route…"
+            (ngModelChange)="assignPageIndex = 0"
+          />
+          <label class="inline-filter">
+            Route
+            <select [(ngModel)]="assignRouteFilter" name="assignRouteFilter" (ngModelChange)="assignPageIndex = 0">
+              <option value="">All routes</option>
+              @for (route of routes; track route.id) {
+                <option [value]="route.id">{{ route.routeName }}</option>
+              }
+            </select>
+          </label>
+          <button type="button" class="secondary" (click)="clearAssignFilters()">Clear</button>
+          <span class="table-meta">{{ assignPageLabel }}</span>
+        </div>
+        <div class="table-scroll">
+          <table class="transport-table">
+            <thead>
+              <tr>
+                <th>
+                  <button type="button" class="th-sort" (click)="sortAssignmentsBy('studentName')">
+                    Student <span class="sort-icon">{{ assignmentSortIcon('studentName') }}</span>
+                  </button>
+                </th>
+                <th>
+                  <button type="button" class="th-sort" (click)="sortAssignmentsBy('admissionNo')">
+                    Admission No <span class="sort-icon">{{ assignmentSortIcon('admissionNo') }}</span>
+                  </button>
+                </th>
+                <th>
+                  <button type="button" class="th-sort" (click)="sortAssignmentsBy('routeName')">
+                    Route <span class="sort-icon">{{ assignmentSortIcon('routeName') }}</span>
+                  </button>
+                </th>
+                <th>Stop / Pickup</th>
+                <th>
+                  <button type="button" class="th-sort" (click)="sortAssignmentsBy('assignedAt')">
+                    Assigned <span class="sort-icon">{{ assignmentSortIcon('assignedAt') }}</span>
+                  </button>
+                </th>
+                <th class="actions-col">Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (assignment of filteredAssignments; track assignment.id) {
+                <tr>
+                  <td class="cell-strong">{{ assignment.studentName || 'Student' }}</td>
+                  <td>{{ assignment.admissionNo }}</td>
+                  <td>
+                    <span class="cell-strong">{{ assignment.routeName || routeLabel(assignment.routeId) }}</span>
+                    <span class="cell-sub">{{ assignment.vehicleNo || routeVehicle(assignment.routeId) }}</span>
+                  </td>
+                  <td>
+                    {{ assignment.stopName || '—' }}
+                    <span class="cell-sub">{{ assignment.pickupTime || 'Time not set' }}</span>
+                  </td>
+                  <td class="muted-cell">{{ fmtDate(assignment.assignedAt) }}</td>
+                  <td>
+                    <button
+                      type="button"
+                      class="secondary row-action"
+                      (click)="endAssignment(assignment)"
+                      [disabled]="submitting"
+                      [attr.aria-label]="'End route assignment for ' + (assignment.studentName || assignment.admissionNo)"
+                    >
+                      End
+                    </button>
+                  </td>
+                </tr>
+              } @empty {
+                <tr>
+                  <td colspan="6" class="empty-cell">
+                    <strong>No active assignments</strong>
+                    <span>Assign a student to a route, or clear the current search and route filter.</span>
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+        <div class="table-pager">
+          <button
+            type="button"
+            class="secondary"
+            [disabled]="assignPageIndex <= 0"
+            (click)="assignPageIndex = assignPageIndex - 1"
+          >
+            Previous
+          </button>
+          <button
+            type="button"
+            class="secondary"
+            [disabled]="(assignPageIndex + 1) * assignPageSize >= filteredAssignmentsTotal"
+            (click)="assignPageIndex = assignPageIndex + 1"
+          >
+            Next
+          </button>
+        </div>
+      </section>
+    }
+
+    @if (view === 'workflow') {
+      <section class="panel" role="tabpanel">
+        <h3>New transport request</h3>
+        <p class="muted form-hint">
+          Select the student and route first. Matching fields below are filled automatically.
+        </p>
+        <div class="workflow-assisted-fields">
+          <div>
+            @for (_ of [workflowLookupNonce]; track workflowLookupNonce) {
+              <sf-student-lookup
+                label="Search student"
+                placeholder="Search name, admission no, class, parent…"
+                [disabled]="submitting"
+                [showFilters]="true"
+                (studentSelected)="onWorkflowStudentSelected($event)"
+                (cleared)="onWorkflowStudentCleared()"
+              />
+            }
+          </div>
+          <label>
+            <span class="field-title">Route <span class="req">*</span></span>
+            <select
+              [(ngModel)]="workflowRouteId"
+              name="workflowRouteId"
+              (ngModelChange)="onWorkflowRouteSelected($event)"
+            >
+              <option value="">Select a route…</option>
+              @for (route of routes; track route.id) {
+                <option [value]="route.id">{{ route.routeName }} — {{ route.vehicleNo || 'No vehicle' }}</option>
+              }
+            </select>
+          </label>
+        </div>
+
+        @if (workflowStudent) {
+          <div class="selected-student workflow-student-card" aria-live="polite">
+            <div class="student-avatar" aria-hidden="true">
+              {{ (workflowStudent.fullName || '?').charAt(0).toUpperCase() }}
+            </div>
+            <div class="student-summary">
+              <strong>{{ workflowStudent.fullName || 'Student' }}</strong>
+              <div>
+                <span>Admission No <b>{{ workflowStudent.admissionNo || '—' }}</b></span>
+                <span>Class <b>{{ workflowStudent.classSection || '—' }}</b></span>
+                <span>Email <b>{{ workflowStudent.email || '—' }}</b></span>
+                <span>Mobile <b>{{ workflowStudent.mobile || '—' }}</b></span>
+              </div>
+            </div>
+          </div>
+        }
+
+        <div class="grid two">
+          @for (field of fields; track field.key) {
+            <label>
+              <span class="field-title">
+                {{ field.label }}
+                @if (field.mandatory) {
+                  <span class="req">*</span>
+                }
+              </span>
+              @if (field.type === 'CHECKBOX') {
+                <input type="checkbox" [(ngModel)]="answers[field.key]" [name]="field.key" />
+              } @else if (field.type === 'NUMBER') {
+                <input
+                  type="number"
+                  [(ngModel)]="answers[field.key]"
+                  [name]="field.key"
+                  [readonly]="isWorkflowAutoField(field.key)"
+                  [class.auto-filled]="isWorkflowAutoField(field.key) && answers[field.key]"
+                />
+              } @else if (isDateField(field)) {
+                <input type="date" [(ngModel)]="answers[field.key]" [name]="field.key" />
+              } @else {
+                <input
+                  [(ngModel)]="answers[field.key]"
+                  [name]="field.key"
+                  [readonly]="isWorkflowAutoField(field.key)"
+                  [class.auto-filled]="isWorkflowAutoField(field.key) && answers[field.key]"
+                  [placeholder]="isWorkflowAutoField(field.key) ? 'Auto-filled after selection' : ''"
+                />
+              }
+            </label>
+          }
+        </div>
+        <div class="actions">
+          <button
+            type="button"
+            (click)="submit()"
+            [disabled]="submitting || !workflowStudent || !workflowRouteId"
+          >
+            {{ submitting ? 'Submitting…' : 'Submit request' }}
+          </button>
+        </div>
       </section>
 
-      <section class="panel">
-        <h3>Detail</h3>
-        @if (!selected) {
-          <p class="muted">Select a record.</p>
-        } @else {
-          <p>
-            <strong>{{ selected.status }}</strong> — step {{ selected.currentStepSequence }}
-            {{ selected.currentStepName }} ({{ selected.assigneeRole }})
-          </p>
-          <pre class="answers">{{ selected.answers | json }}</pre>
-          <label>
-            Comment
-            <input [(ngModel)]="actionComment" name="actionComment" />
-          </label>
-          <div class="actions">
-            <button type="button" (click)="act('APPROVE')" [disabled]="submitting">Approve step</button>
-            <button type="button" class="secondary" (click)="act('REQUEST_INFO')" [disabled]="submitting">
-              Request info
-            </button>
-            <button type="button" class="danger" (click)="act('REJECT')" [disabled]="submitting">Reject</button>
+      <div class="workflow-layout">
+        <section class="panel table-panel inbox-panel">
+          <div class="inbox-head">
+            <div>
+              <h3>Approval inbox</h3>
+              <p class="muted">Transport requests waiting for staff review.</p>
+            </div>
+            <span class="table-meta">
+              @if (page.totalElements) {
+                {{ showingFrom }}–{{ showingTo }} of {{ page.totalElements }}
+              } @else {
+                0 records
+              }
+            </span>
           </div>
-          @if (latestApproveDelivery().length) {
-            <h4>Notifications</h4>
+          <div class="table-toolbar">
+            <input
+              class="table-search"
+              [(ngModel)]="listQ"
+              name="listQ"
+              aria-label="Search workflow inbox"
+              placeholder="Search student, admission no, route, status…"
+              (keyup.enter)="pageIndex = 0; loadRecords()"
+            />
+            <button type="button" class="secondary" (click)="pageIndex = 0; loadRecords()" [disabled]="searching">
+              {{ searching ? 'Searching…' : 'Search' }}
+            </button>
+            <button type="button" class="secondary" (click)="clearListFilters()">Clear</button>
+          </div>
+          <div class="table-scroll">
+            <table class="transport-table inbox-table">
+              <thead>
+                <tr>
+                  <th>
+                    <button type="button" class="th-sort" (click)="sortInboxBy('studentName')">
+                      Student <span class="sort-icon">{{ inboxSortIcon('studentName') }}</span>
+                    </button>
+                  </th>
+                  <th>
+                    <button type="button" class="th-sort" (click)="sortInboxBy('routeName')">
+                      Route <span class="sort-icon">{{ inboxSortIcon('routeName') }}</span>
+                    </button>
+                  </th>
+                  <th>
+                    <button type="button" class="th-sort" (click)="sortInboxBy('status')">
+                      Status <span class="sort-icon">{{ inboxSortIcon('status') }}</span>
+                    </button>
+                  </th>
+                  <th>Step</th>
+                  <th>
+                    <button type="button" class="th-sort" (click)="sortInboxBy('updatedAt')">
+                      Updated <span class="sort-icon">{{ inboxSortIcon('updatedAt') }}</span>
+                    </button>
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (row of records; track row.id) {
+                  <tr
+                    class="inbox-row"
+                    [class.selected]="row.id === selectedId"
+                    tabindex="0"
+                    (click)="select(row)"
+                    (keyup.enter)="select(row)"
+                  >
+                    <td>
+                      <span class="cell-strong">{{ row.answers?.studentName || 'Student' }}</span>
+                      <span class="cell-sub">{{ row.answers?.admissionNo || '—' }}</span>
+                    </td>
+                    <td>
+                      {{ row.answers?.routeName || '—' }}
+                      <span class="cell-sub">{{ row.answers?.stopName || 'No stop' }}</span>
+                    </td>
+                    <td>
+                      <span class="status-chip" [class]="'status-chip ' + recordStatusClass(row.status)">
+                        {{ recordStatusLabel(row.status) }}
+                      </span>
+                    </td>
+                    <td>{{ row.currentStepName || '—' }}</td>
+                    <td class="muted-cell">{{ fmtDate(row.updatedAt || row.createdAt) }}</td>
+                  </tr>
+                } @empty {
+                  <tr>
+                    <td colspan="5" class="empty-cell">
+                      <strong>No transport requests</strong>
+                      <span>Submitted requests will appear here for approval.</span>
+                    </td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+          <div class="table-pager">
+            <button
+              type="button"
+              class="secondary"
+              [disabled]="pageIndex <= 0"
+              (click)="pageIndex = pageIndex - 1; loadRecords()"
+            >
+              Previous
+            </button>
+            <button
+              type="button"
+              class="secondary"
+              [disabled]="!page.hasNext"
+              (click)="pageIndex = pageIndex + 1; loadRecords()"
+            >
+              Next
+            </button>
+          </div>
+        </section>
+
+        <section class="panel detail-panel">
+          <h3>Request detail</h3>
+          @if (!selected) {
+            <p class="muted">Select a request from the inbox to review its details and take action.</p>
+          } @else {
+            <p class="detail-status">
+              <span class="status-chip" [class]="'status-chip ' + recordStatusClass(selected.status)">
+                {{ recordStatusLabel(selected.status) }}
+              </span>
+              <span class="muted">
+                Step {{ selected.currentStepSequence }} · {{ selected.currentStepName }}
+                ({{ selected.assigneeRole }})
+              </span>
+            </p>
+            <dl class="detail-fields">
+              @for (entry of answerEntries(selected.answers); track entry.label) {
+                <div>
+                  <dt>{{ entry.label }}</dt>
+                  <dd>{{ entry.value }}</dd>
+                </div>
+              } @empty {
+                <div>
+                  <dt>Details</dt>
+                  <dd>No submitted details.</dd>
+                </div>
+              }
+            </dl>
+            <label>
+              Review comment
+              <input [(ngModel)]="actionComment" name="actionComment" placeholder="Optional note" />
+            </label>
+            <div class="actions">
+              <button type="button" (click)="act('APPROVE')" [disabled]="submitting">Approve step</button>
+              <button type="button" class="secondary" (click)="act('REQUEST_INFO')" [disabled]="submitting">
+                Request info
+              </button>
+              <button type="button" class="danger" (click)="act('REJECT')" [disabled]="submitting">Reject</button>
+            </div>
+            @if (latestApproveDelivery().length) {
+              <h4>Notifications</h4>
+              <ul class="history">
+                @for (delivery of latestApproveDelivery(); track delivery.at) {
+                  <li>
+                    {{ delivery.channel }} → {{ delivery.status }}
+                    {{ delivery.recipient ? ' · ' + delivery.recipient : '' }}
+                  </li>
+                }
+              </ul>
+            }
+            <h4>History</h4>
             <ul class="history">
-              @for (d of latestApproveDelivery(); track d.at) {
-                <li>{{ d.channel }} → {{ d.status }}{{ d.recipient ? ' · ' + d.recipient : '' }}</li>
+              @for (item of selected.history; track item.at) {
+                <li>{{ fmtDate(item.at) }} — {{ item.type }}: {{ item.message }}</li>
+              } @empty {
+                <li>No history available.</li>
               }
             </ul>
           }
-          <h4>History</h4>
-          <ul class="history">
-            @for (h of selected.history; track h.at) {
-              <li>{{ h.at }} — {{ h.type }}: {{ h.message }}</li>
-            }
-          </ul>
-        }
-      </section>
-    </div>
+        </section>
+      </div>
+    }
   }
 </div>

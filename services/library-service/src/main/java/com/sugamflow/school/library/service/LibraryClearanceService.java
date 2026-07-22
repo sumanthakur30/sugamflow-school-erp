@@ -2,10 +2,14 @@ package com.sugamflow.school.library.service;
 
 import com.sugamflow.school.common.tenant.TenantContext;
 import com.sugamflow.school.common.tenant.TenantScope;
+import com.sugamflow.school.library.persistence.entity.LibraryCirculationEntity;
 import com.sugamflow.school.library.persistence.entity.LibraryRecordEntity;
+import com.sugamflow.school.library.persistence.repo.LibraryCirculationRepository;
 import com.sugamflow.school.library.persistence.repo.LibraryRecordRepository;
 import com.sugamflow.school.library.web.LibraryException;
+import java.time.Instant;
 import java.time.LocalDate;
+import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -18,9 +22,12 @@ import org.springframework.transaction.annotation.Transactional;
 public class LibraryClearanceService {
 
   private final LibraryRecordRepository repository;
+  private final LibraryCirculationRepository circulations;
 
-  public LibraryClearanceService(LibraryRecordRepository repository) {
+  public LibraryClearanceService(
+      LibraryRecordRepository repository, LibraryCirculationRepository circulations) {
     this.repository = repository;
+    this.circulations = circulations;
   }
 
   @Transactional(readOnly = true)
@@ -30,12 +37,30 @@ public class LibraryClearanceService {
       throw new LibraryException("VALIDATION", "admissionNo is required");
     }
     String ref = admissionNo.trim();
-    List<LibraryRecordEntity> records = scopedRecords(scope);
+    List<Map<String, Object>> items = new ArrayList<>();
     int outstandingBooks = 0;
     int maxOverdueDays = 0;
-    List<Map<String, Object>> items = new ArrayList<>();
     LocalDate today = LocalDate.now();
-    for (LibraryRecordEntity entity : records) {
+
+    // Deep ledger (preferred)
+    for (LibraryCirculationEntity c :
+        circulations.findByOrganizationIdAndAdmissionNoIgnoreCaseAndStatus(
+            scope.organizationId(), ref, "ISSUED")) {
+      outstandingBooks++;
+      int overdueDays = overdueFromInstant(c.getDueAt(), today);
+      maxOverdueDays = Math.max(maxOverdueDays, overdueDays);
+      Map<String, Object> item = new LinkedHashMap<>();
+      item.put("source", "CIRCULATION");
+      item.put("recordId", c.getId().toString());
+      item.put("bookId", c.getBookId().toString());
+      item.put("bookTitle", "");
+      item.put("dueDate", c.getDueAt() == null ? "" : c.getDueAt().toString());
+      item.put("overdueDays", overdueDays);
+      items.add(item);
+    }
+
+    // Legacy workflow records (until fully migrated)
+    for (LibraryRecordEntity entity : scopedRecords(scope)) {
       Map<String, Object> answers = entity.getAnswers() != null ? entity.getAnswers() : Map.of();
       if (!ref.equalsIgnoreCase(stringOr(answers.get("admissionNo"), ""))) {
         continue;
@@ -50,6 +75,7 @@ public class LibraryClearanceService {
       int overdueDays = overdueDays(answers, today);
       maxOverdueDays = Math.max(maxOverdueDays, overdueDays);
       Map<String, Object> item = new LinkedHashMap<>();
+      item.put("source", "WORKFLOW");
       item.put("recordId", entity.getId().toString());
       item.put("bookId", stringOr(answers.get("bookId"), ""));
       item.put("bookTitle", stringOr(answers.get("bookTitle"), ""));
@@ -57,6 +83,7 @@ public class LibraryClearanceService {
       item.put("overdueDays", overdueDays);
       items.add(item);
     }
+
     Map<String, Object> out = new LinkedHashMap<>();
     out.put("admissionNo", ref);
     out.put("outstandingBooks", outstandingBooks);
@@ -67,8 +94,10 @@ public class LibraryClearanceService {
   }
 
   private List<LibraryRecordEntity> scopedRecords(TenantScope scope) {
-    if (scope.branchId() != null && !scope.branchId().isBlank()
-        && scope.academicSessionId() != null && !scope.academicSessionId().isBlank()) {
+    if (scope.branchId() != null
+        && !scope.branchId().isBlank()
+        && scope.academicSessionId() != null
+        && !scope.academicSessionId().isBlank()) {
       return repository.findByOrganizationIdAndBranchIdAndAcademicSessionIdOrderByUpdatedAtDesc(
           scope.organizationId(), scope.branchId(), scope.academicSessionId());
     }
@@ -97,6 +126,17 @@ public class LibraryClearanceService {
     } catch (Exception ex) {
       return 0;
     }
+  }
+
+  private static int overdueFromInstant(Instant dueAt, LocalDate today) {
+    if (dueAt == null) {
+      return 0;
+    }
+    LocalDate dueDate = LocalDate.ofInstant(dueAt, ZoneOffset.UTC);
+    if (!dueDate.isBefore(today)) {
+      return 0;
+    }
+    return (int) ChronoUnit.DAYS.between(dueDate, today);
   }
 
   private static String stringOr(Object value, String fallback) {

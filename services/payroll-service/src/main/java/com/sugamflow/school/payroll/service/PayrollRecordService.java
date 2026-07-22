@@ -16,6 +16,7 @@ import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.UUID;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -122,6 +123,8 @@ public class PayrollRecordService {
       throw new PayrollException("FORM_MISSING", "Form definition not found: " + formKey);
     }
     validateMandatory(form, answers);
+    normalizePayAmounts(answers);
+    rejectDuplicatePeriod(scope, answers);
 
     Map<String, Object> workflow = engines.getWorkflow(scope, workflowKey);
     if (workflow == null) {
@@ -172,6 +175,68 @@ public class PayrollRecordService {
     }
     entity.setNotificationIntents(intents);
     return toDto(repository.save(entity));
+  }
+
+  private void normalizePayAmounts(Map<String, Object> answers) {
+    double basicPay = nonNegativeAmount(answers.get("basicPay"), "Basic pay");
+    double allowances = nonNegativeAmount(answers.get("allowances"), "Allowances");
+    double deductions = nonNegativeAmount(answers.get("deductions"), "Deductions");
+    double grossPay = basicPay + allowances;
+    if (deductions > grossPay) {
+      throw new PayrollException(
+          "INVALID_PAY", "Deductions cannot be greater than gross pay.");
+    }
+    answers.put("basicPay", basicPay);
+    answers.put("allowances", allowances);
+    answers.put("deductions", deductions);
+    answers.put("grossPay", grossPay);
+    answers.put("netPay", grossPay - deductions);
+  }
+
+  private void rejectDuplicatePeriod(TenantScope scope, Map<String, Object> answers) {
+    String employeeId = stringOr(answers.get("employeeId"), "");
+    String month = stringOr(answers.get("month"), "");
+    String year = stringOr(answers.get("year"), "");
+    if (employeeId.isBlank() || month.isBlank() || year.isBlank()) {
+      throw new PayrollException(
+          "PAYROLL_PERIOD_REQUIRED", "Employee, payroll month, and year are required.");
+    }
+    boolean duplicate =
+        repository.findByOrganizationIdOrderByUpdatedAtDesc(scope.organizationId()).stream()
+            .filter(
+                record ->
+                    Objects.equals(record.getBranchId(), scope.branchId())
+                        && Objects.equals(
+                            record.getAcademicSessionId(), scope.academicSessionId())
+                        && !"REJECTED".equalsIgnoreCase(record.getStatus()))
+            .anyMatch(
+                record ->
+                    employeeId.equalsIgnoreCase(
+                            stringOr(record.getAnswers().get("employeeId"), ""))
+                        && month.equalsIgnoreCase(
+                            stringOr(record.getAnswers().get("month"), ""))
+                        && year.equalsIgnoreCase(
+                            stringOr(record.getAnswers().get("year"), "")));
+    if (duplicate) {
+      throw new PayrollException(
+          "DUPLICATE_PAYROLL",
+          "A payroll run already exists for this employee for " + month + " " + year + ".");
+    }
+  }
+
+  private double nonNegativeAmount(Object raw, String label) {
+    if (raw == null || String.valueOf(raw).isBlank()) {
+      return 0d;
+    }
+    try {
+      double value = raw instanceof Number number ? number.doubleValue() : Double.parseDouble(String.valueOf(raw));
+      if (!Double.isFinite(value) || value < 0) {
+        throw new NumberFormatException();
+      }
+      return value;
+    } catch (NumberFormatException ex) {
+      throw new PayrollException("INVALID_PAY", label + " must be a non-negative number.");
+    }
   }
 
   @Transactional

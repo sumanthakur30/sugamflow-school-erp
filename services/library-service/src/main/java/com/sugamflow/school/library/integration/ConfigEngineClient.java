@@ -1,5 +1,6 @@
 package com.sugamflow.school.library.integration;
 
+import com.sugamflow.school.common.cache.TtlCache;
 import com.sugamflow.school.common.tenant.TenantScope;
 import com.sugamflow.school.common.tenant.TenantHeaders;
 import com.sugamflow.school.library.config.LibraryProperties;
@@ -29,21 +30,44 @@ public class ConfigEngineClient {
     this.properties = properties;
   }
 
+  private final TtlCache<String, Boolean> featureFlagCache = TtlCache.forConfig();
+  private final TtlCache<String, Map<String, Object>> moduleSettingsCache = TtlCache.forConfig();
+
   public boolean isFeatureEnabled(TenantScope scope, String flag) {
-    Map<String, Object> body =
-        get(
-            properties.getIntegrations().getSubscriptionBaseUrl()
-                + "/api/subscription/feature-flags/"
-                + flag,
-            scope);
-    return body != null && Boolean.TRUE.equals(body.get("enabled"));
+    String cacheKey = scope.organizationId() + "|" + flag;
+    Boolean enabled =
+        featureFlagCache.get(
+            cacheKey,
+            key -> {
+              Map<String, Object> body =
+                  get(
+                      properties.getIntegrations().getSubscriptionBaseUrl()
+                          + "/api/subscription/feature-flags/"
+                          + flag,
+                      scope);
+              return body == null ? null : Boolean.TRUE.equals(body.get("enabled"));
+            });
+    return Boolean.TRUE.equals(enabled);
   }
 
   public Map<String, Object> getModuleSettings(TenantScope scope, String moduleKey) {
+    String cacheKey =
+        scope.organizationId()
+            + "|"
+            + scope.branchId()
+            + "|"
+            + scope.academicSessionId()
+            + "|"
+            + moduleKey;
     Map<String, Object> body =
-        get(
-            properties.getIntegrations().getSettingsBaseUrl() + "/api/config/modules/" + moduleKey,
-            scope);
+        moduleSettingsCache.get(
+            cacheKey,
+            key ->
+                get(
+                    properties.getIntegrations().getSettingsBaseUrl()
+                        + "/api/config/modules/"
+                        + moduleKey,
+                    scope));
     return body != null ? body : Map.of();
   }
 
