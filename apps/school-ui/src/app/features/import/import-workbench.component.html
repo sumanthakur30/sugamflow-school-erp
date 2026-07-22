@@ -1,0 +1,243 @@
+<section class="page import-page">
+  <header class="page-head import-head">
+    <div>
+      <p class="eyebrow">Students</p>
+      <h2>Import students</h2>
+      <p>Add many students at once from a CSV file. Nothing is saved until you review and confirm.</p>
+    </div>
+    <button type="button" class="secondary" (click)="downloadTemplate()">Download CSV template</button>
+  </header>
+
+  @if (error) {
+    <p class="error panel" role="alert">{{ error }}</p>
+  }
+  @if (status) {
+    <p class="status panel">{{ status }}</p>
+  }
+
+  @if (loading) {
+    <p class="panel">Loading student import…</p>
+  } @else if (!featureEnabled) {
+    <p class="panel">Student import is not enabled for this plan.</p>
+  } @else {
+    <nav class="import-steps" aria-label="Import progress">
+      <div class="import-step active">
+        <span>1</span>
+        <div><strong>Choose file</strong><small>Select your student CSV</small></div>
+      </div>
+      <div class="step-line"></div>
+      <div class="import-step" [class.active]="selected">
+        <span>2</span>
+        <div><strong>Check data</strong><small>Review errors before saving</small></div>
+      </div>
+      <div class="step-line"></div>
+      <div class="import-step" [class.active]="selected?.status === 'COMMITTED'">
+        <span>3</span>
+        <div><strong>Import</strong><small>Create student records</small></div>
+      </div>
+    </nav>
+
+    <section class="panel upload-card">
+      <div class="section-heading">
+        <div>
+          <h3>1. Choose a student CSV file</h3>
+          <p class="muted">Use the template so column names and values are recognized correctly.</p>
+        </div>
+      </div>
+
+      <label class="file-picker">
+        <input type="file" accept=".csv,text/csv" (change)="onFileSelected($event)" />
+        <span class="file-icon">CSV</span>
+        <span class="file-copy">
+          <strong>{{ selectedFileName || 'Choose CSV file' }}</strong>
+          <small>
+            @if (selectedFileName) {
+              {{ sourceRowCount }} student row{{ sourceRowCount === 1 ? '' : 's' }} ready to review
+            } @else {
+              Click to browse · maximum one file
+            }
+          </small>
+        </span>
+      </label>
+
+      <div class="required-columns">
+        <strong>Accepted columns</strong>
+        <div class="column-chips">
+          @for (field of targetFields; track field) {
+            <span>{{ field }}</span>
+          }
+        </div>
+      </div>
+
+      <button type="button" class="paste-toggle" (click)="showPasteMode = !showPasteMode">
+        {{ showPasteMode ? 'Hide pasted CSV' : 'Advanced: paste CSV instead' }}
+      </button>
+      @if (showPasteMode) {
+        <label class="paste-area">
+          CSV content
+          <textarea
+            rows="7"
+            [(ngModel)]="csvText"
+            name="csvText"
+            placeholder="Paste the header row and student rows here…"
+          ></textarea>
+        </label>
+      }
+
+      <div class="actions upload-actions">
+        <button type="button" (click)="createJob()" [disabled]="!canReview">
+          {{ busy ? 'Preparing…' : 'Review student data' }}
+        </button>
+        @if (csvText) {
+          <button type="button" class="secondary" (click)="clearSource()" [disabled]="busy">
+            Clear
+          </button>
+        }
+      </div>
+    </section>
+
+    @if (selected) {
+      <section class="panel review-card">
+        <div class="section-heading">
+          <div>
+            <h3>2. Check student data</h3>
+            <p class="muted">{{ selected.fileName }} · {{ selected.stats?.total || 0 }} rows</p>
+          </div>
+          <span class="status-badge" [class.status-complete]="selected.status === 'COMMITTED'">
+            {{ statusLabel(selected.status) }}
+          </span>
+        </div>
+
+        <div class="review-stats">
+          <div><span>Total rows</span><strong>{{ selected.stats?.total || 0 }}</strong></div>
+          <div class="ready"><span>Ready</span><strong>{{ selected.stats?.ready || 0 }}</strong></div>
+          <div class="invalid"><span>Need attention</span><strong>{{ selected.stats?.error || 0 }}</strong></div>
+          <div><span>Imported</span><strong>{{ selected.stats?.committed || 0 }}</strong></div>
+        </div>
+
+        <div class="review-actions">
+          <button type="button" class="secondary" (click)="dryRun()" [disabled]="busy">
+            {{ busy ? 'Checking…' : 'Run validation' }}
+          </button>
+          <button type="button" (click)="commit()" [disabled]="busy || !canCommit">
+            Import {{ selected.stats?.ready || 0 }} students
+          </button>
+          @if ((selected.stats?.error || 0) > 0) {
+            <span class="validation-hint">Fix the listed errors and upload the corrected file again.</span>
+          } @else if (selected.status !== 'VALIDATED' && selected.status !== 'COMMITTED') {
+            <span class="muted">Run validation before importing.</span>
+          }
+        </div>
+
+        @if ((selected.errors || []).length) {
+          <div class="error-summary">
+            <h4>Rows needing attention</h4>
+            <ul>
+              @for (e of selected.errors; track e.id) {
+                <li><strong>Row {{ e.rowNumber }}</strong><span>{{ e.errorMessage }}</span></li>
+              }
+            </ul>
+          </div>
+        }
+
+        <h4>Student preview</h4>
+        <div class="preview-wrap">
+          <table class="preview-table">
+            <thead>
+              <tr>
+                <th>Row</th>
+                <th>Student</th>
+                <th>Admission no.</th>
+                <th>Mobile</th>
+                <th>Class / section</th>
+                <th>Result</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (r of (selected.rows || []).slice(0, 15); track r.id) {
+                <tr>
+                  <td>{{ r.rowNumber }}</td>
+                  <td>{{ r.mapped?.fullName || r.raw?.fullName || '—' }}</td>
+                  <td>{{ r.mapped?.admissionNo || r.raw?.admissionNo || '—' }}</td>
+                  <td>{{ r.mapped?.mobile || r.raw?.mobile || '—' }}</td>
+                  <td>
+                    {{ r.mapped?.classApplied || r.mapped?.classSection || r.raw?.classApplied || '—' }}
+                  </td>
+                  <td><span class="row-status">{{ statusLabel(r.status) }}</span></td>
+                </tr>
+              } @empty {
+                <tr><td colspan="6" class="muted">No rows available for preview.</td></tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      </section>
+    }
+
+    <details class="panel history-card">
+      <summary>
+        <span><strong>Previous imports</strong><small>View earlier uploads and their results</small></span>
+        <span>{{ page.totalElements || 0 }}</span>
+      </summary>
+      <div class="history-content">
+        <sf-list-toolbar
+          searchPlaceholder="Search file name or status…"
+          [(q)]="listQ"
+          [(sortBy)]="sortBy"
+          [(sortDir)]="sortDir"
+          [pageSize]="pageSize"
+          [sortOptions]="sortOptions"
+          [searching]="searching"
+          [clearEnabled]="listClearEnabled"
+          (pageSizeChange)="pageSize = $event; pageIndex = 0; loadJobs()"
+          (search)="pageIndex = 0; loadJobs()"
+          (clear)="clearListFilters()"
+        />
+        <div class="list-meta">
+          <span>
+            @if (page.totalElements) {
+              Showing {{ showingFrom }}–{{ showingTo }} of {{ page.totalElements }} imports
+            } @else {
+              No previous imports
+            }
+          </span>
+        </div>
+        <ul class="job-list">
+          @for (job of jobs; track job.id) {
+            <li>
+              <button
+                type="button"
+                class="history-row"
+                [class.active]="selected?.id === job.id"
+                (click)="open(job)"
+              >
+                <span><strong>{{ job.fileName }}</strong><small>{{ job.createdAt }}</small></span>
+                <span>{{ statusLabel(job.status) }} · {{ job.stats?.total || 0 }} rows</span>
+              </button>
+            </li>
+          } @empty {
+            <li class="muted">No import history yet.</li>
+          }
+        </ul>
+        <div class="list-pager actions">
+          <button
+            type="button"
+            class="secondary"
+            [disabled]="pageIndex <= 0"
+            (click)="pageIndex = pageIndex - 1; loadJobs()"
+          >
+            Previous
+          </button>
+          <button
+            type="button"
+            class="secondary"
+            [disabled]="!page.hasNext"
+            (click)="pageIndex = pageIndex + 1; loadJobs()"
+          >
+            Next
+          </button>
+        </div>
+      </div>
+    </details>
+  }
+</section>

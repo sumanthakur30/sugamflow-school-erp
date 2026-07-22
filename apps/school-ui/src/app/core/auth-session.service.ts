@@ -114,9 +114,17 @@ export class AuthSessionService {
   }
 
   applySessionContext(response: AuthResponse): void {
-    localStorage.setItem('sf.tenantId', response.shopId);
-    localStorage.setItem('sf.branchId', localStorage.getItem('sf.branchId') ?? 'main');
-    localStorage.setItem('sf.sessionId', localStorage.getItem('sf.sessionId') ?? '2025-26');
+    const previousOrg = localStorage.getItem('sf.tenantId');
+    const nextOrg = response.shopId;
+    localStorage.setItem('sf.tenantId', nextOrg);
+    // Never carry campus/session from another school into a newly registered org.
+    if (!previousOrg || previousOrg !== nextOrg) {
+      localStorage.setItem('sf.branchId', 'main');
+      localStorage.setItem('sf.sessionId', '2025-26');
+    } else {
+      localStorage.setItem('sf.branchId', localStorage.getItem('sf.branchId') ?? 'main');
+      localStorage.setItem('sf.sessionId', localStorage.getItem('sf.sessionId') ?? '2025-26');
+    }
     localStorage.setItem('sf.userId', response.username);
     localStorage.setItem('sf.role', response.role);
   }

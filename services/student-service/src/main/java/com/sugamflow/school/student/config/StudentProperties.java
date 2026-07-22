@@ -36,6 +36,14 @@ public class StudentProperties {
     private String rulesBaseUrl = "http://localhost:8185";
     private String feeBaseUrl = "http://localhost:8190";
     private String libraryBaseUrl = "http://localhost:8194";
+    private String hostelBaseUrl = "http://localhost:8195";
+    private String transportBaseUrl = "http://localhost:8196";
+    private String staffBaseUrl = "http://localhost:8198";
+    private String academicBaseUrl = "http://localhost:8199";
+    private String attendanceBaseUrl = "http://localhost:8192";
+    private String examBaseUrl = "http://localhost:8193";
+    private String publicApiBaseUrl = "http://localhost:9090";
+    private String publicUiBaseUrl = "http://localhost:4300";
 
     public String getFormsBaseUrl() {
       return formsBaseUrl;
@@ -91,6 +99,70 @@ public class StudentProperties {
 
     public void setLibraryBaseUrl(String libraryBaseUrl) {
       this.libraryBaseUrl = libraryBaseUrl;
+    }
+
+    public String getHostelBaseUrl() {
+      return hostelBaseUrl;
+    }
+
+    public void setHostelBaseUrl(String hostelBaseUrl) {
+      this.hostelBaseUrl = hostelBaseUrl;
+    }
+
+    public String getTransportBaseUrl() {
+      return transportBaseUrl;
+    }
+
+    public void setTransportBaseUrl(String transportBaseUrl) {
+      this.transportBaseUrl = transportBaseUrl;
+    }
+
+    public String getStaffBaseUrl() {
+      return staffBaseUrl;
+    }
+
+    public void setStaffBaseUrl(String staffBaseUrl) {
+      this.staffBaseUrl = staffBaseUrl;
+    }
+
+    public String getAcademicBaseUrl() {
+      return academicBaseUrl;
+    }
+
+    public void setAcademicBaseUrl(String academicBaseUrl) {
+      this.academicBaseUrl = academicBaseUrl;
+    }
+
+    public String getAttendanceBaseUrl() {
+      return attendanceBaseUrl;
+    }
+
+    public void setAttendanceBaseUrl(String attendanceBaseUrl) {
+      this.attendanceBaseUrl = attendanceBaseUrl;
+    }
+
+    public String getExamBaseUrl() {
+      return examBaseUrl;
+    }
+
+    public void setExamBaseUrl(String examBaseUrl) {
+      this.examBaseUrl = examBaseUrl;
+    }
+
+    public String getPublicApiBaseUrl() {
+      return publicApiBaseUrl;
+    }
+
+    public void setPublicApiBaseUrl(String publicApiBaseUrl) {
+      this.publicApiBaseUrl = publicApiBaseUrl;
+    }
+
+    public String getPublicUiBaseUrl() {
+      return publicUiBaseUrl;
+    }
+
+    public void setPublicUiBaseUrl(String publicUiBaseUrl) {
+      this.publicUiBaseUrl = publicUiBaseUrl;
     }
   }
 }

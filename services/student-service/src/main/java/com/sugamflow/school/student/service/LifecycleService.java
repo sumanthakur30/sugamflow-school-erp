@@ -638,10 +638,10 @@ public class LifecycleService {
   private List<StudentRecordEntity> studentsInScope(TenantScope scope) {
     if (scope.branchId() != null && !scope.branchId().isBlank()
         && scope.academicSessionId() != null && !scope.academicSessionId().isBlank()) {
-      return studentRepo.findByOrganizationIdAndBranchIdAndAcademicSessionIdOrderByUpdatedAtDesc(
+      return studentRepo.findByOrganizationIdAndBranchIdAndAcademicSessionIdAndDeletedAtIsNullOrderByUpdatedAtDesc(
           scope.organizationId(), scope.branchId(), scope.academicSessionId());
     }
-    return studentRepo.findByOrganizationIdOrderByUpdatedAtDesc(scope.organizationId());
+    return studentRepo.findByOrganizationIdAndDeletedAtIsNullOrderByUpdatedAtDesc(scope.organizationId());
   }
 
   private void requireLifecycle(TenantScope scope) {
@@ -727,9 +727,50 @@ public class LifecycleService {
     dto.put("studentId", e.getStudentId().toString());
     dto.put("referenceNo", e.getReferenceNo());
     dto.put("academicSessionId", e.getAcademicSessionId());
-    dto.put("payload", e.getPayload());
+    Map<String, Object> payload = slimEventPayload(e.getPayload());
+    dto.put("payload", payload);
+    dto.put("hasDocument", Boolean.TRUE.equals(payload.get("hasDocument")));
     dto.put("createdAt", e.getCreatedAt() != null ? e.getCreatedAt().toString() : null);
     return dto;
+  }
+
+  @SuppressWarnings("unchecked")
+  private static Map<String, Object> slimEventPayload(Map<String, Object> payload) {
+    if (payload == null) {
+      return Map.of();
+    }
+    Map<String, Object> out = new LinkedHashMap<>(payload);
+    Object docRaw = out.get("document");
+    boolean hasDocument = false;
+    if (docRaw instanceof Map<?, ?> doc) {
+      Map<String, Object> slimDoc = new LinkedHashMap<>((Map<String, Object>) doc);
+      hasDocument =
+          slimDoc.get("contentBase64") != null
+              && !String.valueOf(slimDoc.get("contentBase64")).isBlank()
+              && "READY".equalsIgnoreCase(String.valueOf(slimDoc.get("status")));
+      slimDoc.remove("contentBase64");
+      out.put("document", slimDoc);
+    }
+    out.put("hasDocument", hasDocument);
+    return out;
+  }
+
+  @Transactional(readOnly = true)
+  public byte[] eventDocumentPdf(UUID eventId) {
+    TenantScope scope = TenantContext.require();
+    LifecycleEventEntity event =
+        eventRepo
+            .findByIdAndOrganizationId(eventId, scope.organizationId())
+            .orElseThrow(() -> new StudentException("NOT_FOUND", "Lifecycle event not found"));
+    Object docRaw = event.getPayload() != null ? event.getPayload().get("document") : null;
+    if (!(docRaw instanceof Map<?, ?> doc) || doc.get("contentBase64") == null) {
+      throw new StudentException("PDF_MISSING", "No PDF stored on this lifecycle event");
+    }
+    try {
+      return java.util.Base64.getDecoder().decode(String.valueOf(doc.get("contentBase64")));
+    } catch (IllegalArgumentException ex) {
+      throw new StudentException("PDF_CORRUPT", "Stored lifecycle PDF is not valid base64");
+    }
   }
 
   private Map<String, Object> slimStudent(StudentRecordEntity s, String classField) {

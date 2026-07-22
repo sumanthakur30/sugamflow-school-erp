@@ -1,0 +1,366 @@
+<div class="page directory-page">
+  <header class="page-head directory-head">
+    <div class="head-copy">
+      <h2>Student Directory</h2>
+      <p>Search and manage the school roster.</p>
+    </div>
+    <div class="head-actions">
+      <a class="head-link" routerLink="/admin/students">Student master</a>
+      <a class="head-link" routerLink="/admin/lifecycle">Lifecycle / TC</a>
+      <button
+        type="button"
+        class="secondary"
+        [class.active-toggle]="trashMode"
+        (click)="toggleTrash()"
+      >
+        {{ trashMode ? 'Exit trash' : 'Trash' }}
+      </button>
+      <button type="button" class="secondary" (click)="exportCsv()">Export CSV</button>
+    </div>
+  </header>
+
+  @if (error) {
+    <p class="error panel" role="alert">{{ error }}</p>
+  }
+  @if (statusMsg) {
+    <p class="status panel" role="status" aria-live="polite">{{ statusMsg }}</p>
+  }
+
+  @if (loading) {
+    <p class="panel">Loading directory…</p>
+  } @else if (!featureEnabled) {
+    <p class="panel">Student Directory requires FEATURE_STUDENT_MASTER.</p>
+  } @else {
+    <section class="panel summary-strip" aria-label="Directory summary">
+      <button type="button" class="stat" (click)="applySummaryFilter('all')">
+        <span>Total</span>
+        <strong>{{ summary['total'] ?? 0 }}</strong>
+      </button>
+      <button type="button" class="stat" (click)="applySummaryFilter('active')">
+        <span>Active</span>
+        <strong>{{ summary['active'] ?? 0 }}</strong>
+      </button>
+      <button type="button" class="stat" (click)="applySummaryFilter('tc')">
+        <span>TC Issued</span>
+        <strong>{{ summary['tcIssued'] ?? 0 }}</strong>
+      </button>
+      <button type="button" class="stat" (click)="applySummaryFilter('new')">
+        <span>New (30d)</span>
+        <strong>{{ summary['newAdmissions'] ?? 0 }}</strong>
+      </button>
+      <button
+        type="button"
+        class="stat"
+        [class.stat-trash]="trashMode"
+        (click)="applySummaryFilter('trash')"
+      >
+        <span>Trash</span>
+        <strong>{{ trashMode ? page.totalElements : '…' }}</strong>
+      </button>
+      @if (hasGenderData) {
+        <div class="stat stat-static" title="Students with gender recorded">
+          <span>Boys</span>
+          <strong>{{ summary['boys'] ?? 0 }}</strong>
+        </div>
+        <div class="stat stat-static" title="Students with gender recorded">
+          <span>Girls</span>
+          <strong>{{ summary['girls'] ?? 0 }}</strong>
+        </div>
+        @if (genderUnspecified > 0) {
+          <div class="stat stat-static" title="Gender not set on student record">
+            <span>Unspecified</span>
+            <strong>{{ genderUnspecified }}</strong>
+          </div>
+        }
+      }
+    </section>
+
+    <section class="panel filters">
+      <sf-list-toolbar
+        searchPlaceholder="Search name, admission no, mobile, parent…"
+        [(q)]="q"
+        [(sortBy)]="sortBy"
+        [(sortDir)]="sortDir"
+        [pageSize]="page.size"
+        [sortOptions]="sortOptions"
+        [searching]="searching"
+        [showFiltersToggle]="true"
+        [(filtersOpen)]="showAdvancedFilters"
+        [clearEnabled]="clearEnabled"
+        (pageSizeChange)="onPageSize($event)"
+        (search)="search(0)"
+        (clear)="clearFilters()"
+      >
+        <div filters class="grid three filter-grid">
+          <label>
+            Status
+            <select [(ngModel)]="status" name="status">
+              <option value="">All</option>
+              <option value="ACTIVE">Active</option>
+              <option value="INACTIVE">Inactive</option>
+              <option value="ALUMNI">Alumni</option>
+              <option value="TC_ISSUED">TC Issued</option>
+              <option value="DROPOUT">Dropout</option>
+            </select>
+          </label>
+          <label>
+            Class / Section
+            <select [(ngModel)]="classSection" name="classSection">
+              <option value="">All classes / sections</option>
+              @for (section of classSectionOptions; track section) {
+                <option [value]="section">{{ section }}</option>
+              }
+            </select>
+          </label>
+          @if (hasGenderData) {
+            <label>
+              Gender
+              <select [(ngModel)]="gender" name="gender">
+                <option value="">All</option>
+                <option value="Male">Male</option>
+                <option value="Female">Female</option>
+                <option value="Other">Other</option>
+              </select>
+            </label>
+          }
+          <label class="check">
+            <input type="checkbox" [(ngModel)]="transport" name="transport" />
+            Transport students
+          </label>
+          <label class="check">
+            <input type="checkbox" [(ngModel)]="hostel" name="hostel" />
+            Hostel students
+          </label>
+          <div class="filter-apply">
+            <button type="button" class="secondary" (click)="search(0)" [disabled]="searching">
+              Apply filters
+            </button>
+          </div>
+        </div>
+      </sf-list-toolbar>
+
+      @if (hasFilters) {
+        <div class="chip-list filter-chips" aria-label="Active filters">
+          @for (chip of filterChips; track chip.key) {
+            <button type="button" class="chip chip-dismiss" (click)="removeChip(chip.key)">
+              {{ chip.label }}
+              <span aria-hidden="true">×</span>
+            </button>
+          }
+        </div>
+      }
+    </section>
+
+    <section class="panel">
+      @if (selectedCount) {
+        <div class="bulk-bar" role="region" aria-label="Bulk actions">
+          <span class="bulk-count">{{ selectedCount }} selected</span>
+          @if (!trashMode) {
+            <button
+              type="button"
+              class="danger"
+              (click)="openBulkDelete()"
+              [disabled]="bulkBusy"
+            >
+              Soft delete
+            </button>
+          } @else {
+            <button
+              type="button"
+              (click)="confirmBulkRestore()"
+              [disabled]="bulkBusy"
+            >
+              {{ bulkBusy ? 'Restoring…' : 'Restore selected' }}
+            </button>
+          }
+          <button
+            type="button"
+            class="secondary"
+            (click)="toggleAll(false)"
+            [disabled]="bulkBusy"
+          >
+            Clear selection
+          </button>
+        </div>
+      }
+
+      @if (showBulkDeleteConfirm) {
+        <div class="bulk-confirm panel-inner">
+          <h3>Confirm bulk soft delete</h3>
+          <p class="muted">
+            {{ selectedCount }} student(s) will be hidden from normal lists. History is kept.
+            Reason is required.
+          </p>
+          <label>
+            Reason
+            <input
+              [(ngModel)]="bulkReason"
+              name="bulkReason"
+              placeholder="e.g. Duplicate smoke records"
+              [disabled]="bulkBusy"
+            />
+          </label>
+          <div class="actions">
+            <button
+              type="button"
+              class="danger"
+              (click)="confirmBulkSoftDelete()"
+              [disabled]="bulkBusy"
+            >
+              {{ bulkBusy ? 'Deleting…' : 'Confirm soft delete' }}
+            </button>
+            <button
+              type="button"
+              class="secondary"
+              (click)="cancelBulkDelete()"
+              [disabled]="bulkBusy"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      }
+
+      <div class="table-meta">
+        <span>
+          @if (page.totalElements) {
+            Showing {{ showingFrom }}–{{ showingTo }} of {{ page.totalElements }}
+            {{ trashMode ? 'deleted students' : 'students' }}
+          } @else {
+            0 {{ trashMode ? 'deleted students' : 'students' }}
+          }
+        </span>
+        <span>Page {{ page.page + 1 }} / {{ page.totalPages || 1 }}</span>
+      </div>
+      <div class="table-wrap">
+        <table class="dir-table">
+          <thead>
+            <tr>
+              <th class="col-check list-th">
+                <input
+                  type="checkbox"
+                  (change)="toggleAll($any($event.target).checked)"
+                  [checked]="selectedIds.size > 0 && selectedIds.size === page.items.length"
+                  [attr.aria-label]="'Select all on page'"
+                />
+              </th>
+              @for (col of displayColumns; track col.key) {
+                <th
+                  class="list-th"
+                  [class.col-student]="isNameKey(col.key)"
+                  [class.sortable-heading]="isSortableColumn(col.key)"
+                  [class.active-sort]="isActiveSort(col.key)"
+                  [attr.aria-sort]="
+                    isActiveSort(col.key)
+                      ? (sortDir === 'ASC' ? 'ascending' : 'descending')
+                      : null
+                  "
+                >
+                  @if (isSortableColumn(col.key)) {
+                    <button
+                      type="button"
+                      class="heading-sort"
+                      (click)="sortByColumn(col.key)"
+                      [attr.aria-label]="'Sort by ' + col.label"
+                    >
+                      <span>{{ col.label }}</span>
+                      <span class="sort-indicator" aria-hidden="true">{{
+                        sortIndicator(col.key)
+                      }}</span>
+                    </button>
+                  } @else {
+                    <span class="heading-label">{{ col.label }}</span>
+                  }
+                </th>
+              }
+              <th class="col-actions list-th"><span class="heading-label">Actions</span></th>
+            </tr>
+          </thead>
+          <tbody>
+            @if (!page.items.length) {
+              <tr>
+                <td [attr.colspan]="displayColumns.length + 2" class="muted empty-row">
+                  {{ trashMode ? 'Trash is empty.' : 'No students match filters.' }}
+                </td>
+              </tr>
+            }
+            @for (row of page.items; track row.id) {
+              <tr [class.selected]="isSelected(row.id)" [class.row-deleted]="row.deleted">
+                <td class="col-check">
+                  <input
+                    type="checkbox"
+                    [checked]="isSelected(row.id)"
+                    (change)="toggleRow(row.id, $any($event.target).checked)"
+                    [attr.aria-label]="'Select ' + displayName(row)"
+                  />
+                </td>
+                @for (col of displayColumns; track col.key) {
+                  @if (isNameKey(col.key)) {
+                    <td class="col-student">
+                      <a
+                        class="student-name"
+                        [routerLink]="['/admin/students']"
+                        [queryParams]="{ id: row.id }"
+                        [title]="'Open profile for ' + displayName(row)"
+                      >
+                        {{ displayName(row) }}
+                      </a>
+                      <div class="student-sub">{{ cell(row, 'admissionNo') }}</div>
+                      @if (row.deleteReason) {
+                        <div class="student-sub delete-reason">{{ row.deleteReason }}</div>
+                      }
+                    </td>
+                  } @else if (col.key === 'status') {
+                    <td>
+                      <span [class]="statusClass(row.status)">{{ cell(row, 'status') }}</span>
+                    </td>
+                  } @else {
+                    <td [class.mono]="col.key === 'mobile'">{{ cell(row, col.key) }}</td>
+                  }
+                }
+                <td class="col-actions">
+                  <div class="row-actions">
+                    <a [routerLink]="['/admin/students']" [queryParams]="{ id: row.id }">Profile</a>
+                    @if (!trashMode) {
+                      <a
+                        class="action-primary"
+                        [routerLink]="['/admin/students', row.id, '360']"
+                        >360</a
+                      >
+                      <a [routerLink]="['/admin/lifecycle']" [queryParams]="{ studentId: row.id }"
+                        >TC</a
+                      >
+                      <a
+                        routerLink="/admin/fee"
+                        [queryParams]="{ new: '1', admissionNo: row.admissionNo }"
+                        >Fee</a
+                      >
+                    }
+                  </div>
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+      <div class="pager actions">
+        <button
+          type="button"
+          class="secondary"
+          [disabled]="page.page <= 0"
+          (click)="search(page.page - 1)"
+        >
+          Previous
+        </button>
+        <button
+          type="button"
+          class="secondary"
+          [disabled]="!page.hasNext"
+          (click)="search(page.page + 1)"
+        >
+          Next
+        </button>
+      </div>
+    </section>
+  }
+</div>

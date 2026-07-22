@@ -19,10 +19,9 @@ export const featureGuard: CanActivateFn = (route) => {
   const role = (auth.getRole() || '').toUpperCase();
 
   if (roles?.length) {
-    const elevated = role === 'SHOP_OWNER' || role === 'SUPER_ADMIN' || role === 'ADMIN';
-    const ok = elevated || roles.map((r) => r.toUpperCase()).includes(role);
+    const ok = roles.map((r) => r.toUpperCase()).includes(role);
     if (!ok) {
-      return router.createUrlTree(['/admin/admission']);
+      return router.createUrlTree([roleHome(role)]);
     }
   }
 
@@ -34,12 +33,28 @@ export const featureGuard: CanActivateFn = (route) => {
   if (current?.featureFlags) {
     return current.featureFlags[feature] === true
       ? true
-      : router.createUrlTree(['/admin/admission']);
+      : router.createUrlTree([roleHome(role)]);
   }
 
   return entitlements.load().pipe(
-    map((e) =>
-      e.featureFlags?.[feature] === true ? true : router.createUrlTree(['/admin/admission']),
-    ),
+    map((e) => {
+      const flags = e?.featureFlags;
+      // Fail open when subscription/entitlements is down — otherwise every
+      // guarded route redirects to /admin/admission and loops into a blank page.
+      if (!flags) {
+        return true;
+      }
+      return flags[feature] === true ? true : router.createUrlTree([roleHome(role)]);
+    }),
   );
 };
+
+function roleHome(role: string): string {
+  if (role === 'PARENT' || role === 'GUARDIAN' || role === 'STUDENT') {
+    return '/parent';
+  }
+  if (role === 'TEACHER') {
+    return '/teacher';
+  }
+  return '/admin/dashboard';
+}

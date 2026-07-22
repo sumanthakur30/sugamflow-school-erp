@@ -1,0 +1,345 @@
+<div class="page directory-page">
+  <header class="page-head staff-page-head">
+    <div>
+      <p class="staff-eyebrow">People</p>
+      <h2>{{ pageTitle }}</h2>
+      <p>{{ pageSubtitle }}</p>
+    </div>
+    <div class="staff-head-actions">
+      @if (showForm) {
+        <button type="button" class="staff-btn staff-btn--secondary" (click)="cancelCreate()">
+          Staff list
+        </button>
+      } @else {
+        <a class="staff-btn staff-btn--secondary" routerLink="/admin/payroll">Payroll</a>
+        <a class="staff-btn staff-btn--primary" routerLink="/admin/staff-directory/add">+ Add staff</a>
+      }
+    </div>
+  </header>
+
+  @if (error) {
+    <p class="error panel" role="alert">{{ error }}</p>
+  }
+  @if (statusMsg) {
+    <p class="panel">{{ statusMsg }}</p>
+  }
+
+  @if (loading) {
+    <p class="panel">Loading staff directory…</p>
+  } @else if (!featureEnabled) {
+    <p class="panel">Staff Directory requires FEATURE_STAFF_MASTER.</p>
+  } @else {
+    @if (!showForm) {
+      <section class="panel summary-strip">
+      <div class="stat"><span>Total</span><strong>{{ summary['total'] ?? 0 }}</strong></div>
+      <div class="stat"><span>Active</span><strong>{{ summary['active'] ?? 0 }}</strong></div>
+      <div class="stat"><span>Teachers</span><strong>{{ summary['teachers'] ?? 0 }}</strong></div>
+      <div class="stat"><span>Non-teaching</span><strong>{{ summary['nonTeaching'] ?? 0 }}</strong></div>
+      <div class="stat"><span>New (30d)</span><strong>{{ summary['newJoinings'] ?? 0 }}</strong></div>
+      </section>
+
+      <section class="panel filters">
+      <sf-list-toolbar
+        searchPlaceholder="Name, employee ID, mobile, email…"
+        [(q)]="q"
+        [(sortBy)]="sortBy"
+        [(sortDir)]="sortDir"
+        [pageSize]="page.size"
+        [sortOptions]="sortOptions"
+        [searching]="searching"
+        [showFiltersToggle]="true"
+        [(filtersOpen)]="showAdvancedFilters"
+        [clearEnabled]="clearEnabled"
+        (pageSizeChange)="onPageSize($event)"
+        (search)="search(0)"
+        (clear)="clearFilters()"
+      >
+        <div filters class="grid three filter-grid">
+          <label>
+            Status
+            <select [(ngModel)]="status" name="status">
+              <option value="">All</option>
+              <option value="ACTIVE">Active</option>
+              <option value="INACTIVE">Inactive</option>
+              <option value="ON_LEAVE">On Leave</option>
+              <option value="RESIGNED">Resigned</option>
+            </select>
+          </label>
+          <label>
+            Department
+            <select [(ngModel)]="department" name="department">
+              <option value="">All departments</option>
+              @for (option of departmentOptions; track option) {
+                <option [value]="option">{{ option }}</option>
+              }
+            </select>
+          </label>
+          <label>
+            Designation
+            <select [(ngModel)]="designation" name="designation">
+              <option value="">All designations</option>
+              @for (option of designationOptions; track option) {
+                <option [value]="option">{{ option }}</option>
+              }
+            </select>
+          </label>
+          <label>
+            Employment type
+            <select [(ngModel)]="employmentType" name="employmentType">
+              <option value="">All</option>
+              <option value="Permanent">Permanent</option>
+              <option value="Contract">Contract</option>
+              <option value="Part-time">Part-time</option>
+            </select>
+          </label>
+          <label>
+            Gender
+            <select [(ngModel)]="gender" name="gender">
+              <option value="">All</option>
+              <option value="Male">Male</option>
+              <option value="Female">Female</option>
+              <option value="Other">Other</option>
+            </select>
+          </label>
+          <div class="filter-apply">
+            <button type="button" class="secondary" (click)="search(0)" [disabled]="searching">
+              Apply filters
+            </button>
+          </div>
+        </div>
+        <div class="staff-list-actions">
+          <span class="muted">Export the currently filtered staff list.</span>
+          <button type="button" class="staff-export-btn" (click)="exportCsv()">⇩ Export CSV</button>
+        </div>
+      </sf-list-toolbar>
+      </section>
+    }
+
+    @if (showForm) {
+      <section class="panel staff-form-card">
+        <div class="staff-form-intro">
+          <div>
+            <h3>{{ editingId ? 'Edit employee information' : 'Employee information' }}</h3>
+            <p class="muted">
+              @if (editingId) {
+                Update the fields below and save. Employee number stays the same.
+              } @else {
+                Fields marked required are needed to create the staff record.
+              }
+            </p>
+          </div>
+        </div>
+        <div class="grid three">
+          <label>
+            <span class="field-title">Full name <span class="required">*</span></span>
+            <input
+              [(ngModel)]="draft['fullName']"
+              name="fullName"
+              autocomplete="name"
+              placeholder="e.g. Priya Sharma"
+            />
+          </label>
+          <label>
+            Mobile
+            <input
+              [(ngModel)]="draft['mobile']"
+              name="mobile"
+              type="tel"
+              inputmode="numeric"
+              maxlength="10"
+              placeholder="10-digit mobile"
+            />
+          </label>
+          <label>
+            Email
+            <input
+              [(ngModel)]="draft['email']"
+              name="email"
+              type="email"
+              placeholder="name@school.com"
+            />
+          </label>
+          <label>
+            <span class="field-title">Department <span class="required">*</span></span>
+            <select [(ngModel)]="draft['department']" name="departmentDraft">
+              <option value="">Select department…</option>
+              @for (option of departmentOptions; track option) {
+                <option [value]="option">{{ option }}</option>
+              }
+            </select>
+          </label>
+          <label>
+            <span class="field-title">Designation <span class="required">*</span></span>
+            <select [(ngModel)]="draft['designation']" name="designationDraft">
+              <option value="">Select designation…</option>
+              @for (option of designationOptions; track option) {
+                <option [value]="option">{{ option }}</option>
+              }
+            </select>
+          </label>
+          <label>
+            Employment type
+            <select [(ngModel)]="draft['employmentType']" name="employmentTypeDraft">
+              <option value="Permanent">Permanent</option>
+              <option value="Contract">Contract</option>
+              <option value="Part-time">Part-time</option>
+            </select>
+          </label>
+          <label>
+            Gender
+            <select [(ngModel)]="draft['gender']" name="genderDraft">
+              <option value="">Select gender…</option>
+              <option value="Male">Male</option>
+              <option value="Female">Female</option>
+              <option value="Other">Other</option>
+            </select>
+          </label>
+          <label>
+            Joining date
+            <span class="date-field">
+              <input
+                [(ngModel)]="joiningDateDisplay"
+                name="joiningDateDisplay"
+                type="text"
+                inputmode="numeric"
+                maxlength="10"
+                placeholder="DD/MM/YYYY"
+                (blur)="normalizeJoiningDateDisplay()"
+              />
+              <button
+                type="button"
+                class="date-picker-btn"
+                (click)="openJoiningCalendar(picker)"
+                aria-label="Open calendar"
+                title="Pick from calendar"
+              >
+                📅
+              </button>
+              <input
+                #picker
+                class="date-picker-native"
+                type="date"
+                name="joiningDatePicker"
+                tabindex="-1"
+                aria-hidden="true"
+                (change)="onJoiningCalendarPicked(picker.value)"
+              />
+            </span>
+            <span class="field-hint">Type DD/MM/YYYY or pick from the calendar</span>
+          </label>
+          @if (editingId) {
+            <label>
+              Status
+              <select [(ngModel)]="draft['status']" name="statusDraft">
+                <option value="ACTIVE">Active</option>
+                <option value="INACTIVE">Inactive</option>
+                <option value="ON_LEAVE">On Leave</option>
+                <option value="RESIGNED">Resigned</option>
+              </select>
+            </label>
+          }
+        </div>
+        <div class="actions staff-form-actions">
+          <button type="button" (click)="saveStaff()" [disabled]="saving">
+            @if (saving) {
+              Saving…
+            } @else if (editingId) {
+              Save changes
+            } @else {
+              Create staff member
+            }
+          </button>
+          <button type="button" class="secondary" (click)="cancelCreate()" [disabled]="saving">
+            Cancel
+          </button>
+        </div>
+      </section>
+    }
+
+    @if (!showForm) {
+      <section class="panel">
+      <div class="table-meta">
+        <span>
+          @if (page.totalElements) {
+            Showing {{ showingFrom }}–{{ showingTo }} of {{ page.totalElements }} employees
+          } @else {
+            0 employees
+          }
+        </span>
+        <span>Page {{ page.page + 1 }} / {{ page.totalPages || 1 }}</span>
+      </div>
+      <div class="table-wrap">
+        <table class="dir-table">
+          <thead>
+            <tr>
+              @for (col of columns; track col.key) {
+                <th
+                  class="list-th"
+                  [class.sortable-heading]="isSortableColumn(col.key)"
+                  [class.active-sort]="sortBy === col.key"
+                  [attr.aria-sort]="
+                    sortBy === col.key
+                      ? (sortDir === 'ASC' ? 'ascending' : 'descending')
+                      : null
+                  "
+                >
+                  @if (isSortableColumn(col.key)) {
+                    <button
+                      type="button"
+                      class="heading-sort"
+                      (click)="sortByColumn(col.key)"
+                      [attr.aria-label]="'Sort by ' + col.label"
+                    >
+                      <span>{{ col.label }}</span>
+                      <span class="sort-indicator" aria-hidden="true">{{ sortIndicator(col.key) }}</span>
+                    </button>
+                  } @else {
+                    <span class="heading-label">{{ col.label }}</span>
+                  }
+                </th>
+              }
+              <th class="list-th col-actions"><span class="heading-label">Actions</span></th>
+            </tr>
+          </thead>
+          <tbody>
+            @if (!page.items.length) {
+              <tr>
+                <td [attr.colspan]="columns.length + 1" class="muted">No staff match filters.</td>
+              </tr>
+            }
+            @for (row of page.items; track row.id) {
+              <tr>
+                @for (col of columns; track col.key) {
+                  <td>{{ cell(row, col.key) }}</td>
+                }
+                <td class="col-actions">
+                  <button
+                    type="button"
+                    class="row-action"
+                    (click)="startEdit(row)"
+                    [disabled]="saving || deletingId === row.id"
+                  >
+                    Edit
+                  </button>
+                  <button
+                    type="button"
+                    class="row-action row-action--danger"
+                    (click)="deleteStaff(row)"
+                    [disabled]="saving || deletingId === row.id"
+                  >
+                    {{ deletingId === row.id ? 'Deleting…' : 'Delete' }}
+                  </button>
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+      <div class="pager actions">
+        <button type="button" [disabled]="page.page <= 0" (click)="search(page.page - 1)">Previous</button>
+        <button type="button" [disabled]="!page.hasNext" (click)="search(page.page + 1)">Next</button>
+      </div>
+      </section>
+    }
+  }
+</div>

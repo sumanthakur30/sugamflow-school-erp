@@ -1,88 +1,343 @@
-<div class="page">
-  <header class="page-head">
-    <h2>Students</h2>
-    <p>
-      Config-driven student master — form <code>{{ formKey }}</code>, guardians from
-      <code>{{ parentFormKey }}</code> (FEATURE_STUDENT_MASTER).
-    </p>
-  </header>
+<div class="page students-page">
+  @if (selected && featureEnabled && !loading) {
+    <!-- Full-page detail (SugamFlow Edit pattern) -->
+    <div class="form-page detail-page" [class.is-busy]="savingGuardians">
+      <p class="crumb">
+        <button type="button" class="crumb-link" (click)="closeDetail()" [disabled]="savingGuardians">
+          Students
+        </button>
+        / {{ studentName(selected) }}
+      </p>
 
-  @if (error) {
-    <p class="error panel" role="alert">{{ error }}</p>
-  }
-
-  @if (loading) {
-    <p class="panel">Loading student configuration…</p>
-  } @else if (!featureEnabled) {
-    <p class="panel">Student master is not enabled for this plan (FEATURE_STUDENT_MASTER).</p>
-  } @else {
-    <div class="student-layout">
-      <section class="panel">
-        <h3>Roster</h3>
-        @if (!students.length) {
-          <p class="muted">No students yet. Approve an admission application to enroll.</p>
-        }
-        <ul class="app-list">
-          @for (row of students; track row.id) {
-            <li>
-              <button
-                type="button"
-                class="app-row"
-                [class.active]="selected?.id === row.id"
-                (click)="select(row)"
-              >
-                <strong>{{ row.answers?.fullName || row.id }}</strong>
-                <span>
-                  {{ row.admissionNo || '-' }} · {{ row.status }} ·
-                  {{ row.guardianCount || 0 }} guardian(s)
-                </span>
-              </button>
-            </li>
-          }
-        </ul>
-      </section>
-
-      <section class="panel">
-        <h3>Detail</h3>
-        @if (!selected) {
-          <p class="muted">Select a student.</p>
-        } @else {
+      <header class="page-head list-head">
+        <div>
+          <h2>{{ studentName(selected) }}</h2>
           <p>
-            <strong>{{ selected.status }}</strong>
             @if (selected.admissionNo) {
-              - {{ selected.admissionNo }}
+              {{ selected.admissionNo }}
+            } @else {
+              Student profile
+            }
+            @if (displayClass(selected) !== '—') {
+              · Class {{ displayClass(selected) }}
             }
           </p>
+        </div>
+        <div class="head-actions">
+          <span [class]="statusClass(selected.status)">{{ selected.status || '—' }}</span>
+          @if (selected.deleted) {
+            <span class="badge badge-bad">Soft deleted</span>
+          }
+          <a
+            class="secondary head-link-btn"
+            [routerLink]="['/admin/students', selected.id, '360']"
+          >
+            Student 360
+          </a>
+          @if (!selected.deleted && !editOpen) {
+            <button type="button" (click)="startEdit()" [disabled]="busyAction">Edit</button>
+            <button
+              type="button"
+              class="secondary"
+              (click)="issueDocument('ID_CARD')"
+              [disabled]="busyAction"
+            >
+              ID card
+            </button>
+            <button
+              type="button"
+              class="secondary"
+              (click)="issueDocument('BONAFIDE')"
+              [disabled]="busyAction"
+            >
+              Bonafide
+            </button>
+            <button
+              type="button"
+              class="secondary"
+              (click)="issueDocument('CHARACTER_CERTIFICATE')"
+              [disabled]="busyAction"
+            >
+              Character
+            </button>
+            <button type="button" class="danger" (click)="openDelete()" [disabled]="busyAction">
+              Delete
+            </button>
+          }
+          @if (selected.deleted) {
+            <button type="button" (click)="restoreStudent()" [disabled]="busyAction">
+              {{ busyAction ? 'Restoring…' : 'Restore' }}
+            </button>
+          }
+          <button type="button" class="secondary" (click)="toggleAudit()">
+            {{ showAudit ? 'Hide audit' : 'Audit history' }}
+          </button>
+          <button
+            type="button"
+            class="secondary"
+            (click)="closeDetail()"
+            [disabled]="savingGuardians || savingProfile || busyAction"
+          >
+            Back to list
+          </button>
+        </div>
+      </header>
+
+      @if (error) {
+        <p class="error panel" role="alert">{{ error }}</p>
+      }
+      @if (statusMsg) {
+        <p class="status panel" role="status" aria-live="polite">{{ statusMsg }}</p>
+      }
+
+      <section class="form-section panel">
+        <h3 class="form-section-title">ID &amp; certificates</h3>
+        <p class="muted">
+          Issue printable PDFs with a verification QR. Recipients can scan to confirm authenticity.
+        </p>
+        @if (documentsLoading) {
+          <p class="muted">Loading documents…</p>
+        } @else if (!documents.length) {
+          <p class="muted">No documents issued yet. Use ID card / Bonafide / Character above.</p>
+        } @else {
+          <ul class="doc-list">
+            @for (doc of documents; track doc.id) {
+              <li>
+                <div>
+                  <strong>{{ documentLabel(doc.documentType) }}</strong>
+                  <span class="muted">
+                    · {{ doc.referenceNo }} · {{ doc.status }} · {{ formatWhen(doc.issuedAt) }}
+                  </span>
+                </div>
+                <div class="doc-actions">
+                  <button type="button" class="tiny" (click)="downloadDocument(doc)" [disabled]="busyAction">
+                    PDF
+                  </button>
+                  @if (doc.status === 'ISSUED') {
+                    <button
+                      type="button"
+                      class="tiny secondary"
+                      (click)="revokeDocument(doc)"
+                      [disabled]="busyAction"
+                    >
+                      Revoke
+                    </button>
+                  }
+                  @if (doc.verifyUrl) {
+                    <a class="tiny-link" [href]="doc.verifyUrl" target="_blank" rel="noopener">Verify</a>
+                  }
+                </div>
+              </li>
+            }
+          </ul>
+        }
+      </section>
+
+      @if (deleteOpen) {
+        <section class="form-section panel delete-panel">
+          <h3 class="form-section-title">Confirm soft delete</h3>
+          <p class="muted">
+            The student will be hidden from normal lists. History and mappings are kept. Provide a
+            reason (required).
+          </p>
+          <label>
+            Reason
+            <input [(ngModel)]="deleteReason" name="deleteReason" placeholder="e.g. Duplicate entry" />
+          </label>
+          <div class="form-actions actions">
+            <button type="button" class="danger" (click)="confirmSoftDelete()" [disabled]="busyAction">
+              {{ busyAction ? 'Deleting…' : 'Confirm delete' }}
+            </button>
+            <button type="button" class="secondary" (click)="deleteOpen = false" [disabled]="busyAction">
+              Cancel
+            </button>
+          </div>
+        </section>
+      }
+
+      @if (editOpen) {
+        <section class="form-section panel">
+          <h3 class="form-section-title">Edit student</h3>
+          <p class="muted">Correct mistakes carefully. Every field change is audited.</p>
+          <div class="grid three">
+            @for (field of editFields(); track field.key) {
+              <label>
+                <span class="field-title">
+                  {{ field.label }}
+                  @if (field.mandatory) {
+                    <span class="req">*</span>
+                  }
+                </span>
+                @if (field.key === 'house') {
+                  <select
+                    [(ngModel)]="editAnswers[field.key]"
+                    [attr.name]="'edit-' + field.key"
+                    [disabled]="savingProfile"
+                    required
+                  >
+                    <option value="" disabled>Select house</option>
+                    @for (house of availableHouseOptions(); track house) {
+                      <option [value]="house">{{ house }} House</option>
+                    }
+                  </select>
+                  <span class="muted">Used for activities, teams, and school events.</span>
+                } @else if (field.type === 'CHECKBOX') {
+                  <input
+                    type="checkbox"
+                    [(ngModel)]="editAnswers[field.key]"
+                    [name]="'edit-' + field.key"
+                    [disabled]="savingProfile"
+                  />
+                } @else if (field.type === 'NUMBER') {
+                  <input
+                    type="number"
+                    [(ngModel)]="editAnswers[field.key]"
+                    [name]="'edit-' + field.key"
+                    [disabled]="savingProfile"
+                  />
+                } @else if (field.type === 'EMAIL') {
+                  <input
+                    type="email"
+                    [(ngModel)]="editAnswers[field.key]"
+                    [name]="'edit-' + field.key"
+                    [disabled]="savingProfile"
+                  />
+                } @else {
+                  <input
+                    [(ngModel)]="editAnswers[field.key]"
+                    [name]="'edit-' + field.key"
+                    [disabled]="savingProfile"
+                  />
+                }
+              </label>
+            }
+          </div>
+          <label>
+            Reason for change
+            <input
+              [(ngModel)]="editReason"
+              name="editReason"
+              placeholder="e.g. Typing mistake in father name"
+              [disabled]="savingProfile"
+            />
+          </label>
+          <div class="form-actions actions">
+            <button type="button" (click)="saveEdit()" [disabled]="savingProfile">
+              {{ savingProfile ? 'Saving…' : 'Save changes' }}
+            </button>
+            <button type="button" class="secondary" (click)="cancelEdit()" [disabled]="savingProfile">
+              Cancel
+            </button>
+          </div>
+        </section>
+      } @else {
+        <section class="form-section panel">
+          <h3 class="form-section-title">Student</h3>
+          <div class="read-grid">
+            @for (field of studentFields(); track field.key) {
+              <div class="read-field">
+                <span class="read-label">{{ field.label }}</span>
+                <span
+                  class="read-value"
+                  [class.mono]="field.key === 'mobile' || field.key === 'admissionNo'"
+                >
+                  {{ field.value }}
+                </span>
+              </div>
+            }
+          </div>
           @if (selected.sourceApplicationId) {
-            <p class="muted">
-              From admission
+            <p class="enroll-note">
+              Enrolled from admission
               <a [routerLink]="['/admin/admission']">{{ selected.sourceApplicationId }}</a>
             </p>
           }
-          <pre class="answers">{{ selected.answers | json }}</pre>
-
-          <h4>Parents / Guardians</h4>
-          @if (!guardians().length) {
-            <p class="muted">No guardians linked yet.</p>
+          @if (selected.deleteReason) {
+            <p class="enroll-note">Delete reason: {{ selected.deleteReason }}</p>
           }
+        </section>
+
+        @if (!selected.deleted) {
+          <section class="form-section panel">
+            <h3 class="form-section-title">Status</h3>
+            <div class="status-row">
+              <label class="compact">
+                Status
+                <select [(ngModel)]="statusDraft" name="statusDraft">
+                  <option value="ACTIVE">ACTIVE</option>
+                  <option value="INACTIVE">INACTIVE</option>
+                  <option value="LEFT_SCHOOL">LEFT_SCHOOL</option>
+                  <option value="SUSPENDED">SUSPENDED</option>
+                  <option value="TRANSFERRED">TRANSFERRED</option>
+                  <option value="TC_ISSUED">TC_ISSUED</option>
+                  <option value="ALUMNI">ALUMNI</option>
+                  <option value="PASSED_OUT">PASSED_OUT</option>
+                  <option value="EXPELLED">EXPELLED</option>
+                </select>
+              </label>
+              <button type="button" class="secondary" (click)="applyStatus()" [disabled]="busyAction">
+                Apply status
+              </button>
+              <a
+                class="secondary head-link-btn"
+                [routerLink]="['/admin/lifecycle']"
+                [queryParams]="{ studentId: selected.id }"
+              >
+                Lifecycle / TC
+              </a>
+            </div>
+          </section>
+        }
+      }
+
+      <section class="form-section panel">
+        <h3 class="form-section-title">Quick links</h3>
+        <div class="quick-links">
+          <a [routerLink]="['/admin/students', selected.id, '360']">Student 360</a>
+          <a [routerLink]="['/admin/fee']" [queryParams]="{ admissionNo: selected.admissionNo }">
+            Fees
+          </a>
+          <a [routerLink]="['/admin/lifecycle']" [queryParams]="{ studentId: selected.id }">
+            Transfer / TC
+          </a>
+          <a routerLink="/admin/student-directory">Student directory</a>
+        </div>
+      </section>
+
+      <section class="form-section panel">
+        <div class="section-head">
+          <h3 class="form-section-title">Parents / Guardians</h3>
+          <span class="muted">{{ guardians().length }} linked</span>
+        </div>
+
+        @if (!guardians().length) {
+          <p class="muted empty-note">No guardians linked yet. Add one below.</p>
+        } @else {
           <ul class="guardian-list">
             @for (g of guardians(); track $index) {
-              <li class="guardian-row">
-                <div>
-                  <strong>{{ g.fullName || 'Guardian' }}</strong>
-                  <span class="muted">
-                    {{ g.relation || '' }}
+              <li class="guardian-card">
+                <div class="guardian-main">
+                  <div class="guardian-name">
+                    {{ g.fullName || 'Guardian' }}
                     @if (g.isPrimary) {
-                      · primary
+                      <span class="badge badge-ok">Primary</span>
+                    }
+                  </div>
+                  <div class="guardian-meta">
+                    @if (g.relation) {
+                      <span>{{ g.relation }}</span>
                     }
                     @if (g.mobile) {
-                      · {{ g.mobile }}
+                      <span class="mono">{{ g.mobile }}</span>
                     }
-                  </span>
+                    @if (g.email) {
+                      <span>{{ g.email }}</span>
+                    }
+                  </div>
                 </div>
                 <button
                   type="button"
-                  class="danger"
+                  class="danger tiny"
                   (click)="removeGuardian($index)"
                   [disabled]="savingGuardians"
                 >
@@ -91,39 +346,259 @@
               </li>
             }
           </ul>
+        }
 
-          <h4>Add guardian</h4>
+        <div class="add-guardian">
+          <h4 class="sub-title">Add guardian</h4>
+          @if (selected.deleted) {
+            <p class="muted">Restore the student before changing guardians.</p>
+          } @else {
           <div class="grid two">
             @for (field of parentFields; track field.key) {
               <label>
-                {{ field.label }}
-                @if (field.mandatory) {
-                  <span class="req">*</span>
-                }
+                <span class="field-title">
+                  {{ field.label }}
+                  @if (field.mandatory) {
+                    <span class="req">*</span>
+                  }
+                </span>
                 @if (field.type === 'CHECKBOX') {
-                  <input type="checkbox" [(ngModel)]="guardianDraft[field.key]" [name]="field.key" />
+                  <input
+                    type="checkbox"
+                    [(ngModel)]="guardianDraft[field.key]"
+                    [name]="field.key"
+                    [disabled]="savingGuardians"
+                  />
                 } @else if (field.type === 'EMAIL') {
-                  <input type="email" [(ngModel)]="guardianDraft[field.key]" [name]="field.key" />
+                  <input
+                    type="email"
+                    [(ngModel)]="guardianDraft[field.key]"
+                    [name]="field.key"
+                    [disabled]="savingGuardians"
+                  />
                 } @else {
-                  <input [(ngModel)]="guardianDraft[field.key]" [name]="field.key" />
+                  <input
+                    [(ngModel)]="guardianDraft[field.key]"
+                    [name]="field.key"
+                    [disabled]="savingGuardians"
+                  />
                 }
               </label>
             }
           </div>
-          <div class="actions">
+          <div class="form-actions actions">
             <button type="button" (click)="addGuardian()" [disabled]="savingGuardians">
               {{ savingGuardians ? 'Saving…' : 'Add guardian' }}
             </button>
           </div>
+          }
+        </div>
+      </section>
 
-          <h4>History</h4>
-          <ul class="history">
+      <section class="form-section panel">
+        <h3 class="form-section-title">History</h3>
+        @if (!selected.history?.length) {
+          <p class="muted">No history yet.</p>
+        } @else {
+          <ol class="timeline">
             @for (h of selected.history; track h.at) {
-              <li>{{ h.at }} — {{ h.type }}: {{ h.message }}</li>
+              <li>
+                <div class="timeline-title">{{ h.type || 'EVENT' }}</div>
+                <div class="timeline-msg">{{ h.message }}</div>
+                @for (c of historyChanges(h); track c.field) {
+                  <div class="timeline-change">
+                    <strong>{{ c.field }}</strong>: {{ c.from || '—' }} → {{ c.to || '—' }}
+                  </div>
+                }
+                <div class="timeline-at">{{ formatWhen(h.at) }}</div>
+              </li>
             }
-          </ul>
+          </ol>
         }
       </section>
+
+      @if (showAudit) {
+        <section class="form-section panel">
+          <h3 class="form-section-title">Field audit</h3>
+          @if (auditLoading) {
+            <p class="muted">Loading audit…</p>
+          } @else if (!auditItems.length) {
+            <p class="muted">No field-level changes recorded yet.</p>
+          } @else {
+            <div class="table-wrap">
+              <table class="inbox-table">
+                <thead>
+                  <tr>
+                    <th>Field</th>
+                    <th>Old</th>
+                    <th>New</th>
+                    <th>By</th>
+                    <th>When</th>
+                    <th>Reason</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  @for (a of auditItems; track a.id) {
+                    <tr>
+                      <td>{{ a.fieldName || a.field }}</td>
+                      <td>{{ a.oldValue || '—' }}</td>
+                      <td>{{ a.newValue || '—' }}</td>
+                      <td>{{ a.changedBy || '—' }}</td>
+                      <td class="muted-cell">{{ formatWhen(a.changedAt) }}</td>
+                      <td>{{ a.reason || '—' }}</td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            </div>
+          }
+        </section>
+      }
     </div>
+  } @else {
+    <header class="page-head list-head">
+      <div>
+        <h2>Students</h2>
+        <p>Search and open student profiles, guardians, and related school records.</p>
+      </div>
+      <div class="head-actions">
+        <a class="secondary head-link-btn" routerLink="/admin/student-directory">Directory</a>
+        <a class="secondary head-link-btn" routerLink="/admin/admission">Admissions</a>
+      </div>
+    </header>
+
+    @if (error) {
+      <p class="error panel" role="alert">{{ error }}</p>
+    }
+
+    @if (loading) {
+      <p class="panel">Loading student configuration…</p>
+    } @else if (!featureEnabled) {
+      <p class="panel">Student master is not enabled for this plan (FEATURE_STUDENT_MASTER).</p>
+    } @else {
+      <section class="panel inbox-panel">
+        <sf-list-toolbar
+          searchPlaceholder="Search name, admission no, class, status…"
+          [(q)]="listQ"
+          [(sortBy)]="sortBy"
+          [(sortDir)]="sortDir"
+          [pageSize]="pageSize"
+          [sortOptions]="sortOptions"
+          [statusOptions]="statusOptions"
+          [(status)]="listStatus"
+          [searching]="searching"
+          [clearEnabled]="listClearEnabled"
+          (pageSizeChange)="pageSize = $event; pageIndex = 0; loadStudents()"
+          (statusChange)="pageIndex = 0; loadStudents()"
+          (search)="pageIndex = 0; loadStudents()"
+          (clear)="clearListFilters()"
+        />
+
+        <div class="table-wrap">
+          <table class="inbox-table">
+            <thead>
+              <tr>
+                @for (
+                  col of [
+                    { key: 'fullName', label: 'Student' },
+                    { key: 'admissionNo', label: 'Admission No' },
+                    { key: 'classApplied', label: 'Class' },
+                    { key: 'status', label: 'Status' },
+                    { key: 'guardianCount', label: 'Guardians' },
+                    { key: 'updatedAt', label: 'Updated' }
+                  ];
+                  track col.key
+                ) {
+                  <th
+                    class="list-th"
+                    [class.sortable-heading]="isSortableColumn(col.key)"
+                    [class.active-sort]="sortBy === col.key"
+                    [attr.aria-sort]="
+                      sortBy === col.key
+                        ? (sortDir === 'ASC' ? 'ascending' : 'descending')
+                        : null
+                    "
+                  >
+                    @if (isSortableColumn(col.key)) {
+                      <button
+                        type="button"
+                        class="heading-sort"
+                        (click)="sortByColumn(col.key)"
+                        [attr.aria-label]="'Sort by ' + col.label"
+                      >
+                        <span>{{ col.label }}</span>
+                        <span class="sort-indicator" aria-hidden="true">{{
+                          sortIndicator(col.key)
+                        }}</span>
+                      </button>
+                    } @else {
+                      <span class="heading-label">{{ col.label }}</span>
+                    }
+                  </th>
+                }
+                <th class="col-actions list-th"><span class="heading-label">Actions</span></th>
+              </tr>
+            </thead>
+            <tbody>
+              @if (!students.length) {
+                <tr>
+                  <td colspan="7" class="muted empty-row">
+                    No students yet. Approve an admission application to enroll.
+                    <a routerLink="/admin/admission">Open Admissions</a>
+                  </td>
+                </tr>
+              }
+              @for (row of students; track row.id) {
+                <tr
+                  class="inbox-row"
+                  [class.selected]="row.id === selectedId"
+                  (click)="select(row)"
+                  tabindex="0"
+                  (keyup.enter)="select(row)"
+                >
+                  <td>
+                    <div class="cell-primary">{{ studentName(row) }}</div>
+                    <div class="cell-sub">{{ answer(row, 'email') }}</div>
+                  </td>
+                  <td class="mono">{{ row.admissionNo || '—' }}</td>
+                  <td>{{ displayClass(row) }}</td>
+                  <td>
+                    <span [class]="statusClass(row.status)">{{ row.status || '—' }}</span>
+                  </td>
+                  <td>{{ row.guardianCount ?? 0 }}</td>
+                  <td class="muted-cell">{{ formatWhen(row.updatedAt || row.createdAt) }}</td>
+                  <td class="col-actions" (click)="$event.stopPropagation()">
+                    <a
+                      class="tiny"
+                      [routerLink]="[]"
+                      [queryParams]="{ id: row.id }"
+                      queryParamsHandling="merge"
+                    >
+                      Open
+                    </a>
+                    <a
+                      class="tiny-link"
+                      [routerLink]="['/admin/students', row.id, '360']"
+                      title="Student 360"
+                    >
+                      360
+                    </a>
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+
+        <sf-list-pager
+          [pageIndex]="pageIndex"
+          [pageSize]="pageSize"
+          [totalElements]="page.totalElements"
+          [hasNext]="page.hasNext"
+          itemLabel="students"
+          (pageChange)="onPageChange($event)"
+        />
+      </section>
+    }
   }
 </div>

@@ -1,0 +1,264 @@
+<section class="page student-360">
+  <div class="page-head">
+    <p class="eyebrow">
+      <a routerLink="/admin/student-directory">Directory</a>
+      ·
+      <a routerLink="/admin/students" [queryParams]="{ id: studentId }">Master</a>
+    </p>
+    <h2>{{ data?.summary?.displayName || 'Student 360' }}</h2>
+    <p>
+      Unified profile — demographics, guardians, campus ops, fees, library, attendance, exams, and lifecycle.
+    </p>
+  </div>
+
+  @if (error) {
+    <p class="error panel" role="alert">{{ error }}</p>
+  }
+
+  @if (loading) {
+    <p class="panel">Loading…</p>
+  } @else if (data) {
+    <div class="panel meta-row">
+      <span class="chip">{{ data.summary?.admissionNo }}</span>
+      <span class="chip">{{ data.summary?.classSection }}</span>
+      <span class="chip">{{ data.summary?.status }}</span>
+      @if (houseName()) {
+        <span class="house-chip" [ngClass]="houseClass()">
+          <span class="house-dot" aria-hidden="true"></span>
+          {{ houseName() }} House
+        </span>
+      } @else {
+        <a
+          class="house-chip house-unassigned"
+          routerLink="/admin/students"
+          [queryParams]="{ id: studentId }"
+        >
+          House not assigned
+        </a>
+      }
+      @if (data.summary?.mobile) {
+        <span class="muted">{{ data.summary.mobile }}</span>
+      }
+    </div>
+
+    <div class="ops-cards">
+      <a
+        class="ops-card panel"
+        routerLink="/admin/library"
+        [queryParams]="admissionQuery()"
+        aria-label="Open library for this student"
+      >
+        <h4>Library</h4>
+        <p class="ops-value">{{ data.ops?.openLoanCount ?? 0 }}</p>
+        <p class="muted">open loan{{ (data.ops?.openLoanCount ?? 0) === 1 ? '' : 's' }}</p>
+        <span class="ops-action">Open library →</span>
+      </a>
+      <a
+        class="ops-card panel"
+        routerLink="/admin/hostel"
+        [queryParams]="admissionQuery()"
+        aria-label="Open hostel for this student"
+      >
+        <h4>Hostel</h4>
+        @if (data.ops?.bed?.label || data.ops?.bed?.roomNo) {
+          <p class="ops-value small">{{ data.ops.bed.label || (data.ops.bed.blockKey + ' / ' + data.ops.bed.roomNo + ' / ' + data.ops.bed.bedNo) }}</p>
+          <p class="muted">active bed</p>
+        } @else {
+          <p class="ops-value muted">—</p>
+          <p class="muted">no bed assigned</p>
+        }
+        <span class="ops-action">Open hostel →</span>
+      </a>
+      <a
+        class="ops-card panel"
+        routerLink="/admin/transport"
+        [queryParams]="admissionQuery()"
+        aria-label="Open transport for this student"
+      >
+        <h4>Transport</h4>
+        @if (data.ops?.route?.routeName) {
+          <p class="ops-value small">{{ data.ops.route.routeName }}</p>
+          <p class="muted">{{ data.ops.route.stopName || data.ops.route.vehicleNo || 'active route' }}</p>
+        } @else {
+          <p class="ops-value muted">—</p>
+          <p class="muted">no route assigned</p>
+        }
+        <span class="ops-action">Open transport →</span>
+      </a>
+    </div>
+
+    <nav class="tabs panel">
+      @for (t of data.tabs || []; track t) {
+        <button type="button" [class.active]="tab === t" (click)="setTab(t)">{{ t | titlecase }}</button>
+      }
+    </nav>
+
+    @if (tab === 'profile') {
+      <div class="panel">
+        <h3>Profile</h3>
+        <dl class="kv">
+          @for (entry of profileEntries(); track entry.label) {
+            <div>
+              <dt>{{ entry.label }}</dt>
+              <dd>{{ entry.value }}</dd>
+            </div>
+          } @empty {
+            <div>
+              <dt>Profile</dt>
+              <dd class="muted">No profile fields available.</dd>
+            </div>
+          }
+        </dl>
+      </div>
+    }
+
+    @if (tab === 'guardians') {
+      <ul class="record-list">
+        @for (g of data.guardians || []; track $index) {
+          <li class="panel">
+            <strong>{{ g.fullName || 'Guardian' }}</strong>
+            <p class="muted">{{ g.relation }} · {{ g.mobile }} · {{ g.email }}</p>
+          </li>
+        } @empty {
+          <li class="panel muted">No guardians on file.</li>
+        }
+      </ul>
+    }
+
+    @if (tab === 'ops') {
+      <div class="panel">
+        <h3>Campus operations</h3>
+        <h4>Open library loans</h4>
+        <ul class="subject-lines">
+          @for (loan of data.ops?.openLoans || []; track $index) {
+            <li>
+              <span>{{ loan.bookTitle || loan.title || 'Book' }}</span>
+              <span class="muted">{{ loan.dueDate || loan.issuedAt || loan.status }}</span>
+            </li>
+          } @empty {
+            <li class="muted">No open loans.</li>
+          }
+        </ul>
+        <h4>Hostel bed</h4>
+        @if (data.ops?.bed?.id) {
+          <p>
+            {{ data.ops.bed.label || (data.ops.bed.blockKey + ' / Room ' + data.ops.bed.roomNo + ' / Bed ' + data.ops.bed.bedNo) }}
+            <span class="muted">· since {{ data.ops.bed.allocatedAt }}</span>
+          </p>
+        } @else {
+          <p class="muted">No active bed assignment.</p>
+        }
+        <h4>Transport route</h4>
+        @if (data.ops?.route?.id) {
+          <p>
+            {{ data.ops.route.routeName || data.ops.route.routeKey }}
+            @if (data.ops.route.stopName) {
+              <span class="muted">· stop {{ data.ops.route.stopName }}</span>
+            }
+            @if (data.ops.route.pickupTime) {
+              <span class="muted">· pickup {{ data.ops.route.pickupTime }}</span>
+            }
+          </p>
+        } @else {
+          <p class="muted">No active route assignment.</p>
+        }
+      </div>
+    }
+
+    @if (tab === 'fees') {
+      <div class="panel">
+        <h3>Fee clearance</h3>
+        <p>
+          Pending:
+          <strong>{{ data.fee?.pendingAmount ?? '—' }}</strong>
+          · Open collections: {{ data.fee?.openCollections ?? '—' }}
+          · Has dues: {{ data.fee?.hasDues ?? '—' }}
+        </p>
+        <ul class="subject-lines">
+          @for (item of data.fee?.items || []; track $index) {
+            <li>
+              <span>{{ item.feeHead || item.status || 'Item' }}</span>
+              <span class="muted">{{ item.amount }}</span>
+            </li>
+          }
+        </ul>
+      </div>
+    }
+
+    @if (tab === 'library') {
+      <div class="panel">
+        <h3>Library clearance</h3>
+        <p>
+          Outstanding books: <strong>{{ data.library?.outstandingBooks ?? '—' }}</strong>
+          · Has outstanding: {{ data.library?.hasOutstanding ?? '—' }}
+        </p>
+        <ul class="subject-lines">
+          @for (item of data.library?.items || []; track $index) {
+            <li>
+              <span>{{ item.bookTitle || item.title || 'Book' }}</span>
+              <span class="muted">{{ item.dueDate || item.status }}</span>
+            </li>
+          }
+        </ul>
+      </div>
+    }
+
+    @if (tab === 'attendance') {
+      <div class="panel">
+        <h3>Recent attendance</h3>
+        @if (!data.attendance?.available) {
+          <p class="muted">Attendance snapshot unavailable.</p>
+        } @else if (!(data.attendance?.items || []).length) {
+          <p class="muted">No matching attendance marks in current scope.</p>
+        } @else {
+          <ul class="subject-lines">
+            @for (m of data.attendance.items; track $index) {
+              <li>
+                <span>{{ m.attendanceDate || m.date }}</span>
+                <span class="muted">{{ m.markStatus || m.status }}</span>
+              </li>
+            }
+          </ul>
+        }
+      </div>
+    }
+
+    @if (tab === 'exams') {
+      <div class="panel">
+        <h3>Published marks</h3>
+        @if (!data.exams?.available) {
+          <p class="muted">Exam snapshot unavailable.</p>
+        } @else if (!(data.exams?.items || []).length) {
+          <p class="muted">No published marks for this student in current scope.</p>
+        } @else {
+          <ul class="subject-lines">
+            @for (m of data.exams.items; track $index) {
+              <li>
+                <span>{{ m.examName || m.subject || 'Exam' }}</span>
+                <span class="muted">
+                  {{ m.marksObtained }}{{ m.maxMarks != null ? '/' + m.maxMarks : '' }}
+                  @if (m.grade) {
+                    · {{ m.grade }}
+                  }
+                </span>
+              </li>
+            }
+          </ul>
+        }
+      </div>
+    }
+
+    @if (tab === 'lifecycle') {
+      <ul class="record-list">
+        @for (e of data.lifecycleEvents || []; track e.id) {
+          <li class="panel">
+            <strong>{{ e.eventType }}</strong>
+            <p class="muted">{{ e.status }} · {{ e.createdAt }} · {{ e.referenceNo }}</p>
+          </li>
+        } @empty {
+          <li class="panel muted">No lifecycle events yet.</li>
+        }
+      </ul>
+    }
+  }
+</section>

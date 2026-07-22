@@ -57,6 +57,21 @@ public class StudentRecordEntity {
   @Column(name = "updated_at", nullable = false)
   private Instant updatedAt = Instant.now();
 
+  @Column(name = "deleted_at")
+  private Instant deletedAt;
+
+  @Column(name = "deleted_by", length = 128)
+  private String deletedBy;
+
+  @Column(name = "delete_reason", columnDefinition = "text")
+  private String deleteReason;
+
+  @Column(name = "restored_at")
+  private Instant restoredAt;
+
+  @Column(name = "restored_by", length = 128)
+  private String restoredBy;
+
   public UUID getId() {
     return id;
   }
@@ -159,5 +174,49 @@ public class StudentRecordEntity {
 
   public void setUpdatedAt(Instant updatedAt) {
     this.updatedAt = updatedAt;
+  }
+
+  public Instant getDeletedAt() {
+    return deletedAt;
+  }
+
+  public void setDeletedAt(Instant deletedAt) {
+    this.deletedAt = deletedAt;
+  }
+
+  public String getDeletedBy() {
+    return deletedBy;
+  }
+
+  public void setDeletedBy(String deletedBy) {
+    this.deletedBy = deletedBy;
+  }
+
+  public String getDeleteReason() {
+    return deleteReason;
+  }
+
+  public void setDeleteReason(String deleteReason) {
+    this.deleteReason = deleteReason;
+  }
+
+  public Instant getRestoredAt() {
+    return restoredAt;
+  }
+
+  public void setRestoredAt(Instant restoredAt) {
+    this.restoredAt = restoredAt;
+  }
+
+  public String getRestoredBy() {
+    return restoredBy;
+  }
+
+  public void setRestoredBy(String restoredBy) {
+    this.restoredBy = restoredBy;
+  }
+
+  public boolean isDeleted() {
+    return deletedAt != null;
   }
 }
