@@ -12,7 +12,14 @@
 .DS_Store
 apps/school-ui/.angular/
 pgdata/
+backups/
 logs/
 build-out.txt
 **/startup.out
 **/startup.err
+
+# Accidental / local dumps (do not commit)
+*.exe
+docs/invoice-WSI-*.pdf
+docs/gstr-*
+docs/hsn-2026-*
