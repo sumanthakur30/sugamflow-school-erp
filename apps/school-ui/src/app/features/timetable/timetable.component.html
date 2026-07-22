@@ -1,0 +1,475 @@
+<section class="page timetable-page">
+  <header class="page-head tt-page-head">
+    <div>
+      <p class="eyebrow">Academics</p>
+      <h2>Timetable Planner</h2>
+      <p>Build a clear weekly schedule for every class and keep teachers, subjects, and rooms aligned.</p>
+    </div>
+    @if (!loading) {
+      <div class="head-summary">
+        <span><strong>{{ periods.length }}</strong> periods</span>
+        <span><strong>{{ sections.length }}</strong> sections</span>
+      </div>
+    }
+  </header>
+
+  @if (error) {
+    <p class="error panel" role="alert">{{ error }}</p>
+  }
+  @if (status) {
+    <p class="status panel" role="status">{{ status }}</p>
+  }
+
+  @if (loading) {
+    <div class="panel loading-state">Loading timetable planner…</div>
+  } @else {
+    <nav class="workspace-tabs" aria-label="Timetable workspace">
+      <button
+        type="button"
+        [class.active]="activeView === 'schedule'"
+        (click)="activeView = 'schedule'"
+      >
+        Weekly schedule
+      </button>
+      <button
+        type="button"
+        [class.active]="activeView === 'periods'"
+        (click)="activeView = 'periods'"
+      >
+        Period setup
+        <span>{{ periods.length }}</span>
+      </button>
+    </nav>
+
+    @if (activeView === 'periods') {
+      <section class="panel period-workspace">
+        <div class="section-heading">
+          <div>
+            <p class="section-kicker">School day structure</p>
+            <h3>Periods and breaks</h3>
+            <p>Set the order and timing once; every class timetable uses this structure.</p>
+          </div>
+        </div>
+
+        <div class="period-list">
+          @for (p of periods; track p.id) {
+            <article class="period-card" [class.period-card-break]="p.breakPeriod">
+              <div class="period-number">{{ p.periodNo }}</div>
+              <div class="period-info">
+                <strong>{{ p.label }}</strong>
+                <span>
+                  @if (p.startTime || p.endTime) {
+                    {{ p.startTime || '—' }} – {{ p.endTime || '—' }}
+                  } @else {
+                    Time not set
+                  }
+                </span>
+              </div>
+              @if (p.breakPeriod) {
+                <span class="break-badge">Break</span>
+              }
+              @if (canManage) {
+                <button
+                  type="button"
+                  class="icon-danger"
+                  [disabled]="busy"
+                  (click)="deletePeriod(p.id)"
+                  [attr.aria-label]="'Delete ' + p.label"
+                  title="Delete period"
+                >
+                  Delete
+                </button>
+              }
+            </article>
+          } @empty {
+            <div class="empty-state">
+              <strong>No periods configured</strong>
+              <p>Add teaching periods and breaks to begin building class schedules.</p>
+            </div>
+          }
+        </div>
+
+        @if (canManage) {
+          <div class="period-form">
+            <div class="period-form-head">
+              <div>
+                <h4>Add a period</h4>
+                <p>Create a teaching slot or a common break.</p>
+              </div>
+            </div>
+            <div class="grid period-form-grid">
+              <label>
+                <span class="field-title">Number <span class="req">*</span></span>
+                <input type="number" min="1" [(ngModel)]="periodDraft.periodNo" name="pNo" />
+              </label>
+              <label>
+                <span class="field-title">Label <span class="req">*</span></span>
+                <input [(ngModel)]="periodDraft.label" name="pLabel" placeholder="e.g. Period 3" />
+              </label>
+              <label>
+                Start time
+                <input type="time" [(ngModel)]="periodDraft.startTime" name="pStart" />
+              </label>
+              <label>
+                End time
+                <input type="time" [(ngModel)]="periodDraft.endTime" name="pEnd" />
+              </label>
+              <label class="break-toggle">
+                <input type="checkbox" [(ngModel)]="periodDraft.breakPeriod" name="pBreak" />
+                <span>
+                  <strong>This is a break</strong>
+                  <small>Lunch, recess, or assembly</small>
+                </span>
+              </label>
+              <button type="button" (click)="createPeriod()" [disabled]="busy">
+                {{ busy ? 'Creating…' : 'Add period' }}
+              </button>
+            </div>
+          </div>
+
+          <div class="room-setup">
+            <div class="section-heading">
+              <div>
+                <p class="section-kicker">Capacity planning</p>
+                <h3>Rooms</h3>
+                <p>The generator only assigns rooms that can hold the selected class.</p>
+              </div>
+            </div>
+            <div class="room-list">
+              @for (room of rooms; track room.id) {
+                <article class="room-card">
+                  <div>
+                    <strong>{{ room.name }}</strong>
+                    <span>Capacity {{ room.capacity }}</span>
+                  </div>
+                  <button
+                    type="button"
+                    class="icon-danger"
+                    [disabled]="busy"
+                    (click)="deleteRoom(room.id)"
+                  >
+                    Delete
+                  </button>
+                </article>
+              } @empty {
+                <p class="muted">No rooms configured. The section's default room will be used.</p>
+              }
+            </div>
+            <div class="room-form">
+              <label>
+                Room name
+                <input [(ngModel)]="roomDraft.name" name="roomName" placeholder="e.g. Science Lab 1" />
+              </label>
+              <label>
+                Capacity
+                <input
+                  type="number"
+                  min="1"
+                  [(ngModel)]="roomDraft.capacity"
+                  name="roomCapacity"
+                />
+              </label>
+              <button type="button" (click)="createRoom()" [disabled]="busy">Add room</button>
+            </div>
+          </div>
+        }
+      </section>
+    } @else {
+      <section class="panel schedule-workspace">
+        <div class="schedule-toolbar">
+          <label class="section-pick">
+            <span class="field-title">Class / section <span class="req">*</span></span>
+            <select
+              [(ngModel)]="selectedSectionId"
+              name="ttSection"
+              (ngModelChange)="onSectionChange()"
+            >
+              <option value="">Choose a class to build its timetable…</option>
+              @for (s of sections; track s.id) {
+                <option [value]="s.id">{{ s.studentLabel || s.name }}</option>
+              }
+            </select>
+          </label>
+          <div class="toolbar-help">
+            <a routerLink="/admin/academic">Manage subjects &amp; teachers</a>
+          </div>
+        </div>
+
+        @if (!selectedSectionId) {
+          <div class="empty-state schedule-empty">
+            <div class="empty-icon">▦</div>
+            <strong>Select a class to begin</strong>
+            <p>Choose a class above to view and edit its weekly schedule.</p>
+          </div>
+        } @else if (!periods.length) {
+          <div class="empty-state schedule-empty">
+            <strong>Set up periods first</strong>
+            <p>A timetable needs teaching periods before subjects can be assigned.</p>
+            <button type="button" class="secondary" (click)="activeView = 'periods'">
+              Open period setup
+            </button>
+          </div>
+        } @else {
+          <div class="schedule-overview">
+            <div>
+              <span>Editing schedule for</span>
+              <strong>{{ selectedSectionName() }}</strong>
+            </div>
+            <div class="completion">
+              <div class="completion-copy">
+                <span>{{ assignedSlotCount() }} of {{ totalTeachingSlots() }} slots assigned</span>
+                <strong>{{ completionPercent() }}%</strong>
+              </div>
+              <div class="progress-track">
+                <span [style.width.%]="completionPercent()"></span>
+              </div>
+            </div>
+            <div class="overview-stats">
+              <span><strong>{{ sectionSubjects().length }}</strong> subjects</span>
+              <span><strong>{{ teachers.length }}</strong> teachers</span>
+              <span><strong>{{ sectionAssignments().length }}</strong> mappings</span>
+            </div>
+          </div>
+
+          @if (!sectionAssignments().length) {
+            <div class="mapping-warning">
+              <div>
+                <strong>Teacher suggestions are not configured</strong>
+                <p>Subjects remain available, but teachers will not be suggested automatically.</p>
+              </div>
+              <a routerLink="/admin/academic">Add mappings</a>
+            </div>
+          }
+
+          @if (canManage && sectionAssignments().length) {
+            <section class="ai-planner">
+              <div class="ai-planner-head">
+                <div>
+                  <p class="section-kicker">AI-assisted planning</p>
+                  <h3>Generate a conflict-free timetable</h3>
+                  <p>
+                    Uses weekly subject load, teacher availability, daily limits, room capacity,
+                    and schedules already published for other classes.
+                  </p>
+                </div>
+                <button type="button" (click)="generateSchedule()" [disabled]="aiGenerating || busy">
+                  {{ aiGenerating ? 'Generating…' : 'Generate timetable' }}
+                </button>
+              </div>
+
+              <details class="constraint-details">
+                <summary>
+                  <span>Scheduling rules</span>
+                  <small>{{ sectionAssignments().length }} subject–teacher mappings</small>
+                </summary>
+                <div class="constraint-list">
+                  @for (assignment of sectionAssignments(); track assignment.id) {
+                    <article class="constraint-card">
+                      <div class="constraint-title">
+                        <div>
+                          <strong>{{ assignmentSubjectName(assignment) }}</strong>
+                          <span>{{ assignment.teacherUsername }}</span>
+                        </div>
+                        <button
+                          type="button"
+                          class="secondary"
+                          [disabled]="savingAssignmentId === assignment.id"
+                          (click)="saveAssignmentConstraints(assignment)"
+                        >
+                          {{
+                            savingAssignmentId === assignment.id ? 'Saving…' : 'Save rules'
+                          }}
+                        </button>
+                      </div>
+                      <div class="constraint-fields">
+                        <label>
+                          Periods / week
+                          <input
+                            type="number"
+                            min="1"
+                            [max]="totalTeachingSlots()"
+                            [(ngModel)]="assignment.weeklyPeriods"
+                            [name]="'weekly-' + assignment.id"
+                          />
+                        </label>
+                        <label>
+                          Maximum / day
+                          <input
+                            type="number"
+                            min="1"
+                            [(ngModel)]="assignment.maxDailyPeriods"
+                            [name]="'daily-' + assignment.id"
+                          />
+                        </label>
+                        <label>
+                          Preferred room
+                          <select
+                            [(ngModel)]="assignment.preferredRoom"
+                            [name]="'preferred-room-' + assignment.id"
+                          >
+                            <option value="">Use class room / best fit</option>
+                            @for (room of rooms; track room.id) {
+                              <option [value]="room.name">
+                                {{ room.name }} · {{ room.capacity }} seats
+                              </option>
+                            }
+                          </select>
+                        </label>
+                      </div>
+                      <div class="availability-grid">
+                        <span class="availability-label">Mark teacher unavailable</span>
+                        @for (day of days; track day.value) {
+                          <div class="availability-row">
+                            <strong>{{ day.label }}</strong>
+                            @for (period of teachingPeriods(); track period.id) {
+                              <button
+                                type="button"
+                                [class.unavailable]="
+                                  isTeacherUnavailable(assignment, day.value, period.id)
+                                "
+                                (click)="
+                                  toggleTeacherAvailability(assignment, day.value, period.id)
+                                "
+                                [attr.aria-pressed]="
+                                  isTeacherUnavailable(assignment, day.value, period.id)
+                                "
+                                [title]="day.fullLabel + ' · ' + period.label"
+                              >
+                                {{ period.periodNo }}
+                              </button>
+                            }
+                          </div>
+                        }
+                      </div>
+                    </article>
+                  }
+                </div>
+              </details>
+
+              @if (aiResult) {
+                <div class="generation-summary" [class.has-errors]="hasErrorConflicts()">
+                  <div>
+                    <strong>{{ aiResult.placedPeriods }} / {{ aiResult.requestedPeriods }}</strong>
+                    <span>requested periods placed</span>
+                  </div>
+                  <p>
+                    The generated draft is loaded into the grid below. Review and manually adjust it,
+                    then save.
+                  </p>
+                </div>
+              }
+
+              @if (conflicts.length) {
+                <div class="conflict-panel" role="alert">
+                  <strong>Conflict check</strong>
+                  <ul>
+                    @for (conflict of conflicts; track $index) {
+                      <li [class.warning]="conflict.severity === 'WARNING'">
+                        <span>{{ conflict.severity === 'WARNING' ? 'Warning' : 'Conflict' }}</span>
+                        {{ conflict.message }}
+                      </li>
+                    }
+                  </ul>
+                </div>
+              }
+            </section>
+          }
+
+          <div class="tt-scroll">
+            <table class="tt-grid">
+              <thead>
+                <tr>
+                  <th class="period-heading">Period</th>
+                  @for (d of days; track d.value) {
+                    <th>
+                      <span class="day-short">{{ d.label }}</span>
+                      <span class="day-full">{{ d.fullLabel }}</span>
+                    </th>
+                  }
+                </tr>
+              </thead>
+              <tbody>
+                @for (p of periods; track p.id) {
+                  <tr [class.break-row]="p.breakPeriod">
+                    <td class="period-cell">
+                      <span class="period-index">{{ p.periodNo }}</span>
+                      <div>
+                        <strong>{{ p.label }}</strong>
+                        @if (p.startTime || p.endTime) {
+                          <span>{{ p.startTime || '—' }} – {{ p.endTime || '—' }}</span>
+                        }
+                      </div>
+                    </td>
+                    @if (p.breakPeriod) {
+                      <td [attr.colspan]="days.length" class="break-cell">
+                        <span>☕</span>
+                        <strong>{{ p.label }}</strong>
+                        @if (p.startTime || p.endTime) {
+                          <small>{{ p.startTime || '—' }} – {{ p.endTime || '—' }}</small>
+                        }
+                      </td>
+                    } @else {
+                      @for (d of days; track d.value) {
+                        <td [class.slot-filled]="isCellFilled(d.value, p.id)">
+                          <div class="cell-edit">
+                            <select
+                              [(ngModel)]="cell(d.value, p.id).subjectId"
+                              [name]="'sub-' + d.value + '-' + p.id"
+                              [disabled]="!canManage || busy"
+                              (ngModelChange)="onSubjectChange(d.value, p.id)"
+                              [attr.aria-label]="d.fullLabel + ' ' + p.label + ' subject'"
+                            >
+                              <option value="">Subject…</option>
+                              @for (s of sectionSubjects(); track s.id) {
+                                <option [value]="s.id">
+                                  {{ s.name }}{{ s.code ? ' (' + s.code + ')' : '' }}
+                                </option>
+                              }
+                            </select>
+                            <select
+                              [(ngModel)]="cell(d.value, p.id).teacherUsername"
+                              [name]="'tch-' + d.value + '-' + p.id"
+                              [disabled]="!canManage || busy"
+                              [attr.aria-label]="d.fullLabel + ' ' + p.label + ' teacher'"
+                            >
+                              <option value="">Teacher…</option>
+                              @for (
+                                teacher of teacherOptions(d.value, p.id);
+                                track teacher.username
+                              ) {
+                                <option [value]="teacher.username">{{ teacher.label }}</option>
+                              }
+                            </select>
+                            <input
+                              [(ngModel)]="cell(d.value, p.id).room"
+                              [name]="'rm-' + d.value + '-' + p.id"
+                              placeholder="Room (optional)"
+                              [disabled]="!canManage || busy"
+                              [attr.aria-label]="d.fullLabel + ' ' + p.label + ' room'"
+                            />
+                          </div>
+                        </td>
+                      }
+                    }
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+
+          @if (canManage) {
+            <div class="save-bar">
+              <div>
+                <strong>Ready to publish?</strong>
+                <span>Changes update the class and teacher schedules.</span>
+              </div>
+              <button type="button" (click)="saveGrid()" [disabled]="busy">
+                {{ busy ? 'Saving…' : 'Save timetable' }}
+              </button>
+            </div>
+          }
+        }
+      </section>
+    }
+  }
+</section>

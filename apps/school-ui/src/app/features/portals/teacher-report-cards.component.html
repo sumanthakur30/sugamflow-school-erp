@@ -1,0 +1,175 @@
+<section class="page">
+  <div class="page-head">
+    <h2>Report cards</h2>
+    <p>Assemble a term report card per student from gradebook marks and download printable PDFs.</p>
+  </div>
+
+  @if (error) {
+    <p class="error panel" role="alert">{{ error }}</p>
+  }
+  @if (status) {
+    <p class="status panel">{{ status }}</p>
+  }
+
+  @if (loading) {
+    <p class="panel">Loading…</p>
+  } @else {
+    <div class="panel filters grid three">
+      <label>
+        Section
+        <select [(ngModel)]="sectionId" (ngModelChange)="load()" name="sectionId">
+          @for (s of sections; track s.id) {
+            <option [value]="s.id">{{ s.studentLabel || s.name }}</option>
+          }
+        </select>
+      </label>
+      <label>
+        Term
+        <input [(ngModel)]="termKey" (change)="load()" name="termKey" placeholder="TERM1" />
+      </label>
+      <label class="checkbox">
+        <input type="checkbox" [(ngModel)]="publishedOnly" (ngModelChange)="load()" name="publishedOnly" />
+        Published only
+      </label>
+    </div>
+
+    @if (report) {
+      <div class="panel meta-row">
+        <span>{{ report.sectionLabel }}</span>
+        <span class="chip">{{ report.termKey }}</span>
+        <span class="muted">{{ (report.students || []).length }} students · {{ (report.subjects || []).length }} subjects</span>
+      </div>
+
+      @if (!(report.subjects || []).length) {
+        <p class="panel muted">
+          No {{ publishedOnly ? 'published ' : '' }}exams for this section and term yet.
+        </p>
+      } @else if (!(report.students || []).length) {
+        <p class="panel muted">No students on this section roster.</p>
+      } @else {
+        <div class="panel table-wrap desktop-table">
+          <table class="report-grid">
+            <thead>
+              <tr>
+                <th class="sticky">Student</th>
+                @for (col of report.subjects; track col.subjectId) {
+                  <th>{{ col.name }}</th>
+                }
+                <th>Total</th>
+                <th>%</th>
+                <th>Grade</th>
+                <th>Result</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (st of report.students; track st.studentId || st.admissionNo) {
+                <tr>
+                  <td class="sticky">
+                    <strong>{{ st.studentName || st.admissionNo }}</strong>
+                    <span class="muted">{{ st.admissionNo }}</span>
+                  </td>
+                  @for (col of report.subjects; track col.subjectId) {
+                    <td class="num">{{ subjectCell(st, col.subjectId) }}</td>
+                  }
+                  <td class="num">
+                    {{ st.totalObtained != null ? st.totalObtained + '/' + st.totalMax : '–' }}
+                  </td>
+                  <td class="num">{{ st.percentage != null ? st.percentage + '%' : '–' }}</td>
+                  <td class="num">{{ st.overallGrade || '–' }}</td>
+                  <td>
+                    <span class="badge" [class.fail]="st.result === 'FAIL'">{{ st.result || '–' }}</span>
+                  </td>
+                  <td>
+                    <div class="row-actions">
+                      <button
+                        type="button"
+                        class="tiny insight-button"
+                        (click)="toggleInsights(st)"
+                        [disabled]="st.totalObtained == null || isInsightLoading(st)"
+                      >
+                        {{
+                          isInsightLoading(st)
+                            ? 'Analyzing…'
+                            : expandedInsightKey === insightKey(st)
+                              ? 'Hide insights'
+                              : 'Insights'
+                        }}
+                      </button>
+                      <button type="button" class="tiny secondary" (click)="downloadPdf(st)" [disabled]="busy || st.totalObtained == null">
+                        PDF
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+                @if (expandedInsightKey === insightKey(st)) {
+                  <tr class="insight-row">
+                    <td [attr.colspan]="(report.subjects || []).length + 6">
+                      @if (isInsightLoading(st)) {
+                        <p class="insight-loading">Analyzing published marks and term history…</p>
+                      } @else if (insightFor(st)) {
+                        <sf-report-card-insights [insight]="insightFor(st)" />
+                      }
+                    </td>
+                  </tr>
+                }
+              }
+            </tbody>
+          </table>
+        </div>
+
+        <ul class="mobile-cards">
+          @for (st of report.students; track st.studentId || st.admissionNo) {
+            <li class="panel">
+              <div class="mobile-card-head">
+                <div>
+                  <strong>{{ st.studentName || st.admissionNo }}</strong>
+                  <p class="muted">{{ st.admissionNo }}</p>
+                </div>
+                <span class="badge" [class.fail]="st.result === 'FAIL'">{{ st.result || '–' }}</span>
+              </div>
+              <ul class="mobile-subjects">
+                @for (col of report.subjects; track col.subjectId) {
+                  <li>
+                    <span>{{ col.name }}</span>
+                    <span class="muted">{{ subjectCell(st, col.subjectId) }}</span>
+                  </li>
+                }
+              </ul>
+              <div class="mobile-footer">
+                <div class="chip-list">
+                  <span class="chip">
+                    {{ st.totalObtained != null ? st.totalObtained + '/' + st.totalMax : '–' }}
+                  </span>
+                  <span class="chip">{{ st.percentage != null ? st.percentage + '%' : '–' }}</span>
+                  <span class="chip">Grade {{ st.overallGrade || '–' }}</span>
+                </div>
+                <div class="row-actions">
+                  <button
+                    type="button"
+                    (click)="toggleInsights(st)"
+                    [disabled]="st.totalObtained == null || isInsightLoading(st)"
+                  >
+                    {{
+                      isInsightLoading(st)
+                        ? 'Analyzing…'
+                        : expandedInsightKey === insightKey(st)
+                          ? 'Hide insights'
+                          : 'View insights'
+                    }}
+                  </button>
+                  <button type="button" class="secondary" (click)="downloadPdf(st)" [disabled]="busy || st.totalObtained == null">
+                    Download PDF
+                  </button>
+                </div>
+              </div>
+              @if (expandedInsightKey === insightKey(st) && insightFor(st)) {
+                <sf-report-card-insights [insight]="insightFor(st)" />
+              }
+            </li>
+          }
+        </ul>
+      }
+    }
+  }
+</section>

@@ -1,0 +1,36 @@
+.list-pager-bar {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.75rem;
+  margin-top: 0.85rem;
+}
+
+.list-meta {
+  margin: 0;
+  font-size: 0.9rem;
+  opacity: 0.8;
+}
+
+.list-pager {
+  display: flex;
+  gap: 0.45rem;
+  flex-wrap: wrap;
+  margin: 0;
+}
+
+@media (max-width: 640px) {
+  .list-pager-bar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .list-pager {
+    justify-content: stretch;
+
+    button {
+      flex: 1 1 auto;
+    }
+  }
+}

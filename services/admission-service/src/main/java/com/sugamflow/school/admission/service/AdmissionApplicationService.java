@@ -9,6 +9,7 @@ import com.sugamflow.school.admission.persistence.repo.AdmissionApplicationRepos
 import com.sugamflow.school.admission.web.AdmissionException;
 import com.sugamflow.school.common.api.PageQuery;
 import com.sugamflow.school.common.api.PageResult;
+import com.sugamflow.school.common.security.PersonaRoles;
 import com.sugamflow.school.common.tenant.TenantContext;
 import com.sugamflow.school.common.tenant.TenantScope;
 import java.time.Instant;
@@ -17,7 +18,9 @@ import java.util.Base64;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -83,24 +86,37 @@ public class AdmissionApplicationService {
   }
 
   @Transactional(readOnly = true)
-  public PageResult<Map<String, Object>> list(Integer page, Integer size) {
+  public PageResult<Map<String, Object>> list(
+      Integer page, Integer size, String q, String status, String sortBy, String sortDir) {
     TenantScope scope = TenantContext.require();
     requireFeature(scope);
-    PageQuery q = PageQuery.of(page, size);
-    Pageable pageable = PageRequest.of(q.page(), q.size());
-    Page<AdmissionApplicationEntity> result;
-    if (scope.branchId() != null
-        && !scope.branchId().isBlank()
-        && scope.academicSessionId() != null
-        && !scope.academicSessionId().isBlank()) {
-      result =
-          repository.findByOrganizationIdAndBranchIdAndAcademicSessionIdOrderByUpdatedAtDesc(
-              scope.organizationId(), scope.branchId(), scope.academicSessionId(), pageable);
-    } else {
-      result = repository.findByOrganizationIdOrderByUpdatedAtDesc(scope.organizationId(), pageable);
-    }
+    PageQuery pq = PageQuery.of(page, size);
+    // Native query already applies ORDER BY; keep Pageable unsorted to avoid double-sort conflict.
+    Pageable pageable = PageRequest.of(pq.page(), pq.size());
+
+    String branch = blankToEmpty(scope.branchId());
+    String session = blankToEmpty(scope.academicSessionId());
+    String statusFilter = blankToEmpty(status);
+    String query = blankToEmpty(q);
+    String sortKey = normalizeSortKey(sortBy);
+    boolean sortAsc = "ASC".equalsIgnoreCase(blankToEmpty(sortDir));
+
+    Page<AdmissionApplicationEntity> result =
+        repository.search(
+            scope.organizationId(),
+            branch,
+            branch.isBlank(),
+            session,
+            session.isBlank(),
+            statusFilter,
+            statusFilter.isBlank(),
+            query,
+            query.isBlank(),
+            sortKey,
+            sortAsc,
+            pageable);
     return PageResult.of(
-        result.map(this::toDto).getContent(), q.page(), q.size(), result.getTotalElements());
+        result.map(this::toDto).getContent(), pq.page(), pq.size(), result.getTotalElements());
   }
 
   @Transactional(readOnly = true)
@@ -201,6 +217,8 @@ public class AdmissionApplicationService {
       throw new AdmissionException("TERMINAL", "Application is already " + entity.getStatus());
     }
 
+    requireAssigneeRole(scope, entity);
+
     Map<String, Object> workflow = engines.getWorkflow(scope, entity.getWorkflowKey());
     if (workflow == null) {
       throw new AdmissionException(
@@ -210,9 +228,10 @@ public class AdmissionApplicationService {
     return switch (action) {
       case "REJECT" -> reject(entity, scope, comment);
       case "REQUEST_INFO" -> requestInfo(entity, scope, comment);
+      case "RESUME" -> resume(entity, scope, comment);
       case "APPROVE" -> approve(entity, scope, workflow, comment);
       default -> throw new AdmissionException(
-          "UNKNOWN_ACTION", "Supported actions: APPROVE, REJECT, REQUEST_INFO");
+          "UNKNOWN_ACTION", "Supported actions: APPROVE, REJECT, REQUEST_INFO, RESUME");
     };
   }
 
@@ -247,6 +266,27 @@ public class AdmissionApplicationService {
                 entity.getCurrentStepSequence(),
                 entity.getCurrentStepName()));
     entity.getNotificationIntents().add(recordNotification(scope, entity, "ADMISSION_INFO_REQUESTED"));
+    return toDto(repository.save(entity));
+  }
+
+  private Map<String, Object> resume(
+      AdmissionApplicationEntity entity, TenantScope scope, String comment) {
+    if (!"INFO_REQUESTED".equalsIgnoreCase(entity.getStatus())) {
+      throw new AdmissionException(
+          "INVALID_STATE", "RESUME is only allowed when more information was requested.");
+    }
+    entity.setStatus("IN_PROGRESS");
+    entity.setUpdatedAt(Instant.now());
+    entity
+        .getHistory()
+        .add(
+            event(
+                "INFO_RECEIVED",
+                scope.userId(),
+                scope.roleCode(),
+                comment != null ? comment : "Information received — workflow resumed",
+                entity.getCurrentStepSequence(),
+                entity.getCurrentStepName()));
     return toDto(repository.save(entity));
   }
 
@@ -667,13 +707,88 @@ public class AdmissionApplicationService {
         }
         String key = String.valueOf(field.get("key"));
         Object value = answers.get(key);
+        Object typeRaw = field.get("type");
+        String type =
+            String.valueOf(typeRaw == null ? "TEXTBOX" : typeRaw).toUpperCase(Locale.ROOT);
+        Object label = field.get("label");
+        String labelText = label != null ? String.valueOf(label) : key;
+        if ("CHECKBOX".equals(type)) {
+          if (!Boolean.TRUE.equals(value) && !"true".equalsIgnoreCase(String.valueOf(value))) {
+            throw new AdmissionException("VALIDATION", "Mandatory field missing: " + labelText);
+          }
+          continue;
+        }
         if (value == null || String.valueOf(value).isBlank()) {
-          Object label = field.get("label");
-          throw new AdmissionException(
-              "VALIDATION", "Mandatory field missing: " + (label != null ? label : key));
+          throw new AdmissionException("VALIDATION", "Mandatory field missing: " + labelText);
         }
       }
     }
+  }
+
+  private void requireAssigneeRole(TenantScope scope, AdmissionApplicationEntity entity) {
+    if (canActOnStep(scope, entity)) {
+      return;
+    }
+    throw new AdmissionException(
+        "FORBIDDEN_ROLE",
+        "Action requires role "
+            + entity.getAssigneeRole()
+            + " (current: "
+            + scope.roleCode()
+            + ")");
+  }
+
+  private static boolean canActOnStep(TenantScope scope, AdmissionApplicationEntity entity) {
+    if (scope == null) {
+      return false;
+    }
+    if (PersonaRoles.isElevated(scope.roleCode())) {
+      return true;
+    }
+    String required = PersonaRoles.normalize(entity.getAssigneeRole());
+    if (required.isBlank() || "SYSTEM".equals(required) || "ANY".equals(required)) {
+      return true;
+    }
+    String current = PersonaRoles.normalize(scope.roleCode());
+    if (current.equals(required)) {
+      return true;
+    }
+    // Common aliases used in seeded workflows vs platform roles.
+    return switch (required) {
+      case "RECEPTION", "RECEPTIONIST" -> Set.of("RECEPTION", "RECEPTIONIST", "ADMIN").contains(current);
+      case "ACCOUNTS", "ACCOUNTANT" -> Set.of("ACCOUNTS", "ACCOUNTANT", "FINANCE").contains(current);
+      case "MANAGEMENT", "MANAGER" -> Set.of("MANAGEMENT", "MANAGER", "ADMIN").contains(current);
+      default -> false;
+    };
+  }
+
+  private static String normalizeSortKey(String sortBy) {
+    String key = blankToEmpty(sortBy).toLowerCase(Locale.ROOT);
+    return switch (key) {
+      case "fullname", "applicant", "applicantname" -> "fullName";
+      case "status" -> "status";
+      case "updated", "updatedat", "createdat" -> "updatedAt";
+      default -> "updatedAt";
+    };
+  }
+
+  private static String blankToEmpty(String value) {
+    return value == null ? "" : value.trim();
+  }
+
+  private static String statusLabel(String status) {
+    return switch (PersonaRoles.normalize(status)) {
+      case "IN_PROGRESS" -> "Under review";
+      case "INFO_REQUESTED" -> "More information needed";
+      case "APPROVED" -> "Approved";
+      case "REJECTED" -> "Rejected";
+      default -> status == null || status.isBlank() ? "Unknown" : status;
+    };
+  }
+
+  private static boolean isTerminal(String status) {
+    String s = PersonaRoles.normalize(status);
+    return "APPROVED".equals(s) || "REJECTED".equals(s);
   }
 
   private List<WorkflowStep> steps(Map<String, Object> workflow) {
@@ -730,6 +845,7 @@ public class AdmissionApplicationService {
   }
 
   private Map<String, Object> toDto(AdmissionApplicationEntity e) {
+    TenantScope scope = TenantContext.get().orElse(null);
     Map<String, Object> dto = new LinkedHashMap<>();
     dto.put("id", e.getId().toString());
     dto.put("organizationId", e.getOrganizationId());
@@ -738,9 +854,26 @@ public class AdmissionApplicationService {
     dto.put("formKey", e.getFormKey());
     dto.put("workflowKey", e.getWorkflowKey());
     dto.put("status", e.getStatus());
+    dto.put("statusLabel", statusLabel(e.getStatus()));
+    dto.put("terminal", isTerminal(e.getStatus()));
     dto.put("currentStepSequence", e.getCurrentStepSequence());
     dto.put("currentStepName", e.getCurrentStepName());
     dto.put("assigneeRole", e.getAssigneeRole());
+    boolean canAct = !isTerminal(e.getStatus()) && canActOnStep(scope, e);
+    dto.put("canAct", canAct);
+    List<String> allowed = new ArrayList<>();
+    if (canAct) {
+      if ("INFO_REQUESTED".equalsIgnoreCase(e.getStatus())) {
+        allowed.add("RESUME");
+        allowed.add("APPROVE");
+        allowed.add("REJECT");
+      } else {
+        allowed.add("APPROVE");
+        allowed.add("REQUEST_INFO");
+        allowed.add("REJECT");
+      }
+    }
+    dto.put("allowedActions", allowed);
     dto.put("answers", e.getAnswers());
     dto.put("history", e.getHistory());
     dto.put("matchedActions", e.getMatchedActions());

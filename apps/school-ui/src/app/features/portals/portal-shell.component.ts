@@ -12,7 +12,7 @@ import { BranchSwitcherComponent } from '../branches/branch-switcher.component';
   standalone: true,
   imports: [RouterOutlet, RouterLink, RouterLinkActive, AsyncPipe, BranchSwitcherComponent],
   templateUrl: './portal-shell.component.html',
-  styleUrls: ['../../layout/shell.component.scss', './portal-shell.component.scss'],
+  styleUrls: ['./portal-shell.component.scss'],
 })
 export class PortalShellComponent implements OnInit {
   private readonly route = inject(ActivatedRoute);
@@ -53,9 +53,8 @@ export class PortalShellComponent implements OnInit {
         this.title = boot.title || this.portalKey;
         this.subtitle = boot.subtitle || '';
         this.nav = boot.nav || [];
-        if (boot.roleCode) {
-          this.auth.setActiveRole(String(boot.roleCode));
-        }
+        // Do not override JWT role — gateway ignores client X-Auth-Role for school APIs.
+        // Keep UI destination only; relationship scoping uses the signed-in account role.
         this.portalCtx.set(this.portalKey, boot);
       },
       error: (err) => {
@@ -76,7 +75,7 @@ export class PortalShellComponent implements OnInit {
 
   goAdmin(): void {
     this.auth.setActiveRole(this.auth.getSession()?.role ?? 'SHOP_OWNER');
-    this.router.navigateByUrl('/admin/admission');
+    this.router.navigateByUrl('/admin/dashboard');
   }
 
   onBranchChanged(): void {

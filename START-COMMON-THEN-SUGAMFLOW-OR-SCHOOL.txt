@@ -1,0 +1,303 @@
+================================================================================
+  SUGAMFLOW + SCHOOL — START ORDER (COMMON FIRST, THEN APP)
+  Plain notepad guide for local development
+  Updated: 2026-07-20
+================================================================================
+
+FOLDER LAYOUT
+-------------
+  D:\sugamFlow     = Shop / POS / polyclinic platform (+ shared gateway, auth, shop)
+  D:\school        = School ERP domain services + school UI
+
+RULE OF THUMB
+-------------
+  1) Start SHARED (common) platform first
+  2) Then start EITHER SugamFlow shop stack OR School ERP stack (or both)
+  3) One PostgreSQL on :5432 is shared — do not run a second Postgres on 5432
+  4) One API gateway on :9090 is shared by both UIs
+
+
+================================================================================
+  PART A — WHAT IS COMMON vs APP-SPECIFIC
+================================================================================
+
+A1) INFRASTRUCTURE (always first)
+---------------------------------
+  PostgreSQL          :5432     (Windows service: postgresql-x64-17)
+  Redis               :6379     (Docker — SugamFlow compose; optional for School jar mode)
+  MailHog (optional)  :1025 SMTP / :8025 UI
+
+A2) COMMON MICROSERVICES (shared by SugamFlow AND School)
+---------------------------------------------------------
+  discovery-service (Eureka)   :8761   (Docker host map often 18761 -> 8761)
+  config-service               :8888   (Docker host map often 18888 -> 8888)
+  gateway-service              :9090   *** single API edge for both products ***
+  auth-service                 :8085   login / JWT
+  shop-service                 :8080   org / tenant / shop registration
+  notification-service         :8087   email/SMS delivery
+  user-service                 :8084   users / customers (SugamFlow; useful if full stack)
+
+  School registers its domain services into the SAME Eureka and calls APIs
+  through the SAME gateway :9090.
+
+A3) SUGAMFLOW-ONLY MICROSERVICES
+--------------------------------
+  product-service          :8081
+  stock-service            :8082
+  order-service            :8083
+  payment-service          :8086
+  reporting-service        :8088
+  account-service          :8089
+  fieldforce-service       :8090
+  gst-service              :8091
+  doctor-service           :8092
+  appointment-service      :8093
+  ledger-service           :8094
+  queue-management-service :8098
+  gst-mock-service         :8099   (optional sandbox)
+
+  UI: D:\sugamFlow\shop-management-ui  ->  http://localhost:4200
+
+A4) SCHOOL-ONLY MICROSERVICES (D:\school)
+-----------------------------------------
+  school-settings-service              :8181
+  subscription-service                 :8182
+  form-builder-service                 :8183
+  workflow-service                     :8184
+  rule-engine-service                  :8185
+  report-builder-service               :8186
+  school-notification-config-service   :8187
+  audit-service                        :8188
+  admission-service                    :8189
+  fee-service                          :8190
+  student-service                      :8191
+  attendance-service                   :8192
+  exam-service                         :8193
+  library-service                      :8194
+  hostel-service                       :8195
+  transport-service                    :8196
+  payroll-service                      :8197
+  staff-service                        :8198
+  academic-structure-service           :8199
+
+  UI: D:\school\apps\school-ui  ->  http://localhost:4300
+
+
+================================================================================
+  PART B — PREREQUISITES (once / after reboot)
+================================================================================
+
+  [ ] Docker Desktop running (for SugamFlow Docker stack)
+  [ ] PostgreSQL listening on localhost:5432
+  [ ] Java 17+ and Maven (needed for School jar mode / platform jars)
+  [ ] Node / npm (for Angular UIs)
+  [ ] SugamFlow env: copy .env.example -> .env.local under D:\sugamFlow
+
+  If School platform jars are missing, build them once:
+
+    cd D:\sugamFlow
+    mvn -q -DskipTests package -pl discovery-service,gateway-service,auth-service,shop-service,notification-service -am
+
+
+================================================================================
+  PART C — START COMMON PLATFORM FIRST
+================================================================================
+
+There are TWO ways to start the common layer. Pick ONE style and stick to it
+for the day (mixing jar Eureka on 8761 with Docker Eureka on 18761 causes
+confusion).
+
+-----------------------------------------------------------------------------
+OPTION 1 — Common via School script (JAR mode)  *** best for School daily ***
+-----------------------------------------------------------------------------
+  Starts Eureka + auth + shop + gateway (+ notification / MailHog) as host JVMs
+  from jars under D:\sugamFlow.
+
+    cd D:\school
+    .\scripts\start-platform.ps1 -SugamFlowRoot "D:\sugamFlow" -SkipMailHog
+
+  Wait until:
+    Eureka  http://localhost:8761
+    Gateway http://localhost:9090/actuator/health   -> UP
+
+  Re-run is safe (skips ports already listening).
+
+-----------------------------------------------------------------------------
+OPTION 2 — Common via SugamFlow Docker (compose)  *** best for full shop ***
+-----------------------------------------------------------------------------
+  Starts redis + config + discovery + full shop stack including common services.
+
+    cd D:\sugamFlow
+    .\compose-local.ps1 -UpStack
+    # or:
+    .\start-local.ps1 -SkipMail
+
+  Eureka UI (Docker mapped): http://127.0.0.1:18761
+  Gateway:                   http://localhost:9090/actuator/health
+
+  Minimum common-only containers (if you do not want full shop yet):
+
+    cd D:\sugamFlow
+    .\compose-local.ps1 up -d redis config-service discovery-service
+    .\compose-local.ps1 up -d auth-service shop-service notification-service user-service
+    .\compose-local.ps1 up -d gateway-service
+
+
+================================================================================
+  PART D — THEN START SUGAMFLOW (shop application)
+================================================================================
+
+  After common / infra is up:
+
+  1) If you used OPTION 1 (jar platform only) and now need shop domain services,
+     start the SugamFlow Docker apps (or package+run jars). Easiest:
+
+       cd D:\sugamFlow
+       .\compose-local.ps1 -UpStack
+
+     (If Eureka is already running as a jar on 8761, prefer OPTION 2 alone for
+      a clean Docker day — do not run two Discoveries.)
+
+  2) Start SugamFlow UI:
+
+       cd D:\sugamFlow\shop-management-ui
+       npm start
+       # -> http://localhost:4200
+
+  3) Quick checks:
+
+       Gateway health:  http://localhost:9090/actuator/health
+       Login uses:      POST /api/v1/auth/login  via gateway
+
+  Demo wholesale (example):
+    Shop     WHOLE-DEMO-01
+    User     demo_WHOLE-DEMO-01   (UI may show "demo")
+    Password Demo@2026
+
+
+================================================================================
+  PART E — THEN START SCHOOL APPLICATION
+================================================================================
+
+  After common platform is up (PART C — Option 1 recommended):
+
+  1) Seed demo school login (first time / fresh DB / login fails):
+
+       cd D:\school
+       .\scripts\seed-school-demo-auth.ps1
+
+  2) Start School domain microservices:
+
+       cd D:\school
+       .\scripts\start-services.ps1
+
+     If stuck:
+
+       .\scripts\start-services.ps1 -Restart
+
+  3) Start School UI:
+
+       cd D:\school\apps\school-ui
+       npx ng serve --port 4300
+       # -> http://localhost:4300
+
+  4) Login:
+
+       Organization   demo-school
+       Username       admin
+       Password       password
+
+  5) Optional verify:
+
+       cd D:\school
+       .\scripts\verify-auth.ps1
+       .\scripts\verify-gateway.ps1
+
+  Register a new school org (platform admin) from SugamFlow UI :4200 if needed.
+
+
+================================================================================
+  PART F — RUNNING BOTH PRODUCTS THE SAME DAY
+================================================================================
+
+  Recommended pattern:
+
+    1. PostgreSQL up
+    2. Common platform (Option 1 jar OR Option 2 Docker — pick one Eureka)
+    3. School services + school-ui :4300
+    4. SugamFlow shop services (if Docker Option 2, they are already included)
+       + shop-management-ui :4200
+
+  Both UIs talk to the SAME gateway :9090
+    Shop routes   -> product / stock / order / gst / ...
+    School routes -> /api/admission/** /api/student/** /api/fee/** ...
+
+  Do NOT start a second gateway or a second auth-service on the same ports.
+
+
+================================================================================
+  PART G — STOP / CLEAN
+================================================================================
+
+  School services (jars):
+    Close the PowerShell windows started by start-services.ps1 / start-platform.ps1
+    or stop Java processes listening on 8761, 8080, 8085, 8087, 9090, 8181-8199
+
+  SugamFlow Docker:
+    cd D:\sugamFlow
+    .\compose-local.ps1 down
+    # or daily helper if you use it:
+    .\scripts\daily-stop-sugamflow.ps1
+
+  PostgreSQL usually stays running as a Windows service.
+
+
+================================================================================
+  PART H — QUICK CHEAT SHEET
+================================================================================
+
+  WANT ONLY SCHOOL TODAY
+  ----------------------
+    1. Postgres :5432
+    2. cd D:\school
+       .\scripts\start-platform.ps1 -SugamFlowRoot "D:\sugamFlow" -SkipMailHog
+    3. .\scripts\seed-school-demo-auth.ps1          (if needed)
+    4. .\scripts\start-services.ps1
+    5. cd apps\school-ui ; npx ng serve --port 4300
+
+  WANT ONLY SUGAMFLOW TODAY
+  -------------------------
+    1. Postgres :5432 + Docker Desktop
+    2. cd D:\sugamFlow
+       .\compose-local.ps1 -UpStack
+    3. cd shop-management-ui ; npm start            (-> :4200)
+
+  WANT BOTH
+  ---------
+    Prefer Docker full stack for SugamFlow common+shop, then School services
+    that register to Eureka — OR jar platform + school services + selective
+    shop containers. Keep a single Eureka and a single gateway.
+
+  HEALTH URLS
+  -----------
+    Gateway     http://localhost:9090/actuator/health
+    Eureka jar  http://localhost:8761
+    Eureka dock http://127.0.0.1:18761
+    MailHog     http://localhost:8025
+    Shop UI     http://localhost:4200
+    School UI   http://localhost:4300
+
+
+================================================================================
+  RELATED DOCS
+================================================================================
+  D:\school\docs\DAILY_START.md
+  D:\school\docs\PLATFORM_INTEGRATION.md
+  D:\school\docs\PRODUCTION_DEPLOYMENT_SCHOOL_AND_SUGAMFLOW.md
+  D:\sugamFlow\START-LOCAL-AND-EC2.txt
+  D:\sugamFlow\compose-local.ps1
+  D:\sugamFlow\docker_cmd.txt
+
+================================================================================
+  END OF NOTEPAD
+================================================================================

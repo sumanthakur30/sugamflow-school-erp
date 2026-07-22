@@ -1,0 +1,93 @@
+/* Shared column-header pattern for list tables.
+   Header cells (th.list-th) render as a distinct dark band using the theme's
+   menu colour, so they never blend into data rows. Sortable headings are
+   buttons with the ↕ / ↑ / ↓ indicators; the active column gets an accent
+   underline. */
+
+$thead-bg: var(--sf-menu, #0b3d2e);
+$thead-bg-hover: color-mix(in srgb, var(--sf-menu, #0b3d2e) 82%, #fff);
+$thead-border: color-mix(in srgb, var(--sf-menu, #0b3d2e) 75%, #000);
+$thead-text: color-mix(in srgb, #fff 82%, var(--sf-menu, #0b3d2e));
+$thead-text-active: #ffffff;
+$thead-accent: var(--sf-accent, #e9b44c);
+
+thead tr th.list-th {
+  padding: 0;
+  background: $thead-bg;
+  border-bottom: 2px solid $thead-border;
+  color: $thead-text;
+  opacity: 1;
+}
+
+thead tr th.list-th:first-child {
+  border-top-left-radius: 0.55rem;
+}
+
+thead tr th.list-th:last-child {
+  border-top-right-radius: 0.55rem;
+}
+
+thead tr th.list-th.col-check {
+  padding: 0.65rem 0.7rem;
+
+  input[type='checkbox'] {
+    accent-color: $thead-accent;
+  }
+}
+
+.heading-sort {
+  display: flex;
+  width: 100%;
+  min-height: 2.7rem;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.4rem;
+  border: 0;
+  border-radius: 0;
+  padding: 0.65rem 0.7rem;
+  background: transparent;
+  color: $thead-text;
+  font-size: 0.74rem;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-align: left;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.heading-sort:hover {
+  background: $thead-bg-hover;
+  color: $thead-text-active;
+}
+
+.heading-label {
+  display: flex;
+  min-height: 2.7rem;
+  align-items: center;
+  padding: 0.65rem 0.7rem;
+  color: $thead-text;
+  font-size: 0.74rem;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+thead tr th.list-th.active-sort {
+  background: $thead-bg-hover;
+  box-shadow: inset 0 -3px 0 $thead-accent;
+}
+
+thead tr th.list-th.active-sort .heading-sort {
+  color: $thead-text-active;
+}
+
+.sort-indicator {
+  font-size: 0.9rem;
+  line-height: 1;
+  opacity: 0.55;
+}
+
+thead tr th.list-th.active-sort .sort-indicator {
+  color: $thead-accent;
+  opacity: 1;
+}

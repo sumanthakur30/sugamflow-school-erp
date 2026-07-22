@@ -1,3 +1,31 @@
+.title-row {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.live-badge {
+  padding: 0.18rem 0.48rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, #16a34a 12%, transparent);
+  color: #15803d;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.live-warning {
+  margin-top: 0.35rem !important;
+  color: #b45309;
+  font-size: 0.82rem;
+}
+
+.live-loading {
+  min-height: 8rem;
+  color: #64748b;
+}
+
 .widget-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -42,12 +70,77 @@
   color: color-mix(in srgb, var(--sf-text) 72%, #64748b);
 }
 
+.alert-inbox {
+  margin-bottom: 1rem;
+}
+
+.alert-inbox-head,
+.in-app-alert {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.alert-inbox-head h3 {
+  margin-top: 0;
+}
+
+.unread-count {
+  border-radius: 999px;
+  padding: 0.2rem 0.55rem;
+  background: color-mix(in srgb, var(--sf-primary) 14%, transparent);
+  color: var(--sf-primary);
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.in-app-alert {
+  padding: 0.8rem;
+  border: 1px solid color-mix(in srgb, var(--sf-text) 12%, transparent);
+  border-radius: 0.65rem;
+}
+
+.in-app-alert.unread {
+  border-left: 4px solid var(--sf-primary);
+  background: color-mix(in srgb, var(--sf-primary) 4%, transparent);
+}
+
+.in-app-alert small {
+  color: color-mix(in srgb, var(--sf-text) 55%, #64748b);
+}
+
+.mark-read {
+  flex: 0 0 auto;
+  border: 1px solid color-mix(in srgb, var(--sf-primary) 45%, transparent);
+  border-radius: 0.45rem;
+  background: transparent;
+  color: var(--sf-primary);
+  padding: 0.38rem 0.65rem;
+  cursor: pointer;
+}
+
 .muted {
   color: color-mix(in srgb, var(--sf-text) 62%, #64748b);
 }
 
-@media (max-width: 800px) {
+@media (max-width: 1024px) {
+  .widget-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
   .widget-grid {
     grid-template-columns: 1fr;
+  }
+
+  .chip-list .chip {
+    max-width: 100%;
+    word-break: break-word;
+  }
+
+  .in-app-alert {
+    flex-direction: column;
   }
 }

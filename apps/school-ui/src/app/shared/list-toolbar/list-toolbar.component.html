@@ -1,0 +1,78 @@
+<div class="list-toolbar">
+  <div class="toolbar-row">
+    @if (showSearch) {
+      <label class="search-field">
+        <span class="sr-only">Search</span>
+        <input
+          [ngModel]="q"
+          (ngModelChange)="onQInput($event)"
+          [placeholder]="searchPlaceholder"
+          (keyup.enter)="submitSearch()"
+        />
+      </label>
+      <button type="button" (click)="submitSearch()" [disabled]="searching">
+        {{ searching ? 'Searching…' : 'Search' }}
+      </button>
+    }
+
+    @if (showStatus) {
+      <label class="compact">
+        {{ statusLabel }}
+        <select [ngModel]="status" (ngModelChange)="onStatus($event)">
+          <option value="">ALL</option>
+          @for (opt of statusOptions; track opt.value) {
+            <option [value]="opt.value">{{ opt.label }}</option>
+          }
+        </select>
+      </label>
+    }
+
+    @if (showFiltersToggle) {
+      <button type="button" class="secondary" (click)="toggleFilters()">
+        {{ filtersOpen ? 'Hide filters' : 'Filters' }}
+      </button>
+    }
+
+    @if (showSort) {
+      <label class="compact">
+        Sort by
+        <select [ngModel]="sortBy" (ngModelChange)="onSortBy($event)">
+          @for (opt of sortOptions; track opt.key) {
+            <option [value]="opt.key">{{ opt.label }}</option>
+          }
+        </select>
+      </label>
+      <button type="button" class="secondary dir-btn" (click)="toggleDir()" [attr.aria-label]="'Sort ' + sortDir">
+        {{ sortDir }}
+      </button>
+    }
+
+    @if (showPageSize) {
+      <label class="compact">
+        Page size
+        <select [ngModel]="pageSize" (ngModelChange)="onPageSize($event)">
+          @for (n of pageSizes; track n) {
+            <option [ngValue]="n">{{ n }}</option>
+          }
+        </select>
+      </label>
+    }
+
+    <button
+      type="button"
+      class="secondary"
+      (click)="clearAll()"
+      [disabled]="!clearEnabled && !q && !status"
+    >
+      Clear
+    </button>
+  </div>
+
+  @if (filtersOpen || !showFiltersToggle) {
+    <div class="toolbar-filters">
+      <ng-content select="[filters]"></ng-content>
+    </div>
+  }
+
+  <ng-content></ng-content>
+</div>

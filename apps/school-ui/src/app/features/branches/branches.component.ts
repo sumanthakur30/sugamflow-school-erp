@@ -20,6 +20,7 @@ export class BranchesComponent implements OnInit {
   loading = true;
   featureEnabled = false;
   canAdd = false;
+  canManage = false;
   maxBranches: number | string = 1;
   branchCount = 0;
   currentKey = 'main';
@@ -48,6 +49,7 @@ export class BranchesComponent implements OnInit {
       next: (boot) => {
         this.featureEnabled = !!boot.featureEnabled;
         this.canAdd = !!boot.canAdd;
+        this.canManage = !!boot.canManage;
         this.maxBranches = boot.maxBranches;
         this.branchCount = boot.branchCount ?? 0;
         this.currentKey = boot.currentBranchKey || this.auth.getBranchId();

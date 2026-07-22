@@ -18,7 +18,8 @@ services/                      School-domain Spring Boot services (Eureka client
   school-notification-config-service   Templates only — delivery via sugamflow
   admission-service                    Runtime applications (config-driven)
   fee-service                          Fee collection runtime (config-driven)
-  student-service                      Student master runtime (enrollment from admission)
+  student-service                      Student master + Global Student Directory + lifecycle
+  staff-service                        Staff / employee master + Global Staff Directory
   attendance-service                   Attendance marking runtime (config-driven)
   exam-service                         Exam / gradebook runtime (config-driven)
   library-service                      Library / book issue runtime (config-driven)
@@ -48,8 +49,15 @@ npm start
 
 Open `http://localhost:4200` — login with `demo-school` / `admin` / `password`.
 
+**Daily run:** see [docs/DAILY_START.md](docs/DAILY_START.md) (order, ports, health checks, common failures).  
+**Complete testing (automated + UI):** see [docs/SCHOOL_APPLICATION_TESTING_GUIDE.md](docs/SCHOOL_APPLICATION_TESTING_GUIDE.md).  
+**School register + login services:** see [docs/SCHOOL_REGISTRATION_LOGIN_RUNBOOK.md](docs/SCHOOL_REGISTRATION_LOGIN_RUNBOOK.md).
+
 ## Docs
 
+- [School application testing guide (step by step)](docs/SCHOOL_APPLICATION_TESTING_GUIDE.md)
+- [Daily start](docs/DAILY_START.md)
+- [School registration & login runbook](docs/SCHOOL_REGISTRATION_LOGIN_RUNBOOK.md)
 - [Postgres](docs/POSTGRES.md)
 - [Platform Integration](docs/PLATFORM_INTEGRATION.md)
 - [Phase 3 Runtime](docs/PHASE3_RUNTIME.md)
@@ -72,6 +80,11 @@ Open `http://localhost:4200` — login with `demo-school` / `admin` / `password`
 - [Phase 17 Security + pagination](docs/PHASE17_SECURITY_PAGINATION.md)
 - [Phase 18 Config editors](docs/PHASE18_CONFIG_EDITORS.md)
 - [Phase 19 Finance depth](docs/PHASE19_FINANCE.md)
+- [Phase 21 Ops depth](docs/PHASE21_OPS_DEPTH.md)
+- [Phase 22 Global Directory](docs/PHASE22_GLOBAL_DIRECTORY.md)
+- [Phase 23 Operational readiness](docs/PHASE23_OPS_READINESS.md)
+- [Phase 24 Student 360 / Comms / LMS / deep ops / Import](docs/PHASE24_STUDENT360_OPS.md)
+- [LMS choice](docs/LMS_CHOICE.md)
 - [Local SMTP / EMAIL SENT](docs/SMTP_LOCAL.md)
 - [Design Studio live theme](docs/DESIGN_STUDIO_LIVE_THEME.md)
 - [Architecture](docs/ARCHITECTURE.md)

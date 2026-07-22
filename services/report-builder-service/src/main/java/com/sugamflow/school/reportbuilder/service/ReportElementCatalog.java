@@ -17,7 +17,8 @@ public final class ReportElementCatalog {
           type("field", "Data field", 280, 24, false),
           type("line", "Horizontal line", 500, 2, false),
           type("box", "Box / frame", 320, 80, false),
-          type("image", "Image placeholder", 120, 120, false));
+          type("image", "Image placeholder", 120, 120, false),
+          type("qr", "QR code", 120, 120, true));
 
   private static Map<String, Object> type(
       String key, String label, int defaultWidth, int defaultHeight, boolean hasText) {
@@ -56,6 +57,10 @@ public final class ReportElementCatalog {
       case "line" -> el.put("text", "");
       case "box" -> el.put("text", "");
       case "image" -> el.put("text", "[Image]");
+      case "qr" -> {
+        el.put("bind", "context.verifyUrl");
+        el.put("text", "{{context.verifyUrl}}");
+      }
       default -> el.put("text", "");
     }
     return el;
@@ -100,6 +105,7 @@ public final class ReportElementCatalog {
       case "line" -> 500;
       case "box" -> 320;
       case "image" -> 120;
+      case "qr" -> 120;
       case "field" -> 280;
       default -> 420;
     };
@@ -111,6 +117,7 @@ public final class ReportElementCatalog {
       case "line" -> 2;
       case "box" -> 80;
       case "image" -> 120;
+      case "qr" -> 120;
       default -> 24;
     };
   }
@@ -149,10 +156,12 @@ public final class ReportElementCatalog {
     context.put("issuedAt", "2026-07-16T10:00:00Z");
     context.put("offerLetterUrl", "https://example.local/offer.pdf");
     context.put("feeReceiptUrl", "https://example.local/receipt.pdf");
+    context.put("verifyUrl", "https://example.local/verify/document/demo-token");
     Map<String, Object> data = new LinkedHashMap<>();
     data.put("student", student);
     data.put("application", application);
     data.put("payment", payment);
+    data.put("document", Map.of("type", "ID_CARD", "referenceNo", "ID-1001"));
     data.put("context", context);
     return data;
   }

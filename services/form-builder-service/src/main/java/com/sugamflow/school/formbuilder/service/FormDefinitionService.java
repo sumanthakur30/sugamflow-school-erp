@@ -103,6 +103,9 @@ public class FormDefinitionService {
         if ("payroll_run".equals(key)) {
           ensurePayrollRunFormEnriched();
         }
+        if ("employee_master".equals(key)) {
+          ensureEmployeeMasterFormEnriched();
+        }
         continue;
       }
       FormDefinitionEntity e = new FormDefinitionEntity();
@@ -237,6 +240,18 @@ public class FormDefinitionService {
     });
   }
 
+  private void ensureEmployeeMasterFormEnriched() {
+    repo.findByOrganizationIdIsNullAndFormKey("employee_master").ifPresent(e -> {
+      String payload = String.valueOf(e.getPayload());
+      if (payload.contains("employeeNo") && payload.contains("department") && payload.contains("joiningDate")) {
+        return;
+      }
+      e.setPayload(employeeMasterForm());
+      e.setUpdatedAt(Instant.now());
+      repo.save(e);
+    });
+  }
+
   private Map<String, Object> effectiveForm(Map<String, Object> tenant, Map<String, Object> platform) {
     if (platform == null || hasFormFields(tenant)) {
       return tenant;
@@ -302,6 +317,9 @@ public class FormDefinitionService {
     }
     if ("payroll_run".equals(key)) {
       return payrollRunForm();
+    }
+    if ("employee_master".equals(key)) {
+      return employeeMasterForm();
     }
     Map<String, Object> form = new LinkedHashMap<>();
     form.put("formKey", key);
@@ -377,6 +395,7 @@ public class FormDefinitionService {
                     field("relation", "Relation", "TEXTBOX", true),
                     field("mobile", "Mobile", "PHONE", true),
                     field("email", "Email", "EMAIL", false),
+                    field("userId", "Linked Login Username", "TEXTBOX", false),
                     field("isPrimary", "Primary Contact", "CHECKBOX", false)))));
     form.put("validationRules", List.of());
     form.put("conditionalVisibility", List.of());
@@ -541,6 +560,30 @@ public class FormDefinitionService {
             field("netPay","Net Pay","NUMBER",true),
             field("email","Email","EMAIL",false),
             field("mobile","Mobile","PHONE",false)))));
+    form.put("validationRules", List.of());
+    form.put("conditionalVisibility", List.of());
+    return form;
+  }
+
+  private Map<String, Object> employeeMasterForm() {
+    Map<String, Object> form = new LinkedHashMap<>();
+    form.put("formKey", "employee_master");
+    form.put("title", "Employee Master");
+    form.put("sections", List.of(Map.of(
+        "id", "employee", "title", "Employee", "repeatable", false,
+        "fields", List.of(
+            field("employeeNo","Employee No","TEXTBOX",false),
+            field("fullName","Full Name","TEXTBOX",true),
+            field("mobile","Mobile","PHONE",true),
+            field("email","Email","EMAIL",false),
+            field("department","Department","TEXTBOX",true),
+            field("designation","Designation","TEXTBOX",true),
+            field("employmentType","Employment Type","TEXTBOX",true),
+            field("authUsername","Linked Login Username","TEXTBOX",false),
+            field("assignedClassSections","Assigned Class Sections","TEXTBOX",false),
+            field("gender","Gender","TEXTBOX",false),
+            field("joiningDate","Joining Date","TEXTBOX",true),
+            field("status","Status","TEXTBOX",false)))));
     form.put("validationRules", List.of());
     form.put("conditionalVisibility", List.of());
     return form;

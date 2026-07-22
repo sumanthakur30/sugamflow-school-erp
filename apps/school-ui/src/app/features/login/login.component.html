@@ -58,6 +58,9 @@
           <option value="parent">Parent App</option>
           <option value="teacher">Teacher App</option>
         </select>
+        <span class="hint"
+          >Data access follows the account JWT role (PARENT / TEACHER), not this menu.</span
+        >
       </label>
       <button type="submit" [disabled]="submitting">
         {{ submitting ? 'Signing in…' : 'Sign in' }}

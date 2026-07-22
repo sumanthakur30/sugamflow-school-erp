@@ -34,8 +34,13 @@ public class AdmissionController {
 
   @GetMapping("/applications")
   public ApiResponse<PageResult<Map<String, Object>>> list(
-      @RequestParam(required = false) Integer page, @RequestParam(required = false) Integer size) {
-    return ApiResponse.ok(service.list(page, size));
+      @RequestParam(required = false) Integer page,
+      @RequestParam(required = false) Integer size,
+      @RequestParam(required = false) String q,
+      @RequestParam(required = false) String status,
+      @RequestParam(required = false) String sortBy,
+      @RequestParam(required = false) String sortDir) {
+    return ApiResponse.ok(service.list(page, size, q, status, sortBy, sortDir));
   }
 
   @GetMapping("/applications/{id}")

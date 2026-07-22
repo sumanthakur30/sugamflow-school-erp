@@ -1,0 +1,422 @@
+<div class="page lms-page">
+  <header class="page-head lms-head">
+    <div>
+      <nav class="breadcrumb" aria-label="Breadcrumb">
+        <span>Academics</span>
+        <span class="crumb-sep" aria-hidden="true">›</span>
+        <span class="crumb-current">Learning Management</span>
+      </nav>
+      <h2>Assignments &amp; Homework</h2>
+      <p>Create, publish, and track homework across classes and subjects.</p>
+    </div>
+    @if (!loading && homeworkEnabled) {
+      <button type="button" (click)="selectView('publish')">+ Publish homework</button>
+    }
+  </header>
+
+  @if (error) {
+    <div class="notice error-notice" role="alert">
+      <span>{{ error }}</span>
+      @if (loading || !items.length) {
+        <button type="button" class="secondary" (click)="reload()">Try again</button>
+      }
+    </div>
+  }
+  @if (message) {
+    <div class="notice success-notice" role="status" aria-live="polite">
+      <span>{{ message }}</span>
+      <button type="button" class="notice-close" aria-label="Dismiss message" (click)="message = ''">×</button>
+    </div>
+  }
+  @if (academicWarning && !loading) {
+    <div class="notice warning-notice" role="status">
+      <span>{{ academicWarning }}</span>
+      <button type="button" class="secondary" (click)="reload()">Refresh</button>
+    </div>
+  }
+
+  @if (loading) {
+    <section class="panel loading-state" aria-live="polite">
+      <span class="spinner" aria-hidden="true"></span>
+      <div>
+        <strong>Loading assignments</strong>
+        <span>Fetching homework and academic choices…</span>
+      </div>
+    </section>
+  } @else {
+    <div class="stat-cards" aria-label="Assignment summary">
+      <button
+        type="button"
+        class="stat-card"
+        [class.active]="view === 'assignments' && !statusFilter"
+        (click)="openSummary('')"
+      >
+        <span class="stat-value">{{ items.length }}</span>
+        <span class="stat-label">All assignments</span>
+        <span class="stat-action">View all →</span>
+      </button>
+      <button
+        type="button"
+        class="stat-card info"
+        [class.active]="view === 'assignments' && statusFilter === 'PUBLISHED'"
+        (click)="openSummary('PUBLISHED')"
+      >
+        <span class="stat-value">{{ publishedCount }}</span>
+        <span class="stat-label">Published</span>
+        <span class="stat-action">View published →</span>
+      </button>
+      <button
+        type="button"
+        class="stat-card warn"
+        [class.active]="view === 'assignments' && statusFilter === 'DUE_SOON'"
+        (click)="openSummary('DUE_SOON')"
+      >
+        <span class="stat-value">{{ dueSoonCount }}</span>
+        <span class="stat-label">Due in 7 days</span>
+        <span class="stat-action">Review upcoming →</span>
+      </button>
+      <button
+        type="button"
+        class="stat-card danger-card"
+        [class.active]="view === 'assignments' && statusFilter === 'OVERDUE'"
+        (click)="openSummary('OVERDUE')"
+      >
+        <span class="stat-value">{{ overdueCount }}</span>
+        <span class="stat-label">Overdue</span>
+        <span class="stat-action">Review overdue →</span>
+      </button>
+    </div>
+
+    <nav class="lms-tabs" aria-label="LMS sections">
+      <button type="button" [class.active]="view === 'assignments'" (click)="selectView('assignments')">
+        Assignments
+        @if (items.length) {
+          <span class="tab-badge">{{ items.length }}</span>
+        }
+      </button>
+      <button type="button" [class.active]="view === 'publish'" (click)="selectView('publish')">
+        Publish homework
+      </button>
+      <button type="button" [class.active]="view === 'settings'" (click)="selectView('settings')">
+        LMS settings
+      </button>
+    </nav>
+
+    @if (view === 'assignments') {
+      <section class="panel table-panel">
+        <div class="section-heading">
+          <div>
+            <h3>Assignment register</h3>
+            <p>Search and filter homework published across your academic sections.</p>
+          </div>
+          <span class="table-meta">{{ pageLabel }}</span>
+        </div>
+
+        <div class="table-toolbar">
+          <label class="search-wrap">
+            <span class="sr-only">Search assignments</span>
+            <input
+              class="table-search"
+              [(ngModel)]="q"
+              name="assignmentSearch"
+              placeholder="Search title, subject, section…"
+              (ngModelChange)="pageIndex = 0"
+            />
+          </label>
+          <label class="inline-filter">
+            <span>Section</span>
+            <select [(ngModel)]="sectionFilter" name="sectionFilter" (ngModelChange)="pageIndex = 0">
+              <option value="">All sections</option>
+              @for (section of sections; track section.id) {
+                <option [value]="section.id">{{ sectionLabel(section) }}</option>
+              }
+            </select>
+          </label>
+          <label class="inline-filter">
+            <span>Subject</span>
+            <select [(ngModel)]="subjectFilter" name="subjectFilter" (ngModelChange)="pageIndex = 0">
+              <option value="">All subjects</option>
+              @for (subject of subjects; track subject.id) {
+                <option [value]="subjectOptionKey(subject)">{{ subject.name || subject.code || 'Subject' }}</option>
+              }
+            </select>
+          </label>
+          <label class="inline-filter">
+            <span>Status</span>
+            <select [(ngModel)]="statusFilter" name="statusFilter" (ngModelChange)="pageIndex = 0">
+              <option value="">All statuses</option>
+              <option value="PUBLISHED">Published</option>
+              <option value="DUE_SOON">Due soon</option>
+              <option value="OVERDUE">Overdue</option>
+              <option value="DRAFT">Draft</option>
+              <option value="CLOSED">Closed</option>
+            </select>
+          </label>
+          <button type="button" class="secondary" (click)="clearFilters()" [disabled]="!filtersActive">
+            Clear
+          </button>
+        </div>
+
+        <div class="table-scroll">
+          <table class="assignment-table">
+            <thead>
+              <tr>
+                <th>
+                  <button type="button" class="th-sort" (click)="sortAssignmentsBy('title')">
+                    Assignment <span class="sort-icon">{{ sortIcon('title') }}</span>
+                  </button>
+                </th>
+                <th>
+                  <button type="button" class="th-sort" (click)="sortAssignmentsBy('subject')">
+                    Subject <span class="sort-icon">{{ sortIcon('subject') }}</span>
+                  </button>
+                </th>
+                <th>
+                  <button type="button" class="th-sort" (click)="sortAssignmentsBy('section')">
+                    Section <span class="sort-icon">{{ sortIcon('section') }}</span>
+                  </button>
+                </th>
+                <th>
+                  <button type="button" class="th-sort" (click)="sortAssignmentsBy('dueAt')">
+                    Due date <span class="sort-icon">{{ sortIcon('dueAt') }}</span>
+                  </button>
+                </th>
+                <th>
+                  <button type="button" class="th-sort" (click)="sortAssignmentsBy('status')">
+                    Status <span class="sort-icon">{{ sortIcon('status') }}</span>
+                  </button>
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (item of filteredAssignments; track item.id) {
+                <tr>
+                  <td>
+                    <strong class="assignment-title">{{ item.title || 'Untitled assignment' }}</strong>
+                    @if (item.description) {
+                      <span class="assignment-description">{{ item.description }}</span>
+                    }
+                  </td>
+                  <td>{{ subjectLabel(item.subjectKey) }}</td>
+                  <td>{{ assignmentSection(item) }}</td>
+                  <td>
+                    <span class="due-date">{{ fmtDate(item.dueAt) }}</span>
+                    <span class="due-hint">{{ dueHint(item) }}</span>
+                  </td>
+                  <td>
+                    <span class="status-chip" [class]="'status-chip ' + statusClass(item)">
+                      {{ statusLabel(item) }}
+                    </span>
+                  </td>
+                </tr>
+              } @empty {
+                <tr>
+                  <td colspan="5" class="empty-cell">
+                    <strong>{{ items.length ? 'No assignments match your filters' : 'No homework published yet' }}</strong>
+                    <span>
+                      {{
+                        items.length
+                          ? 'Clear or adjust the filters to see more assignments.'
+                          : 'Publish your first assignment for a class and subject.'
+                      }}
+                    </span>
+                    @if (items.length) {
+                      <button type="button" class="secondary" (click)="clearFilters()">Clear filters</button>
+                    } @else if (homeworkEnabled) {
+                      <button type="button" (click)="selectView('publish')">Publish homework</button>
+                    }
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+
+        @if (filteredTotal > pageSize) {
+          <div class="table-pager">
+            <span class="table-meta">{{ pageLabel }}</span>
+            <button
+              type="button"
+              class="secondary"
+              [disabled]="pageIndex <= 0"
+              (click)="pageIndex = pageIndex - 1"
+            >
+              Previous
+            </button>
+            <button
+              type="button"
+              class="secondary"
+              [disabled]="(pageIndex + 1) * pageSize >= filteredTotal"
+              (click)="pageIndex = pageIndex + 1"
+            >
+              Next
+            </button>
+          </div>
+        }
+      </section>
+    }
+
+    @if (view === 'publish') {
+      <section class="panel publish-panel">
+        <div class="section-heading">
+          <div>
+            <h3>Publish homework</h3>
+            <p>Choose a real academic section and subject before publishing.</p>
+          </div>
+          <span class="required-note"><span class="req">*</span> Required fields</span>
+        </div>
+
+        @if (!homeworkEnabled) {
+          <div class="disabled-callout" role="alert">
+            <strong>Native homework is disabled</strong>
+            <span>Enable homework in LMS module settings before publishing an assignment.</span>
+            <a routerLink="/admin/modules">Open module settings</a>
+          </div>
+        } @else if (!sections.length || !subjects.length) {
+          <div class="disabled-callout" role="alert">
+            <strong>Academic setup is incomplete</strong>
+            <span>Add at least one section and subject before publishing homework.</span>
+            <a routerLink="/admin/academic">Open academic structure</a>
+          </div>
+        }
+
+        <form #homeworkForm="ngForm" (ngSubmit)="create()" novalidate>
+          <div class="grid two publish-grid">
+            <label class="full">
+              <span class="field-title">Assignment title <span class="req">*</span></span>
+              <input
+                [(ngModel)]="form.title"
+                name="title"
+                required
+                maxlength="160"
+                placeholder="e.g. Fractions practice worksheet"
+                [disabled]="saving || !homeworkEnabled"
+                [class.invalid]="formSubmitted && !form.title.trim()"
+              />
+              @if (formSubmitted && !form.title.trim()) {
+                <span class="field-error">Enter an assignment title.</span>
+              }
+            </label>
+            <label>
+              <span class="field-title">Class / section <span class="req">*</span></span>
+              <select
+                [(ngModel)]="form.sectionId"
+                name="sectionId"
+                required
+                [disabled]="saving || !homeworkEnabled"
+                [class.invalid]="formSubmitted && !form.sectionId"
+              >
+                <option value="">Select a section…</option>
+                @for (section of sections; track section.id) {
+                  <option [value]="section.id">{{ sectionLabel(section) }}</option>
+                }
+              </select>
+              @if (formSubmitted && !form.sectionId) {
+                <span class="field-error">Select the class and section.</span>
+              }
+            </label>
+            <label>
+              <span class="field-title">Subject <span class="req">*</span></span>
+              <select
+                [(ngModel)]="form.subjectId"
+                name="subjectId"
+                required
+                [disabled]="saving || !homeworkEnabled"
+                [class.invalid]="formSubmitted && !form.subjectId"
+              >
+                <option value="">Select a subject…</option>
+                @for (subject of subjects; track subject.id) {
+                  <option [value]="subject.id">
+                    {{ subject.name || subject.code || 'Subject' }}
+                    {{ subject.code && subject.name ? ' · ' + subject.code : '' }}
+                  </option>
+                }
+              </select>
+              @if (formSubmitted && !form.subjectId) {
+                <span class="field-error">Select a subject.</span>
+              }
+            </label>
+            <label>
+              <span class="field-title">Due date <span class="req">*</span></span>
+              <input
+                type="date"
+                [(ngModel)]="form.dueDate"
+                name="dueDate"
+                required
+                [min]="minDueDate"
+                [disabled]="saving || !homeworkEnabled"
+                [class.invalid]="formSubmitted && (!form.dueDate || !formValid)"
+              />
+              @if (formSubmitted && !form.dueDate) {
+                <span class="field-error">Choose a due date.</span>
+              } @else if (formSubmitted && !formValid) {
+                <span class="field-error">Due date cannot be in the past.</span>
+              }
+            </label>
+            <label class="full">
+              Description / instructions
+              <textarea
+                [(ngModel)]="form.description"
+                name="description"
+                rows="5"
+                maxlength="2000"
+                placeholder="Add clear instructions, chapters, or resources for students…"
+                [disabled]="saving || !homeworkEnabled"
+              ></textarea>
+              <span class="field-help">Optional · {{ form.description.length }}/2000 characters</span>
+            </label>
+          </div>
+          <div class="form-actions">
+            <button
+              type="submit"
+              [disabled]="saving || !homeworkEnabled || !sections.length || !subjects.length"
+            >
+              {{ saving ? 'Publishing…' : 'Publish assignment' }}
+            </button>
+            <button type="button" class="secondary" [disabled]="saving" (click)="selectView('assignments')">
+              Cancel
+            </button>
+          </div>
+        </form>
+      </section>
+    }
+
+    @if (view === 'settings') {
+      <section class="panel settings-panel">
+        <div class="section-heading">
+          <div>
+            <h3>LMS configuration</h3>
+            <p>Current delivery mode and provider settings for this school.</p>
+          </div>
+          <span class="status-chip" [class.published]="homeworkEnabled" [class.closed]="!homeworkEnabled">
+            {{ homeworkEnabled ? 'Homework enabled' : 'Homework disabled' }}
+          </span>
+        </div>
+        <dl class="settings-grid">
+          <div>
+            <dt>Delivery mode</dt>
+            <dd>{{ settings['mode'] || 'Native homework' }}</dd>
+          </div>
+          <div>
+            <dt>External provider</dt>
+            <dd>{{ settings['externalProvider'] || 'None' }}</dd>
+          </div>
+          <div>
+            <dt>Parent submissions</dt>
+            <dd>{{ settings['parentSubmissionEnabled'] === false ? 'Disabled' : 'Enabled' }}</dd>
+          </div>
+          <div>
+            <dt>Native homework</dt>
+            <dd>{{ homeworkEnabled ? 'Enabled' : 'Disabled' }}</dd>
+          </div>
+        </dl>
+        @if (settings['notes']) {
+          <p class="settings-notes">{{ settings['notes'] }}</p>
+        }
+        <div class="actions">
+          <a class="button-link" routerLink="/admin/modules">Manage module settings</a>
+        </div>
+      </section>
+    }
+  }
+</div>

@@ -1,0 +1,81 @@
+.filters,
+.create-exam {
+  margin-bottom: 1rem;
+}
+
+.meta-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: center;
+}
+
+.marks-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.65rem;
+}
+
+.marks-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+}
+
+.mark-inputs {
+  display: flex;
+  gap: 0.5rem;
+  flex-shrink: 0;
+}
+
+.mark-inputs input[type='number'] {
+  width: 5.5rem;
+}
+
+.mark-inputs input[type='text'] {
+  width: 4.5rem;
+}
+
+.actions.panel {
+  position: sticky;
+  bottom: 0.5rem;
+  z-index: 5;
+  backdrop-filter: blur(8px);
+}
+
+@media (max-width: 768px) {
+  .mark-inputs input[type='number'] {
+    width: 5rem;
+  }
+
+  .mark-inputs input[type='text'] {
+    width: 4rem;
+  }
+}
+
+@media (max-width: 640px) {
+  .marks-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .mark-inputs {
+    width: 100%;
+  }
+
+  .mark-inputs input {
+    flex: 1 1 0;
+    width: auto !important;
+    min-width: 0;
+  }
+
+  .actions.panel {
+    position: sticky;
+    bottom: 0;
+    margin-bottom: 0;
+    border-radius: var(--sf-radius) var(--sf-radius) 0 0;
+  }
+}

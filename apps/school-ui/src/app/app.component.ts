@@ -17,8 +17,12 @@ export class AppComponent implements OnInit {
     if (this.auth.isLoggedIn()) {
       this.theme.loadAuthenticated().subscribe();
     } else {
-      const org = localStorage.getItem('sf.tenantId') ?? 'demo-school';
-      this.theme.loadPublished(org).subscribe();
+      const org = (localStorage.getItem('sf.tenantId') ?? '').trim();
+      if (org.length >= 3) {
+        this.theme.loadPublished(org).subscribe();
+      } else {
+        this.theme.clearToFallback();
+      }
     }
   }
 }

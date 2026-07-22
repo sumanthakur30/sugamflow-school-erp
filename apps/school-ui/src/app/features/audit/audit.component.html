@@ -63,11 +63,26 @@
     <div class="audit-layout">
       <section class="panel">
         <h3>Change log ({{ entries.length }})</h3>
+        <sf-list-toolbar
+          searchPlaceholder="Search entity, key, changed by, reason…"
+          [(q)]="listQ"
+          [(sortBy)]="sortBy"
+          [(sortDir)]="sortDir"
+          [pageSize]="pageSize"
+          [sortOptions]="sortOptions"
+          [clearEnabled]="listClearEnabled"
+          (pageSizeChange)="pageSize = $event; pageIndex = 0"
+          (search)="pageIndex = 0"
+          (clear)="clearListFilters()"
+        />
+        <div class="list-meta">
+          <span>{{ filteredEntriesTotal }} changes</span>
+        </div>
         @if (!entries.length) {
           <p class="muted">No config changes yet. Save Design Studio, module settings, menus, or localization — or record a sample.</p>
         }
         <ul class="audit-list">
-          @for (e of entries; track e.id) {
+          @for (e of filteredEntries; track e.id) {
             <li>
               <button
                 type="button"
@@ -88,6 +103,24 @@
             </li>
           }
         </ul>
+        <div class="list-pager actions">
+          <button
+            type="button"
+            class="secondary"
+            [disabled]="pageIndex <= 0"
+            (click)="pageIndex = pageIndex - 1"
+          >
+            Previous
+          </button>
+          <button
+            type="button"
+            class="secondary"
+            [disabled]="(pageIndex + 1) * pageSize >= filteredEntriesTotal"
+            (click)="pageIndex = pageIndex + 1"
+          >
+            Next
+          </button>
+        </div>
       </section>
 
       <section class="panel detail">

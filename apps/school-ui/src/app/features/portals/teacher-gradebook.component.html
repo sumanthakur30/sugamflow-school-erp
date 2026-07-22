@@ -1,0 +1,126 @@
+<section class="page">
+  <div class="page-head">
+    <h2>Gradebook</h2>
+    <p>Create subject exams, enter marks for the section roster, then publish for parents.</p>
+  </div>
+
+  @if (error) {
+    <p class="error panel" role="alert">{{ error }}</p>
+  }
+  @if (status) {
+    <p class="status panel">{{ status }}</p>
+  }
+
+  @if (loading) {
+    <p class="panel">Loading…</p>
+  } @else {
+    <div class="panel filters grid two">
+      <label>
+        Section
+        <select
+          [(ngModel)]="sectionId"
+          (ngModelChange)="refreshDefinitions()"
+          name="sectionId"
+        >
+          @for (s of sections; track s.id) {
+            <option [value]="s.id">{{ s.studentLabel || s.name }}</option>
+          }
+        </select>
+      </label>
+      <label>
+        Subject
+        <select
+          [(ngModel)]="subjectId"
+          (ngModelChange)="refreshDefinitions()"
+          name="subjectId"
+        >
+          @for (s of subjects; track s.id) {
+            <option [value]="s.id">{{ s.name }}</option>
+          }
+        </select>
+      </label>
+    </div>
+
+    <div class="panel create-exam grid">
+      <h3>New exam</h3>
+      <div class="grid three">
+        <label>
+          Name
+          <input [(ngModel)]="createDraft.name" name="examName" placeholder="Unit Test 1" />
+        </label>
+        <label>
+          Term
+          <input [(ngModel)]="createDraft.termKey" name="termKey" />
+        </label>
+        <label>
+          Max marks
+          <input type="number" [(ngModel)]="createDraft.maxMarks" name="maxMarks" min="1" />
+        </label>
+      </div>
+      <div class="actions">
+        <button type="button" (click)="createExam()" [disabled]="busy">Create exam</button>
+      </div>
+    </div>
+
+    @if (definitions.length) {
+      <div class="panel">
+        <label>
+          Exam
+          <select
+            [(ngModel)]="examDefinitionId"
+            (ngModelChange)="loadGradebook()"
+            name="examDefinitionId"
+          >
+            @for (d of definitions; track d.id) {
+              <option [value]="d.id">{{ d.name }} ({{ d.status }}) · max {{ d.maxMarks }}</option>
+            }
+          </select>
+        </label>
+      </div>
+    }
+
+    @if (gradebook) {
+      <div class="panel meta-row">
+        <span>{{ gradebook.sectionLabel }}</span>
+        <span class="chip">{{ gradebook.exam?.status }}</span>
+        <span class="muted">max {{ gradebook.exam?.maxMarks }}</span>
+      </div>
+
+      <div class="actions panel">
+        <button type="button" (click)="saveMarks()" [disabled]="busy || readOnly()">Save marks</button>
+        <button type="button" (click)="publish()" [disabled]="busy || readOnly()">Publish</button>
+      </div>
+
+      @if (!(gradebook.students || []).length) {
+        <p class="panel muted">No students on this section roster yet.</p>
+      } @else {
+        <ul class="marks-list">
+          @for (s of gradebook.students; track s.studentId || s.admissionNo) {
+            <li class="panel marks-row">
+              <div>
+                <strong>{{ s.studentName || s.admissionNo }}</strong>
+                <p class="muted">{{ s.admissionNo }}</p>
+              </div>
+              <div class="mark-inputs">
+                <input
+                  type="number"
+                  [(ngModel)]="marksDraft[s.studentId || s.admissionNo].marksObtained"
+                  [name]="'m-' + (s.studentId || s.admissionNo)"
+                  [disabled]="busy || readOnly()"
+                  placeholder="Marks"
+                />
+                <input
+                  type="text"
+                  [(ngModel)]="marksDraft[s.studentId || s.admissionNo].grade"
+                  [name]="'g-' + (s.studentId || s.admissionNo)"
+                  [disabled]="busy || readOnly()"
+                  placeholder="Grade"
+                />
+              </div>
+            </li>
+          }
+        </ul>
+      }
+    }
+  }
+</section>

@@ -1,3 +1,16 @@
+.service-warning {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  border-color: color-mix(in srgb, var(--sf-warning) 38%, transparent);
+  background: color-mix(in srgb, var(--sf-warning) 8%, var(--sf-panel));
+}
+
+.service-warning p {
+  margin: 0.2rem 0 0;
+}
+
 .live-swatch {
   display: flex;
   align-items: center;

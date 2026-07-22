@@ -1,46 +1,240 @@
-<div class="shell">
-  <aside class="rail">
-    <div class="brand">
+<div
+  class="shell"
+  [class.nav-open]="mobileNavOpen"
+  [class.sidebar-collapsed]="sidebarCollapsed"
+>
+  <header class="context-bar">
+    <div class="context-row">
+      <button
+        type="button"
+        class="context-menu-toggle"
+        data-sf-nav-keep
+        (click)="toggleMobileNav($event)"
+        [attr.aria-expanded]="mobileNavOpen"
+        aria-label="Open navigation"
+      >
+        <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
+          <path fill="currentColor" d="M4 6h16v2H4V6zm0 5h16v2H4v-2zm0 5h16v2H4v-2z" />
+        </svg>
+      </button>
+
       @if (theme$ | async; as theme) {
-        @if (theme.branding?.['schoolLogo']) {
-          <img class="brand-logo" [src]="theme.branding?.['schoolLogo']" [alt]="theme.branding?.['schoolName'] || 'School'" />
-        }
-        <p class="eyebrow">{{ theme.branding?.['schoolName'] || 'SugamFlow' }}</p>
-        <h1>School Admin</h1>
-        <p class="tagline">{{ theme.branding?.['productTagline'] || 'Configuration over customization' }}</p>
-      } @else {
-        <p class="eyebrow">SugamFlow</p>
-        <h1>School Admin</h1>
-        <p class="tagline">Configuration over customization</p>
-      }
-      <sf-branch-switcher (branchChanged)="onBranchChanged()" />
-      <p class="conn-status" [class.offline]="(online$ | async) === false">
-        @if (online$ | async) {
-          Online
-        } @else {
-          Offline
-        }
-        @if (offlineItems$ | async; as items) {
-          @if (items.length) {
-            <span class="queue-count"> · {{ items.length }} queued</span>
+        <a class="context-brand" routerLink="/admin/dashboard" (click)="goNav('/admin/dashboard', $event)">
+          @if (theme.branding?.['schoolLogo']) {
+            <img
+              class="context-brand-logo"
+              [src]="theme.branding?.['schoolLogo']"
+              [alt]="schoolName(theme)"
+            />
+          } @else {
+            <span class="context-brand-mark">{{ brandInitial(theme) }}</span>
           }
+          <span class="context-brand-text">{{ schoolName(theme) }}</span>
+        </a>
+      } @else {
+        <a class="context-brand" routerLink="/admin/dashboard" (click)="goNav('/admin/dashboard', $event)">
+          <span class="context-brand-mark">S</span>
+          <span class="context-brand-text">School Admin</span>
+        </a>
+      }
+
+      <div class="context-meta">
+        <div class="context-pills">
+          <span class="context-pill">
+            <span class="pill-label">Campus</span>
+            <sf-branch-switcher (branchChanged)="onBranchChanged()" />
+          </span>
+          <span class="context-pill" [class.context-pill--offline]="(online$ | async) === false">
+            <span class="pill-label">Status</span>
+            <span class="pill-value">
+              @if (online$ | async) {
+                Online
+              } @else {
+                Offline
+              }
+              @if (offlineItems$ | async; as items) {
+                @if (items.length) {
+                  · {{ items.length }} queued
+                }
+              }
+            </span>
+          </span>
+        </div>
+      </div>
+
+      <div class="context-actions">
+        <div class="user-chip">
+          <span class="user-name">{{ sessionChip() }}</span>
+          <span class="user-role">{{ roleLabel() }}</span>
+        </div>
+        <button type="button" class="logout-btn" (click)="logout()">Sign out</button>
+      </div>
+    </div>
+  </header>
+
+  <!-- SugamFlow-style module strip: split tabs -->
+  <nav class="module-nav" aria-label="Primary modules" data-sf-nav-keep>
+    <div class="module-nav-row">
+      <button
+        type="button"
+        class="module-sidebar-toggle"
+        data-sf-nav-keep
+        [class.active]="!sidebarCollapsed || mobileNavOpen"
+        (click)="toggleSidebar($event)"
+        aria-label="Toggle sidebar"
+        [attr.aria-expanded]="!sidebarCollapsed"
+      >
+        <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
+          <path fill="currentColor" d="M4 6h16v2H4V6zm0 5h16v2H4v-2zm0 5h16v2H4v-2z" />
+        </svg>
+      </button>
+
+      <div class="module-tabs-scroll">
+        <div class="module-tabs">
+          @for (group of topGroups; track group.id) {
+            <div
+              class="module-split"
+              [class.open]="isTopOpen(group.id)"
+              [class.active]="isGroupActive(group)"
+            >
+              <a
+                class="module-split-primary"
+                [routerLink]="groupHome(group)"
+                (click)="goNav(groupHome(group), $event)"
+              >
+                {{ group.label }}
+              </a>
+              <button
+                type="button"
+                class="module-split-caret"
+                data-sf-nav-keep
+                [attr.aria-expanded]="isTopOpen(group.id)"
+                [attr.aria-label]="'Open ' + group.label + ' menu'"
+                (click)="openTopMenu(group.id, $event)"
+              >
+                <span class="caret" aria-hidden="true"></span>
+              </button>
+            </div>
+          }
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <!-- Floating submenu — outside overflow parents (SugamFlow Bootstrap pattern) -->
+  @if (openTopId) {
+    <div
+      class="module-flyout"
+      role="menu"
+      data-sf-nav-keep
+      [attr.aria-label]="openGroupLabel() + ' menu'"
+      [ngStyle]="dropdownStyle"
+      (click)="$event.stopPropagation()"
+    >
+      @for (item of openGroupItems(); track item.path) {
+        <a
+          role="menuitem"
+          [routerLink]="item.path"
+          routerLinkActive="active"
+          (click)="goNav(item.path, $event)"
+        >
+          {{ item.label }}
+        </a>
+      }
+    </div>
+  }
+
+  @if (mobileNavOpen) {
+    <div class="nav-scrim" (click)="closeMobileNav()" aria-hidden="true"></div>
+  }
+
+  <div class="workspace">
+    <aside class="sidebar" aria-label="Staff, reports and admin">
+      <div class="sidebar-card">
+        @if (theme$ | async; as theme) {
+          <div class="sidebar-brand">
+            <span class="sidebar-brand-mark">{{ brandInitial(theme) }}</span>
+            <div class="sidebar-brand-copy">
+              <span class="sidebar-brand-name">{{ schoolName(theme) }}</span>
+              <span class="sidebar-brand-sub">Workspace</span>
+            </div>
+            <button
+              type="button"
+              class="sidebar-close"
+              (click)="closeMobileNav()"
+              aria-label="Close navigation"
+            >
+              ×
+            </button>
+          </div>
         }
-      </p>
-    </div>
-    <nav>
-      @for (item of nav; track item.path) {
-        <a [routerLink]="item.path" routerLinkActive="active">{{ item.label }}</a>
-      }
-    </nav>
-    <div class="session">
-      <p class="session-label">{{ sessionLabel() }}</p>
-      @if (theme$ | async; as theme) {
-        <p class="footer-brand">{{ theme.branding?.['footer'] }}</p>
-      }
-      <button type="button" class="logout" (click)="logout()">Sign out</button>
-    </div>
-  </aside>
-  <main>
-    <router-outlet />
-  </main>
+
+        <nav class="sidebar-nav">
+          <div class="sidebar-mobile-primary">
+            <p class="sidebar-hint">Modules</p>
+            @for (group of topGroups; track group.id) {
+              <div class="side-group" [class.active]="isGroupActive(group)">
+                <button
+                  type="button"
+                  class="side-group-toggle"
+                  [attr.aria-expanded]="isSideExpanded('m-' + group.id)"
+                  (click)="toggleSideSection('m-' + group.id, $event)"
+                >
+                  <span class="side-icon" [attr.data-icon]="group.icon"></span>
+                  <span class="side-label">{{ group.label }}</span>
+                  <span class="side-chevron" [class.open]="isSideExpanded('m-' + group.id)"></span>
+                </button>
+                @if (isSideExpanded('m-' + group.id)) {
+                  <div class="side-links">
+                    @for (item of group.items; track item.path) {
+                      <a
+                        [routerLink]="item.path"
+                        routerLinkActive="active"
+                        (click)="goNav(item.path, $event)"
+                      >
+                        {{ item.label }}
+                      </a>
+                    }
+                  </div>
+                }
+              </div>
+            }
+            <p class="sidebar-hint sidebar-hint--more">More</p>
+          </div>
+
+          @for (group of sideGroups; track group.id) {
+            <div class="side-group" [class.active]="isGroupActive(group)">
+              <button
+                type="button"
+                class="side-group-toggle"
+                [attr.aria-expanded]="isSideExpanded(group.id)"
+                (click)="toggleSideSection(group.id, $event)"
+              >
+                <span class="side-icon" [attr.data-icon]="group.icon"></span>
+                <span class="side-label">{{ group.label }}</span>
+                <span class="side-chevron" [class.open]="isSideExpanded(group.id)"></span>
+              </button>
+              @if (isSideExpanded(group.id)) {
+                <div class="side-links">
+                  @for (item of group.items; track item.path) {
+                    <a
+                      [routerLink]="item.path"
+                      routerLinkActive="active"
+                      (click)="goNav(item.path, $event)"
+                    >
+                      {{ item.label }}
+                    </a>
+                  }
+                </div>
+              }
+            </div>
+          }
+        </nav>
+      </div>
+    </aside>
+
+    <main class="outlet-well">
+      <router-outlet />
+    </main>
+  </div>
 </div>

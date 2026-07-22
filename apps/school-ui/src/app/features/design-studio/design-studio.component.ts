@@ -17,6 +17,8 @@ export class DesignStudioComponent implements OnInit {
 
   theme: DesignTheme | null = null;
   status = '';
+  loading = true;
+  serviceUnavailable = false;
   readonly colorKeys = [
     'primary',
     'secondary',
@@ -32,10 +34,28 @@ export class DesignStudioComponent implements OnInit {
   ];
 
   ngOnInit(): void {
-    this.api.get<DesignTheme>('/api/config/design-studio/theme').subscribe((t) => {
-      this.ensureMaps(t);
-      this.theme = t;
-      this.preview();
+    this.loadTheme();
+  }
+
+  loadTheme(): void {
+    this.loading = true;
+    this.serviceUnavailable = false;
+    this.api.get<DesignTheme>('/api/config/design-studio/theme').subscribe({
+      next: (t) => {
+        this.ensureMaps(t);
+        this.theme = t;
+        this.loading = false;
+        this.preview();
+      },
+      error: () => {
+        const fallback = this.themeService.theme() ?? this.themeService.apply(null);
+        this.ensureMaps(fallback);
+        this.theme = fallback;
+        this.loading = false;
+        this.serviceUnavailable = true;
+        this.status =
+          'Color settings service is temporarily unavailable. You can preview colors, then retry before saving.';
+      },
     });
   }
 
@@ -49,20 +69,34 @@ export class DesignStudioComponent implements OnInit {
     if (!this.theme) {
       return;
     }
-    this.api.put('/api/config/design-studio/theme', this.theme).subscribe((t) => {
-      this.ensureMaps(t as DesignTheme);
-      this.theme = t as DesignTheme;
-      this.status = 'Saved — live theme applied across the app.';
-      this.preview();
+    this.api.put('/api/config/design-studio/theme', this.theme).subscribe({
+      next: (t) => {
+        this.ensureMaps(t as DesignTheme);
+        this.theme = t as DesignTheme;
+        this.serviceUnavailable = false;
+        this.status = 'Saved — live theme applied across the app.';
+        this.preview();
+      },
+      error: () => {
+        this.serviceUnavailable = true;
+        this.status = 'Could not save colors. Retry after the settings service is available.';
+      },
     });
   }
 
   publish(): void {
-    this.api.put<DesignTheme>('/api/config/design-studio/theme/publish', {}).subscribe((t) => {
-      this.ensureMaps(t);
-      this.theme = t;
-      this.status = `Published version ${t.version} — login screen will use this branding.`;
-      this.preview();
+    this.api.put<DesignTheme>('/api/config/design-studio/theme/publish', {}).subscribe({
+      next: (t) => {
+        this.ensureMaps(t);
+        this.theme = t;
+        this.serviceUnavailable = false;
+        this.status = `Published version ${t.version} — login screen will use this branding.`;
+        this.preview();
+      },
+      error: () => {
+        this.serviceUnavailable = true;
+        this.status = 'Could not publish the theme. Retry after the settings service is available.';
+      },
     });
   }
 

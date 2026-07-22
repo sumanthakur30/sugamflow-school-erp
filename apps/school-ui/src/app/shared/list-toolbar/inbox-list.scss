@@ -1,0 +1,297 @@
+/* Shared SugamFlow Stock-style inbox list surface.
+   Import alongside admin-page.scss in list-first feature components. */
+
+.list-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.head-actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.crumb {
+  margin: 0 0 0.35rem;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: #64748b;
+}
+
+.crumb-link {
+  display: inline;
+  padding: 0;
+  margin: 0;
+  border: 0;
+  background: none;
+  color: var(--sf-primary);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.form-page {
+  max-width: 960px;
+}
+
+.detail-page {
+  max-width: 900px;
+}
+
+.form-section {
+  margin-bottom: 1rem;
+}
+
+.form-section-title {
+  margin: 0 0 0.85rem;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #64748b;
+}
+
+.form-actions {
+  margin-top: 0.75rem;
+  margin-bottom: 0.5rem;
+}
+
+.read-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.85rem 1rem;
+}
+
+.read-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-width: 0;
+}
+
+.read-label {
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #64748b;
+}
+
+.read-value {
+  font-size: 0.98rem;
+  font-weight: 600;
+  color: var(--sf-text, #0f172a);
+  word-break: break-word;
+}
+
+.inbox-panel {
+  padding-top: 0.85rem;
+}
+
+.table-wrap {
+  overflow-x: auto;
+  margin-top: 0.5rem;
+}
+
+.inbox-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.92rem;
+}
+
+.inbox-table th,
+.inbox-table td {
+  text-align: left;
+  padding: 0.7rem 0.75rem;
+  border-bottom: 1px solid color-mix(in srgb, var(--sf-menu) 16%, transparent);
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+.inbox-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: color-mix(in srgb, var(--sf-panel) 94%, #e8f0ec);
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  opacity: 0.8;
+}
+
+.inbox-row {
+  cursor: pointer;
+
+  &:hover {
+    background: color-mix(in srgb, var(--sf-primary) 5%, #fff);
+  }
+
+  &.selected {
+    background: color-mix(in srgb, var(--sf-primary) 9%, #fff);
+  }
+
+  &.row-warn {
+    background: color-mix(in srgb, #ca8a04 8%, #fff);
+  }
+
+  &.row-danger {
+    background: color-mix(in srgb, #b91c1c 8%, #fff);
+  }
+}
+
+.cell-primary {
+  font-weight: 700;
+}
+
+.cell-sub {
+  margin-top: 0.15rem;
+  font-size: 0.8rem;
+  opacity: 0.65;
+  max-width: 18rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.86rem;
+}
+
+.muted-cell {
+  font-size: 0.85rem;
+  opacity: 0.75;
+}
+
+.empty-row {
+  text-align: center;
+  padding: 1.5rem 0.75rem !important;
+  white-space: normal !important;
+}
+
+.col-actions {
+  width: 1%;
+  white-space: nowrap;
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.2rem 0.55rem;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  background: color-mix(in srgb, var(--sf-menu) 12%, #fff);
+  color: #334155;
+}
+
+.badge-ok {
+  background: color-mix(in srgb, #15803d 16%, #fff);
+  color: #166534;
+}
+
+.badge-bad {
+  background: color-mix(in srgb, #b91c1c 14%, #fff);
+  color: #991b1b;
+}
+
+.badge-progress {
+  background: color-mix(in srgb, #c2410c 14%, #fff);
+  color: #9a3412;
+}
+
+.badge-warn {
+  background: color-mix(in srgb, #ca8a04 16%, #fff);
+  color: #854d0e;
+}
+
+.step-chip {
+  display: inline-flex;
+  padding: 0.18rem 0.5rem;
+  border-radius: calc(var(--sf-radius) - 2px);
+  background: color-mix(in srgb, var(--sf-menu) 10%, #fff);
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+.timeline {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.65rem;
+}
+
+.timeline li {
+  padding-left: 0.85rem;
+  border-left: 3px solid color-mix(in srgb, var(--sf-primary) 35%, transparent);
+}
+
+.timeline-title {
+  font-weight: 700;
+  font-size: 0.86rem;
+}
+
+.timeline-msg {
+  font-size: 0.9rem;
+  margin-top: 0.1rem;
+}
+
+.timeline-at {
+  font-size: 0.78rem;
+  opacity: 0.65;
+  margin-top: 0.15rem;
+}
+
+.history {
+  margin: 0;
+  padding-left: 1.1rem;
+  font-size: 0.9rem;
+}
+
+.muted {
+  color: #64748b;
+}
+
+.req {
+  color: #b91c1c;
+}
+
+.is-busy {
+  opacity: 0.92;
+  pointer-events: none;
+}
+
+button.tiny,
+.tiny {
+  padding: 0.35rem 0.65rem;
+  font-size: 0.85rem;
+  min-height: 0;
+}
+
+button.danger {
+  background: #b91c1c;
+}
+
+button:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
+@media (max-width: 900px) {
+  .read-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 560px) {
+  .read-grid {
+    grid-template-columns: 1fr;
+  }
+}

@@ -191,6 +191,7 @@ public class ReportTemplateService {
     ensureTemplate("offer_letter");
     ensureFeeReceiptEnriched();
     ensureTransferCertificateEnriched();
+    ensureStudentDocumentTemplates();
   }
 
   private void ensureTemplate(String key) {
@@ -250,6 +251,21 @@ public class ReportTemplateService {
     }
     if ("transfer_certificate".equals(key)) {
       return transferCertificateTemplate();
+    }
+    if ("id_card".equals(key)) {
+      return idCardTemplate();
+    }
+    if ("bonafide".equals(key)) {
+      return certificateTemplate(
+          "bonafide",
+          "BONAFIDE CERTIFICATE",
+          "This is to certify that {{student.name}} (Admission No: {{student.admissionNo}}) is a bona fide student of class {{student.classSection}}.");
+    }
+    if ("character_certificate".equals(key)) {
+      return certificateTemplate(
+          "character_certificate",
+          "CHARACTER CERTIFICATE",
+          "This is to certify that {{student.name}} (Admission No: {{student.admissionNo}}) of class {{student.classSection}} bears a good moral character.");
     }
     Map<String, Object> t = new LinkedHashMap<>();
     t.put("templateKey", key);
@@ -450,6 +466,116 @@ public class ReportTemplateService {
             element("box", "", 40, 240, 11, 400, 80),
             element("text", "Download: {{context.feeReceiptUrl}}", 40, 340, 10, 520, 24),
             element("text", "Issued at {{context.issuedAt}}", 40, 380, 10, 400, 24)));
+    t.put("charts", List.of());
+    t.put("filters", List.of());
+    t.put("calculatedFields", List.of());
+    t.put("schedule", Map.of("enabled", false, "channels", List.of("EMAIL")));
+    return normalizeTemplate(t);
+  }
+
+  private void ensureStudentDocumentTemplates() {
+    upsertCanonicalTemplate("id_card", idCardTemplate(), "context.verifyUrl");
+    upsertCanonicalTemplate(
+        "bonafide",
+        certificateTemplate(
+            "bonafide",
+            "BONAFIDE CERTIFICATE",
+            "This is to certify that {{student.name}} (Admission No: {{student.admissionNo}}) is a bona fide student of class {{student.classSection}}."),
+        "context.verifyUrl");
+    upsertCanonicalTemplate(
+        "character_certificate",
+        certificateTemplate(
+            "character_certificate",
+            "CHARACTER CERTIFICATE",
+            "This is to certify that {{student.name}} (Admission No: {{student.admissionNo}}) of class {{student.classSection}} bears a good moral character."),
+        "context.verifyUrl");
+  }
+
+  private void upsertCanonicalTemplate(
+      String key, Map<String, Object> canonical, String marker) {
+    repo.findByOrganizationIdIsNullAndTemplateKey(key)
+        .ifPresentOrElse(
+            e -> {
+              String payload = String.valueOf(e.getPayload());
+              if (payload.contains(marker) && payload.contains("\"type\":\"qr\"")) {
+                return;
+              }
+              e.setPayload(canonical);
+              e.setUpdatedAt(Instant.now());
+              repo.save(e);
+            },
+            () -> {
+              ReportTemplateEntity e = new ReportTemplateEntity();
+              e.setOrganizationId(null);
+              e.setTemplateKey(key);
+              e.setPayload(canonical);
+              e.setUpdatedAt(Instant.now());
+              repo.save(e);
+            });
+  }
+
+  private Map<String, Object> idCardTemplate() {
+    Map<String, Object> t = new LinkedHashMap<>();
+    t.put("templateKey", "id_card");
+    t.put("name", "Student ID Card");
+    t.put("layout", Map.of("width", 794, "height", 1123, "units", "px", "paper", "A4"));
+    t.put(
+        "elements",
+        List.of(
+            element("heading", "STUDENT IDENTITY CARD", 40, 48, 18, 420, 28),
+            element("box", "", 40, 90, 11, 520, 220),
+            element("text", "Name: {{student.name}}", 60, 110, 12, 300, 24),
+            element("text", "Admission No: {{student.admissionNo}}", 60, 140, 11, 300, 24),
+            element("text", "Class: {{student.classSection}}", 60, 170, 11, 300, 24),
+            element("text", "Session: {{context.academicSessionId}}", 60, 200, 11, 300, 24),
+            element("text", "Ref: {{document.referenceNo}}", 60, 230, 10, 300, 24),
+            element("qr", "{{context.verifyUrl}}", 420, 120, 11, 120, 120),
+            element("text", "Scan to verify", 420, 250, 9, 120, 20),
+            element(
+                "text",
+                "Organization: {{context.organizationId}} · Branch: {{context.branchId}}",
+                40,
+                340,
+                10,
+                520,
+                24),
+            element("text", "Issued at {{context.issuedAt}}", 40, 370, 10, 400, 24)));
+    t.put("charts", List.of());
+    t.put("filters", List.of());
+    t.put("calculatedFields", List.of());
+    t.put("schedule", Map.of("enabled", false, "channels", List.of("EMAIL")));
+    return normalizeTemplate(t);
+  }
+
+  private Map<String, Object> certificateTemplate(String key, String title, String body) {
+    Map<String, Object> t = new LinkedHashMap<>();
+    t.put("templateKey", key);
+    t.put("name", key.replace('_', ' '));
+    t.put("layout", Map.of("width", 794, "height", 1123, "units", "px", "paper", "A4"));
+    t.put(
+        "elements",
+        List.of(
+            element("heading", title, 40, 60, 18, 500, 28),
+            element("text", body, 40, 120, 12, 520, 60),
+            element(
+                "text",
+                "This certificate is issued on request. Reference: {{document.referenceNo}}",
+                40,
+                200,
+                11,
+                520,
+                36),
+            element(
+                "text",
+                "Organization: {{context.organizationId}} · Branch: {{context.branchId}} · Session: {{context.academicSessionId}}",
+                40,
+                260,
+                10,
+                520,
+                36),
+            element("qr", "{{context.verifyUrl}}", 40, 320, 11, 120, 120),
+            element("text", "Scan QR to verify authenticity", 180, 360, 10, 300, 24),
+            element("text", "Issued at {{context.issuedAt}}", 40, 470, 10, 400, 24)));
     t.put("charts", List.of());
     t.put("filters", List.of());
     t.put("calculatedFields", List.of());

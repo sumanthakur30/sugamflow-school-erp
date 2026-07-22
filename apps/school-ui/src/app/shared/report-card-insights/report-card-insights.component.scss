@@ -1,0 +1,231 @@
+.insight-panel {
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--sf-primary) 22%, #cbd5e1);
+  border-radius: var(--sf-radius);
+  background: color-mix(in srgb, var(--sf-primary) 3%, #fff);
+}
+
+.insight-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.85rem 1rem;
+  border-bottom: 1px solid color-mix(in srgb, var(--sf-primary) 14%, transparent);
+}
+
+.insight-kicker,
+.insight-head h4,
+.insight-head p {
+  margin: 0;
+}
+
+.insight-kicker {
+  color: var(--sf-primary);
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.insight-head h4 {
+  margin: 0.12rem 0 0.2rem;
+  font-size: 1rem;
+}
+
+.insight-head p {
+  max-width: 720px;
+  color: #475569;
+  font-size: 0.8rem;
+}
+
+.trend-badge {
+  flex: 0 0 auto;
+  padding: 0.22rem 0.55rem;
+  border-radius: 999px;
+  background: #e2e8f0;
+  color: #475569;
+  font-size: 0.72rem;
+  font-weight: 800;
+}
+
+.trend-badge.improving {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.trend-badge.declining {
+  background: #fee2e2;
+  color: #b91c1c;
+}
+
+.trend-badge.stable {
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+
+.insight-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  border-bottom: 1px solid color-mix(in srgb, var(--sf-text) 9%, transparent);
+}
+
+.insight-metrics > div {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  padding: 0.65rem 1rem;
+  border-right: 1px solid color-mix(in srgb, var(--sf-text) 9%, transparent);
+}
+
+.insight-metrics > div:last-child {
+  border-right: 0;
+}
+
+.insight-metrics span,
+.block-label {
+  color: #64748b;
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.insight-metrics strong {
+  color: #0f172a;
+  font-size: 0.94rem;
+}
+
+.term-trend {
+  padding: 0.75rem 1rem 0;
+}
+
+.trend-list {
+  display: grid;
+  gap: 0.32rem;
+  margin-top: 0.4rem;
+}
+
+.trend-row {
+  display: grid;
+  grid-template-columns: 70px minmax(100px, 1fr) 56px;
+  align-items: center;
+  gap: 0.55rem;
+  color: #64748b;
+  font-size: 0.75rem;
+}
+
+.trend-row.current {
+  color: #0f172a;
+  font-weight: 700;
+}
+
+.bar-track {
+  height: 7px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #e2e8f0;
+}
+
+.bar-track i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--sf-primary);
+}
+
+.trend-row strong {
+  text-align: right;
+}
+
+.insight-columns {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+  padding: 0.85rem 1rem;
+}
+
+.evidence-list {
+  display: grid;
+  gap: 0.45rem;
+  margin: 0.45rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.evidence-list li {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0.2rem 0.75rem;
+  padding: 0.55rem 0.65rem;
+  border-radius: calc(var(--sf-radius) - 2px);
+  background: #fff;
+}
+
+.evidence-list li > div {
+  display: flex;
+  flex-direction: column;
+}
+
+.evidence-list li span,
+.evidence-list li p,
+.positive-note {
+  color: #64748b;
+  font-size: 0.74rem;
+}
+
+.evidence-list li p {
+  grid-column: 1 / -1;
+  margin: 0.15rem 0 0;
+}
+
+.evidence-list.strengths li {
+  border-left: 3px solid #22c55e;
+}
+
+.evidence-list.focus li {
+  border-left: 3px solid #f59e0b;
+}
+
+.positive-note {
+  margin: 0.45rem 0 0;
+}
+
+.next-actions {
+  margin: 0 1rem 0.8rem;
+  padding: 0.7rem 0.8rem;
+  border-radius: var(--sf-radius);
+  background: #fff;
+}
+
+.next-actions ol {
+  display: grid;
+  gap: 0.25rem;
+  margin: 0.45rem 0 0;
+  padding-left: 1.2rem;
+  color: #334155;
+  font-size: 0.78rem;
+}
+
+footer {
+  padding: 0.55rem 1rem;
+  border-top: 1px solid color-mix(in srgb, var(--sf-text) 8%, transparent);
+  color: #64748b;
+  font-size: 0.68rem;
+}
+
+@media (max-width: 640px) {
+  .insight-head {
+    flex-direction: column;
+  }
+
+  .insight-metrics,
+  .insight-columns {
+    grid-template-columns: 1fr;
+  }
+
+  .insight-metrics > div {
+    border-right: 0;
+    border-bottom: 1px solid color-mix(in srgb, var(--sf-text) 8%, transparent);
+  }
+}

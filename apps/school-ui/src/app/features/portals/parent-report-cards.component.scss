@@ -1,0 +1,83 @@
+.card-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.85rem;
+}
+
+.rc-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.rc-summary {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.subject-lines {
+  list-style: none;
+  margin: 0.75rem 0;
+  padding: 0;
+  display: grid;
+  gap: 0.35rem;
+}
+
+.subject-lines li {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  border-bottom: 1px dashed color-mix(in srgb, var(--sf-menu) 15%, transparent);
+  padding-bottom: 0.25rem;
+}
+
+.badge {
+  display: inline-block;
+  padding: 0.1rem 0.5rem;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  background: color-mix(in srgb, #16a34a 18%, #fff);
+  color: #15803d;
+}
+
+.badge.fail {
+  background: color-mix(in srgb, #dc2626 15%, #fff);
+  color: #b91c1c;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.insight-button {
+  background: color-mix(in srgb, var(--sf-primary) 10%, #fff);
+  color: var(--sf-primary);
+}
+
+.insight-loading {
+  margin: 0.75rem 0 0;
+  padding: 1rem;
+  border-radius: var(--sf-radius);
+  background: color-mix(in srgb, var(--sf-primary) 4%, #fff);
+  color: #64748b;
+  text-align: center;
+}
+
+@media (max-width: 640px) {
+  .rc-head {
+    flex-direction: column;
+  }
+
+  .actions button {
+    width: 100%;
+  }
+}

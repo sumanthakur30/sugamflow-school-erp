@@ -1,0 +1,172 @@
+<div class="slu" [class.is-disabled]="disabled">
+  <div class="slu-label-row">
+    <label class="slu-label" [attr.for]="inputId">{{ label }}</label>
+    @if (showFilters) {
+      <button
+        type="button"
+        class="slu-link"
+        (click)="showFilterPanel = !showFilterPanel"
+        [disabled]="disabled"
+      >
+        {{ showFilterPanel ? 'Hide filters' : 'Filters' }}
+      </button>
+    }
+  </div>
+
+  @if (showFilters && showFilterPanel) {
+    <div class="slu-filters">
+      <label>
+        Status
+        <select
+          [(ngModel)]="filters.status"
+          name="sluStatus"
+          [disabled]="disabled"
+          (ngModelChange)="applyFilters()"
+        >
+          <option value="ACTIVE">Active</option>
+          <option value="">All (visible)</option>
+          <option value="INACTIVE">Inactive</option>
+        </select>
+      </label>
+      <label>
+        Class / Section
+        <input
+          [(ngModel)]="filters.classSection"
+          name="sluClass"
+          placeholder="e.g. Grade 8-A"
+          [disabled]="disabled"
+          (keyup.enter)="applyFilters()"
+        />
+      </label>
+      <label>
+        Branch
+        <input
+          [(ngModel)]="filters.branchId"
+          name="sluBranch"
+          placeholder="Branch id"
+          [disabled]="disabled"
+        />
+      </label>
+      <label>
+        Academic year
+        <input
+          [(ngModel)]="filters.academicSessionId"
+          name="sluSession"
+          placeholder="e.g. 2025-26"
+          [disabled]="disabled"
+        />
+      </label>
+      <button type="button" class="slu-apply" (click)="applyFilters()" [disabled]="disabled">
+        Apply
+      </button>
+    </div>
+  }
+
+  @if (selected) {
+    <div class="slu-selected">
+      <div class="slu-selected-main">
+        <div class="slu-avatar" aria-hidden="true">
+          {{ (selected.fullName || '?').charAt(0).toUpperCase() }}
+        </div>
+        <div>
+          <div class="slu-selected-name">{{ selected.fullName || '—' }}</div>
+          <div class="slu-selected-meta">
+            {{ selected.admissionNo || '—' }}
+            @if (selected.classSection) {
+              · {{ selected.classSection }}
+            }
+            @if (selected.rollNo) {
+              · Roll {{ selected.rollNo }}
+            }
+          </div>
+        </div>
+      </div>
+      <button type="button" class="slu-change" (click)="clearSelection()" [disabled]="disabled">
+        Change student
+      </button>
+    </div>
+  } @else {
+    <div class="slu-input-wrap">
+      <input
+        #searchInput
+        [id]="inputId"
+        class="slu-input"
+        type="search"
+        autocomplete="off"
+        [placeholder]="placeholder"
+        [ngModel]="q"
+        (ngModelChange)="onQueryChange($event)"
+        (focus)="onFocus()"
+        (keydown)="onKeydown($event)"
+        [disabled]="disabled"
+        role="combobox"
+        aria-autocomplete="list"
+        [attr.aria-expanded]="open"
+        [attr.aria-controls]="listId"
+      />
+      @if (searching) {
+        <span class="slu-spinner" aria-label="Searching"></span>
+      }
+    </div>
+  }
+
+  @if (error) {
+    <p class="slu-error" role="alert">{{ error }}</p>
+  }
+
+  @if (open && !selected) {
+    <ul class="slu-dropdown" role="listbox" [id]="listId">
+      @if (!searching && !results.length) {
+        <li class="slu-empty muted">
+          @if (q.trim().length < minChars && !filters.classSection) {
+            Type at least {{ minChars }} characters to search.
+          } @else {
+            {{ emptyHint || 'No matching active students.' }}
+          }
+        </li>
+      }
+      @for (row of results; track trackById($index, row); let i = $index) {
+        <li
+          role="option"
+          class="slu-option"
+          [class.is-active]="i === highlightIndex"
+          [attr.aria-selected]="i === highlightIndex"
+          (mousedown)="selectRow(row, $event)"
+          (mouseenter)="highlightIndex = i"
+        >
+          <div class="slu-avatar sm" aria-hidden="true">
+            {{ (row.fullName || '?').charAt(0).toUpperCase() }}
+          </div>
+          <div class="slu-option-body">
+            <div class="slu-option-title">
+              {{ row.fullName || '—' }}
+              <span [class]="statusClass(row.status)">{{
+                row.source === 'ADMISSION' ? 'Applicant' : row.status || '—'
+              }}</span>
+            </div>
+            <div class="slu-option-line">
+              @if (row.source === 'ADMISSION') {
+                Application ·
+              }
+              Admission No: {{ row.admissionNo || '—' }}
+              @if (row.classSection) {
+                · Class: {{ row.classSection }}
+              }
+              @if (row.rollNo) {
+                · Roll: {{ row.rollNo }}
+              }
+            </div>
+            <div class="slu-option-line">
+              @if (row.parentName) {
+                Parent: {{ row.parentName }}
+              }
+              @if (row.mobile) {
+                · Mobile: {{ row.mobile }}
+              }
+            </div>
+          </div>
+        </li>
+      }
+    </ul>
+  }
+</div>

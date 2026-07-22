@@ -1,0 +1,106 @@
+<section class="insight-panel">
+  <header class="insight-head">
+    <div>
+      <p class="insight-kicker">AI-assisted analysis</p>
+      <h4>Performance insights</h4>
+      <p>{{ insight?.summary?.overallMessage }}</p>
+    </div>
+    <span class="trend-badge" [class]="trendClass()">{{ trendLabel() }}</span>
+  </header>
+
+  <div class="insight-metrics">
+    <div>
+      <span>Current result</span>
+      <strong>{{ insight?.summary?.currentPercentage ?? '—' }}%</strong>
+    </div>
+    <div>
+      <span>Previous result</span>
+      <strong>
+        {{
+          insight?.summary?.previousPercentage != null
+            ? insight.summary.previousPercentage + '%'
+            : 'Not available'
+        }}
+      </strong>
+    </div>
+    <div>
+      <span>Change</span>
+      <strong>{{ changeLabel() }}</strong>
+    </div>
+  </div>
+
+  @if ((insight?.termTrend || []).length) {
+    <div class="term-trend">
+      <span class="block-label">Term trend</span>
+      <div class="trend-list">
+        @for (point of insight.termTrend; track point.termKey) {
+          <div class="trend-row" [class.current]="point.current">
+            <span>{{ point.termKey }}</span>
+            <div class="bar-track">
+              <i [style.width.%]="barWidth(point.percentage)"></i>
+            </div>
+            <strong>{{ point.percentage }}%</strong>
+          </div>
+        }
+      </div>
+    </div>
+  }
+
+  <div class="insight-columns">
+    <section>
+      <span class="block-label">Strengths</span>
+      @if ((insight?.strengths || []).length) {
+        <ul class="evidence-list strengths">
+          @for (item of insight.strengths; track item.subjectId) {
+            <li>
+              <div>
+                <strong>{{ item.subject }}</strong>
+                <span>{{ item.label }}</span>
+              </div>
+              <b>{{ item.percentage }}%</b>
+              <p>{{ item.recommendation }}</p>
+            </li>
+          }
+        </ul>
+      } @else {
+        <p class="muted">More assessed subjects are needed to identify strengths.</p>
+      }
+    </section>
+
+    <section>
+      <span class="block-label">Focus areas</span>
+      @if ((insight?.focusAreas || []).length) {
+        <ul class="evidence-list focus">
+          @for (item of insight.focusAreas; track item.subjectId) {
+            <li>
+              <div>
+                <strong>{{ item.subject }}</strong>
+                <span>{{ item.label }}</span>
+              </div>
+              <b>{{ item.percentage }}%</b>
+              <p>{{ item.recommendation }}</p>
+            </li>
+          }
+        </ul>
+      } @else {
+        <p class="positive-note">No major focus area was detected in the assessed subjects.</p>
+      }
+    </section>
+  </div>
+
+  @if ((insight?.recommendedActions || []).length) {
+    <section class="next-actions">
+      <span class="block-label">Recommended next steps</span>
+      <ol>
+        @for (action of insight.recommendedActions; track $index) {
+          <li>{{ action }}</li>
+        }
+      </ol>
+    </section>
+  }
+
+  <footer>
+    Based on {{ insight?.evidence?.subjectsAnalyzed || 0 }} assessed subjects across
+    {{ insight?.evidence?.termsAnalyzed || 0 }} term(s). {{ insight?.disclaimer }}
+  </footer>
+</section>

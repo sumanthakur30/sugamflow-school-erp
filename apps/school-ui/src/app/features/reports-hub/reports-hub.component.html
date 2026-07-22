@@ -1,0 +1,29 @@
+<div class="page reports-hub">
+  <header class="page-head">
+    <div>
+      <h2>Reports</h2>
+      <p>School insights in one place — open a report or design a custom template.</p>
+    </div>
+  </header>
+
+  @for (cat of categories; track cat.id) {
+    @if (cardsFor(cat.id).length) {
+      <section class="hub-section">
+        <h3>{{ cat.label }}</h3>
+        <div class="hub-grid">
+          @for (card of cardsFor(cat.id); track card.path) {
+            <a class="hub-card" [routerLink]="card.path">
+              <span class="hub-title">{{ card.title }}</span>
+              <span class="hub-desc">{{ card.description }}</span>
+              <span class="hub-go">Open →</span>
+            </a>
+          }
+        </div>
+      </section>
+    }
+  }
+
+  @if (!cards.length) {
+    <p class="panel muted">No report modules are enabled for this plan yet.</p>
+  }
+</div>

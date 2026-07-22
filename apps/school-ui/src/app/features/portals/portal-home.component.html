@@ -3,46 +3,90 @@
     <p class="panel">This portal is not enabled for the current subscription plan.</p>
   } @else {
     <div class="page-head">
-      <h2>{{ boot?.title }}</h2>
-      <p>{{ boot?.subtitle }}</p>
-    </div>
-
-    <section class="panel profile">
-      <h3>Profile</h3>
-      <div class="chip-list">
-        @for (entry of profileEntries(); track entry.key) {
-          <span class="chip">{{ entry.key }}: {{ entry.value }}</span>
-        }
+      <div class="title-row">
+        <h2>{{ boot?.title }}</h2>
+        <span class="live-badge">{{ liveLoading ? 'Refreshing' : 'Live' }}</span>
       </div>
-    </section>
-
-    <div class="widget-grid">
-      @for (w of boot?.widgets || []; track w.id) {
-        @if (w.type === 'stat') {
-          <a class="panel widget-stat" [routerLink]="w.route || '.'">
-            <p class="w-label">{{ w.title }}</p>
-            <p class="w-value">{{ summaryValue(w.valueKey) }}</p>
-          </a>
-        }
+      <p>{{ boot?.subtitle }}</p>
+      @if (liveWarning) {
+        <p class="live-warning">{{ liveWarning }} Showing available information.</p>
       }
     </div>
 
-    @for (w of boot?.widgets || []; track w.id) {
-      @if (w.type === 'list' && w.id === 'notices') {
-        <section class="panel">
-          <h3>{{ w.title }}</h3>
-          @if (!(boot?.notices || []).length) {
-            <p class="muted">No notices.</p>
+    @if (liveLoading) {
+      <section class="panel live-loading">Loading relationship-scoped portal data…</section>
+    } @else {
+      <section class="panel profile">
+        <h3>Profile</h3>
+        <div class="chip-list">
+          @for (entry of profileEntries(); track entry.key) {
+            <span class="chip">{{ entry.key }}: {{ entry.value }}</span>
+          } @empty {
+            <span class="muted">No linked profile is available for this account.</span>
+          }
+        </div>
+      </section>
+    }
+
+    @if (!liveLoading) {
+      <div class="widget-grid">
+        @for (w of boot?.widgets || []; track w.id) {
+          @if (w.type === 'stat') {
+            <a class="panel widget-stat" [routerLink]="w.route || '.'">
+              <p class="w-label">{{ w.title }}</p>
+              <p class="w-value">{{ summaryValue(w.valueKey) }}</p>
+            </a>
+          }
+        }
+      </div>
+
+      @if (boot?.portalKey === 'parent') {
+        <section class="panel alert-inbox">
+          <div class="alert-inbox-head">
+            <h3>Alerts &amp; announcements</h3>
+            @if (unreadAlertCount()) {
+              <span class="unread-count">{{ unreadAlertCount() }} unread</span>
+            }
+          </div>
+          @if (!inAppAlerts.length) {
+            <p class="muted">No alerts yet.</p>
           }
           <ul class="notice-list">
-            @for (n of boot?.notices || []; track n.id || n.title) {
-              <li>
-                <strong>{{ n.title }}</strong>
-                <p>{{ n.body }}</p>
+            @for (alert of inAppAlerts; track alert.id) {
+              <li class="in-app-alert" [class.unread]="!alert.readAt">
+                <div>
+                  <strong>{{ alert.subject }}</strong>
+                  <p>{{ alert.body }}</p>
+                  <small>{{ alert.createdAt | date: 'medium' }}</small>
+                </div>
+                @if (!alert.readAt) {
+                  <button type="button" class="mark-read" (click)="markAlertRead(alert)">
+                    Mark read
+                  </button>
+                }
               </li>
             }
           </ul>
         </section>
+      }
+
+      @for (w of boot?.widgets || []; track w.id) {
+        @if (w.type === 'list' && w.id === 'notices') {
+          <section class="panel">
+            <h3>{{ w.title }}</h3>
+            @if (!(boot?.notices || []).length) {
+              <p class="muted">No notices.</p>
+            }
+            <ul class="notice-list">
+              @for (n of boot?.notices || []; track n.id || n.title) {
+                <li>
+                  <strong>{{ n.title }}</strong>
+                  <p>{{ n.body }}</p>
+                </li>
+              }
+            </ul>
+          </section>
+        }
       }
     }
   }

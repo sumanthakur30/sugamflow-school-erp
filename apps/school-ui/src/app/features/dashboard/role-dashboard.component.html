@@ -1,0 +1,84 @@
+<section class="page dashboard-page">
+  <header class="dashboard-head">
+    <div>
+      <p class="eyebrow">{{ role.replace('_', ' ') }}</p>
+      <h2>{{ title }}</h2>
+      <p>{{ subtitle }}</p>
+    </div>
+    <button type="button" class="secondary" (click)="load()" [disabled]="loading">
+      {{ loading ? 'Refreshing…' : 'Refresh' }}
+    </button>
+  </header>
+
+  @if (error) {
+    <p class="panel error" role="alert">{{ error }}</p>
+  }
+
+  @if (loading) {
+    <section class="metric-grid" aria-label="Loading dashboard">
+      @for (item of [1, 2, 3, 4]; track item) {
+        <div class="panel metric-card skeleton"></div>
+      }
+    </section>
+  } @else {
+    <section class="metric-grid" aria-label="Role metrics">
+      @for (metric of metrics; track metric.id) {
+        <a class="panel metric-card" [class]="'panel metric-card tone-' + metric.tone" [routerLink]="metric.route">
+          <span class="metric-label">{{ metric.label }}</span>
+          <strong>{{ metric.value }}</strong>
+          <span class="metric-hint">{{ metric.hint }}</span>
+        </a>
+      }
+    </section>
+
+    <div class="dashboard-columns">
+      <section class="panel">
+        <div class="section-head">
+          <div>
+            <h3>Priority actions</h3>
+            <p>Shortcuts selected for your role.</p>
+          </div>
+        </div>
+        <div class="action-grid">
+          @for (action of actions; track action.route + action.label) {
+            <a class="action-card" [routerLink]="action.route">
+              <strong>{{ action.label }}</strong>
+              <span>{{ action.description }}</span>
+              <span class="action-arrow" aria-hidden="true">→</span>
+            </a>
+          }
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="section-head">
+          <div>
+            <h3>Needs attention</h3>
+            <p>Recent workflow and attendance activity.</p>
+          </div>
+        </div>
+        @if (!activity.length) {
+          <p class="muted">Nothing needs attention right now.</p>
+        } @else {
+          <ul class="activity-list">
+            @for (item of activity; track item.route + item.label) {
+              <li>
+                <a [routerLink]="item.route">
+                  <span>{{ item.label }}</span>
+                  <strong>{{ item.value }}</strong>
+                </a>
+              </li>
+            }
+          </ul>
+        }
+      </section>
+    </div>
+
+    @if (unavailable) {
+      <p class="availability-note">
+        {{ unavailable }} optional data source{{ unavailable === 1 ? '' : 's' }} unavailable; available
+        dashboard data is shown.
+      </p>
+    }
+  }
+</section>

@@ -27,6 +27,9 @@
         @if (canAdd) {
           <span class="chip">can add</span>
         }
+        @if (!canManage) {
+          <span class="chip">view only</span>
+        }
       </p>
     </section>
 
@@ -46,19 +49,19 @@
           <div class="grid two">
             <label>
               Name
-              <input [(ngModel)]="b.name" [name]="'n-' + b.branchKey" />
+              <input [(ngModel)]="b.name" [name]="'n-' + b.branchKey" [disabled]="!canManage || busy" />
             </label>
             <label>
               Code
-              <input [(ngModel)]="b.code" [name]="'c-' + b.branchKey" />
+              <input [(ngModel)]="b.code" [name]="'c-' + b.branchKey" [disabled]="!canManage || busy" />
             </label>
             <label>
               City
-              <input [(ngModel)]="b.city" [name]="'city-' + b.branchKey" />
+              <input [(ngModel)]="b.city" [name]="'city-' + b.branchKey" [disabled]="!canManage || busy" />
             </label>
             <label>
               Status
-              <select [(ngModel)]="b.status" [name]="'s-' + b.branchKey">
+              <select [(ngModel)]="b.status" [name]="'s-' + b.branchKey" [disabled]="!canManage || busy">
                 <option value="ACTIVE">ACTIVE</option>
                 <option value="INACTIVE">INACTIVE</option>
               </select>
@@ -66,17 +69,19 @@
           </div>
           <label>
             Address
-            <input [(ngModel)]="b.address" [name]="'a-' + b.branchKey" />
+            <input [(ngModel)]="b.address" [name]="'a-' + b.branchKey" [disabled]="!canManage || busy" />
           </label>
           <div class="actions">
             <button type="button" (click)="switchTo(b.branchKey)" [disabled]="b.branchKey === currentKey">
               Switch here
             </button>
-            <button type="button" class="secondary" (click)="saveMeta(b)" [disabled]="busy">Save</button>
-            @if (!b.isDefault) {
-              <button type="button" class="secondary" (click)="setDefault(b.branchKey)" [disabled]="busy">
-                Make default
-              </button>
+            @if (canManage) {
+              <button type="button" class="secondary" (click)="saveMeta(b)" [disabled]="busy">Save</button>
+              @if (!b.isDefault) {
+                <button type="button" class="secondary" (click)="setDefault(b.branchKey)" [disabled]="busy">
+                  Make default
+                </button>
+              }
             }
           </div>
         </article>
@@ -116,6 +121,8 @@
           <button type="button" (click)="create()" [disabled]="busy">Create campus</button>
         </div>
       </section>
+    } @else if (!canManage) {
+      <p class="panel muted">Campus administration requires an elevated role (owner / admin / principal).</p>
     } @else {
       <p class="panel muted">Branch limit reached for this plan — upgrade to add more campuses.</p>
     }

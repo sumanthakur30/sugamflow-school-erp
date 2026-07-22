@@ -40,6 +40,18 @@ label {
   font-weight: 600;
 }
 
+/* Keeps a label's text and its required asterisk on one line. */
+.field-title {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.25rem;
+}
+
+.field-title .req,
+.field-title .required {
+  color: var(--sf-error, #b91c1c);
+}
+
 input,
 select,
 textarea {
@@ -70,6 +82,12 @@ button.secondary {
   background: transparent;
   color: var(--sf-primary);
   border: 1px solid rgba(11, 110, 79, 0.35);
+}
+
+button.tiny {
+  padding: 0.35rem 0.65rem;
+  font-size: 0.85rem;
+  min-height: 0;
 }
 
 .chip-list {
@@ -183,6 +201,16 @@ button.secondary {
   background: color-mix(in srgb, #b91c1c 88%, #000) !important;
 }
 
+@media (max-width: 1024px) {
+  .page {
+    max-width: none;
+  }
+
+  .panel {
+    padding: 1rem;
+  }
+}
+
 @media (max-width: 900px) {
   .editor-layout {
     grid-template-columns: 1fr;
@@ -194,9 +222,40 @@ button.secondary {
   }
 }
 
-@media (max-width: 800px) {
+@media (max-width: 768px) {
+  .grid.three {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .actions button,
+  button {
+    min-height: 2.65rem;
+  }
+
+  input,
+  select,
+  textarea {
+    min-height: 2.65rem;
+    font-size: 16px; /* avoid iOS zoom on focus */
+  }
+}
+
+@media (max-width: 640px) {
   .grid.two,
   .grid.three {
     grid-template-columns: 1fr;
+  }
+
+  .field-grid,
+  .step-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .actions {
+    flex-direction: column;
+  }
+
+  .actions button {
+    width: 100%;
   }
 }

@@ -2,13 +2,19 @@ import { Component, OnInit, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ApiService } from '../../core/api.service';
+import { ListToolbarComponent } from '../../shared/list-toolbar/list-toolbar.component';
+import { ListSortOption, sortRows } from '../../shared/list-toolbar/list-controls';
 
 @Component({
   selector: 'sf-audit',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, ListToolbarComponent],
   templateUrl: './audit.component.html',
-  styleUrls: ['../../shared/admin-page.scss', './audit.component.scss'],
+  styleUrls: [
+    '../../shared/admin-page.scss',
+    '../../shared/list-toolbar/list-toolbar.component.scss',
+    './audit.component.scss',
+  ],
 })
 export class AuditComponent implements OnInit {
   private readonly api = inject(ApiService);
@@ -30,6 +36,20 @@ export class AuditComponent implements OnInit {
   selectedId: string | null = null;
   selected: any = null;
   rollbackReason = '';
+
+  // Client-side text search/sort/page — API already applies entityType/status/entityKey filters.
+  listQ = '';
+  sortBy = 'timestamp';
+  sortDir: 'ASC' | 'DESC' = 'DESC';
+  pageSize = 50;
+  pageIndex = 0;
+  readonly sortOptions: ListSortOption[] = [
+    { key: 'timestamp', label: 'Changed At' },
+    { key: 'entityType', label: 'Entity Type' },
+    { key: 'entityKey', label: 'Entity Key' },
+    { key: 'status', label: 'Status' },
+    { key: 'changedBy', label: 'Changed By' },
+  ];
 
   ngOnInit(): void {
     this.bootstrap();
@@ -92,6 +112,52 @@ export class AuditComponent implements OnInit {
     this.filterStatus = '';
     this.filterEntityKey = '';
     this.reload();
+  }
+
+  get filteredEntries(): any[] {
+    let rows = this.entries;
+    if (this.listQ.trim()) {
+      const q = this.listQ.trim().toLowerCase();
+      rows = rows.filter(
+        (e) =>
+          String(e.entityType ?? '').toLowerCase().includes(q) ||
+          String(e.entityKey ?? '').toLowerCase().includes(q) ||
+          String(e.changedBy ?? '').toLowerCase().includes(q) ||
+          String(e.reason ?? '').toLowerCase().includes(q),
+      );
+    }
+    rows = sortRows(rows, this.sortBy, this.sortDir);
+    const start = this.pageIndex * this.pageSize;
+    return rows.slice(start, start + this.pageSize);
+  }
+
+  get filteredEntriesTotal(): number {
+    if (!this.listQ.trim()) return this.entries.length;
+    const q = this.listQ.trim().toLowerCase();
+    return this.entries.filter(
+      (e) =>
+        String(e.entityType ?? '').toLowerCase().includes(q) ||
+        String(e.entityKey ?? '').toLowerCase().includes(q) ||
+        String(e.changedBy ?? '').toLowerCase().includes(q) ||
+        String(e.reason ?? '').toLowerCase().includes(q),
+    ).length;
+  }
+
+  get listClearEnabled(): boolean {
+    return (
+      !!this.listQ ||
+      this.sortBy !== 'timestamp' ||
+      this.sortDir !== 'DESC' ||
+      this.pageSize !== 50
+    );
+  }
+
+  clearListFilters(): void {
+    this.listQ = '';
+    this.sortBy = 'timestamp';
+    this.sortDir = 'DESC';
+    this.pageSize = 50;
+    this.pageIndex = 0;
   }
 
   select(row: any): void {
