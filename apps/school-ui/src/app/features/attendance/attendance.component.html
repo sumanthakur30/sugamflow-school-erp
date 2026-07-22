@@ -1,107 +1,314 @@
-<div class="page">
-  <header class="page-head">
-    <h2>Attendance</h2>
-    <p>
-      Config-driven vertical slice — form <code>{{ formKey }}</code>, workflow
-      <code>{{ workflowKey }}</code>, rules &amp; FEATURE_ATTENDANCE.
-    </p>
-  </header>
-
-  @if (error) {
-    <p class="error panel" role="alert">{{ error }}</p>
-  }
-
-  @if (loading) {
-    <p class="panel">Loading attendance configuration…</p>
-  } @else if (!featureEnabled) {
-    <p class="panel">Attendance is not enabled for this plan (FEATURE_ATTENDANCE).</p>
-  } @else {
-    <section class="panel">
-      <h3>New record</h3>
-      <div class="grid two">
-        @for (field of fields; track field.key) {
-          <label>
-            {{ field.label }}
-            @if (field.mandatory) {
-              <span class="req">*</span>
-            }
-            @if (field.type === 'CHECKBOX') {
-              <input type="checkbox" [(ngModel)]="answers[field.key]" [name]="field.key" />
-            } @else if (field.type === 'NUMBER') {
-              <input type="number" [(ngModel)]="answers[field.key]" [name]="field.key" />
-            } @else {
-              <input [(ngModel)]="answers[field.key]" [name]="field.key" />
-            }
-          </label>
-        }
-      </div>
-      <div class="actions">
-        <button type="button" (click)="submit()" [disabled]="submitting">
-          {{ submitting ? 'Submitting…' : 'Submit record' }}
+<div class="page attendance-page">
+  @if (formOpen && featureEnabled && !loading) {
+    <div class="form-page" [class.is-busy]="submitting">
+      <p class="crumb">
+        <button type="button" class="crumb-link" (click)="closeForm()" [disabled]="submitting">
+          Attendance
         </button>
-      </div>
-    </section>
+        / New
+      </p>
+      <header class="page-head list-head">
+        <div>
+          <h2>New Attendance</h2>
+          <p>Enter attendance details and submit for approval.</p>
+        </div>
+      </header>
 
-    <div class="attendance-layout">
-      <section class="panel">
-        <h3>Inbox</h3>
-        @if (!records.length) {
-          <p class="muted">No records yet.</p>
-        }
-        <ul class="app-list">
-          @for (row of records; track row.id) {
-            <li>
-              <button
-                type="button"
-                class="app-row"
-                [class.active]="row.id === selectedId"
-                (click)="select(row)"
-              >
-                <strong>{{ row.answers?.studentName || row.id }}</strong>
-                <span>{{ row.status }} · {{ row.currentStepName }} · {{ row.answers?.attendancePercent }}%</span>
-              </button>
-            </li>
+      @if (error) {
+        <p class="error panel" role="alert">{{ error }}</p>
+      }
+      @if (statusMsg) {
+        <p class="status panel" role="status" aria-live="polite">{{ statusMsg }}</p>
+      }
+
+      <section class="form-section panel">
+        <h3 class="form-section-title">Attendance details</h3>
+        <div class="grid three" [attr.aria-busy]="submitting">
+          @for (field of fields; track field.key) {
+            <label>
+              <span class="field-title">
+                {{ field.label }}
+                @if (field.mandatory) {
+                  <span class="req">*</span>
+                }
+              </span>
+              @if (field.type === 'CHECKBOX') {
+                <input
+                  type="checkbox"
+                  [(ngModel)]="answers[field.key]"
+                  [name]="field.key"
+                  [disabled]="submitting"
+                />
+              } @else if (field.type === 'NUMBER') {
+                <input
+                  type="number"
+                  [(ngModel)]="answers[field.key]"
+                  [name]="field.key"
+                  [disabled]="submitting"
+                />
+              } @else {
+                <input
+                  [(ngModel)]="answers[field.key]"
+                  [name]="field.key"
+                  [disabled]="submitting"
+                />
+              }
+            </label>
           }
-        </ul>
+        </div>
       </section>
 
-      <section class="panel">
-        <h3>Detail</h3>
-        @if (!selected) {
-          <p class="muted">Select a record.</p>
-        } @else {
+      <div class="form-actions actions">
+        <button type="button" (click)="submit()" [disabled]="submitting">
+          {{ submitting ? 'Saving…' : 'Submit attendance' }}
+        </button>
+        <button type="button" class="secondary" (click)="closeForm()" [disabled]="submitting">
+          Cancel
+        </button>
+      </div>
+    </div>
+  } @else if (selected && featureEnabled && !loading) {
+    <div class="form-page detail-page" [class.is-busy]="submitting">
+      <p class="crumb">
+        <button type="button" class="crumb-link" (click)="closeDetail()" [disabled]="submitting">
+          Attendance
+        </button>
+        / {{ studentName(selected) }}
+      </p>
+
+      <header class="page-head list-head">
+        <div>
+          <h2>{{ studentName(selected) }}</h2>
           <p>
-            <strong>{{ selected.status }}</strong> — step {{ selected.currentStepSequence }}
-            {{ selected.currentStepName }} ({{ selected.assigneeRole }})
+            Step {{ selected.currentStepSequence || '—' }}
+            · {{ selected.currentStepName || '—' }}
+            @if (selected.assigneeRole) {
+              ({{ selected.assigneeRole }})
+            }
           </p>
-          <pre class="answers">{{ selected.answers | json }}</pre>
-          <label>
-            Comment
-            <input [(ngModel)]="actionComment" name="actionComment" />
-          </label>
-          <div class="actions">
-            <button type="button" (click)="act('APPROVE')" [disabled]="submitting">Approve step</button>
-            <button type="button" class="secondary" (click)="act('REQUEST_INFO')" [disabled]="submitting">
-              Request info
-            </button>
-            <button type="button" class="danger" (click)="act('REJECT')" [disabled]="submitting">Reject</button>
-          </div>
-          @if (latestApproveDelivery().length) {
-            <h4>Notifications</h4>
-            <ul class="history">
-              @for (d of latestApproveDelivery(); track d.at) {
-                <li>{{ d.channel }} → {{ d.status }}{{ d.recipient ? ' · ' + d.recipient : '' }}</li>
-              }
-            </ul>
+        </div>
+        <div class="head-actions">
+          <span [class]="statusClass(selected.status)">{{ selected.status }}</span>
+          <button type="button" class="secondary" (click)="closeDetail()" [disabled]="submitting">
+            Back to list
+          </button>
+        </div>
+      </header>
+
+      @if (error) {
+        <p class="error panel" role="alert">{{ error }}</p>
+      }
+      @if (statusMsg) {
+        <p class="status panel" role="status" aria-live="polite">{{ statusMsg }}</p>
+      }
+
+      <section class="form-section panel">
+        <h3 class="form-section-title">Attendance</h3>
+        <div class="read-grid">
+          @for (field of detailFields(); track field.key) {
+            <div class="read-field">
+              <span class="read-label">{{ field.label }}</span>
+              <span class="read-value">{{ field.value }}</span>
+            </div>
           }
-          <h4>History</h4>
+        </div>
+      </section>
+
+      <section class="form-section panel">
+        <h3 class="form-section-title">Workflow action</h3>
+        <label>
+          Comment
+          <input
+            [(ngModel)]="actionComment"
+            name="actionComment"
+            placeholder="Optional note for this step"
+            [disabled]="submitting"
+          />
+        </label>
+        <div class="form-actions actions">
+          <button type="button" (click)="act('APPROVE')" [disabled]="submitting">
+            Approve step
+          </button>
+          <button
+            type="button"
+            class="secondary"
+            (click)="act('REQUEST_INFO')"
+            [disabled]="submitting"
+          >
+            Request info
+          </button>
+          <button type="button" class="danger" (click)="act('REJECT')" [disabled]="submitting">
+            Reject
+          </button>
+        </div>
+      </section>
+
+      @if (latestApproveDelivery().length) {
+        <section class="form-section panel">
+          <h3 class="form-section-title">Notifications</h3>
           <ul class="history">
-            @for (h of selected.history; track h.at) {
-              <li>{{ h.at }} — {{ h.type }}: {{ h.message }}</li>
+            @for (d of latestApproveDelivery(); track d.at) {
+              <li>{{ d.channel }} → {{ d.status }}{{ d.recipient ? ' · ' + d.recipient : '' }}</li>
             }
           </ul>
+        </section>
+      }
+
+      <section class="form-section panel">
+        <h3 class="form-section-title">History</h3>
+        @if (!selected.history?.length) {
+          <p class="muted">No history yet.</p>
+        } @else {
+          <ol class="timeline">
+            @for (h of selected.history; track h.at) {
+              <li>
+                <div class="timeline-title">{{ h.type || 'EVENT' }}</div>
+                <div class="timeline-msg">{{ h.message }}</div>
+                <div class="timeline-at">{{ formatWhen(h.at) }}</div>
+              </li>
+            }
+          </ol>
         }
       </section>
     </div>
+  } @else {
+    <header class="page-head list-head">
+      <div>
+        <h2>Attendance</h2>
+        <p>Search, review, and approve attendance records.</p>
+      </div>
+      @if (featureEnabled && !loading) {
+        <div class="head-actions">
+          <button type="button" (click)="openForm()">+ New Attendance</button>
+        </div>
+      }
+    </header>
+
+    @if (error) {
+      <p class="error panel" role="alert">{{ error }}</p>
+    }
+    @if (statusMsg) {
+      <p class="status panel" role="status" aria-live="polite">{{ statusMsg }}</p>
+    }
+
+    @if (loading) {
+      <p class="panel">Loading attendance configuration…</p>
+    } @else if (!featureEnabled) {
+      <p class="panel">Attendance is not enabled for this plan (FEATURE_ATTENDANCE).</p>
+    } @else {
+      <section class="panel inbox-panel">
+        <sf-list-toolbar
+          searchPlaceholder="Search student, status…"
+          [(q)]="listQ"
+          [(sortBy)]="sortBy"
+          [(sortDir)]="sortDir"
+          [pageSize]="pageSize"
+          [sortOptions]="sortOptions"
+          [statusOptions]="statusOptions"
+          [(status)]="listStatus"
+          [searching]="searching"
+          [clearEnabled]="listClearEnabled"
+          (pageSizeChange)="pageSize = $event; pageIndex = 0; loadRecords()"
+          (statusChange)="pageIndex = 0; loadRecords()"
+          (search)="pageIndex = 0; loadRecords()"
+          (clear)="clearListFilters()"
+        />
+
+        <div class="table-wrap">
+          <table class="inbox-table">
+            <thead>
+              <tr>
+                @for (
+                  col of [
+                    { key: 'studentName', label: 'Student' },
+                    { key: 'classDate', label: 'Class/Date' },
+                    { key: 'mark', label: 'Mark/Status' },
+                    { key: 'status', label: 'Status' },
+                    { key: 'step', label: 'Step' },
+                    { key: 'updatedAt', label: 'Updated' }
+                  ];
+                  track col.key
+                ) {
+                  <th
+                    class="list-th"
+                    [class.sortable-heading]="isSortableColumn(col.key)"
+                    [class.active-sort]="sortBy === col.key"
+                    [attr.aria-sort]="
+                      sortBy === col.key
+                        ? (sortDir === 'ASC' ? 'ascending' : 'descending')
+                        : null
+                    "
+                  >
+                    @if (isSortableColumn(col.key)) {
+                      <button
+                        type="button"
+                        class="heading-sort"
+                        (click)="sortByColumn(col.key)"
+                        [attr.aria-label]="'Sort by ' + col.label"
+                      >
+                        <span>{{ col.label }}</span>
+                        <span class="sort-indicator" aria-hidden="true">{{
+                          sortIndicator(col.key)
+                        }}</span>
+                      </button>
+                    } @else {
+                      <span class="heading-label">{{ col.label }}</span>
+                    }
+                  </th>
+                }
+                <th class="col-actions list-th"><span class="heading-label">Actions</span></th>
+              </tr>
+            </thead>
+            <tbody>
+              @if (!records.length) {
+                <tr>
+                  <td colspan="7" class="muted empty-row">
+                    No records yet.
+                    <button type="button" class="linkish" (click)="openForm()">
+                      Create the first record
+                    </button>
+                  </td>
+                </tr>
+              }
+              @for (row of records; track row.id) {
+                <tr
+                  class="inbox-row"
+                  [class.selected]="row.id === selectedId"
+                  (click)="select(row)"
+                  tabindex="0"
+                  (keyup.enter)="select(row)"
+                >
+                  <td>
+                    <div class="cell-primary">{{ studentName(row) }}</div>
+                    <div class="cell-sub">{{ answer(row, 'admissionNo') }}</div>
+                  </td>
+                  <td>{{ classOrDate(row) }}</td>
+                  <td>{{ markLabel(row) }}</td>
+                  <td>
+                    <span [class]="statusClass(row.status)">{{ row.status || '—' }}</span>
+                  </td>
+                  <td>
+                    <span class="step-chip">{{ row.currentStepName || '—' }}</span>
+                  </td>
+                  <td class="muted-cell">{{ formatWhen(row.updatedAt || row.createdAt) }}</td>
+                  <td class="col-actions" (click)="$event.stopPropagation()">
+                    <button type="button" class="tiny" (click)="select(row)">Open</button>
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+
+        <sf-list-pager
+          [pageIndex]="pageIndex"
+          [pageSize]="pageSize"
+          [totalElements]="page.totalElements"
+          [hasNext]="page.hasNext"
+          itemLabel="records"
+          (pageChange)="onPageChange($event)"
+        />
+      </section>
+    }
   }
 </div>

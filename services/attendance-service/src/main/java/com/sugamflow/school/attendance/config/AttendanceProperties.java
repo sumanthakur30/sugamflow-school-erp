@@ -47,6 +47,8 @@ public class AttendanceProperties {
     private String reportsBaseUrl = "http://localhost:8186";
     private String notificationDeliveryBaseUrl = "http://localhost:8087";
     private String publicApiBaseUrl = "http://localhost:9090";
+    private String studentBaseUrl = "http://localhost:8191";
+    private String academicBaseUrl = "http://localhost:8199";
 
     public String getFormsBaseUrl() {
       return formsBaseUrl;
@@ -118,6 +120,22 @@ public class AttendanceProperties {
 
     public void setPublicApiBaseUrl(String publicApiBaseUrl) {
       this.publicApiBaseUrl = publicApiBaseUrl;
+    }
+
+    public String getStudentBaseUrl() {
+      return studentBaseUrl;
+    }
+
+    public void setStudentBaseUrl(String studentBaseUrl) {
+      this.studentBaseUrl = studentBaseUrl;
+    }
+
+    public String getAcademicBaseUrl() {
+      return academicBaseUrl;
+    }
+
+    public void setAcademicBaseUrl(String academicBaseUrl) {
+      this.academicBaseUrl = academicBaseUrl;
     }
   }
 }

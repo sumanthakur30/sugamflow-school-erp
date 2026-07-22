@@ -12,8 +12,18 @@ public class AttendanceExceptionHandler {
 
   @ExceptionHandler(AttendanceException.class)
   public ResponseEntity<ApiResponse<Map<String, String>>> handle(AttendanceException ex) {
-    return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+    HttpStatus status =
+        "NOT_FOUND".equals(ex.getCode())
+            ? HttpStatus.NOT_FOUND
+            : "LOCKED".equals(ex.getCode()) ? HttpStatus.CONFLICT : HttpStatus.BAD_REQUEST;
+    return ResponseEntity.status(status)
         .body(new ApiResponse<>(false, Map.of("code", ex.getCode()), ex.getMessage()));
+  }
+
+  @ExceptionHandler(SecurityException.class)
+  public ResponseEntity<ApiResponse<Map<String, String>>> handleSecurity(SecurityException ex) {
+    return ResponseEntity.status(HttpStatus.FORBIDDEN)
+        .body(new ApiResponse<>(false, Map.of("code", "FORBIDDEN"), ex.getMessage()));
   }
 
   @ExceptionHandler(IllegalStateException.class)
