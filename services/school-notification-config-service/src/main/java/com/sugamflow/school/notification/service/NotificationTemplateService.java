@@ -134,6 +134,29 @@ public class NotificationTemplateService {
             + "({{attendance.status}}, {{attendance.attendancePercent}}%) has been approved.\n\n"
             + "Organization: {{context.organizationId}}");
     ensurePlatformTemplate(
+        "attendance_absent",
+        "Attendance absent alert (parent)",
+        "ATTENDANCE",
+        "ATTENDANCE_ABSENT",
+        "Absence alert — {{attendance.studentName}}",
+        "Dear {{guardian.fullName}},\n\n"
+            + "{{attendance.studentName}} ({{attendance.admissionNo}}) was marked ABSENT for "
+            + "{{attendance.classSection}} on {{attendance.date}}.\n"
+            + "Remark: {{attendance.remark}}\n\n"
+            + "If this is unexpected, please contact the school office.\n"
+            + "Organization: {{context.organizationId}}");
+    ensurePlatformTemplate(
+        "attendance_late",
+        "Attendance late alert (parent)",
+        "ATTENDANCE",
+        "ATTENDANCE_LATE",
+        "Late arrival — {{attendance.studentName}}",
+        "Dear {{guardian.fullName}},\n\n"
+            + "{{attendance.studentName}} ({{attendance.admissionNo}}) was marked LATE for "
+            + "{{attendance.classSection}} on {{attendance.date}}.\n"
+            + "Remark: {{attendance.remark}}\n\n"
+            + "Organization: {{context.organizationId}}");
+    ensurePlatformTemplate(
         "exam_approved",
         "Exam approved",
         "EXAM",

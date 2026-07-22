@@ -1,0 +1,311 @@
+<section class="page comms-page">
+  <header class="page-head comms-head">
+    <div>
+      <nav class="breadcrumb" aria-label="Breadcrumb">
+        <span>Communications</span>
+        <span class="crumb-sep" aria-hidden="true">›</span>
+        <span class="crumb-current">Announcements</span>
+      </nav>
+      <h2>Comms Hub</h2>
+      <p>Publish school updates and monitor delivery to parents and guardians.</p>
+    </div>
+    @if (featureEnabled && !loading) {
+      <button type="button" (click)="selectView(view === 'compose' ? 'history' : 'compose')">
+        {{ view === 'compose' ? 'View announcements' : '+ New announcement' }}
+      </button>
+    }
+  </header>
+
+  @if (error) {
+    <div class="notice error-notice" role="alert">
+      <span>{{ error }}</span>
+      <button type="button" class="secondary" (click)="reload()">Try again</button>
+    </div>
+  }
+  @if (status) {
+    <div class="notice success-notice" role="status" aria-live="polite">
+      <span>{{ status }}</span>
+      <button type="button" class="notice-close" aria-label="Dismiss message" (click)="status = ''">×</button>
+    </div>
+  }
+
+  @if (loading) {
+    <div class="panel loading-state" role="status">
+      <span class="spinner" aria-hidden="true"></span>
+      Loading communications…
+    </div>
+  } @else if (!featureEnabled) {
+    <div class="panel empty-state">
+      <strong>Communications are not enabled</strong>
+      <span>Ask your administrator to enable the Comms Hub for this subscription.</span>
+    </div>
+  } @else {
+    <div class="stat-cards" aria-label="Communications summary">
+      <button
+        type="button"
+        class="stat-card"
+        [class.active]="view === 'history' && !statusFilter"
+        (click)="openStatus('')"
+      >
+        <span class="stat-value">{{ announcements.length }}</span>
+        <span class="stat-label">Announcements</span>
+        <span class="stat-action">View all →</span>
+      </button>
+      <button
+        type="button"
+        class="stat-card sent-card"
+        [class.active]="statusFilter === 'SENT'"
+        (click)="openStatus('SENT')"
+      >
+        <span class="stat-value">{{ sentCount }}</span>
+        <span class="stat-label">Sent successfully</span>
+        <span class="stat-action">View sent →</span>
+      </button>
+      <button
+        type="button"
+        class="stat-card warning-card"
+        [class.active]="statusFilter === 'ATTENTION'"
+        (click)="openStatus('ATTENTION')"
+      >
+        <span class="stat-value">{{ attentionCount }}</span>
+        <span class="stat-label">Need attention</span>
+        <span class="stat-action">Review delivery →</span>
+      </button>
+      <button type="button" class="stat-card" (click)="openStatus('')">
+        <span class="stat-value">{{ totalRecipients }}</span>
+        <span class="stat-label">Recipient deliveries</span>
+        <span class="stat-action">View history →</span>
+      </button>
+    </div>
+
+    <nav class="comms-tabs" aria-label="Communications sections">
+      <button type="button" [class.active]="view === 'history'" (click)="selectView('history')">
+        Announcement history
+        @if (announcements.length) {
+          <span class="tab-badge">{{ announcements.length }}</span>
+        }
+      </button>
+      <button type="button" [class.active]="view === 'compose'" (click)="selectView('compose')">
+        Compose announcement
+      </button>
+    </nav>
+
+    @if (view === 'compose') {
+      <section class="panel compose-panel">
+        <div class="section-heading">
+          <div>
+            <h3>New announcement</h3>
+            <p>In-app delivery is always included; choose an additional channel if needed.</p>
+          </div>
+          <span class="required-note"><span class="req">*</span> Required fields</span>
+        </div>
+
+        <div class="compose-grid">
+          <div class="message-fields">
+            <label>
+              <span class="field-title">Title <span class="req">*</span></span>
+              <input
+                [(ngModel)]="draft.title"
+                name="title"
+                maxlength="180"
+                placeholder="e.g. School closed tomorrow"
+                [disabled]="busy"
+              />
+              <span class="field-help">{{ draft.title.length }}/180 characters</span>
+            </label>
+            <label>
+              <span class="field-title">Message <span class="req">*</span></span>
+              <textarea
+                rows="8"
+                maxlength="2000"
+                [(ngModel)]="draft.body"
+                name="body"
+                placeholder="Write a clear message for parents and guardians…"
+                [disabled]="busy"
+              ></textarea>
+              <span class="field-help">{{ draft.body.length }}/2000 characters</span>
+            </label>
+          </div>
+
+          <aside class="delivery-options">
+            <h4>Delivery</h4>
+            <label>
+              Channel
+              <select [(ngModel)]="draft.channel" name="channel" [disabled]="busy">
+                @for (channel of channels; track channel) {
+                  <option [value]="channel">{{ channelLabel(channel) }}</option>
+                }
+              </select>
+            </label>
+            <p class="option-help">
+              Every recipient receives an in-app notification. Email, SMS, or WhatsApp is added when selected.
+            </p>
+            <label>
+              Audience
+              <select [(ngModel)]="draft.audience" name="audience" [disabled]="busy">
+                @for (audience of audiences; track audience) {
+                  <option [value]="audience">{{ audienceLabel(audience) }}</option>
+                }
+              </select>
+            </label>
+            <p class="option-help">Guardians are resolved from active student relationships.</p>
+            <div class="delivery-preview">
+              <span>Delivery plan</span>
+              <strong>{{ channelLabel(draft.channel) }}</strong>
+              <small>{{ audienceLabel(draft.audience) }}</small>
+            </div>
+          </aside>
+        </div>
+
+        <div class="form-actions">
+          <button type="button" (click)="publish()" [disabled]="busy || !draft.title.trim() || !draft.body.trim()">
+            {{ busy ? 'Publishing…' : 'Publish announcement' }}
+          </button>
+          <button type="button" class="secondary" (click)="resetDraft(); selectView('history')" [disabled]="busy">
+            Cancel
+          </button>
+        </div>
+      </section>
+    } @else {
+      <section class="panel table-panel">
+        <div class="section-heading">
+          <div>
+            <h3>Recent announcements</h3>
+            <p>Search messages and review recipient delivery results.</p>
+          </div>
+          <span class="table-meta">{{ pageLabel }}</span>
+        </div>
+
+        <div class="table-toolbar">
+          <input
+            class="table-search"
+            [(ngModel)]="listQ"
+            name="listQ"
+            placeholder="Search title, channel, audience, status…"
+            (ngModelChange)="pageIndex = 0"
+          />
+          <label class="inline-filter">
+            Channel
+            <select [(ngModel)]="channelFilter" name="channelFilter" (ngModelChange)="pageIndex = 0">
+              <option value="">All channels</option>
+              @for (channel of channels; track channel) {
+                <option [value]="channel">{{ channelLabel(channel) }}</option>
+              }
+            </select>
+          </label>
+          <label class="inline-filter">
+            Status
+            <select [(ngModel)]="statusFilter" name="statusFilter" (ngModelChange)="pageIndex = 0">
+              <option value="">All statuses</option>
+              <option value="ATTENTION">Needs attention</option>
+              <option value="SENT">Sent</option>
+              <option value="PARTIAL_FAILED">Partially sent</option>
+              <option value="FAILED">Failed</option>
+              <option value="QUEUED">Queued</option>
+            </select>
+          </label>
+          <button type="button" class="secondary" (click)="clearListFilters()" [disabled]="!listClearEnabled">
+            Clear
+          </button>
+        </div>
+
+        <div class="table-scroll">
+          <table class="comms-table">
+            <thead>
+              <tr>
+                <th>
+                  <button type="button" class="th-sort" (click)="sortByColumn('title')">
+                    Announcement <span class="sort-icon">{{ sortIcon('title') }}</span>
+                  </button>
+                </th>
+                <th>
+                  <button type="button" class="th-sort" (click)="sortByColumn('channel')">
+                    Channel <span class="sort-icon">{{ sortIcon('channel') }}</span>
+                  </button>
+                </th>
+                <th>Audience</th>
+                <th>Delivery</th>
+                <th>
+                  <button type="button" class="th-sort" (click)="sortByColumn('status')">
+                    Status <span class="sort-icon">{{ sortIcon('status') }}</span>
+                  </button>
+                </th>
+                <th>
+                  <button type="button" class="th-sort" (click)="sortByColumn('createdAt')">
+                    Published <span class="sort-icon">{{ sortIcon('createdAt') }}</span>
+                  </button>
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (announcement of filteredAnnouncements; track announcement.id) {
+                <tr>
+                  <td>
+                    <strong class="announcement-title">{{ announcement.title }}</strong>
+                    <span class="announcement-body">{{ announcement.body }}</span>
+                  </td>
+                  <td><span class="channel-chip">{{ channelLabel(announcement.channel) }}</span></td>
+                  <td>{{ audienceLabel(announcement.audience) }}</td>
+                  <td>
+                    @if (deliverySummary(announcement); as delivery) {
+                      @if (delivery['sent'] != null || delivery['failed'] != null) {
+                        <div class="delivery-cell">
+                          <span>{{ delivery['sent'] || 0 }} sent · {{ delivery['failed'] || 0 }} failed</span>
+                          <div class="delivery-bar" aria-hidden="true">
+                            <span [style.width.%]="deliveryRate(announcement)"></span>
+                          </div>
+                        </div>
+                      } @else {
+                        <span class="muted-cell">Pending</span>
+                      }
+                    }
+                  </td>
+                  <td>
+                    <span class="status-chip" [class]="'status-chip ' + statusClass(announcement.status)">
+                      {{ statusLabel(announcement.status) }}
+                    </span>
+                  </td>
+                  <td class="muted-cell">{{ fmtDate(announcement.createdAt) }}</td>
+                </tr>
+              } @empty {
+                <tr>
+                  <td colspan="6" class="empty-cell">
+                    <strong>{{ listClearEnabled ? 'No matching announcements' : 'No announcements yet' }}</strong>
+                    <span>
+                      {{ listClearEnabled
+                        ? 'Try changing or clearing your filters.'
+                        : 'Publish your first announcement to communicate with guardians.' }}
+                    </span>
+                    @if (!listClearEnabled) {
+                      <button type="button" (click)="selectView('compose')">Create announcement</button>
+                    }
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+
+        <div class="table-pager">
+          <span class="table-meta">{{ pageLabel }}</span>
+          <button
+            type="button"
+            class="secondary"
+            [disabled]="pageIndex <= 0"
+            (click)="pageIndex = pageIndex - 1"
+          >
+            Previous
+          </button>
+          <button
+            type="button"
+            class="secondary"
+            [disabled]="(pageIndex + 1) * pageSize >= filteredAnnouncementsTotal"
+            (click)="pageIndex = pageIndex + 1"
+          >
+            Next
+          </button>
+        </div>
+      </section>
+    }
+  }
+</section>
