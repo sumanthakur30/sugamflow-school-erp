@@ -1,0 +1,153 @@
+# Phase A — School ERP on the SAME EC2 / Docker network as SugamFlow.
+#
+# Target host: sugamflows (m7i-flex.xlarge, 16 GiB) — do NOT start all 19 services yet.
+# Phase A services: settings, subscription, admission, fee, student, staff, academic-structure.
+#
+# Prerequisites:
+#   1) SugamFlow stack already up via docker-compose.ec2-rds.yml (project name: sumanthakur30)
+#   2) RDS school_* databases created (see infra/postgres/01-create-school-databases-simple.sql)
+#   3) Images pushed: ${IMAGE_PREFIX}/<module>:${SCHOOL_IMAGE_TAG}
+#   4) .env.school.phase-a filled from .env.school.phase-a.example (use *_DB_USERNAME)
+#
+# Usage on EC2 (from a checkout of D:\school or copied compose files):
+#   docker network ls | grep sumanthakur30
+#   docker compose -f docker-compose.ec2-phase-a.yml --env-file .env.school.phase-a pull
+#   docker compose -f docker-compose.ec2-phase-a.yml --env-file .env.school.phase-a up -d
+#
+# Verify:
+#   docker exec -it <discovery> wget -qO- http://localhost:8761/eureka/apps | head
+#   curl -sS https://YOUR_HOST/api/student/...  (via existing gateway :9090)
+
+name: school-phase-a
+
+x-logging: &docker-logging
+  driver: json-file
+  options:
+    max-size: "25m"
+    max-file: "3"
+
+x-jvm-service: &jvm-service
+  restart: unless-stopped
+  logging: *docker-logging
+  mem_limit: ${SCHOOL_JVM_MEM_LIMIT:-384m}
+  oom_score_adj: 300
+  networks:
+    - sugamflow_net
+
+x-common-env: &common-env
+  SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-prod}
+  TZ: Asia/Kolkata
+  JAVA_TOOL_OPTIONS: ${SCHOOL_JAVA_TOOL_OPTIONS:--Duser.timezone=Asia/Kolkata -Xms96m -Xmx192m -XX:+ExitOnOutOfMemoryError}
+  SPRING_CLOUD_CONFIG_URI: http://config-service:8888
+  EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://discovery-service:8761/eureka
+  EUREKA_INSTANCE_PREFER_IP_ADDRESS: "true"
+  SECURITY_JWT_ENFORCE: "${SECURITY_JWT_ENFORCE:-true}"
+  SECURITY_JWT_SECRET: "${SECURITY_JWT_SECRET}"
+  SECURITY_INVITE_INTERNAL_KEY: "${SECURITY_INVITE_INTERNAL_KEY:-}"
+  SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE: ${DB_POOL_MAX_SIZE:-3}
+  SPRING_DATASOURCE_HIKARI_MINIMUM_IDLE: ${DB_POOL_MIN_IDLE:-1}
+
+networks:
+  sugamflow_net:
+    external: true
+    # Default Compose network for project "sumanthakur30" (docker-compose.ec2-rds.yml name:).
+    name: ${SUGAMFLOW_DOCKER_NETWORK:-sumanthakur30_default}
+
+services:
+  school-settings-service:
+    <<: *jvm-service
+    image: ${IMAGE_PREFIX:-sumanthakur30}/school-settings-service:${SCHOOL_IMAGE_TAG:-${IMAGE_TAG:-1.0.0}}
+    environment:
+      <<: *common-env
+      EUREKA_INSTANCE_HOSTNAME: school-settings-service
+      SERVER_PORT: 8181
+      SCHOOL_SETTINGS_DB_URL: ${SCHOOL_SETTINGS_DB_URL}
+      SCHOOL_SETTINGS_DB_USERNAME: ${SCHOOL_SETTINGS_DB_USERNAME}
+      SCHOOL_SETTINGS_DB_PASSWORD: ${SCHOOL_SETTINGS_DB_PASSWORD}
+      SPRING_DATASOURCE_URL: ${SCHOOL_SETTINGS_DB_URL}
+      SPRING_DATASOURCE_USERNAME: ${SCHOOL_SETTINGS_DB_USERNAME}
+      SPRING_DATASOURCE_PASSWORD: ${SCHOOL_SETTINGS_DB_PASSWORD}
+
+  subscription-service:
+    <<: *jvm-service
+    image: ${IMAGE_PREFIX:-sumanthakur30}/subscription-service:${SCHOOL_IMAGE_TAG:-${IMAGE_TAG:-1.0.0}}
+    environment:
+      <<: *common-env
+      EUREKA_INSTANCE_HOSTNAME: subscription-service
+      SERVER_PORT: 8182
+      SCHOOL_SUBSCRIPTION_DB_URL: ${SCHOOL_SUBSCRIPTION_DB_URL}
+      SCHOOL_SUBSCRIPTION_DB_USERNAME: ${SCHOOL_SUBSCRIPTION_DB_USERNAME}
+      SCHOOL_SUBSCRIPTION_DB_PASSWORD: ${SCHOOL_SUBSCRIPTION_DB_PASSWORD}
+      SPRING_DATASOURCE_URL: ${SCHOOL_SUBSCRIPTION_DB_URL}
+      SPRING_DATASOURCE_USERNAME: ${SCHOOL_SUBSCRIPTION_DB_USERNAME}
+      SPRING_DATASOURCE_PASSWORD: ${SCHOOL_SUBSCRIPTION_DB_PASSWORD}
+
+  admission-service:
+    <<: *jvm-service
+    image: ${IMAGE_PREFIX:-sumanthakur30}/admission-service:${SCHOOL_IMAGE_TAG:-${IMAGE_TAG:-1.0.0}}
+    environment:
+      <<: *common-env
+      EUREKA_INSTANCE_HOSTNAME: admission-service
+      SERVER_PORT: 8189
+      SCHOOL_ADMISSION_DB_URL: ${SCHOOL_ADMISSION_DB_URL}
+      SCHOOL_ADMISSION_DB_USERNAME: ${SCHOOL_ADMISSION_DB_USERNAME}
+      SCHOOL_ADMISSION_DB_PASSWORD: ${SCHOOL_ADMISSION_DB_PASSWORD}
+      SPRING_DATASOURCE_URL: ${SCHOOL_ADMISSION_DB_URL}
+      SPRING_DATASOURCE_USERNAME: ${SCHOOL_ADMISSION_DB_USERNAME}
+      SPRING_DATASOURCE_PASSWORD: ${SCHOOL_ADMISSION_DB_PASSWORD}
+
+  fee-service:
+    <<: *jvm-service
+    image: ${IMAGE_PREFIX:-sumanthakur30}/fee-service:${SCHOOL_IMAGE_TAG:-${IMAGE_TAG:-1.0.0}}
+    environment:
+      <<: *common-env
+      EUREKA_INSTANCE_HOSTNAME: fee-service
+      SERVER_PORT: 8190
+      SCHOOL_FEE_DB_URL: ${SCHOOL_FEE_DB_URL}
+      SCHOOL_FEE_DB_USERNAME: ${SCHOOL_FEE_DB_USERNAME}
+      SCHOOL_FEE_DB_PASSWORD: ${SCHOOL_FEE_DB_PASSWORD}
+      SPRING_DATASOURCE_URL: ${SCHOOL_FEE_DB_URL}
+      SPRING_DATASOURCE_USERNAME: ${SCHOOL_FEE_DB_USERNAME}
+      SPRING_DATASOURCE_PASSWORD: ${SCHOOL_FEE_DB_PASSWORD}
+
+  student-service:
+    <<: *jvm-service
+    image: ${IMAGE_PREFIX:-sumanthakur30}/student-service:${SCHOOL_IMAGE_TAG:-${IMAGE_TAG:-1.0.0}}
+    environment:
+      <<: *common-env
+      EUREKA_INSTANCE_HOSTNAME: student-service
+      SERVER_PORT: 8191
+      SCHOOL_STUDENT_DB_URL: ${SCHOOL_STUDENT_DB_URL}
+      SCHOOL_STUDENT_DB_USERNAME: ${SCHOOL_STUDENT_DB_USERNAME}
+      SCHOOL_STUDENT_DB_PASSWORD: ${SCHOOL_STUDENT_DB_PASSWORD}
+      SPRING_DATASOURCE_URL: ${SCHOOL_STUDENT_DB_URL}
+      SPRING_DATASOURCE_USERNAME: ${SCHOOL_STUDENT_DB_USERNAME}
+      SPRING_DATASOURCE_PASSWORD: ${SCHOOL_STUDENT_DB_PASSWORD}
+
+  staff-service:
+    <<: *jvm-service
+    image: ${IMAGE_PREFIX:-sumanthakur30}/staff-service:${SCHOOL_IMAGE_TAG:-${IMAGE_TAG:-1.0.0}}
+    environment:
+      <<: *common-env
+      EUREKA_INSTANCE_HOSTNAME: staff-service
+      SERVER_PORT: 8198
+      SCHOOL_STAFF_DB_URL: ${SCHOOL_STAFF_DB_URL}
+      SCHOOL_STAFF_DB_USERNAME: ${SCHOOL_STAFF_DB_USERNAME}
+      SCHOOL_STAFF_DB_PASSWORD: ${SCHOOL_STAFF_DB_PASSWORD}
+      SPRING_DATASOURCE_URL: ${SCHOOL_STAFF_DB_URL}
+      SPRING_DATASOURCE_USERNAME: ${SCHOOL_STAFF_DB_USERNAME}
+      SPRING_DATASOURCE_PASSWORD: ${SCHOOL_STAFF_DB_PASSWORD}
+
+  academic-structure-service:
+    <<: *jvm-service
+    image: ${IMAGE_PREFIX:-sumanthakur30}/academic-structure-service:${SCHOOL_IMAGE_TAG:-${IMAGE_TAG:-1.0.0}}
+    environment:
+      <<: *common-env
+      EUREKA_INSTANCE_HOSTNAME: academic-structure-service
+      SERVER_PORT: 8199
+      SCHOOL_ACADEMIC_DB_URL: ${SCHOOL_ACADEMIC_DB_URL}
+      SCHOOL_ACADEMIC_DB_USERNAME: ${SCHOOL_ACADEMIC_DB_USERNAME}
+      SCHOOL_ACADEMIC_DB_PASSWORD: ${SCHOOL_ACADEMIC_DB_PASSWORD}
+      SPRING_DATASOURCE_URL: ${SCHOOL_ACADEMIC_DB_URL}
+      SPRING_DATASOURCE_USERNAME: ${SCHOOL_ACADEMIC_DB_USERNAME}
+      SPRING_DATASOURCE_PASSWORD: ${SCHOOL_ACADEMIC_DB_PASSWORD}
