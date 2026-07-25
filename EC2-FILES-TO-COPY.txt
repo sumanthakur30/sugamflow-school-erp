@@ -8,9 +8,13 @@ SugamFlow (already on EC2):
 School ERP (copy these — different names on purpose):
   docker-compose.school.ec2-rds.yml
   .env.school.production     ← from .env.school.production.example
+  scripts/ec2/*.sh           ← start/stop batches (chmod +x on EC2)
 
 Also for builds (on PC only):
   Dockerfile.school-service
+
+Start/stop batches + production fixes + deploy steps:
+  scripts/ec2/README.md
 
 ----------------------------------------------------------
 A) On PC — prepare .env.school.production
