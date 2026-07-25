@@ -1,0 +1,61 @@
+School ERP — EC2 files to copy (names distinct from SugamFlow)
+==============================================================
+
+SugamFlow (already on EC2):
+  docker-compose.ec2-rds.yml
+  .env.production
+
+School ERP (copy these — different names on purpose):
+  docker-compose.school.ec2-rds.yml
+  .env.school.production     ← from .env.school.production.example
+
+Also for builds (on PC only):
+  Dockerfile.school-service
+
+----------------------------------------------------------
+A) On PC — prepare .env.school.production
+----------------------------------------------------------
+
+  copy .env.school.production.example .env.school.production
+
+Edit:
+  - SECURITY_JWT_SECRET = same as SugamFlow .env.production
+  - YOUR_RDS_ENDPOINT = real RDS host
+  - SCHOOL_*_DB_PASSWORD = DBeaver passwords
+
+WinSCP to EC2 folder e.g. /home/ec2-user/opt/school/ :
+  docker-compose.school.ec2-rds.yml
+  .env.school.production
+
+----------------------------------------------------------
+B) On PC — build & push images
+----------------------------------------------------------
+
+cd D:\school
+$Tag = "1.0.0"
+$Prefix = "sumanthakur30"
+$Modules = @(
+  "school-settings-service","subscription-service","admission-service",
+  "fee-service","student-service","staff-service","academic-structure-service"
+)
+foreach ($Module in $Modules) {
+  docker build -f Dockerfile.school-service --build-arg "MODULE=$Module" `
+    -t "${Prefix}/${Module}:${Tag}" .
+  docker push "${Prefix}/${Module}:${Tag}"
+}
+
+----------------------------------------------------------
+C) On EC2 — start (shop stack already running)
+----------------------------------------------------------
+
+cd /home/ec2-user/opt/school
+docker network ls | grep sumanthakur30
+
+docker compose -f docker-compose.school.ec2-rds.yml --env-file .env.school.production pull
+docker compose -f docker-compose.school.ec2-rds.yml --env-file .env.school.production up -d
+docker compose -f docker-compose.school.ec2-rds.yml --env-file .env.school.production ps
+
+curl -sS http://127.0.0.1:9090/actuator/health
+curl -sS -o /dev/null -w "%{http_code}\n" http://127.0.0.1:9090/api/student/health
+
+Full steps: docs/EC2_SCHOOL_PHASE_A_FOLLOW_ALONG.md

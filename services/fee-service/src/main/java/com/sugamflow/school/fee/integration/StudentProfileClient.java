@@ -5,7 +5,9 @@ import com.sugamflow.school.common.tenant.TenantScope;
 import com.sugamflow.school.fee.config.FeeProperties;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -82,6 +84,53 @@ public class StudentProfileClient {
     } catch (Exception ex) {
       log.debug("student record lookup failed for {}: {}", admissionNo, ex.getMessage());
       return Map.of();
+    }
+  }
+
+  /** Directory search (classSection / q / page size). Returns item maps or empty. */
+  @SuppressWarnings("unchecked")
+  public List<Map<String, Object>> searchDirectory(TenantScope scope, Map<String, String> params) {
+    if (scope == null) {
+      return List.of();
+    }
+    String base = properties.getIntegrations().getStudentBaseUrl();
+    if (base == null || base.isBlank()) {
+      return List.of();
+    }
+    StringBuilder url = new StringBuilder(base.replaceAll("/$", "")).append("/api/student/students?");
+    boolean first = true;
+    for (Map.Entry<String, String> e : params.entrySet()) {
+      if (e.getValue() == null || e.getValue().isBlank()) continue;
+      if (!first) url.append('&');
+      first = false;
+      url.append(URLEncoder.encode(e.getKey(), StandardCharsets.UTF_8))
+          .append('=')
+          .append(URLEncoder.encode(e.getValue(), StandardCharsets.UTF_8));
+    }
+    try {
+      Map<String, Object> envelope =
+          restClientBuilder
+              .build()
+              .get()
+              .uri(url.toString())
+              .headers(h -> TenantHeaders.apply(h, scope))
+              .retrieve()
+              .body(MAP_TYPE);
+      Map<String, Object> data = unwrap(envelope);
+      if (data == null) return List.of();
+      Object items = data.get("items");
+      if (items == null) items = data.get("content");
+      if (!(items instanceof List<?> list)) return List.of();
+      List<Map<String, Object>> out = new ArrayList<>();
+      for (Object item : list) {
+        if (item instanceof Map<?, ?> m) {
+          out.add(new LinkedHashMap<>((Map<String, Object>) m));
+        }
+      }
+      return out;
+    } catch (Exception ex) {
+      log.debug("student directory search failed: {}", ex.getMessage());
+      return List.of();
     }
   }
 

@@ -5,9 +5,11 @@ import com.sugamflow.school.common.tenant.TenantContext;
 import com.sugamflow.school.common.tenant.TenantScope;
 import com.sugamflow.school.fee.persistence.entity.ExpenseRecordEntity;
 import com.sugamflow.school.fee.persistence.entity.FeeCollectionEntity;
+import com.sugamflow.school.fee.persistence.entity.FinanceTransactionEntity;
 import com.sugamflow.school.fee.persistence.entity.IncomeRecordEntity;
 import com.sugamflow.school.fee.persistence.repo.ExpenseRecordRepository;
 import com.sugamflow.school.fee.persistence.repo.FeeCollectionRepository;
+import com.sugamflow.school.fee.persistence.repo.FinanceTransactionRepository;
 import com.sugamflow.school.fee.persistence.repo.IncomeRecordRepository;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -38,18 +40,21 @@ public class IncomeExpenseReportService {
   private final ExpenseService expenseService;
   private final IncomeRecordRepository incomeRepo;
   private final IncomeService incomeService;
+  private final FinanceTransactionRepository financeTxnRepo;
 
   public IncomeExpenseReportService(
       FeeCollectionRepository feeRepo,
       ExpenseRecordRepository expenseRepo,
       ExpenseService expenseService,
       IncomeRecordRepository incomeRepo,
-      IncomeService incomeService) {
+      IncomeService incomeService,
+      FinanceTransactionRepository financeTxnRepo) {
     this.feeRepo = feeRepo;
     this.expenseRepo = expenseRepo;
     this.expenseService = expenseService;
     this.incomeRepo = incomeRepo;
     this.incomeService = incomeService;
+    this.financeTxnRepo = financeTxnRepo;
   }
 
   @Transactional
@@ -418,9 +423,14 @@ public class IncomeExpenseReportService {
     feeAnalysis.put("pendingFees", round(pendingFees));
     feeAnalysis.put("overdueFees", round(overdueFees));
     feeAnalysis.put("advanceCollection", 0);
-    feeAnalysis.put("scholarshipDiscount", 0);
-    feeAnalysis.put("fineCollected", findAmount(incomeBySource, "Late", "Fine"));
-    feeAnalysis.put("refundAmount", 0);
+    double[] feeExtras =
+        sumFeeExtras(scope, window.fromInclusive.toInstant(), window.toExclusive.toInstant());
+    feeAnalysis.put("scholarshipDiscount", round(feeExtras[0]));
+    feeAnalysis.put(
+        "fineCollected",
+        round(Math.max(feeExtras[1], findAmount(incomeBySource, "Late", "Fine"))));
+    feeAnalysis.put("refundAmount", round(feeExtras[2]));
+    feeAnalysis.put("waivedAmount", round(feeExtras[3]));
 
     Map<String, Object> out = new LinkedHashMap<>();
     out.put("generatedAt", Instant.now().toString());
@@ -708,6 +718,46 @@ public class IncomeExpenseReportService {
 
   private static double bankishMode(List<Map<String, Object>> modes) {
     return findAmount(modes, "BANK", "NEFT", "RTGS", "UPI", "CARD", "ONLINE", "CHEQUE", "Bank");
+  }
+
+  /**
+   * Returns [scholarshipDiscount, lateFee/fine, refundAmount, waivedAmount] from collections +
+   * finance transactions in the report window.
+   */
+  private double[] sumFeeExtras(TenantScope scope, Instant fromTs, Instant toTs) {
+    double discount = 0;
+    double late = 0;
+    double refund = 0;
+    double waive = 0;
+    for (FeeCollectionEntity fee :
+        feeRepo.findByOrganizationIdOrderByUpdatedAtDesc(scope.organizationId())) {
+      if (fee.getUpdatedAt() != null
+          && (fee.getUpdatedAt().isBefore(fromTs) || !fee.getUpdatedAt().isBefore(toTs))) {
+        continue;
+      }
+      Map<String, Object> answers = fee.getAnswers() != null ? fee.getAnswers() : Map.of();
+      discount += toDouble(answers.get("discountAmount"));
+      late += toDouble(answers.get("lateFeeAmount"));
+      refund += toDouble(answers.get("refundAmount"));
+      waive += toDouble(answers.get("waivedAmount"));
+    }
+    for (FinanceTransactionEntity txn :
+        financeTxnRepo.findByOrganizationIdOrderByCreatedAtDesc(scope.organizationId())) {
+      if (txn.getCreatedAt() != null
+          && (txn.getCreatedAt().isBefore(fromTs) || !txn.getCreatedAt().isBefore(toTs))) {
+        continue;
+      }
+      String type = txn.getTransactionType() == null ? "" : txn.getTransactionType();
+      if ("FEE_REFUND".equalsIgnoreCase(type)) {
+        refund += txn.getNetAmount() == null ? 0 : txn.getNetAmount().doubleValue();
+      } else if ("FEE_WAIVE".equalsIgnoreCase(type)) {
+        waive += txn.getNetAmount() == null ? 0 : txn.getNetAmount().doubleValue();
+      } else if ("FEE_DEMAND".equalsIgnoreCase(type) && txn.getPayload() != null) {
+        discount += toDouble(txn.getPayload().get("discountAmount"));
+        late += toDouble(txn.getPayload().get("lateFeeAmount"));
+      }
+    }
+    return new double[] {discount, late, refund, waive};
   }
 
   private static double findAmount(List<Map<String, Object>> rows, String... needles) {

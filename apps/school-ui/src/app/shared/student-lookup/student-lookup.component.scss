@@ -73,11 +73,59 @@
 
 .slu-input-wrap {
   position: relative;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.slu-input-row {
+  display: flex;
+  gap: 0.5rem;
+  align-items: stretch;
 }
 
 .slu-input {
   width: 100%;
   padding-right: 2.2rem;
+}
+
+.slu-scan-btn {
+  flex: 0 0 auto;
+  min-width: 4.5rem;
+  font-weight: 700;
+}
+
+.slu-scan-help {
+  margin: 0.35rem 0 0;
+  font-size: 0.8rem;
+}
+
+.slu-scan-panel {
+  margin-top: 0.65rem;
+  padding: 0.75rem;
+  border-radius: var(--sf-radius);
+  border: 1px solid color-mix(in srgb, var(--sf-menu) 18%, transparent);
+  background: #0f172a;
+  color: #e2e8f0;
+}
+
+.slu-scan-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 0.5rem;
+}
+
+.slu-scan-head .slu-link {
+  color: #93c5fd;
+}
+
+.slu-scan-video {
+  width: 100%;
+  max-height: 240px;
+  object-fit: cover;
+  border-radius: 0.5rem;
+  background: #020617;
 }
 
 .slu-spinner {

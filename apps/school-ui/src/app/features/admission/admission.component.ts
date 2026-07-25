@@ -55,6 +55,13 @@ export class AdmissionComponent implements OnInit, OnDestroy {
   answers: Record<string, unknown> = {};
   fieldErrors: Record<string, string> = {};
   readonly houseOptions = ['Red', 'Blue', 'Green', 'Yellow'];
+  /** Grade 1–10 + section letters for Class Applied picker. */
+  readonly defaultGrades = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10'];
+  readonly defaultSections = ['A', 'B', 'C'];
+  gradeChoices: string[] = [...this.defaultGrades];
+  sectionChoices: string[] = [...this.defaultSections];
+  classGrade = '';
+  classSectionLetter = '';
   applications: any[] = [];
   selectedId: string | null = null;
   selected: any = null;
@@ -62,6 +69,7 @@ export class AdmissionComponent implements OnInit, OnDestroy {
   formOpen = false;
   actionComment = '';
   submitting = false;
+  activeFormSectionId = '';
   /** Sync lock — blocks double-click before Angular re-renders disabled state. */
   private submitLocked = false;
   private lastSubmitFingerprint = '';
@@ -97,6 +105,7 @@ export class AdmissionComponent implements OnInit, OnDestroy {
   ngOnInit(): void {
     this.routeSub = this.route.queryParamMap.subscribe((params) => this.syncFromRoute(params));
     this.reload();
+    this.loadClassOptions();
   }
 
   ngOnDestroy(): void {
@@ -141,6 +150,9 @@ export class AdmissionComponent implements OnInit, OnDestroy {
       this.error = '';
       this.statusMsg = '';
       this.fieldErrors = {};
+      this.resetClassPicker();
+      const visible = this.visibleFormSections();
+      this.activeFormSectionId = visible[0]?.id || '';
       return;
     }
     this.formOpen = false;
@@ -190,6 +202,8 @@ export class AdmissionComponent implements OnInit, OnDestroy {
         this.workflowKey = boot.workflowKey;
         this.fields = this.extractFields(boot.form);
         this.formSections = this.extractSections(boot.form);
+        const visible = this.visibleFormSections();
+        this.activeFormSectionId = visible[0]?.id || '';
         for (const f of this.fields) {
           if (this.answers[f.key] === undefined) {
             this.answers[f.key] = f.type === 'CHECKBOX' ? false : '';
@@ -423,6 +437,44 @@ export class AdmissionComponent implements OnInit, OnDestroy {
     });
   }
 
+  downloadRegister(format: 'PDF' | 'EXCEL' | 'CSV' = 'PDF'): void {
+    const qs = new URLSearchParams();
+    if (this.listStatus) qs.set('status', this.listStatus);
+    if (this.listQ) qs.set('q', this.listQ);
+    qs.set('format', format);
+    this.api.get<any>(`/api/admission/register?${qs.toString()}`).subscribe({
+      next: (res) => {
+        const b64 = String(res?.contentBase64 || '');
+        if (!b64) {
+          this.error = 'Register export returned empty content';
+          return;
+        }
+        const bin = atob(b64);
+        const bytes = new Uint8Array(bin.length);
+        for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+        const blob = new Blob([bytes], { type: res.contentType || 'application/octet-stream' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download =
+          res.fileName ||
+          `admission-register.${format === 'EXCEL' ? 'xlsx' : format.toLowerCase()}`;
+        a.click();
+        URL.revokeObjectURL(url);
+        this.statusMsg = `Admission register (${format}) downloaded`;
+      },
+      error: (err) => (this.error = err?.error?.message ?? 'Register export failed'),
+    });
+  }
+
+  selectFormSection(id: string): void {
+    this.activeFormSectionId = id;
+  }
+
+  visibleFormSections(): Array<{ id: string; title: string }> {
+    return this.formSections.filter((s) => this.sectionFields(s.id).length > 0);
+  }
+
   latestApproveDelivery(): any[] {
     const intents = this.selected?.notificationIntents ?? [];
     for (let i = intents.length - 1; i >= 0; i--) {
@@ -511,6 +563,15 @@ export class AdmissionComponent implements OnInit, OnDestroy {
     }
   }
 
+  isClassField(key: string): boolean {
+    const normalized = key.replace(/[^a-z0-9]/gi, '').toLowerCase();
+    return normalized === 'classapplied' || normalized === 'classsection' || normalized === 'class';
+  }
+
+  isDropdownField(key: string): boolean {
+    return key === 'house';
+  }
+
   dropdownOptions(field: FormField): string[] {
     if (field.options?.length) {
       return field.options;
@@ -519,6 +580,99 @@ export class AdmissionComponent implements OnInit, OnDestroy {
       return this.houseOptions;
     }
     return [];
+  }
+
+  selectClassGrade(grade: string): void {
+    this.classGrade = grade;
+    this.syncClassAppliedAnswer();
+  }
+
+  selectClassSection(section: string): void {
+    if (!this.classGrade) {
+      return;
+    }
+    this.classSectionLetter = section;
+    this.syncClassAppliedAnswer();
+  }
+
+  classAppliedLabel(grade = this.classGrade, section = this.classSectionLetter): string {
+    if (!grade || !section) {
+      return '';
+    }
+    return `Grade ${grade}-${section}`;
+  }
+
+  private syncClassAppliedAnswer(): void {
+    const label = this.classAppliedLabel();
+    for (const f of this.fields) {
+      if (!this.isClassField(f.key)) continue;
+      this.answers[f.key] = label;
+      this.clearFieldError(f.key);
+    }
+    this.answers['classGrade'] = this.classGrade;
+    this.answers['sectionLetter'] = this.classSectionLetter;
+    this.answers['section'] = this.classSectionLetter;
+    this.clearFieldError('classGrade');
+    this.clearFieldError('sectionLetter');
+  }
+
+  /** Grade/section part keys are written by the class picker — hide as standalone inputs. */
+  isClassPartField(key: string): boolean {
+    const normalized = key.replace(/[^a-z0-9]/gi, '').toLowerCase();
+    return (
+      normalized === 'classgrade' ||
+      normalized === 'grade' ||
+      normalized === 'sectionletter' ||
+      normalized === 'section' ||
+      normalized === 'sectionname'
+    );
+  }
+
+  private resetClassPicker(): void {
+    this.classGrade = '';
+    this.classSectionLetter = '';
+    for (const f of this.fields) {
+      if (this.isClassField(f.key)) {
+        this.answers[f.key] = '';
+      }
+    }
+  }
+
+  private loadClassOptions(): void {
+    this.api.get<any[]>('/api/academic/sections').subscribe({
+      next: (sections) => {
+        const grades = new Set(this.defaultGrades);
+        const letters = new Set(this.defaultSections);
+        for (const s of sections ?? []) {
+          const label = String(s.studentLabel || '').trim();
+          const parsed = this.parseClassLabel(label);
+          if (parsed) {
+            grades.add(parsed.grade);
+            letters.add(parsed.section);
+          }
+          const sectionName = String(s.name || '')
+            .trim()
+            .toUpperCase();
+          if (/^[A-Z]$/.test(sectionName)) {
+            letters.add(sectionName);
+          }
+        }
+        this.gradeChoices = [...grades].sort((a, b) => Number(a) - Number(b));
+        this.sectionChoices = [...letters].sort((a, b) => a.localeCompare(b));
+      },
+      error: () => {
+        this.gradeChoices = [...this.defaultGrades];
+        this.sectionChoices = [...this.defaultSections];
+      },
+    });
+  }
+
+  private parseClassLabel(label: string): { grade: string; section: string } | null {
+    const m = label.match(/^(?:grade\s*)?(\d{1,2})\s*[-–]?\s*([A-Za-z])$/i);
+    if (!m) return null;
+    const grade = String(Number(m[1]));
+    if (Number(grade) < 1 || Number(grade) > 12) return null;
+    return { grade, section: m[2].toUpperCase() };
   }
 
   currentRole(): string {
@@ -552,18 +706,24 @@ export class AdmissionComponent implements OnInit, OnDestroy {
           errors[f.key] = 'Age must be between 3 and 25';
         }
       }
-      if (
-        f.type === 'PHONE' ||
-        f.key === 'mobile' ||
-        f.key === 'guardianMobile' ||
-        f.key.toLowerCase().includes('mobile') ||
-        f.key.toLowerCase().includes('phone')
-      ) {
-        const digits = value.replace(/\D/g, '');
-        if (digits.length < 10) {
-          errors[f.key] = 'Enter a valid 10-digit mobile number';
-        }
-      }
+                  if (
+                    f.type === 'PHONE' ||
+                    f.key === 'mobile' ||
+                    f.key === 'guardianMobile' ||
+                    f.key.toLowerCase().includes('mobile') ||
+                    f.key.toLowerCase().includes('phone')
+                  ) {
+                    const digits = value.replace(/\D/g, '');
+                    if (digits.length < 10) {
+                      errors[f.key] = 'Enter a valid 10-digit mobile number';
+                    }
+                  }
+                  if (f.key === 'aadhaar' || f.key === 'aadhaarNumber') {
+                    const digits = value.replace(/\D/g, '');
+                    if (digits && digits.length !== 12) {
+                      errors[f.key] = 'Aadhaar must be exactly 12 digits';
+                    }
+                  }
     }
     this.fieldErrors = errors;
     return Object.keys(errors).length === 0;
@@ -581,6 +741,8 @@ export class AdmissionComponent implements OnInit, OnDestroy {
     }
     this.answers = next;
     this.fieldErrors = {};
+    this.classGrade = '';
+    this.classSectionLetter = '';
   }
 
   private normalizeAnswers(): Record<string, unknown> {
@@ -596,7 +758,16 @@ export class AdmissionComponent implements OnInit, OnDestroy {
       if (typeof v === 'string') {
         v = v.trim();
       }
+      if ((f.key === 'aadhaar' || f.key === 'aadhaarNumber') && typeof v === 'string') {
+        v = v.replace(/\D/g, '');
+      }
       out[f.key] = v;
+    }
+    // Always persist grade/section parts even if form keys were added after answers init.
+    if (this.classGrade) out['classGrade'] = this.classGrade;
+    if (this.classSectionLetter) {
+      out['sectionLetter'] = this.classSectionLetter;
+      out['section'] = this.classSectionLetter;
     }
     return out;
   }

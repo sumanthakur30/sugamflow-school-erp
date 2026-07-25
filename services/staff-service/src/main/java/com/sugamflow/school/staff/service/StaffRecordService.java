@@ -209,6 +209,7 @@ public class StaffRecordService {
     requireFeature(scope);
     PageQuery q = PageQuery.of(parseInt(params.get("page")), parseInt(params.get("size")));
     DirectoryQuery dq = DirectoryQuery.from(params, scope);
+    Integer joinedWithinDays = dq.joinedWithinDays;
     Page<StaffRecordEntity> page =
         repository.searchDirectory(
             scope.organizationId(),
@@ -226,6 +227,10 @@ public class StaffRecordService {
             blank(dq.employmentType),
             nullToEmpty(dq.gender),
             blank(dq.gender),
+            nullToEmpty(dq.staffGroup),
+            blank(dq.staffGroup),
+            joinedWithinDays == null ? 0 : joinedWithinDays,
+            joinedWithinDays == null,
             PageRequest.of(q.page(), q.size()));
     List<Map<String, Object>> items = page.getContent().stream().map(this::toRow).toList();
     return PageResult.of(items, q.page(), q.size(), page.getTotalElements());
@@ -531,11 +536,32 @@ public class StaffRecordService {
       String department,
       String designation,
       String employmentType,
-      String gender) {
+      String gender,
+      String staffGroup,
+      Integer joinedWithinDays) {
 
     static DirectoryQuery from(Map<String, String> params, TenantScope scope) {
       Map<String, String> p = params != null ? params : Map.of();
       String branch = first(p.get("branchId"), scope.branchId());
+      Integer joinedWithinDays = null;
+      String daysRaw = p.get("joinedWithinDays");
+      if (daysRaw != null && !daysRaw.isBlank()) {
+        try {
+          int days = Integer.parseInt(daysRaw.trim());
+          if (days > 0) {
+            joinedWithinDays = days;
+          }
+        } catch (NumberFormatException ignored) {
+          // ignore invalid filter
+        }
+      }
+      String staffGroup = emptyToNull(p.get("staffGroup"));
+      if (staffGroup != null) {
+        staffGroup = staffGroup.trim().toUpperCase();
+        if (!"TEACHER".equals(staffGroup) && !"NON_TEACHING".equals(staffGroup)) {
+          staffGroup = null;
+        }
+      }
       return new DirectoryQuery(
           branch,
           emptyToNull(p.get("status")),
@@ -543,7 +569,9 @@ public class StaffRecordService {
           emptyToNull(p.get("department")),
           emptyToNull(p.get("designation")),
           emptyToNull(p.get("employmentType")),
-          emptyToNull(p.get("gender")));
+          emptyToNull(p.get("gender")),
+          staffGroup,
+          joinedWithinDays);
     }
 
     private static String first(String a, String b) {

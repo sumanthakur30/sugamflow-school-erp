@@ -123,17 +123,54 @@ export class FinanceComponent implements OnInit {
   studentRef = '';
   studentName = '';
   classSection = '';
+  periodKey = '';
+  pendingDays = 0;
+  hostelMonthlyFee: number | null = null;
+  transportFare: number | null = null;
   demand: any = null;
+  lastDemandTxn: any = null;
+  bulkResult: any = null;
   selectedStudent: StudentLookupRow | null = null;
 
-  headDraft = {
+  headDraft: {
+    definitionKey: string;
+    label: string;
+    category: string;
+    refundable: boolean;
+    enabled: boolean;
+    frequency: string;
+    gstRate: number;
+    taxable: boolean;
+  } = {
     definitionKey: '',
     label: '',
     category: 'ACADEMIC',
     refundable: true,
     enabled: true,
+    frequency: 'M',
+    gstRate: 0,
+    taxable: false,
   };
   editingHeadKey: string | null = null;
+
+  structureDraft = {
+    definitionKey: '',
+    name: '',
+    currency: 'INR',
+    classSection: '',
+    academicSessionId: '',
+    notes: '',
+    linesText: 'TUITION,12000,M\nLIBRARY,500,Y',
+  };
+  editingStructureKey: string | null = null;
+
+  adjustDraft = {
+    type: 'waive' as 'waive' | 'refund',
+    amount: 0,
+    headKey: 'MISC',
+    reason: '',
+    studentRef: '',
+  };
 
   intentAmount = 1000;
   providerKey = 'simulated';
@@ -443,6 +480,7 @@ export class FinanceComponent implements OnInit {
     this.selectedStudent = null;
     this.studentName = '';
     this.studentRef = '';
+    this.classSection = '';
   }
 
   editHead(h: any): void {
@@ -454,11 +492,232 @@ export class FinanceComponent implements OnInit {
       category: String(p.category || 'ACADEMIC'),
       refundable: p.refundable !== false,
       enabled: p.enabled !== false && h.enabled !== false,
+      frequency: String(p.frequency || 'M'),
+      gstRate: Number(p.gstRate || 0),
+      taxable: !!p.taxable,
     };
     this.setTab('heads');
     queueMicrotask(() =>
       document.getElementById('fin-head-form')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }),
     );
+  }
+
+  resetHeadDraft(): void {
+    this.editingHeadKey = null;
+    this.headDraft = {
+      definitionKey: '',
+      label: '',
+      category: 'ACADEMIC',
+      refundable: true,
+      enabled: true,
+      frequency: 'M',
+      gstRate: 0,
+      taxable: false,
+    };
+  }
+
+  demandBody(): Record<string, unknown> {
+    const body: Record<string, unknown> = {
+      structureKey: this.structureKey,
+      concessionKey: this.concessionKey || undefined,
+      studentRef: this.studentRef || undefined,
+      studentName: this.studentName || undefined,
+      classSection: this.classSection || undefined,
+      periodKey: this.periodKey || undefined,
+      pendingDays: this.pendingDays || 0,
+    };
+    if (this.hostelMonthlyFee != null && this.hostelMonthlyFee > 0) {
+      body['hostelMonthlyFee'] = this.hostelMonthlyFee;
+    }
+    if (this.transportFare != null && this.transportFare > 0) {
+      body['transportFare'] = this.transportFare;
+    }
+    return body;
+  }
+
+  previewDemand(): void {
+    this.busy = true;
+    this.error = '';
+    this.api.post<any>('/api/fee/finance/demands/preview', this.demandBody()).subscribe({
+      next: (d) => {
+        this.busy = false;
+        this.demand = d;
+        if (d?.netAmount != null) {
+          this.intentAmount = Number(d.netAmount) || this.intentAmount;
+        }
+        this.status = `Preview net ${this.formatMoney(d.netAmount)}`;
+      },
+      error: (err) => {
+        this.busy = false;
+        this.error = err?.error?.message ?? 'Demand preview failed';
+      },
+    });
+  }
+
+  generateDemand(): void {
+    if (!this.studentRef?.trim()) {
+      this.error = 'Select a student before generating a demand';
+      return;
+    }
+    this.busy = true;
+    this.error = '';
+    this.api.post<any>('/api/fee/finance/demands', this.demandBody()).subscribe({
+      next: (txn) => {
+        this.busy = false;
+        this.lastDemandTxn = txn;
+        this.demand = txn.demand || this.demand;
+        this.status = `Demand ${txn.referenceNo || ''} saved (${txn.status || 'OPEN'})`;
+        this.reload();
+      },
+      error: (err) => {
+        this.busy = false;
+        this.error = err?.error?.message ?? 'Generate demand failed';
+      },
+    });
+  }
+
+  generateBulkDemands(): void {
+    if (!this.classSection?.trim()) {
+      this.error = 'Class / section is required for bulk demand';
+      return;
+    }
+    this.busy = true;
+    this.error = '';
+    this.api
+      .post<any>('/api/fee/finance/demands/bulk', {
+        ...this.demandBody(),
+        classSection: this.classSection,
+      })
+      .subscribe({
+        next: (res) => {
+          this.busy = false;
+          this.bulkResult = res;
+          this.status = `Bulk demand: ${res.created || 0} created, ${res.failed || 0} failed`;
+          this.reload();
+        },
+        error: (err) => {
+          this.busy = false;
+          this.error = err?.error?.message ?? 'Bulk demand failed';
+        },
+      });
+  }
+
+  editStructure(s: any): void {
+    const p = this.payload(s);
+    this.editingStructureKey = s.definitionKey || p.definitionKey || null;
+    const elig = p.eligibility || {};
+    const lines = Array.isArray(p.lines) ? p.lines : [];
+    this.structureDraft = {
+      definitionKey: String(this.editingStructureKey || ''),
+      name: String(p.name || ''),
+      currency: String(p.currency || 'INR'),
+      classSection: String(elig.classSection || ''),
+      academicSessionId: String(elig.academicSessionId || ''),
+      notes: String(p.notes || ''),
+      linesText: lines
+        .map((l: any) => `${l.headKey},${l.amount},${l.frequency || 'Y'}`)
+        .join('\n'),
+    };
+    this.setTab('structures');
+    queueMicrotask(() =>
+      document.getElementById('fin-structure-form')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }),
+    );
+  }
+
+  resetStructureDraft(): void {
+    this.editingStructureKey = null;
+    this.structureDraft = {
+      definitionKey: '',
+      name: '',
+      currency: 'INR',
+      classSection: '',
+      academicSessionId: '',
+      notes: '',
+      linesText: 'TUITION,12000,M\nLIBRARY,500,Y',
+    };
+  }
+
+  saveStructure(): void {
+    const key = (this.structureDraft.definitionKey || '').trim().toUpperCase().replace(/\s+/g, '_');
+    if (!key || !this.structureDraft.name?.trim()) {
+      this.error = 'Structure key and name are required';
+      return;
+    }
+    const lines = this.structureDraft.linesText
+      .split(/\r?\n/)
+      .map((row) => row.trim())
+      .filter(Boolean)
+      .map((row) => {
+        const [headKey, amount, frequency] = row.split(',').map((x) => x.trim());
+        return {
+          headKey: (headKey || '').toUpperCase(),
+          amount: Number(amount || 0),
+          frequency: (frequency || 'Y').toUpperCase(),
+          optional: false,
+        };
+      })
+      .filter((l) => l.headKey && l.amount > 0);
+    if (!lines.length) {
+      this.error = 'Add at least one line as HEAD,amount,frequency';
+      return;
+    }
+    this.busy = true;
+    this.error = '';
+    this.api
+      .put(`/api/fee/finance/structures/${encodeURIComponent(key)}`, {
+        definitionKey: key,
+        name: this.structureDraft.name.trim(),
+        currency: this.structureDraft.currency || 'INR',
+        notes: this.structureDraft.notes || '',
+        eligibility: {
+          classSection: this.structureDraft.classSection || undefined,
+          academicSessionId: this.structureDraft.academicSessionId || undefined,
+        },
+        lines,
+      })
+      .subscribe({
+        next: () => {
+          this.busy = false;
+          this.status = `Saved structure ${key}`;
+          this.resetStructureDraft();
+          this.reload();
+        },
+        error: (err) => {
+          this.busy = false;
+          this.error = err?.error?.message ?? 'Save structure failed';
+        },
+      });
+  }
+
+  postAdjustment(): void {
+    const amount = Number(this.adjustDraft.amount || 0);
+    if (amount <= 0 || !this.adjustDraft.reason?.trim()) {
+      this.error = 'Adjustment amount and reason are required';
+      return;
+    }
+    const path =
+      this.adjustDraft.type === 'refund' ? '/api/fee/finance/refund' : '/api/fee/finance/waive';
+    this.busy = true;
+    this.error = '';
+    this.api
+      .post(path, {
+        amount,
+        reason: this.adjustDraft.reason.trim(),
+        headKey: this.adjustDraft.headKey || 'MISC',
+        studentRef: this.adjustDraft.studentRef || this.studentRef || undefined,
+      })
+      .subscribe({
+        next: (txn: any) => {
+          this.busy = false;
+          this.status = `${this.adjustDraft.type} posted ${txn.referenceNo || ''}`;
+          this.adjustDraft = { ...this.adjustDraft, amount: 0, reason: '' };
+          this.reload();
+        },
+        error: (err) => {
+          this.busy = false;
+          this.error = err?.error?.message ?? 'Adjustment failed';
+        },
+      });
   }
 
   duplicateHead(h: any): void {
@@ -471,20 +730,12 @@ export class FinanceComponent implements OnInit {
       category: String(p.category || 'ACADEMIC'),
       refundable: p.refundable !== false,
       enabled: true,
+      frequency: String(p.frequency || 'M'),
+      gstRate: Number(p.gstRate || 0),
+      taxable: !!p.taxable,
     };
     this.setTab('heads');
     this.status = `Drafted duplicate of ${base}. Review key/label and save.`;
-  }
-
-  resetHeadDraft(): void {
-    this.editingHeadKey = null;
-    this.headDraft = {
-      definitionKey: '',
-      label: '',
-      category: 'ACADEMIC',
-      refundable: true,
-      enabled: true,
-    };
   }
 
   collectFor(row: OutstandingRow): void {
@@ -501,40 +752,11 @@ export class FinanceComponent implements OnInit {
     this.status = `${channel} reminder queued for ${row.studentName} (${row.mobile}) — wire notification template next.`;
   }
 
-  previewDemand(): void {
-    if (!this.structureKey) {
-      this.error = 'Select a fee structure first';
-      return;
-    }
-    this.busy = true;
-    this.error = '';
-    this.api
-      .post<any>('/api/fee/finance/demands/preview', {
-        structureKey: this.structureKey,
-        concessionKey: this.concessionKey || null,
-        studentRef: this.studentRef || 'WALK-IN',
-        studentName: this.studentName || 'Student',
-        classSection: this.classSection || '',
-      })
-      .subscribe({
-        next: (d) => {
-          this.busy = false;
-          this.demand = d;
-          if (d?.netAmount != null) {
-            this.intentAmount = Number(d.netAmount) || this.intentAmount;
-          }
-          this.status = `Demand net ${this.formatMoney(d.netAmount)} ${d.currency || ''}`.trim();
-        },
-        error: (err) => {
-          this.busy = false;
-          this.error = err?.error?.message ?? 'Demand preview failed';
-        },
-      });
-  }
-
   saveHead(): void {
-    const key = (this.headDraft.definitionKey || '').trim().toUpperCase();
-    if (!key || !this.headDraft.label?.trim()) {
+    const key = String(this.headDraft.definitionKey || '')
+      .trim()
+      .toUpperCase();
+    if (!key || !String(this.headDraft.label || '').trim()) {
       this.error = 'Head key and label are required';
       return;
     }
@@ -544,6 +766,8 @@ export class FinanceComponent implements OnInit {
       .put(`/api/fee/finance/heads/${encodeURIComponent(key)}`, {
         ...this.headDraft,
         definitionKey: key,
+        gstRate: Number(this.headDraft.gstRate || 0),
+        taxable: !!this.headDraft.taxable,
       })
       .subscribe({
         next: () => {

@@ -15,11 +15,26 @@ import {
   sortRows,
 } from '../../shared/list-toolbar/list-controls';
 import { parseListViewParams } from '../../shared/list-toolbar/list-view-route';
+import {
+  StudentLookupComponent,
+  StudentLookupRow,
+  applyStudentLookupToAnswers,
+  clearStudentLookupAnswers,
+  filterNonIdentityFields,
+} from '../../shared/student-lookup';
+import { AttendanceRosterComponent } from '../../shared/attendance-roster';
 
 @Component({
   selector: 'sf-attendance',
   standalone: true,
-  imports: [CommonModule, FormsModule, ListToolbarComponent, ListPagerComponent],
+  imports: [
+    CommonModule,
+    FormsModule,
+    ListToolbarComponent,
+    ListPagerComponent,
+    StudentLookupComponent,
+    AttendanceRosterComponent,
+  ],
   templateUrl: './attendance.component.html',
   styleUrls: [
     '../../shared/admin-page.scss',
@@ -41,8 +56,12 @@ export class AttendanceComponent implements OnInit, OnDestroy {
   featureEnabled = false;
   formKey = 'attendance_mark';
   workflowKey = 'attendance';
+  /** Admin primary mode: class roster (bulk) vs workflow records. */
+  viewMode: 'roster' | 'records' = 'roster';
   fields: Array<{ key: string; label: string; type: string; mandatory: boolean }> = [];
   answers: Record<string, unknown> = {};
+  selectedStudent: StudentLookupRow | null = null;
+  lookupNonce = 0;
   records: any[] = [];
   selectedId: string | null = null;
   selected: any = null;
@@ -125,6 +144,8 @@ export class AttendanceComponent implements OnInit, OnDestroy {
       this.error = '';
       this.statusMsg = '';
       this.resetAnswers();
+      this.clearStudentSelection();
+      this.lookupNonce++;
       return;
     }
     this.formOpen = false;
@@ -273,6 +294,10 @@ export class AttendanceComponent implements OnInit, OnDestroy {
 
   submit(): void {
     if (this.submitLocked || this.submitting) return;
+    if (!this.selectedStudent) {
+      this.error = 'Search and select a student before submitting attendance.';
+      return;
+    }
     this.submitLocked = true;
     this.submitting = true;
     this.error = '';
@@ -306,6 +331,26 @@ export class AttendanceComponent implements OnInit, OnDestroy {
           this.error = err?.error?.message ?? 'Submit failed';
         },
       });
+  }
+
+  /** Editable fields after student identity is chosen via search. */
+  get entryFields(): Array<{ key: string; label: string; type: string; mandatory: boolean }> {
+    return filterNonIdentityFields(this.fields);
+  }
+
+  onStudentSelected(row: StudentLookupRow): void {
+    this.selectedStudent = row;
+    this.error = '';
+    applyStudentLookupToAnswers(this.answers, row);
+  }
+
+  onStudentCleared(): void {
+    this.clearStudentSelection();
+  }
+
+  private clearStudentSelection(): void {
+    this.selectedStudent = null;
+    clearStudentLookupAnswers(this.answers);
   }
 
   select(row: any): void {

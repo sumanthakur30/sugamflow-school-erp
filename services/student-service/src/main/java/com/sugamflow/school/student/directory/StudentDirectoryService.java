@@ -196,7 +196,8 @@ public class StudentDirectoryService {
     exportParams.put("size", "200");
     PageResult<Map<String, Object>> page = search(exportParams);
     StringBuilder sb = new StringBuilder();
-    sb.append("admissionNo,fullName,classSection,gender,status,mobile,branchId,academicSessionId\n");
+    sb.append(
+        "admissionNo,fullName,classSection,gender,status,mobile,penNumber,apaarId,samagraId,schoolStudentId,photoUrl,branchId,academicSessionId\n");
     for (Map<String, Object> row : page.items()) {
       sb.append(csv(row.get("admissionNo"))).append(',')
           .append(csv(row.get("fullName"))).append(',')
@@ -204,10 +205,51 @@ public class StudentDirectoryService {
           .append(csv(row.get("gender"))).append(',')
           .append(csv(row.get("status"))).append(',')
           .append(csv(row.get("mobile"))).append(',')
+          .append(csv(row.get("penNumber"))).append(',')
+          .append(csv(row.get("apaarId"))).append(',')
+          .append(csv(row.get("samagraId"))).append(',')
+          .append(csv(row.get("schoolStudentId"))).append(',')
+          .append(csv(row.get("photoUrl"))).append(',')
           .append(csv(row.get("branchId"))).append(',')
           .append(csv(row.get("academicSessionId"))).append('\n');
     }
     return sb.toString().getBytes(StandardCharsets.UTF_8);
+  }
+
+  @Transactional(readOnly = true)
+  public Map<String, Object> exportWorkbook(Map<String, String> params, String format) {
+    TenantScope scope = TenantContext.require();
+    requireFeature(scope);
+    Map<String, String> exportParams = new LinkedHashMap<>(params != null ? params : Map.of());
+    exportParams.put("page", "0");
+    exportParams.put("size", "500");
+    PageResult<Map<String, Object>> page = search(exportParams);
+    List<Map<String, Object>> columns =
+        List.of(
+            Map.of("key", "admissionNo", "label", "Admission No"),
+            Map.of("key", "fullName", "label", "Full Name"),
+            Map.of("key", "classSection", "label", "Class"),
+            Map.of("key", "gender", "label", "Gender"),
+            Map.of("key", "status", "label", "Status"),
+            Map.of("key", "mobile", "label", "Mobile"),
+            Map.of("key", "penNumber", "label", "PEN"),
+            Map.of("key", "apaarId", "label", "APAAR"),
+            Map.of("key", "samagraId", "label", "Samagra"),
+            Map.of("key", "schoolStudentId", "label", "School Student ID"),
+            Map.of("key", "photoUrl", "label", "Photo URL"),
+            Map.of("key", "branchId", "label", "Branch"),
+            Map.of("key", "academicSessionId", "label", "Session"));
+    Map<String, Object> data = new LinkedHashMap<>();
+    data.put("title", "Student Directory");
+    data.put("subtitle", scope.organizationId() + " · " + page.items().size() + " students");
+    data.put("columns", columns);
+    data.put("rows", page.items());
+    Map<String, Object> rendered =
+        engines.renderReport(scope, "student_directory", data, format == null ? "EXCEL" : format);
+    if (rendered == null || rendered.get("contentBase64") == null) {
+      throw new StudentException("RENDER_FAILED", "Directory export render returned no content");
+    }
+    return rendered;
   }
 
   private Map<String, Object> toRow(StudentRecordEntity e) {
@@ -226,6 +268,17 @@ public class StudentDirectoryService {
     row.put("category", stringVal(answers, "category"));
     row.put("house", stringVal(answers, "house"));
     row.put("rollNo", stringVal(answers, "rollNo"));
+    row.put("aadhaar", stringVal(answers, "aadhaar"));
+    row.put("penNumber", stringVal(answers, "penNumber"));
+    row.put("apaarId", firstNonBlank(stringVal(answers, "apaarId"), stringVal(answers, "apaarNumber")));
+    row.put("samagraId", stringVal(answers, "samagraId"));
+    row.put("schoolStudentId", stringVal(answers, "schoolStudentId"));
+    row.put(
+        "photoUrl",
+        firstNonBlank(
+            stringVal(answers, "photoUrl"),
+            stringVal(answers, "photo"),
+            stringVal(answers, "studentPhoto")));
     row.put("parentName", parentName(answers));
     row.put("transport", truthy(answers.get("transport")));
     row.put("hostel", truthy(answers.get("hostel")));
@@ -308,11 +361,16 @@ public class StudentDirectoryService {
     return String.valueOf(answers.get(key)).trim();
   }
 
-  private static String firstNonBlank(String a, String b) {
-    if (a != null && !a.isBlank()) {
-      return a;
+  private static String firstNonBlank(String... values) {
+    if (values == null) {
+      return "";
     }
-    return b != null ? b : "";
+    for (String v : values) {
+      if (v != null && !v.isBlank()) {
+        return v;
+      }
+    }
+    return "";
   }
 
   private static boolean truthy(Object v) {
@@ -351,11 +409,17 @@ public class StudentDirectoryService {
       Map<String, String> p = params != null ? params : Map.of();
       String branch = first(p.get("branchId"), scope.branchId());
       String session = first(p.get("academicSessionId"), scope.academicSessionId());
+      // Dedicated identity filters reuse the global q LIKE path (PEN/APAAR/Samagra already indexed).
+      String q =
+          emptyToNull(
+              first(
+                  p.get("q"),
+                  first(p.get("penNumber"), first(p.get("apaarId"), p.get("samagraId")))));
       return new DirectoryQuery(
           branch,
           session,
           emptyToNull(p.get("status")),
-          emptyToNull(p.get("q")),
+          q,
           emptyToNull(first(p.get("classSection"), p.get("class"))),
           emptyToNull(p.get("gender")),
           emptyToNull(p.get("category")),

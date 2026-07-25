@@ -86,27 +86,54 @@
       </button>
     </div>
   } @else {
-    <div class="slu-input-wrap">
-      <input
-        #searchInput
-        [id]="inputId"
-        class="slu-input"
-        type="search"
-        autocomplete="off"
-        [placeholder]="placeholder"
-        [ngModel]="q"
-        (ngModelChange)="onQueryChange($event)"
-        (focus)="onFocus()"
-        (keydown)="onKeydown($event)"
-        [disabled]="disabled"
-        role="combobox"
-        aria-autocomplete="list"
-        [attr.aria-expanded]="open"
-        [attr.aria-controls]="listId"
-      />
-      @if (searching) {
-        <span class="slu-spinner" aria-label="Searching"></span>
+    <div class="slu-input-row">
+      <div class="slu-input-wrap">
+        <input
+          #searchInput
+          [id]="inputId"
+          class="slu-input"
+          type="search"
+          autocomplete="off"
+          [placeholder]="placeholder"
+          [ngModel]="q"
+          (ngModelChange)="onQueryChange($event)"
+          (focus)="onFocus()"
+          (keydown)="onKeydown($event)"
+          [disabled]="disabled"
+          role="combobox"
+          aria-autocomplete="list"
+          [attr.aria-expanded]="open"
+          [attr.aria-controls]="listId"
+        />
+        @if (searching) {
+          <span class="slu-spinner" aria-label="Searching"></span>
+        }
+      </div>
+      @if (enableScan) {
+        <button
+          type="button"
+          class="slu-scan-btn"
+          (click)="openScan()"
+          [disabled]="disabled || scanOpen"
+          title="Scan barcode / QR from ID card"
+        >
+          Scan
+        </button>
       }
+    </div>
+    <p class="slu-scan-help muted">
+      Tip: USB barcode scanners work in the search box (scan + Enter). Or tap Scan for camera QR.
+    </p>
+  }
+
+  @if (scanOpen) {
+    <div class="slu-scan-panel" role="dialog" aria-label="Scan student ID">
+      <div class="slu-scan-head">
+        <strong>Scan ID barcode / QR</strong>
+        <button type="button" class="slu-link" (click)="stopScan()">Close</button>
+      </div>
+      <video #scanVideo class="slu-scan-video" playsinline muted></video>
+      <p class="muted">{{ scanBusy ? 'Starting camera…' : scanHint }}</p>
     </div>
   }
 

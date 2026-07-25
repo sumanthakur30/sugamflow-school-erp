@@ -57,3 +57,31 @@ h3 {
 p {
   margin: 0;
 }
+
+@media print {
+  body {
+    background: #fff !important;
+  }
+
+  sf-shell .context-bar,
+  sf-shell .module-nav,
+  sf-shell .sidebar,
+  sf-shell .sidebar-backdrop,
+  sf-shell .mobile-nav,
+  sf-shell .top-menu-popover,
+  .context-bar,
+  .module-nav,
+  .sidebar,
+  .no-print {
+    display: none !important;
+  }
+
+  sf-shell .shell-main,
+  .shell-main,
+  .page {
+    margin: 0 !important;
+    padding: 0 !important;
+    max-width: none !important;
+  }
+}
+

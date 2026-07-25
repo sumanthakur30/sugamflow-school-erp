@@ -42,7 +42,15 @@ export class StudentsComponent implements OnInit, OnDestroy {
   parentFormKey = 'parent_master';
   guardiansAnswerKey = 'guardians';
   parentFields: Array<{ key: string; label: string; type: string; mandatory: boolean }> = [];
-  masterFields: Array<{ key: string; label: string; type: string; mandatory: boolean }> = [];
+  masterFields: Array<{
+    key: string;
+    label: string;
+    type: string;
+    mandatory: boolean;
+    sectionId?: string;
+  }> = [];
+  formSections: Array<{ id: string; title: string }> = [];
+  activeEditSectionId = '';
   students: any[] = [];
   selected: any = null;
   selectedId: string | null = null;
@@ -66,6 +74,49 @@ export class StudentsComponent implements OnInit, OnDestroy {
   showAudit = false;
   documents: any[] = [];
   documentsLoading = false;
+  attachments: any[] = [];
+  attachmentsLoading = false;
+  uploadingAttachment = false;
+  identity = {
+    enableAadhaar: true,
+    enablePen: true,
+    enableApaar: true,
+    enableSamagra: false,
+    enableSchoolStudentId: true,
+    maskAadhaar: true,
+    enableStudentPhoto: true,
+    enableGuardianPhoto: true,
+    enableDocumentVault: true,
+    maxPhotoKb: 512,
+    maxDocumentKb: 2048,
+  };
+  readonly defaultGrades = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10'];
+  readonly defaultSections = ['A', 'B', 'C'];
+  editClassGrade = '';
+  editClassSection = '';
+  readonly documentTypeOptions = [
+    { value: 'BIRTH_CERTIFICATE', label: 'Birth Certificate' },
+    { value: 'TRANSFER_CERTIFICATE', label: 'Transfer Certificate' },
+    { value: 'PREVIOUS_MARKSHEET', label: 'Previous Marksheet' },
+    { value: 'AADHAAR_COPY', label: 'Aadhaar Copy' },
+    { value: 'INCOME_CERTIFICATE', label: 'Income Certificate' },
+    { value: 'CASTE_CERTIFICATE', label: 'Caste Certificate' },
+    { value: 'MEDICAL_CERTIFICATE', label: 'Medical Certificate' },
+    { value: 'PASSPORT_PHOTO', label: 'Passport Photo' },
+    { value: 'OTHER', label: 'Other' },
+  ];
+  readonly guardianPhotoSlots = [
+    { type: 'FATHER_PHOTO', label: 'Father photo' },
+    { type: 'MOTHER_PHOTO', label: 'Mother photo' },
+    { type: 'GUARDIAN_PHOTO', label: 'Guardian photo' },
+  ];
+  private readonly photoAttachmentTypes = new Set([
+    'STUDENT_PHOTO',
+    'FATHER_PHOTO',
+    'MOTHER_PHOTO',
+    'GUARDIAN_PHOTO',
+  ]);
+  documentUploadType = 'BIRTH_CERTIFICATE';
 
   listQ = '';
   listStatus = '';
@@ -99,6 +150,7 @@ export class StudentsComponent implements OnInit, OnDestroy {
   private readonly preferredAnswerKeys = [
     'fullName',
     'admissionNo',
+    'rollNo',
     'classApplied',
     'house',
     'age',
@@ -106,6 +158,11 @@ export class StudentsComponent implements OnInit, OnDestroy {
     'dateOfBirth',
     'mobile',
     'email',
+    'aadhaar',
+    'penNumber',
+    'apaarId',
+    'samagraId',
+    'schoolStudentId',
     'fatherName',
     'parentName',
     'address',
@@ -127,6 +184,11 @@ export class StudentsComponent implements OnInit, OnDestroy {
     'dateOfBirth',
     'address',
     'bloodGroup',
+    'aadhaar',
+    'penNumber',
+    'apaarId',
+    'samagraId',
+    'schoolStudentId',
   ];
 
   ngOnInit(): void {
@@ -184,6 +246,7 @@ export class StudentsComponent implements OnInit, OnDestroy {
         this.statusDraft = String(full?.status || 'ACTIVE');
         this.resetGuardianDraft();
         this.loadDocuments();
+        this.loadAttachments();
         if (this.showAudit) {
           this.loadAudit();
         }
@@ -202,9 +265,15 @@ export class StudentsComponent implements OnInit, OnDestroy {
         this.parentFormKey = boot.parentFormKey ?? 'parent_master';
         this.guardiansAnswerKey = boot.guardiansAnswerKey ?? 'guardians';
         this.parentFields = this.extractFields(boot.parentForm);
+        this.formSections = this.extractSections(boot.form);
         this.masterFields = this.extractFields(boot.form).filter(
           (f) => f.key !== this.guardiansAnswerKey && f.key !== 'guardians',
         );
+        const visible = this.visibleEditSections();
+        this.activeEditSectionId = visible[0]?.id || '';
+        if (boot.identity && typeof boot.identity === 'object') {
+          this.identity = { ...this.identity, ...boot.identity };
+        }
         this.resetGuardianDraft();
         this.loading = false;
         this.loadStudents();
@@ -352,7 +421,9 @@ export class StudentsComponent implements OnInit, OnDestroy {
           ? this.formatGrade(raw)
           : key === 'classSection'
             ? this.formatClass(raw)
-            : this.formatAnswerValue(raw);
+            : key === 'aadhaar' || key === 'aadhaarNumber'
+              ? this.displayAadhaar(raw)
+              : this.formatAnswerValue(raw);
       if (value === '—') return;
       seen.add(key);
       out.push({ key, label: this.prettyLabel(key), value });
@@ -363,6 +434,25 @@ export class StudentsComponent implements OnInit, OnDestroy {
     }
     for (const key of Object.keys(answers)) {
       push(key);
+    }
+
+    // Surface names from linked guardians when flat profile fields are empty.
+    if (!seen.has('fatherName')) {
+      const father = this.guardianNameByRelation('father', 'dad', 'papa');
+      if (father) {
+        seen.add('fatherName');
+        out.push({ key: 'fatherName', label: this.prettyLabel('fatherName'), value: father });
+      }
+    }
+    if (!seen.has('parentName')) {
+      const parent =
+        this.primaryGuardianName() ||
+        this.guardianNameByRelation('father', 'parent') ||
+        this.guardianNameByRelation('mother');
+      if (parent) {
+        seen.add('parentName');
+        out.push({ key: 'parentName', label: this.prettyLabel('parentName'), value: parent });
+      }
     }
 
     // Surface top-level admissionNo if not already in answers
@@ -400,20 +490,71 @@ export class StudentsComponent implements OnInit, OnDestroy {
   }
 
   /** Fields available in the Edit form (configured form + common profile extras). */
-  editFields(): Array<{ key: string; label: string; type: string; mandatory: boolean }> {
+  editFields(): Array<{
+    key: string;
+    label: string;
+    type: string;
+    mandatory: boolean;
+    sectionId?: string;
+  }> {
     const seen = new Set(this.masterFields.map((f) => f.key));
-    const extras: Array<{ key: string; label: string; type: string; mandatory: boolean }> = [];
+    const extras: Array<{
+      key: string;
+      label: string;
+      type: string;
+      mandatory: boolean;
+      sectionId?: string;
+    }> = [];
     for (const key of this.editableExtraKeys) {
       if (seen.has(key)) continue;
+      if (this.isClassPartField(key)) continue;
       seen.add(key);
       extras.push({
         key,
         label: this.prettyLabel(key),
         type: key === 'hostel' || key === 'transport' || key === 'scholarship' ? 'CHECKBOX' : 'TEXTBOX',
         mandatory: false,
+        sectionId: '_more',
       });
     }
     return [...this.masterFields, ...extras];
+  }
+
+  selectEditSection(id: string): void {
+    this.activeEditSectionId = id;
+  }
+
+  visibleEditSections(): Array<{ id: string; title: string }> {
+    const sections = this.formSections.filter((s) => this.editFieldsForSection(s.id).length > 0);
+    if (this.editFieldsForSection('_more').length > 0) {
+      sections.push({ id: '_more', title: 'More' });
+    }
+    return sections;
+  }
+
+  editFieldsForSection(sectionId: string): Array<{
+    key: string;
+    label: string;
+    type: string;
+    mandatory: boolean;
+    sectionId?: string;
+  }> {
+    return this.editFields().filter((f) => {
+      if (this.isClassPartField(f.key)) return false;
+      const sid = f.sectionId || 'main';
+      return sid === sectionId;
+    });
+  }
+
+  isClassPartField(key: string): boolean {
+    const normalized = key.replace(/[^a-z0-9]/gi, '').toLowerCase();
+    return (
+      normalized === 'classgrade' ||
+      normalized === 'grade' ||
+      normalized === 'sectionletter' ||
+      normalized === 'section' ||
+      normalized === 'sectionname'
+    );
   }
 
   startEdit(): void {
@@ -427,10 +568,157 @@ export class StudentsComponent implements OnInit, OnDestroy {
         draft[f.key] = f.type === 'CHECKBOX' ? false : f.type === 'NUMBER' ? 0 : '';
       }
     }
+    this.hydrateProfileNamesFromGuardians(draft);
+    this.hydrateClassPicker(draft);
     this.editAnswers = draft;
     this.editReason = '';
     this.editOpen = true;
     this.error = '';
+    const visible = this.visibleEditSections();
+    this.activeEditSectionId = visible[0]?.id || '';
+  }
+
+  selectEditClassGrade(grade: string): void {
+    this.editClassGrade = grade;
+    this.syncEditClassApplied();
+  }
+
+  selectEditClassSection(section: string): void {
+    if (!this.editClassGrade) return;
+    this.editClassSection = section;
+    this.syncEditClassApplied();
+  }
+
+  private syncEditClassApplied(): void {
+    if (!this.editClassGrade || !this.editClassSection) {
+      return;
+    }
+    const label = `Grade ${this.editClassGrade}-${this.editClassSection}`;
+    this.editAnswers['classApplied'] = label;
+    this.editAnswers['classSection'] = label;
+    this.editAnswers['classGrade'] = this.editClassGrade;
+    this.editAnswers['sectionLetter'] = this.editClassSection;
+  }
+
+  private hydrateClassPicker(draft: Record<string, unknown>): void {
+    const raw = String(draft['classApplied'] ?? draft['classSection'] ?? '');
+    const m = raw.match(/(?:grade\s*)?(\d{1,2})\s*[-–]?\s*([A-Za-z])/i);
+    if (m) {
+      this.editClassGrade = String(Number(m[1]));
+      this.editClassSection = m[2].toUpperCase();
+    } else {
+      this.editClassGrade = '';
+      this.editClassSection = '';
+    }
+  }
+
+  displayAadhaar(raw: unknown): string {
+    const digits = String(raw ?? '').replace(/\D/g, '');
+    if (!digits) return '—';
+    if (this.identity.maskAadhaar && digits.length >= 4) {
+      return `********${digits.slice(-4)}`;
+    }
+    return digits;
+  }
+
+  studentPhotoUrl(): string {
+    const answers = this.selected?.answers ?? {};
+    const url = String(answers.photoUrl || answers.photo || '').trim();
+    if (url.startsWith('/api/')) return url;
+    return this.attachmentUrl('STUDENT_PHOTO');
+  }
+
+  attachmentFor(type: string): any | null {
+    return this.attachments.find((a) => a.attachmentType === type) || null;
+  }
+
+  attachmentUrl(type: string): string {
+    return this.attachmentFor(type)?.contentUrl || '';
+  }
+
+  loadAttachments(): void {
+    if (!this.selected?.id) {
+      this.attachments = [];
+      return;
+    }
+    this.attachmentsLoading = true;
+    this.api.get<any[]>(`/api/student/students/${this.selected.id}/attachments`).subscribe({
+      next: (rows) => {
+        this.attachments = rows ?? [];
+        this.attachmentsLoading = false;
+      },
+      error: () => {
+        this.attachments = [];
+        this.attachmentsLoading = false;
+      },
+    });
+  }
+
+  onPhotoSelected(ev: Event, type = 'STUDENT_PHOTO'): void {
+    const input = ev.target as HTMLInputElement;
+    const file = input.files?.[0];
+    input.value = '';
+    if (!file || !this.selected?.id) return;
+    const maxKb = this.photoAttachmentTypes.has(type)
+      ? this.identity.maxPhotoKb
+      : this.identity.maxDocumentKb;
+    if (file.size > maxKb * 1024) {
+      this.error = `File exceeds ${maxKb} KB limit`;
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = String(reader.result || '');
+      const contentBase64 = dataUrl.includes(',') ? dataUrl.split(',')[1] : dataUrl;
+      this.uploadAttachment({
+        type,
+        fileName: file.name,
+        contentType: file.type || 'application/octet-stream',
+        contentBase64,
+      });
+    };
+    reader.readAsDataURL(file);
+  }
+
+  onDocumentSelected(ev: Event): void {
+    this.onPhotoSelected(ev, this.documentUploadType || 'OTHER');
+  }
+
+  uploadAttachment(body: Record<string, unknown>): void {
+    if (!this.selected?.id) return;
+    this.uploadingAttachment = true;
+    this.error = '';
+    this.api.post<any>(`/api/student/students/${this.selected.id}/attachments`, body).subscribe({
+      next: () => {
+        this.uploadingAttachment = false;
+        this.statusMsg = 'Attachment uploaded';
+        this.loadAttachments();
+        this.loadDetail(this.selected.id);
+      },
+      error: (err) => {
+        this.uploadingAttachment = false;
+        this.error = err?.error?.message ?? 'Upload failed';
+      },
+    });
+  }
+
+  removeAttachment(att: any): void {
+    if (!att?.id || !confirm(`Remove ${att.fileName || att.attachmentType}?`)) return;
+    this.api.delete(`/api/student/attachments/${att.id}`).subscribe({
+      next: () => {
+        this.statusMsg = 'Attachment removed';
+        this.loadAttachments();
+        if (this.selected?.id) this.loadDetail(this.selected.id);
+      },
+      error: (err) => (this.error = err?.error?.message ?? 'Remove failed'),
+    });
+  }
+
+  attachmentLabel(type: unknown): string {
+    const t = String(type || '');
+    const found = this.documentTypeOptions.find((o) => o.value === t);
+    if (found) return found.label;
+    return t.replace(/_/g, ' ');
   }
 
   cancelEdit(): void {
@@ -449,6 +737,13 @@ export class StudentsComponent implements OnInit, OnDestroy {
       this.error = 'Select a valid school house.';
       return;
     }
+    const aadhaar = String(this.editAnswers['aadhaar'] ?? '').replace(/\D/g, '');
+    if (aadhaar && aadhaar.length !== 12) {
+      this.error = 'Aadhaar must be exactly 12 digits';
+      return;
+    }
+    if (aadhaar) this.editAnswers['aadhaar'] = aadhaar;
+    this.syncEditClassApplied();
     this.savingProfile = true;
     this.error = '';
     this.statusMsg = 'Saving student profile…';
@@ -756,6 +1051,43 @@ export class StudentsComponent implements OnInit, OnDestroy {
     this.guardianDraft = draft;
   }
 
+  /** Prefer linked Father guardian when the flat fatherName answer was never filled. */
+  private hydrateProfileNamesFromGuardians(draft: Record<string, unknown>): void {
+    const blank = (key: string) => !String(draft[key] ?? '').trim();
+    if (blank('fatherName')) {
+      const father = this.guardianNameByRelation('father', 'dad', 'papa');
+      if (father) draft['fatherName'] = father;
+    }
+    if (blank('motherName')) {
+      const mother = this.guardianNameByRelation('mother', 'mom', 'mummy');
+      if (mother) draft['motherName'] = mother;
+    }
+    if (blank('parentName')) {
+      const parent =
+        this.primaryGuardianName() ||
+        this.guardianNameByRelation('father', 'parent') ||
+        this.guardianNameByRelation('mother');
+      if (parent) draft['parentName'] = parent;
+    }
+  }
+
+  private primaryGuardianName(): string {
+    const primary = this.guardians().find((g) => !!g?.isPrimary) || this.guardians()[0];
+    return String(primary?.fullName || primary?.name || '').trim();
+  }
+
+  private guardianNameByRelation(...patterns: string[]): string {
+    for (const g of this.guardians()) {
+      const relation = String(g?.relation || '').toLowerCase();
+      if (!relation) continue;
+      if (patterns.some((p) => relation.includes(p))) {
+        const name = String(g?.fullName || g?.name || '').trim();
+        if (name) return name;
+      }
+    }
+    return '';
+  }
+
   private normalizeGuardian(raw: Record<string, unknown>): Record<string, unknown> {
     const out: Record<string, unknown> = {};
     for (const f of this.parentFields) {
@@ -807,6 +1139,11 @@ export class StudentsComponent implements OnInit, OnDestroy {
       fatherName: 'Father name',
       parentName: 'Parent name',
       rollNo: 'Roll no',
+      aadhaar: 'Aadhaar',
+      penNumber: 'PEN number',
+      apaarId: 'APAAR ID',
+      samagraId: 'Samagra ID',
+      schoolStudentId: 'School student ID',
     };
     if (map[key]) return map[key];
     return key
@@ -815,20 +1152,37 @@ export class StudentsComponent implements OnInit, OnDestroy {
       .trim();
   }
 
+  private extractSections(form: any): Array<{ id: string; title: string }> {
+    const sections = form?.sections ?? [];
+    return sections.map((section: any, index: number) => ({
+      id: String(section.id ?? `section-${index}`),
+      title: String(section.title ?? `Section ${index + 1}`),
+    }));
+  }
+
   private extractFields(
     form: any,
-  ): Array<{ key: string; label: string; type: string; mandatory: boolean }> {
-    const fields: Array<{ key: string; label: string; type: string; mandatory: boolean }> = [];
-    for (const section of form?.sections ?? []) {
+  ): Array<{ key: string; label: string; type: string; mandatory: boolean; sectionId?: string }> {
+    const fields: Array<{
+      key: string;
+      label: string;
+      type: string;
+      mandatory: boolean;
+      sectionId?: string;
+    }> = [];
+    const sections = form?.sections ?? [];
+    sections.forEach((section: any, index: number) => {
+      const sectionId = String(section.id ?? `section-${index}`);
       for (const field of section.fields ?? []) {
         fields.push({
           key: field.key,
           label: field.label ?? field.key,
-          type: field.type ?? 'TEXTBOX',
+          type: String(field.type ?? 'TEXTBOX').toUpperCase(),
           mandatory: !!field.mandatory,
+          sectionId,
         });
       }
-    }
+    });
     return fields;
   }
 }

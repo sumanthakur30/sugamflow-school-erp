@@ -570,8 +570,25 @@ a.crumb-link {
   .head-actions,
   .form-actions,
   .crumb,
-  .detail-hero-side button,
-  .detail-student-actions {
+  .detail-hero-side,
+  .detail-student-actions,
+  .no-print,
+  .error,
+  .status,
+  .processing-banner {
     display: none !important;
+  }
+
+  .detail-page,
+  .form-section.panel,
+  .detail-student-card,
+  .detail-hero {
+    box-shadow: none !important;
+    border: 0 !important;
+    background: #fff !important;
+  }
+
+  .detail-hero {
+    display: block !important;
   }
 }

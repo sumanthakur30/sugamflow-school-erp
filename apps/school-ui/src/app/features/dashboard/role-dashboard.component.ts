@@ -11,6 +11,7 @@ type Metric = {
   value: string | number;
   hint: string;
   route: string;
+  queryParams?: Record<string, string>;
   tone: 'green' | 'blue' | 'amber' | 'purple';
 };
 
@@ -18,6 +19,14 @@ type Action = {
   label: string;
   description: string;
   route: string;
+  queryParams?: Record<string, string>;
+};
+
+type ActivityItem = {
+  label: string;
+  value: string;
+  route: string;
+  queryParams?: Record<string, string>;
 };
 
 type DashboardBundle = {
@@ -53,7 +62,7 @@ export class RoleDashboardComponent implements OnInit {
   subtitle = 'Your campus overview and priority actions.';
   metrics: Metric[] = [];
   actions: Action[] = [];
-  activity: Array<{ label: string; value: string; route: string }> = [];
+  activity: ActivityItem[] = [];
   unavailable = 0;
 
   ngOnInit(): void {
@@ -99,7 +108,7 @@ export class RoleDashboardComponent implements OnInit {
         this.configureRole(data.config);
         this.buildMetrics(data);
         this.buildActivity(data);
-        this.unavailable = Object.values(data).filter((value) => value == null).length;
+        this.unavailable = this.countUnavailable(data, wantsFinance, wantsTeacher);
         this.loading = false;
       },
       error: (err) => {
@@ -109,8 +118,31 @@ export class RoleDashboardComponent implements OnInit {
     });
   }
 
+  /** Only count sources that were actually requested (skip intentional of(null) skips). */
+  private countUnavailable(
+    data: DashboardBundle,
+    wantsFinance: boolean,
+    wantsTeacher: boolean,
+  ): number {
+    const skipped = new Set<keyof DashboardBundle>();
+    if (!wantsTeacher) {
+      skipped.add('teacherScope');
+      skipped.add('accessScope');
+      skipped.add('mySlots');
+    } else {
+      skipped.add('issues');
+    }
+    if (!wantsFinance) {
+      skipped.add('finance');
+      skipped.add('salary');
+    }
+    return (Object.keys(data) as Array<keyof DashboardBundle>).filter(
+      (key) => !skipped.has(key) && data[key] == null,
+    ).length;
+  }
+
   private safeGet<T = any>(path: string): Observable<T | null> {
-    return this.api.get<T>(path).pipe(timeout(6000), catchError(() => of(null)));
+    return this.api.get<T>(path).pipe(timeout(15000), catchError(() => of(null)));
   }
 
   private safePage(
@@ -119,7 +151,7 @@ export class RoleDashboardComponent implements OnInit {
   ): Observable<PageResult<any> | null> {
     return this.api
       .getPage<any>(path, 0, 5, extra)
-      .pipe(timeout(6000), catchError(() => of(null)));
+      .pipe(timeout(15000), catchError(() => of(null)));
   }
 
   private isLeadershipRole(): boolean {
@@ -291,7 +323,7 @@ export class RoleDashboardComponent implements OnInit {
   }
 
   private buildActivity(data: DashboardBundle): void {
-    const rows: Array<{ label: string; value: string; route: string }> = [];
+    const rows: ActivityItem[] = [];
     if (this.role === 'TEACHER') {
       const sectionNames = data.teacherScope?.sectionNames ?? {};
       const sectionIds: string[] = data.teacherScope?.sectionIds ?? [];
@@ -322,10 +354,12 @@ export class RoleDashboardComponent implements OnInit {
     }
 
     for (const app of data.admissions?.items ?? []) {
+      const id = String(app?.id || '').trim();
       rows.push({
         label: app?.answers?.fullName || 'Admission applicant',
         value: app?.statusLabel || 'Under review',
-        route: `/admin/admission?id=${app.id}`,
+        route: '/admin/admission',
+        queryParams: id ? { id } : undefined,
       });
     }
     for (const record of (data.attendance?.items ?? []).slice(0, 3)) {
@@ -400,7 +434,8 @@ export class RoleDashboardComponent implements OnInit {
         {
           label: 'New application',
           description: 'Create an admission application',
-          route: '/admin/admission?new=1',
+          route: '/admin/admission',
+          queryParams: { new: '1' },
         },
         {
           label: 'Admissions inbox',
@@ -417,7 +452,8 @@ export class RoleDashboardComponent implements OnInit {
         {
           label: 'New application',
           description: 'Create an admission application',
-          route: '/admin/admission?new=1',
+          route: '/admin/admission',
+          queryParams: { new: '1' },
         },
         {
           label: 'Admissions inbox',

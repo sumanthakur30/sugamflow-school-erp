@@ -636,6 +636,24 @@
   }
 }
 
+/* ── Tablet (narrow rail) ── */
+@media (max-width: 1024px) {
+  .sidebar {
+    flex: 0 0 210px;
+    width: 210px;
+  }
+
+  .outlet-well {
+    padding: 1rem 1rem 1.75rem;
+  }
+
+  .module-split-primary {
+    padding-left: 0.65rem;
+    padding-right: 0.55rem;
+    font-size: 0.88rem;
+  }
+}
+
 /* ── Mobile / tablet ── */
 @media (max-width: 900px) {
   .context-menu-toggle {

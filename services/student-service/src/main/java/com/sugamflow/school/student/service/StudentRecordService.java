@@ -44,6 +44,8 @@ public class StudentRecordService {
   private static final Pattern EMAIL_RE =
       Pattern.compile("^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$");
   private static final Pattern PIN_RE = Pattern.compile("^[0-9]{4,10}$");
+  private static final Pattern AADHAAR_RE = Pattern.compile("^[0-9]{12}$");
+  private static final Pattern PEN_RE = Pattern.compile("^[A-Za-z0-9\\-/]{6,32}$");
   private static final Set<String> ALLOWED_STATUSES =
       Set.of(
           "ACTIVE",
@@ -103,7 +105,32 @@ public class StudentRecordService {
     out.put("parentForm", parentForm);
     out.put("guardiansAnswerKey", stringOr(settings.get("guardiansAnswerKey"), "guardians"));
     out.put("maxGuardians", settings.getOrDefault("maxGuardians", 4));
+    out.put("identity", identitySettings(settings));
     return out;
+  }
+
+  private static Map<String, Object> identitySettings(Map<String, Object> settings) {
+    Map<String, Object> id = new LinkedHashMap<>();
+    id.put("enableAadhaar", bool(settings.get("enableAadhaar"), true));
+    id.put("enablePen", bool(settings.get("enablePen"), true));
+    id.put("enableApaar", bool(settings.get("enableApaar"), true));
+    id.put("enableSamagra", bool(settings.get("enableSamagra"), false));
+    id.put("enableSchoolStudentId", bool(settings.get("enableSchoolStudentId"), true));
+    id.put("maskAadhaar", bool(settings.get("maskAadhaar"), true));
+    id.put("aadhaarMandatory", bool(settings.get("aadhaarMandatory"), false));
+    id.put("penMandatory", bool(settings.get("penMandatory"), false));
+    id.put("enableStudentPhoto", bool(settings.get("enableStudentPhoto"), true));
+    id.put("enableGuardianPhoto", bool(settings.get("enableGuardianPhoto"), true));
+    id.put("enableDocumentVault", bool(settings.get("enableDocumentVault"), true));
+    id.put("maxPhotoKb", settings.getOrDefault("maxPhotoKb", 512));
+    id.put("maxDocumentKb", settings.getOrDefault("maxDocumentKb", 2048));
+    return id;
+  }
+
+  private static boolean bool(Object v, boolean def) {
+    if (v == null) return def;
+    if (v instanceof Boolean b) return b;
+    return Boolean.parseBoolean(String.valueOf(v));
   }
 
   @Transactional(readOnly = true)
@@ -303,7 +330,23 @@ public class StudentRecordService {
     out.put("academicSessionId", studentDto.get("academicSessionId"));
     out.put("gender", stringVal(answers, "gender"));
     out.put("house", stringVal(answers, "house"));
+    out.put("penNumber", stringVal(answers, "penNumber"));
+    out.put("apaarId", firstNonBlank(stringVal(answers, "apaarId"), stringVal(answers, "apaarNumber")));
+    out.put("samagraId", stringVal(answers, "samagraId"));
+    out.put("schoolStudentId", stringVal(answers, "schoolStudentId"));
+    String aadhaarRaw =
+        firstNonBlank(stringVal(answers, "aadhaar"), stringVal(answers, "aadhaarNumber"));
+    out.put("aadhaar", aadhaarRaw);
+    out.put("aadhaarMasked", maskAadhaar(aadhaarRaw));
     return out;
+  }
+
+  /** Mask Aadhaar for display: ********1234 */
+  public static String maskAadhaar(String aadhaar) {
+    if (aadhaar == null) return "";
+    String digits = aadhaar.replaceAll("\\D", "");
+    if (digits.length() < 4) return "";
+    return "********" + digits.substring(digits.length() - 4);
   }
 
   private static String fatherName(Map<String, Object> answers) {
@@ -325,6 +368,64 @@ public class StudentRecordService {
       }
     }
     return "";
+  }
+
+  /**
+   * Keep flat profile fields in sync with structured guardians. Only fills blank
+   * scalar fields so an explicit fatherName typed on the student form is preserved.
+   */
+  private static void syncProfileNamesFromGuardians(
+      Map<String, Object> answers, List<Map<String, Object>> guardians) {
+    if (answers == null || guardians == null || guardians.isEmpty()) {
+      return;
+    }
+    String father = "";
+    String mother = "";
+    String primary = "";
+    for (Map<String, Object> g : guardians) {
+      if (g == null) {
+        continue;
+      }
+      String name = firstNonBlank(mapStr(g, "fullName"), mapStr(g, "name"));
+      if (name.isEmpty()) {
+        continue;
+      }
+      String relation = mapStr(g, "relation").toLowerCase(Locale.ROOT);
+      boolean isPrimary =
+          Boolean.TRUE.equals(g.get("isPrimary"))
+              || "true".equalsIgnoreCase(String.valueOf(g.get("isPrimary")));
+      if (isPrimary && primary.isEmpty()) {
+        primary = name;
+      }
+      if (father.isEmpty()
+          && (relation.contains("father")
+              || relation.equals("dad")
+              || relation.equals("papa"))) {
+        father = name;
+      }
+      if (mother.isEmpty()
+          && (relation.contains("mother")
+              || relation.equals("mom")
+              || relation.equals("mummy"))) {
+        mother = name;
+      }
+    }
+    if (primary.isEmpty()) {
+      Map<String, Object> first = guardians.get(0);
+      primary = firstNonBlank(mapStr(first, "fullName"), mapStr(first, "name"));
+    }
+    if (stringVal(answers, "fatherName").isEmpty() && !father.isEmpty()) {
+      answers.put("fatherName", father);
+    }
+    if (stringVal(answers, "motherName").isEmpty() && !mother.isEmpty()) {
+      answers.put("motherName", mother);
+    }
+    if (stringVal(answers, "parentName").isEmpty()) {
+      String parent = firstNonBlank(primary, father, mother);
+      if (!parent.isEmpty()) {
+        answers.put("parentName", parent);
+      }
+    }
   }
 
   private static String guardianName(Map<String, Object> answers) {
@@ -439,7 +540,13 @@ public class StudentRecordService {
 
     attachGuardiansOnEnroll(scope, module, answers, sourceAnswers, body);
 
+    normalizeIdentityAnswers(answers);
     validateMandatory(form, answers);
+    validateFormats(answers);
+    assertUniqueAdmissionNo(scope.organizationId(), admissionNo, null);
+    assertUniqueAadhaar(scope.organizationId(), answers, null);
+    assertUniquePen(scope.organizationId(), answers, null);
+    assertUniqueRollInClass(scope.organizationId(), answers, null);
 
     StudentRecordEntity entity = new StudentRecordEntity();
     entity.setId(UUID.randomUUID());
@@ -587,6 +694,7 @@ public class StudentRecordService {
 
     Map<String, Object> answers = new LinkedHashMap<>(entity.getAnswers());
     answers.put(guardiansKey, normalized);
+    syncProfileNamesFromGuardians(answers, normalized);
     entity.setAnswers(answers);
     entity.setUpdatedAt(Instant.now());
 
@@ -646,12 +754,14 @@ public class StudentRecordService {
     if (form != null) {
       validateMandatory(form, answers);
     }
+    normalizeIdentityAnswers(answers);
     validateFormats(answers);
 
     String admissionNo = stringOr(answers.get("admissionNo"), entity.getAdmissionNo());
     answers.put("admissionNo", admissionNo);
     assertUniqueAdmissionNo(scope.organizationId(), admissionNo, entity.getId());
     assertUniqueAadhaar(scope.organizationId(), answers, entity.getId());
+    assertUniquePen(scope.organizationId(), answers, entity.getId());
     assertUniqueRollInClass(scope.organizationId(), answers, entity.getId());
 
     String reason = stringOr(body.get("reason"), "Student profile correction");
@@ -1177,9 +1287,54 @@ public class StudentRecordService {
     if (pin != null && !PIN_RE.matcher(pin).matches()) {
       throw new StudentException("VALIDATION", "Invalid PIN code");
     }
+    String aadhaar = stringOr(answers.get("aadhaar"), stringOr(answers.get("aadhaarNumber"), null));
+    if (aadhaar != null && !aadhaar.isBlank() && !AADHAAR_RE.matcher(aadhaar).matches()) {
+      throw new StudentException("VALIDATION", "Aadhaar must be exactly 12 digits");
+    }
+    String pen = stringOr(answers.get("penNumber"), null);
+    if (pen != null && !pen.isBlank() && !PEN_RE.matcher(pen).matches()) {
+      throw new StudentException("VALIDATION", "PEN number format is invalid");
+    }
     validateDateField(answers, "dateOfBirth", "DOB");
     validateDateField(answers, "dob", "DOB");
     validateDateField(answers, "admissionDate", "Admission date");
+  }
+
+  /** Normalize gov IDs and sync classApplied from grade+section when present. */
+  private void normalizeIdentityAnswers(Map<String, Object> answers) {
+    String aadhaar = stringOr(answers.get("aadhaar"), stringOr(answers.get("aadhaarNumber"), null));
+    if (aadhaar != null) {
+      String digits = aadhaar.replaceAll("\\D", "");
+      if (!digits.isBlank()) {
+        answers.put("aadhaar", digits);
+        answers.remove("aadhaarNumber");
+      }
+    }
+    String pen = stringOr(answers.get("penNumber"), null);
+    if (pen != null) {
+      answers.put("penNumber", pen.trim().toUpperCase(Locale.ROOT));
+    }
+    String apaar = stringOr(answers.get("apaarId"), stringOr(answers.get("apaarNumber"), null));
+    if (apaar != null) {
+      answers.put("apaarId", apaar.trim().toUpperCase(Locale.ROOT));
+      answers.remove("apaarNumber");
+    }
+    String samagra = stringOr(answers.get("samagraId"), null);
+    if (samagra != null) {
+      answers.put("samagraId", samagra.trim());
+    }
+    String schoolId = stringOr(answers.get("schoolStudentId"), null);
+    if (schoolId != null) {
+      answers.put("schoolStudentId", schoolId.trim());
+    }
+    // Class / Section split → combined classApplied (Grade 8-A)
+    String grade = stringOr(answers.get("classGrade"), null);
+    String section = stringOr(answers.get("sectionLetter"), stringOr(answers.get("section"), null));
+    if (grade != null && section != null && !grade.isBlank() && !section.isBlank()) {
+      String combined = "Grade " + grade.trim() + "-" + section.trim().toUpperCase(Locale.ROOT);
+      answers.put("classApplied", combined);
+      answers.put("classSection", combined);
+    }
   }
 
   private void validateDateField(Map<String, Object> answers, String key, String label) {
@@ -1205,7 +1360,7 @@ public class StudentRecordService {
         .findByOrganizationIdAndAdmissionNoIgnoreCaseAndDeletedAtIsNull(org, admissionNo)
         .ifPresent(
             other -> {
-              if (!other.getId().equals(selfId)) {
+              if (selfId == null || !other.getId().equals(selfId)) {
                 throw new StudentException(
                     "VALIDATION", "Admission number already exists: " + admissionNo);
               }
@@ -1219,13 +1374,31 @@ public class StudentRecordService {
     }
     for (StudentRecordEntity e :
         repository.findByOrganizationIdAndDeletedAtIsNullOrderByUpdatedAtDesc(org)) {
-      if (e.getId().equals(selfId)) {
+      if (selfId != null && e.getId().equals(selfId)) {
         continue;
       }
       String other =
           stringOr(e.getAnswers().get("aadhaar"), stringOr(e.getAnswers().get("aadhaarNumber"), ""));
+      other = other == null ? "" : other.replaceAll("\\D", "");
       if (aadhaar.equalsIgnoreCase(other)) {
         throw new StudentException("VALIDATION", "Aadhaar already exists on another student");
+      }
+    }
+  }
+
+  private void assertUniquePen(String org, Map<String, Object> answers, UUID selfId) {
+    String pen = stringOr(answers.get("penNumber"), null);
+    if (pen == null || pen.isBlank()) {
+      return;
+    }
+    for (StudentRecordEntity e :
+        repository.findByOrganizationIdAndDeletedAtIsNullOrderByUpdatedAtDesc(org)) {
+      if (selfId != null && e.getId().equals(selfId)) {
+        continue;
+      }
+      String other = stringOr(e.getAnswers().get("penNumber"), "");
+      if (pen.equalsIgnoreCase(other)) {
+        throw new StudentException("VALIDATION", "PEN number already exists on another student");
       }
     }
   }
@@ -1239,7 +1412,7 @@ public class StudentRecordService {
     }
     for (StudentRecordEntity e :
         repository.findByOrganizationIdAndDeletedAtIsNullOrderByUpdatedAtDesc(org)) {
-      if (e.getId().equals(selfId)) {
+      if (selfId != null && e.getId().equals(selfId)) {
         continue;
       }
       String otherRoll =
@@ -1354,6 +1527,7 @@ public class StudentRecordService {
     }
     if (!normalized.isEmpty()) {
       answers.put(guardiansKey, normalized);
+      syncProfileNamesFromGuardians(answers, normalized);
     }
   }
 

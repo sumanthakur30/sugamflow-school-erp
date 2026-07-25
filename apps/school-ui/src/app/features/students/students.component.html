@@ -155,63 +155,244 @@
         </section>
       }
 
+      @if (identity.enableStudentPhoto || identity.enableDocumentVault) {
+        <section class="form-section panel">
+          <h3 class="form-section-title">Photo &amp; documents</h3>
+          <p class="muted">Optional uploads — JPG/PNG/WEBP for photos; PDFs and images for KYC documents.</p>
+          <div class="media-grid">
+            @if (identity.enableStudentPhoto) {
+              <div class="photo-card">
+                <span class="read-label">Student photo</span>
+                @if (studentPhotoUrl()) {
+                  <img class="student-photo" [src]="studentPhotoUrl()" alt="Student photo" />
+                } @else {
+                  <div class="photo-placeholder">No photo</div>
+                }
+                <div class="doc-actions">
+                  <label class="tiny file-btn" [class.disabled]="uploadingAttachment || selected.deleted">
+                    {{ uploadingAttachment ? 'Uploading…' : studentPhotoUrl() ? 'Replace' : 'Upload' }}
+                    <input
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp"
+                      hidden
+                      (change)="onPhotoSelected($event, 'STUDENT_PHOTO')"
+                      [disabled]="uploadingAttachment || selected.deleted"
+                    />
+                  </label>
+                  @if (studentPhotoUrl()) {
+                    @for (att of attachments; track att.id) {
+                      @if (att.attachmentType === 'STUDENT_PHOTO') {
+                        <button
+                          type="button"
+                          class="tiny secondary"
+                          (click)="removeAttachment(att)"
+                          [disabled]="uploadingAttachment"
+                        >
+                          Remove
+                        </button>
+                      }
+                    }
+                  }
+                </div>
+              </div>
+            }
+            @if (identity.enableGuardianPhoto) {
+              @for (slot of guardianPhotoSlots; track slot.type) {
+                <div class="photo-card">
+                  <span class="read-label">{{ slot.label }}</span>
+                  @if (attachmentUrl(slot.type)) {
+                    <img class="student-photo" [src]="attachmentUrl(slot.type)" [alt]="slot.label" />
+                  } @else {
+                    <div class="photo-placeholder">No photo</div>
+                  }
+                  <div class="doc-actions">
+                    <label class="tiny file-btn" [class.disabled]="uploadingAttachment || selected.deleted">
+                      {{ uploadingAttachment ? 'Uploading…' : attachmentUrl(slot.type) ? 'Replace' : 'Upload' }}
+                      <input
+                        type="file"
+                        accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp"
+                        hidden
+                        (change)="onPhotoSelected($event, slot.type)"
+                        [disabled]="uploadingAttachment || selected.deleted"
+                      />
+                    </label>
+                    @if (attachmentFor(slot.type); as att) {
+                      <button
+                        type="button"
+                        class="tiny secondary"
+                        (click)="removeAttachment(att)"
+                        [disabled]="uploadingAttachment"
+                      >
+                        Remove
+                      </button>
+                    }
+                  </div>
+                </div>
+              }
+            }
+          </div>
+          @if (identity.enableDocumentVault) {
+            <div class="vault-block">
+              <div class="vault-upload">
+                <select [(ngModel)]="documentUploadType" name="documentUploadType">
+                  @for (opt of documentTypeOptions; track opt.value) {
+                    <option [value]="opt.value">{{ opt.label }}</option>
+                  }
+                </select>
+                <label class="tiny file-btn">
+                  Upload document
+                  <input
+                    type="file"
+                    accept="image/*,application/pdf,.pdf"
+                    hidden
+                    (change)="onDocumentSelected($event)"
+                    [disabled]="uploadingAttachment || selected.deleted"
+                  />
+                </label>
+              </div>
+              @if (attachmentsLoading) {
+                <p class="muted">Loading attachments…</p>
+              } @else {
+                <ul class="doc-list">
+                  @for (att of attachments; track att.id) {
+                    @if (!att.photo) {
+                      <li>
+                        <div>
+                          <strong>{{ attachmentLabel(att.attachmentType) }}</strong>
+                          <span class="muted"> · {{ att.fileName }} · {{ att.byteLength }} bytes</span>
+                        </div>
+                        <div class="doc-actions">
+                          <a class="tiny-link" [href]="att.contentUrl" target="_blank" rel="noopener">Open</a>
+                          <button type="button" class="tiny secondary" (click)="removeAttachment(att)">
+                            Remove
+                          </button>
+                        </div>
+                      </li>
+                    }
+                  }
+                </ul>
+              }
+            </div>
+          }
+        </section>
+      }
+
       @if (editOpen) {
         <section class="form-section panel">
           <h3 class="form-section-title">Edit student</h3>
           <p class="muted">Correct mistakes carefully. Every field change is audited.</p>
-          <div class="grid three">
-            @for (field of editFields(); track field.key) {
-              <label>
-                <span class="field-title">
-                  {{ field.label }}
-                  @if (field.mandatory) {
-                    <span class="req">*</span>
-                  }
-                </span>
-                @if (field.key === 'house') {
-                  <select
-                    [(ngModel)]="editAnswers[field.key]"
-                    [attr.name]="'edit-' + field.key"
-                    [disabled]="savingProfile"
-                    required
-                  >
-                    <option value="" disabled>Select house</option>
-                    @for (house of availableHouseOptions(); track house) {
-                      <option [value]="house">{{ house }} House</option>
+          @if (visibleEditSections().length > 1) {
+            <div class="form-tabs" role="tablist" aria-label="Student profile sections">
+              @for (section of visibleEditSections(); track section.id) {
+                <button
+                  type="button"
+                  class="form-tab"
+                  role="tab"
+                  [class.active]="activeEditSectionId === section.id"
+                  [attr.aria-selected]="activeEditSectionId === section.id"
+                  (click)="selectEditSection(section.id)"
+                  [disabled]="savingProfile"
+                >
+                  {{ section.title }}
+                </button>
+              }
+            </div>
+          }
+          @for (section of visibleEditSections(); track section.id) {
+            @if (!activeEditSectionId || activeEditSectionId === section.id) {
+              <div class="grid three" role="tabpanel">
+                @for (field of editFieldsForSection(section.id); track field.key) {
+                  <label>
+                    <span class="field-title">
+                      {{ field.label }}
+                      @if (field.mandatory) {
+                        <span class="req">*</span>
+                      }
+                    </span>
+                    @if (field.key === 'house') {
+                      <select
+                        [(ngModel)]="editAnswers[field.key]"
+                        [attr.name]="'edit-' + field.key"
+                        [disabled]="savingProfile"
+                        required
+                      >
+                        <option value="" disabled>Select house</option>
+                        @for (house of availableHouseOptions(); track house) {
+                          <option [value]="house">{{ house }} House</option>
+                        }
+                      </select>
+                      <span class="muted">Used for activities, teams, and school events.</span>
+                    } @else if (field.key === 'classApplied' || field.key === 'classSection') {
+                      <div class="class-picker">
+                        <div class="class-picker-row">
+                          <span class="class-picker-label">Grade</span>
+                          <div class="class-picker-options">
+                            @for (g of defaultGrades; track g) {
+                              <button
+                                type="button"
+                                class="class-opt"
+                                [class.active]="editClassGrade === g"
+                                [disabled]="savingProfile"
+                                (click)="selectEditClassGrade(g)"
+                              >
+                                {{ g }}
+                              </button>
+                            }
+                          </div>
+                        </div>
+                        <div class="class-picker-row">
+                          <span class="class-picker-label">Section</span>
+                          <div class="class-picker-options">
+                            @for (s of defaultSections; track s) {
+                              <button
+                                type="button"
+                                class="class-opt"
+                                [class.active]="editClassSection === s"
+                                [disabled]="savingProfile || !editClassGrade"
+                                (click)="selectEditClassSection(s)"
+                              >
+                                {{ s }}
+                              </button>
+                            }
+                          </div>
+                        </div>
+                        <div class="class-picker-preview" [class.ready]="!!editAnswers[field.key]">
+                          {{ editAnswers[field.key] || 'Choose grade, then section' }}
+                        </div>
+                      </div>
+                    } @else if (field.type === 'CHECKBOX') {
+                      <input
+                        type="checkbox"
+                        [(ngModel)]="editAnswers[field.key]"
+                        [name]="'edit-' + field.key"
+                        [disabled]="savingProfile"
+                      />
+                    } @else if (field.type === 'NUMBER') {
+                      <input
+                        type="number"
+                        [(ngModel)]="editAnswers[field.key]"
+                        [name]="'edit-' + field.key"
+                        [disabled]="savingProfile"
+                      />
+                    } @else if (field.type === 'EMAIL') {
+                      <input
+                        type="email"
+                        [(ngModel)]="editAnswers[field.key]"
+                        [name]="'edit-' + field.key"
+                        [disabled]="savingProfile"
+                      />
+                    } @else {
+                      <input
+                        [(ngModel)]="editAnswers[field.key]"
+                        [name]="'edit-' + field.key"
+                        [disabled]="savingProfile"
+                      />
                     }
-                  </select>
-                  <span class="muted">Used for activities, teams, and school events.</span>
-                } @else if (field.type === 'CHECKBOX') {
-                  <input
-                    type="checkbox"
-                    [(ngModel)]="editAnswers[field.key]"
-                    [name]="'edit-' + field.key"
-                    [disabled]="savingProfile"
-                  />
-                } @else if (field.type === 'NUMBER') {
-                  <input
-                    type="number"
-                    [(ngModel)]="editAnswers[field.key]"
-                    [name]="'edit-' + field.key"
-                    [disabled]="savingProfile"
-                  />
-                } @else if (field.type === 'EMAIL') {
-                  <input
-                    type="email"
-                    [(ngModel)]="editAnswers[field.key]"
-                    [name]="'edit-' + field.key"
-                    [disabled]="savingProfile"
-                  />
-                } @else {
-                  <input
-                    [(ngModel)]="editAnswers[field.key]"
-                    [name]="'edit-' + field.key"
-                    [disabled]="savingProfile"
-                  />
+                  </label>
                 }
-              </label>
+              </div>
             }
-          </div>
+          }
           <label>
             Reason for change
             <input

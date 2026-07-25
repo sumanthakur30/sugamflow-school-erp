@@ -72,7 +72,7 @@ export class FormBuilderComponent implements OnInit {
           title: 'Main',
           repeatable: false,
           fields: [
-            { key: 'field1', label: 'Field 1', type: 'TEXTBOX', mandatory: false },
+            { key: 'field1', label: 'Field 1', type: 'TEXTBOX', mandatory: false, showInReports: true, showOnIdCard: false },
           ],
         },
       ],
@@ -107,6 +107,8 @@ export class FormBuilderComponent implements OnInit {
       label: `Field ${n}`,
       type: this.fieldTypes[0] || 'TEXTBOX',
       mandatory: false,
+      showInReports: true,
+      showOnIdCard: false,
     });
   }
 

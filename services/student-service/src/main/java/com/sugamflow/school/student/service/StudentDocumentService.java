@@ -6,8 +6,10 @@ import com.sugamflow.school.common.tenant.TenantContext;
 import com.sugamflow.school.common.tenant.TenantScope;
 import com.sugamflow.school.student.config.StudentProperties;
 import com.sugamflow.school.student.integration.ConfigEngineClient;
+import com.sugamflow.school.student.persistence.entity.StudentAttachmentEntity;
 import com.sugamflow.school.student.persistence.entity.StudentDocumentEntity;
 import com.sugamflow.school.student.persistence.entity.StudentRecordEntity;
+import com.sugamflow.school.student.persistence.repo.StudentAttachmentRepository;
 import com.sugamflow.school.student.persistence.repo.StudentDocumentRepository;
 import com.sugamflow.school.student.persistence.repo.StudentRecordRepository;
 import com.sugamflow.school.student.web.StudentException;
@@ -32,16 +34,19 @@ public class StudentDocumentService {
 
   private final StudentDocumentRepository documents;
   private final StudentRecordRepository students;
+  private final StudentAttachmentRepository attachments;
   private final ConfigEngineClient engines;
   private final StudentProperties properties;
 
   public StudentDocumentService(
       StudentDocumentRepository documents,
       StudentRecordRepository students,
+      StudentAttachmentRepository attachments,
       ConfigEngineClient engines,
       StudentProperties properties) {
     this.documents = documents;
     this.students = students;
+    this.attachments = attachments;
     this.engines = engines;
     this.properties = properties;
   }
@@ -91,20 +96,11 @@ public class StudentDocumentService {
             + token.substring(0, 6).toUpperCase(Locale.ROOT);
 
     Map<String, Object> studentDto = StudentRecordService.toIdentitySummary(studentAnswersDto(student));
+    String photoBase64 = resolveStudentPhotoBase64(scope.organizationId(), studentId, student);
+    Map<String, Object> studentPayload =
+        buildIdCardStudentPayload(scope, student, studentDto, photoBase64, type);
     Map<String, Object> data = new LinkedHashMap<>();
-    data.put(
-        "student",
-        Map.of(
-            "name",
-            stringOr(studentDto.get("fullName"), "Student"),
-            "admissionNo",
-            stringOr(student.getAdmissionNo(), ""),
-            "classSection",
-            stringOr(studentDto.get("classSection"), ""),
-            "house",
-            stringOr(studentDto.get("house"), ""),
-            "gender",
-            stringOr(studentDto.get("gender"), "")));
+    data.put("student", studentPayload);
     data.put(
         "document",
         Map.of(
@@ -309,11 +305,163 @@ public class StudentDocumentService {
     return dto;
   }
 
+  /**
+   * Build ID-card student payload. For ID_CARD, only include values whose form fields have
+   * {@code showOnIdCard=true} (photo always kept for layout). Other document types keep full payload.
+   */
+  private Map<String, Object> buildIdCardStudentPayload(
+      TenantScope scope,
+      StudentRecordEntity student,
+      Map<String, Object> studentDto,
+      String photoBase64,
+      String documentType) {
+    Map<String, Object> full = new LinkedHashMap<>();
+    full.put("name", stringOr(studentDto.get("fullName"), "Student"));
+    full.put("fullName", stringOr(studentDto.get("fullName"), "Student"));
+    full.put("admissionNo", stringOr(student.getAdmissionNo(), ""));
+    full.put("classSection", stringOr(studentDto.get("classSection"), ""));
+    full.put("classApplied", stringOr(studentDto.get("classSection"), ""));
+    full.put("rollNo", stringOr(studentDto.get("rollNo"), ""));
+    full.put("house", stringOr(studentDto.get("house"), ""));
+    full.put("gender", stringOr(studentDto.get("gender"), ""));
+    full.put("photoUrl", stringOr(studentDto.get("photoUrl"), ""));
+    full.put("photoBase64", photoBase64 == null ? "" : photoBase64);
+    full.put("penNumber", stringOr(studentDto.get("penNumber"), ""));
+    full.put("apaarId", stringOr(studentDto.get("apaarId"), ""));
+    full.put("samagraId", stringOr(studentDto.get("samagraId"), ""));
+    full.put("schoolStudentId", stringOr(studentDto.get("schoolStudentId"), ""));
+    if (!TYPE_ID_CARD.equals(documentType)) {
+      return full;
+    }
+    java.util.Set<String> allowed = idCardAllowedKeys(scope);
+    if (allowed.isEmpty()) {
+      return full;
+    }
+    // Always keep visual identity anchors used by the template shell.
+    allowed.add("name");
+    allowed.add("fullName");
+    allowed.add("admissionNo");
+    allowed.add("photoBase64");
+    allowed.add("photoUrl");
+    Map<String, Object> filtered = new LinkedHashMap<>();
+    for (Map.Entry<String, Object> e : full.entrySet()) {
+      filtered.put(e.getKey(), allowed.contains(e.getKey()) ? e.getValue() : "");
+    }
+    return filtered;
+  }
+
+  @SuppressWarnings("unchecked")
+  private java.util.Set<String> idCardAllowedKeys(TenantScope scope) {
+    java.util.Set<String> keys = new java.util.LinkedHashSet<>();
+    try {
+      Map<String, Object> module = engines.getModuleSettings(scope, "student");
+      String formKey = "student_master";
+      if (module != null) {
+        Object settings = module.get("settings");
+        if (settings instanceof Map<?, ?> sm && sm.get("formKey") != null) {
+          String fk = String.valueOf(sm.get("formKey")).trim();
+          if (!fk.isEmpty()) {
+            formKey = fk;
+          }
+        } else if (module.get("formKey") != null) {
+          String fk = String.valueOf(module.get("formKey")).trim();
+          if (!fk.isEmpty()) {
+            formKey = fk;
+          }
+        }
+      }
+      Map<String, Object> form = engines.getForm(scope, formKey);
+      if (form == null) {
+        return keys;
+      }
+      Object sectionsObj = form.get("sections");
+      if (!(sectionsObj instanceof List<?> sections)) {
+        return keys;
+      }
+      boolean sawFlag = false;
+      for (Object sectionObj : sections) {
+        if (!(sectionObj instanceof Map<?, ?>)) {
+          continue;
+        }
+        Map<String, Object> section = (Map<String, Object>) sectionObj;
+        Object fieldsObj = section.get("fields");
+        if (!(fieldsObj instanceof List<?> fields)) {
+          continue;
+        }
+        for (Object fieldObj : fields) {
+          if (!(fieldObj instanceof Map<?, ?>)) {
+            continue;
+          }
+          Map<String, Object> field = (Map<String, Object>) fieldObj;
+          if (!field.containsKey("showOnIdCard")) {
+            continue;
+          }
+          sawFlag = true;
+          if (!truthy(field.get("showOnIdCard"))) {
+            continue;
+          }
+          String key = String.valueOf(field.get("key")).trim();
+          if (key.isEmpty()) {
+            continue;
+          }
+          keys.add(key);
+          // Template bind aliases
+          if ("fullName".equals(key)) {
+            keys.add("name");
+          }
+          if ("classApplied".equals(key) || "classSection".equals(key)) {
+            keys.add("classSection");
+            keys.add("classApplied");
+          }
+        }
+      }
+      if (!sawFlag) {
+        keys.clear();
+      }
+    } catch (Exception ignored) {
+      keys.clear();
+    }
+    return keys;
+  }
+
+  private static boolean truthy(Object v) {
+    if (v instanceof Boolean b) {
+      return b;
+    }
+    if (v == null) {
+      return false;
+    }
+    String s = String.valueOf(v).trim().toLowerCase(Locale.ROOT);
+    return "true".equals(s) || "1".equals(s) || "yes".equals(s);
+  }
+
   private static String stringOr(Object value, String fallback) {
     if (value == null) {
       return fallback;
     }
     String s = String.valueOf(value).trim();
     return s.isEmpty() ? fallback : s;
+  }
+
+  /** Prefer vault STUDENT_PHOTO bytes; fall back empty so PDF draws an image placeholder. */
+  private String resolveStudentPhotoBase64(String organizationId, UUID studentId, StudentRecordEntity student) {
+    List<StudentAttachmentEntity> photos =
+        attachments.findByOrganizationIdAndStudentIdAndAttachmentTypeOrderByCreatedAtDesc(
+            organizationId, studentId, StudentAttachmentService.TYPE_STUDENT_PHOTO);
+    if (!photos.isEmpty()) {
+      String b64 = photos.get(0).getContentBase64();
+      if (b64 != null && !b64.isBlank()) {
+        return b64.contains(",") ? b64.substring(b64.indexOf(',') + 1) : b64;
+      }
+    }
+    Map<String, Object> answers = student.getAnswers() != null ? student.getAnswers() : Map.of();
+    Object raw = answers.get("photoBase64");
+    if (raw != null) {
+      String s = String.valueOf(raw).trim();
+      if (!s.isBlank()) {
+        return s.contains(",") ? s.substring(s.indexOf(',') + 1) : s;
+      }
+    }
+    return "";
   }
 }

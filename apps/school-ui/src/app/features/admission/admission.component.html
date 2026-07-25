@@ -26,97 +26,183 @@
         </div>
       }
 
-      @for (section of formSections; track section.id) {
-        @if (sectionFields(section.id).length) {
-          <section class="form-section panel">
+      @if (visibleFormSections().length > 1) {
+        <div class="form-tabs" role="tablist" aria-label="Application sections">
+          @for (section of visibleFormSections(); track section.id) {
+            <button
+              type="button"
+              class="form-tab"
+              role="tab"
+              [class.active]="activeFormSectionId === section.id"
+              [attr.aria-selected]="activeFormSectionId === section.id"
+              (click)="selectFormSection(section.id)"
+              [disabled]="submitting"
+            >
+              {{ section.title }}
+            </button>
+          }
+        </div>
+      }
+
+      @for (section of visibleFormSections(); track section.id) {
+        @if (!activeFormSectionId || activeFormSectionId === section.id) {
+          <section class="form-section panel" role="tabpanel">
             <h3 class="form-section-title">{{ section.title }}</h3>
             <div class="grid three" [attr.aria-busy]="submitting">
               @for (field of sectionFields(section.id); track field.key) {
-                <label [class.invalid]="fieldInvalid(field.key)">
-                  <span class="field-title">
-                    {{ field.label }}
-                    @if (field.mandatory) {
-                      <span class="req">*</span>
-                    }
-                  </span>
-                  @if (field.type === 'CHECKBOX') {
-                    <input
-                      type="checkbox"
-                      [(ngModel)]="answers[field.key]"
-                      [name]="field.key"
-                      [disabled]="submitting"
-                      (ngModelChange)="clearFieldError(field.key)"
-                    />
-                  } @else if (field.type === 'DROPDOWN' || field.key === 'house') {
-                    <select
-                      [(ngModel)]="answers[field.key]"
-                      [attr.name]="field.key"
-                      [disabled]="submitting"
-                      (ngModelChange)="clearFieldError(field.key)"
-                    >
-                      <option value="">Select {{ field.label | lowercase }}</option>
-                      @for (opt of dropdownOptions(field); track opt) {
-                        <option [value]="opt">
-                          {{ field.key === 'house' ? opt + ' House' : opt }}
-                        </option>
+                @if (!isClassPartField(field.key)) {
+                  @if (isClassField(field.key)) {
+                    <div class="field class-field" [class.invalid]="fieldInvalid(field.key)">
+                      <span class="field-title">
+                        {{ field.label }}
+                        @if (field.mandatory) {
+                          <span class="req">*</span>
+                        }
+                      </span>
+                      <div
+                        class="class-picker"
+                        [attr.aria-invalid]="fieldInvalid(field.key)"
+                        role="group"
+                        [attr.aria-label]="field.label"
+                      >
+                        <div class="class-picker-row">
+                          <span class="class-picker-label">Grade</span>
+                          <div class="class-picker-options" role="listbox" aria-label="Grade">
+                            @for (g of gradeChoices; track g) {
+                              <button
+                                type="button"
+                                class="class-opt"
+                                role="option"
+                                [attr.aria-selected]="classGrade === g"
+                                [class.active]="classGrade === g"
+                                [disabled]="submitting"
+                                (click)="selectClassGrade(g)"
+                              >
+                                {{ g }}
+                              </button>
+                            }
+                          </div>
+                        </div>
+                        <div class="class-picker-row">
+                          <span class="class-picker-label">Section</span>
+                          <div class="class-picker-options" role="listbox" aria-label="Section">
+                            @for (s of sectionChoices; track s) {
+                              <button
+                                type="button"
+                                class="class-opt class-opt-section"
+                                role="option"
+                                [attr.aria-selected]="classSectionLetter === s"
+                                [class.active]="classSectionLetter === s"
+                                [disabled]="submitting || !classGrade"
+                                (click)="selectClassSection(s)"
+                              >
+                                {{ s }}
+                              </button>
+                            }
+                          </div>
+                        </div>
+                        <div class="class-picker-preview" [class.ready]="!!answers[field.key]">
+                          @if (answers[field.key]) {
+                            Applying for <strong>{{ answers[field.key] }}</strong>
+                          } @else if (classGrade) {
+                            Pick a section for Grade {{ classGrade }}
+                          } @else {
+                            Choose grade, then section
+                          }
+                        </div>
+                      </div>
+                      @if (fieldErrors[field.key]) {
+                        <span class="field-error">{{ fieldErrors[field.key] }}</span>
                       }
-                    </select>
-                    @if (field.key === 'house') {
-                      <span class="muted">Used for activities, teams, and school events.</span>
-                    }
-                  } @else if (field.type === 'NUMBER') {
-                    <input
-                      type="number"
-                      [(ngModel)]="answers[field.key]"
-                      [name]="field.key"
-                      [disabled]="submitting"
-                      (ngModelChange)="clearFieldError(field.key)"
-                    />
-                  } @else if (field.type === 'EMAIL') {
-                    <input
-                      type="email"
-                      [(ngModel)]="answers[field.key]"
-                      [name]="field.key"
-                      [disabled]="submitting"
-                      (ngModelChange)="clearFieldError(field.key)"
-                    />
-                  } @else if (field.type === 'DATE') {
-                    <input
-                      type="date"
-                      [(ngModel)]="answers[field.key]"
-                      [name]="field.key"
-                      [disabled]="submitting"
-                      (ngModelChange)="clearFieldError(field.key)"
-                    />
-                  } @else if (field.type === 'PHONE') {
-                    <input
-                      type="tel"
-                      inputmode="tel"
-                      [(ngModel)]="answers[field.key]"
-                      [name]="field.key"
-                      [disabled]="submitting"
-                      (ngModelChange)="clearFieldError(field.key)"
-                    />
-                  } @else if (field.type === 'TEXTAREA') {
-                    <textarea
-                      rows="3"
-                      [(ngModel)]="answers[field.key]"
-                      [name]="field.key"
-                      [disabled]="submitting"
-                      (ngModelChange)="clearFieldError(field.key)"
-                    ></textarea>
+                    </div>
                   } @else {
-                    <input
-                      [(ngModel)]="answers[field.key]"
-                      [name]="field.key"
-                      [disabled]="submitting"
-                      (ngModelChange)="clearFieldError(field.key)"
-                    />
+                    <label [class.invalid]="fieldInvalid(field.key)">
+                      <span class="field-title">
+                        {{ field.label }}
+                        @if (field.mandatory) {
+                          <span class="req">*</span>
+                        }
+                      </span>
+                      @if (field.type === 'CHECKBOX') {
+                        <input
+                          type="checkbox"
+                          [(ngModel)]="answers[field.key]"
+                          [name]="field.key"
+                          [disabled]="submitting"
+                          (ngModelChange)="clearFieldError(field.key)"
+                        />
+                      } @else if (field.type === 'DROPDOWN' || isDropdownField(field.key)) {
+                        <select
+                          [(ngModel)]="answers[field.key]"
+                          [attr.name]="field.key"
+                          [disabled]="submitting"
+                          (ngModelChange)="clearFieldError(field.key)"
+                        >
+                          <option value="">Select {{ field.label | lowercase }}</option>
+                          @for (opt of dropdownOptions(field); track opt) {
+                            <option [value]="opt">
+                              {{ field.key === 'house' ? opt + ' House' : opt }}
+                            </option>
+                          }
+                        </select>
+                        @if (field.key === 'house') {
+                          <span class="muted">Used for activities, teams, and school events.</span>
+                        }
+                      } @else if (field.type === 'NUMBER') {
+                        <input
+                          type="number"
+                          [(ngModel)]="answers[field.key]"
+                          [name]="field.key"
+                          [disabled]="submitting"
+                          (ngModelChange)="clearFieldError(field.key)"
+                        />
+                      } @else if (field.type === 'EMAIL') {
+                        <input
+                          type="email"
+                          [(ngModel)]="answers[field.key]"
+                          [name]="field.key"
+                          [disabled]="submitting"
+                          (ngModelChange)="clearFieldError(field.key)"
+                        />
+                      } @else if (field.type === 'DATE') {
+                        <input
+                          type="date"
+                          [(ngModel)]="answers[field.key]"
+                          [name]="field.key"
+                          [disabled]="submitting"
+                          (ngModelChange)="clearFieldError(field.key)"
+                        />
+                      } @else if (field.type === 'PHONE') {
+                        <input
+                          type="tel"
+                          inputmode="tel"
+                          [(ngModel)]="answers[field.key]"
+                          [name]="field.key"
+                          [disabled]="submitting"
+                          (ngModelChange)="clearFieldError(field.key)"
+                        />
+                      } @else if (field.type === 'TEXTAREA') {
+                        <textarea
+                          rows="3"
+                          [(ngModel)]="answers[field.key]"
+                          [name]="field.key"
+                          [disabled]="submitting"
+                          (ngModelChange)="clearFieldError(field.key)"
+                        ></textarea>
+                      } @else {
+                        <input
+                          [(ngModel)]="answers[field.key]"
+                          [name]="field.key"
+                          [disabled]="submitting"
+                          (ngModelChange)="clearFieldError(field.key)"
+                        />
+                      }
+                      @if (fieldErrors[field.key]) {
+                        <span class="field-error">{{ fieldErrors[field.key] }}</span>
+                      }
+                    </label>
                   }
-                  @if (fieldErrors[field.key]) {
-                    <span class="field-error">{{ fieldErrors[field.key] }}</span>
-                  }
-                </label>
+                }
               }
             </div>
           </section>
@@ -322,6 +408,8 @@
       </div>
       @if (featureEnabled && !loading) {
         <div class="head-actions">
+          <button type="button" class="ghost" (click)="downloadRegister('PDF')">Print register</button>
+          <button type="button" class="ghost" (click)="downloadRegister('EXCEL')">Excel</button>
           <button type="button" (click)="openForm()">+ New Application</button>
         </div>
       }

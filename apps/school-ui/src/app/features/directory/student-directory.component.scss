@@ -60,10 +60,18 @@
   border-radius: var(--sf-radius);
   padding: 0.7rem 0.8rem;
   min-height: 0;
+  cursor: pointer;
+  font: inherit;
 }
 
 .stat:hover {
   border-color: color-mix(in srgb, var(--sf-primary) 40%, transparent);
+}
+
+.stat.active {
+  border-color: var(--sf-primary, #166534);
+  background: color-mix(in srgb, var(--sf-primary, #166534) 12%, #fff);
+  box-shadow: inset 0 -3px 0 var(--sf-primary, #166534);
 }
 
 .stat-static {
@@ -192,6 +200,34 @@
 .col-student {
   min-width: 12rem;
   white-space: normal;
+}
+
+.student-identity {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+}
+
+.student-identity-text {
+  min-width: 0;
+}
+
+.student-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+  background: #e2e8f0;
+}
+
+.student-avatar.placeholder {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: #475569;
 }
 
 .student-name {

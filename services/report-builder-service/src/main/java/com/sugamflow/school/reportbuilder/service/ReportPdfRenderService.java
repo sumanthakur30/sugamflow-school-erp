@@ -80,7 +80,7 @@ public class ReportPdfRenderService {
         switch (type) {
           case "line" -> drawLine(cb, x, yPdf, w);
           case "box" -> drawBox(cb, x, yPdf - h, w, h, false);
-          case "image" -> drawBox(cb, x, yPdf - h, w, h, true);
+          case "image" -> drawImage(cb, el, data, x, yPdf - h, w, h);
           case "qr" -> drawQr(cb, el, data, x, yPdf - h, w, h);
           case "heading", "text", "field" ->
               drawText(cb, el, data, x, yPdf - h * 0.25f, w, h, scaleY);
@@ -121,6 +121,57 @@ public class ReportPdfRenderService {
           0);
     }
     cb.restoreState();
+  }
+
+  /**
+   * Renders an image from a bound data field. Accepts raw base64, {@code data:image/...;base64,...},
+   * or empty (draws a placeholder box). Template text/bind typically {@code {{student.photoBase64}}}.
+   */
+  private void drawImage(
+      PdfContentByte cb,
+      Map<String, Object> el,
+      Map<String, Object> data,
+      float x,
+      float y,
+      float w,
+      float h) {
+    String raw =
+        el.containsKey("text")
+            ? String.valueOf(el.get("text"))
+            : bindValue(data, String.valueOf(el.getOrDefault("bind", "student.photoBase64")));
+    if ((raw == null || raw.isBlank()) && el.get("bind") != null) {
+      raw = "{{" + el.get("bind") + "}}";
+    }
+    String payload = substitute(raw, data);
+    byte[] bytes = decodeImageBytes(payload);
+    if (bytes == null || bytes.length == 0) {
+      drawBox(cb, x, y, w, h, true);
+      return;
+    }
+    try {
+      Image image = Image.getInstance(bytes);
+      image.setAbsolutePosition(x, y);
+      image.scaleAbsolute(w, h);
+      cb.addImage(image);
+    } catch (Exception ex) {
+      drawBox(cb, x, y, w, h, true);
+    }
+  }
+
+  private static byte[] decodeImageBytes(String payload) {
+    if (payload == null || payload.isBlank() || payload.contains("{{")) {
+      return null;
+    }
+    String b64 = payload.trim();
+    int comma = b64.indexOf(',');
+    if (b64.regionMatches(true, 0, "data:", 0, 5) && comma > 0) {
+      b64 = b64.substring(comma + 1);
+    }
+    try {
+      return java.util.Base64.getDecoder().decode(b64);
+    } catch (IllegalArgumentException ex) {
+      return null;
+    }
   }
 
   private void drawQr(

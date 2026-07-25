@@ -15,11 +15,18 @@ import {
   sortRows,
 } from '../../shared/list-toolbar/list-controls';
 import { parseListViewParams } from '../../shared/list-toolbar/list-view-route';
+import { StaffLookupComponent, StaffLookupRow } from '../../shared/staff-lookup';
 
 @Component({
   selector: 'sf-payroll',
   standalone: true,
-  imports: [CommonModule, FormsModule, ListToolbarComponent, ListPagerComponent],
+  imports: [
+    CommonModule,
+    FormsModule,
+    ListToolbarComponent,
+    ListPagerComponent,
+    StaffLookupComponent,
+  ],
   templateUrl: './payroll.component.html',
   styleUrls: [
     '../../shared/admin-page.scss',
@@ -43,9 +50,8 @@ export class PayrollComponent implements OnInit, OnDestroy {
   fields: Array<{ key: string; label: string; type: string; mandatory: boolean }> = [];
   answers: Record<string, unknown> = {};
   fieldErrors: Record<string, string> = {};
-  staffOptions: any[] = [];
-  staffSearch = '';
-  staffLoading = false;
+  selectedStaff: StaffLookupRow | null = null;
+  lookupNonce = 0;
   records: any[] = [];
   selectedId: string | null = null;
   selected: any = null;
@@ -143,6 +149,8 @@ export class PayrollComponent implements OnInit, OnDestroy {
       this.error = '';
       this.statusMsg = '';
       this.fieldErrors = {};
+      this.resetAnswers();
+      this.lookupNonce++;
       return;
     }
     this.formOpen = false;
@@ -177,7 +185,6 @@ export class PayrollComponent implements OnInit, OnDestroy {
         this.fields = this.extractFields(boot.form);
         this.resetAnswers();
         this.loading = false;
-        this.loadStaffOptions();
         this.loadRecords();
       },
       error: (err) => {
@@ -188,61 +195,25 @@ export class PayrollComponent implements OnInit, OnDestroy {
     });
   }
 
-  loadStaffOptions(): void {
-    this.staffLoading = true;
-    this.api
-      .getPage<any>('/api/staff/directory/staff', 0, 200, { status: 'ACTIVE' })
-      .subscribe({
-        next: (page) => {
-          this.staffOptions = (page.items || []).sort((a, b) =>
-            this.staffLabel(a).localeCompare(this.staffLabel(b), undefined, {
-              numeric: true,
-              sensitivity: 'base',
-            }),
-          );
-          this.staffLoading = false;
-        },
-        error: () => {
-          this.staffOptions = [];
-          this.staffLoading = false;
-          this.error = 'Active staff could not be loaded. Please refresh and try again.';
-        },
-      });
-  }
-
-  staffLabel(row: any): string {
-    const name = String(row?.fullName || row?.name || 'Unnamed staff').trim();
-    const employeeNo = String(row?.employeeNo || row?.id || '').trim();
-    const detail = [employeeNo, row?.department].filter(Boolean).join(' · ');
-    return detail ? `${name} — ${detail}` : name;
-  }
-
-  selectStaffByLabel(): void {
-    const query = this.staffSearch.trim().toLowerCase();
-    const staff = this.staffOptions.find(
-      (row) =>
-        this.staffLabel(row).toLowerCase() === query ||
-        String(row?.employeeNo || '').toLowerCase() === query,
-    );
-    if (!staff) {
-      this.answers['staffRecordId'] = '';
-      this.answers['employeeName'] = '';
-      this.answers['employeeId'] = '';
-      this.answers['email'] = '';
-      this.answers['mobile'] = '';
-      this.fieldErrors['employeeName'] = this.staffSearch.trim()
-        ? 'Select an employee from the staff list'
-        : 'Employee is required';
-      return;
-    }
-    this.staffSearch = this.staffLabel(staff);
-    this.answers['staffRecordId'] = staff.id || '';
-    this.answers['employeeName'] = staff.fullName || staff.name || '';
-    this.answers['employeeId'] = staff.employeeNo || staff.id || '';
-    this.answers['email'] = staff.email || '';
-    this.answers['mobile'] = staff.mobile || '';
+  onStaffSelected(row: StaffLookupRow): void {
+    this.selectedStaff = row;
+    this.answers['staffRecordId'] = row.id || '';
+    this.answers['employeeName'] = row.fullName || row.name || '';
+    this.answers['employeeId'] = row.employeeNo || row.id || '';
+    this.answers['email'] = row.email || '';
+    this.answers['mobile'] = row.mobile || '';
     this.clearFieldError('employeeName');
     this.clearFieldError('employeeId');
+    this.error = '';
+  }
+
+  onStaffCleared(): void {
+    this.selectedStaff = null;
+    this.answers['staffRecordId'] = '';
+    this.answers['employeeName'] = '';
+    this.answers['employeeId'] = '';
+    this.answers['email'] = '';
+    this.answers['mobile'] = '';
   }
 
   recalculatePay(): void {
@@ -573,7 +544,7 @@ export class PayrollComponent implements OnInit, OnDestroy {
     next['grossPay'] = 0;
     next['netPay'] = 0;
     this.answers = next;
-    this.staffSearch = '';
+    this.selectedStaff = null;
     this.fieldErrors = {};
   }
 

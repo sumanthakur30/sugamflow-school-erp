@@ -10,7 +10,7 @@
       <header class="page-head list-head">
         <div>
           <h2>New Attendance</h2>
-          <p>Enter attendance details and submit for approval.</p>
+          <p>Search and select a student, then enter attendance details — no typing of identity fields.</p>
         </div>
       </header>
 
@@ -22,50 +22,88 @@
       }
 
       <section class="form-section panel">
-        <h3 class="form-section-title">Attendance details</h3>
-        <div class="grid three" [attr.aria-busy]="submitting">
-          @for (field of fields; track field.key) {
-            <label>
-              <span class="field-title">
-                {{ field.label }}
-                @if (field.mandatory) {
-                  <span class="req">*</span>
-                }
-              </span>
-              @if (field.type === 'CHECKBOX') {
-                <input
-                  type="checkbox"
-                  [(ngModel)]="answers[field.key]"
-                  [name]="field.key"
-                  [disabled]="submitting"
-                />
-              } @else if (field.type === 'NUMBER') {
-                <input
-                  type="number"
-                  [(ngModel)]="answers[field.key]"
-                  [name]="field.key"
-                  [disabled]="submitting"
-                />
-              } @else {
-                <input
-                  [(ngModel)]="answers[field.key]"
-                  [name]="field.key"
-                  [disabled]="submitting"
-                />
-              }
-            </label>
-          }
-        </div>
+        <h3 class="form-section-title">Student</h3>
+        @for (_ of [lookupNonce]; track lookupNonce) {
+          <sf-student-lookup
+            label="Search student"
+            [disabled]="submitting"
+            (studentSelected)="onStudentSelected($event)"
+            (cleared)="onStudentCleared()"
+          />
+        }
+        @if (!selectedStudent) {
+          <p class="muted form-hint">Search by name, admission no, roll no, mobile, or student ID.</p>
+        }
       </section>
 
-      <div class="form-actions actions">
-        <button type="button" (click)="submit()" [disabled]="submitting">
-          {{ submitting ? 'Saving…' : 'Submit attendance' }}
-        </button>
-        <button type="button" class="secondary" (click)="closeForm()" [disabled]="submitting">
-          Cancel
-        </button>
-      </div>
+      @if (selectedStudent) {
+        <section class="form-section panel">
+          <h3 class="form-section-title">Attendance details</h3>
+          <div class="grid three" [attr.aria-busy]="submitting">
+            @for (field of entryFields; track field.key) {
+              <label>
+                <span class="field-title">
+                  {{ field.label }}
+                  @if (field.mandatory) {
+                    <span class="req">*</span>
+                  }
+                </span>
+                @if (field.type === 'CHECKBOX') {
+                  <input
+                    type="checkbox"
+                    [(ngModel)]="answers[field.key]"
+                    [name]="field.key"
+                    [disabled]="submitting"
+                  />
+                } @else if (field.type === 'NUMBER') {
+                  <input
+                    type="number"
+                    [(ngModel)]="answers[field.key]"
+                    [name]="field.key"
+                    [disabled]="submitting"
+                  />
+                } @else if (field.key === 'attendanceDate' || field.key.toLowerCase().includes('date')) {
+                  <input
+                    type="date"
+                    [(ngModel)]="answers[field.key]"
+                    [name]="field.key"
+                    [disabled]="submitting"
+                  />
+                } @else if (field.key === 'status' || field.key === 'mark') {
+                  <select
+                    [(ngModel)]="answers[field.key]"
+                    [name]="field.key"
+                    [disabled]="submitting"
+                  >
+                    <option value="">Select…</option>
+                    <option value="PRESENT">Present</option>
+                    <option value="ABSENT">Absent</option>
+                    <option value="LATE">Late</option>
+                    <option value="LEAVE">Leave</option>
+                    <option value="HALF_DAY">Half day</option>
+                  </select>
+                } @else {
+                  <input
+                    [(ngModel)]="answers[field.key]"
+                    [name]="field.key"
+                    [disabled]="submitting || field.key === 'classSection'"
+                    [attr.readonly]="field.key === 'classSection' ? true : null"
+                  />
+                }
+              </label>
+            }
+          </div>
+        </section>
+
+        <div class="form-actions actions">
+          <button type="button" (click)="submit()" [disabled]="submitting">
+            {{ submitting ? 'Saving…' : 'Submit attendance' }}
+          </button>
+          <button type="button" class="secondary" (click)="closeForm()" [disabled]="submitting">
+            Cancel
+          </button>
+        </div>
+      }
     </div>
   } @else if (selected && featureEnabled && !loading) {
     <div class="form-page detail-page" [class.is-busy]="submitting">
@@ -175,11 +213,11 @@
     <header class="page-head list-head">
       <div>
         <h2>Attendance</h2>
-        <p>Search, review, and approve attendance records.</p>
+        <p>Mark a class roster in bulk, or review workflow attendance records.</p>
       </div>
-      @if (featureEnabled && !loading) {
+      @if (featureEnabled && !loading && viewMode === 'records') {
         <div class="head-actions">
-          <button type="button" (click)="openForm()">+ New Attendance</button>
+          <button type="button" (click)="openForm()">+ New single record</button>
         </div>
       }
     </header>
@@ -196,6 +234,35 @@
     } @else if (!featureEnabled) {
       <p class="panel">Attendance is not enabled for this plan (FEATURE_ATTENDANCE).</p>
     } @else {
+      <div class="panel mode-tabs" role="tablist" aria-label="Attendance modes">
+        <button
+          type="button"
+          role="tab"
+          class="mode-tab"
+          [class.active]="viewMode === 'roster'"
+          [attr.aria-selected]="viewMode === 'roster'"
+          (click)="viewMode = 'roster'"
+        >
+          Class roster
+        </button>
+        <button
+          type="button"
+          role="tab"
+          class="mode-tab"
+          [class.active]="viewMode === 'records'"
+          [attr.aria-selected]="viewMode === 'records'"
+          (click)="viewMode = 'records'"
+        >
+          Workflow records
+        </button>
+      </div>
+
+      @if (viewMode === 'roster') {
+        <sf-attendance-roster
+          title="Class roster"
+          subtitle="Pick Class / Section once, mark Present / Absent for every student, then save or submit."
+        />
+      } @else {
       <section class="panel inbox-panel">
         <sf-list-toolbar
           searchPlaceholder="Search student, status…"
@@ -309,6 +376,7 @@
           (pageChange)="onPageChange($event)"
         />
       </section>
+      }
     }
   }
 </div>

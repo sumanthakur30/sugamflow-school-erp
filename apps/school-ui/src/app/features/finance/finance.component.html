@@ -375,7 +375,25 @@
                 <option value="OTHER">Other</option>
               </select>
             </label>
+            <label>
+              Frequency
+              <select [(ngModel)]="headDraft.frequency" name="headFreq">
+                <option value="M">Monthly (M)</option>
+                <option value="Q">Quarterly (Q)</option>
+                <option value="HY">Half-yearly (HY)</option>
+                <option value="Y">Yearly (Y)</option>
+                <option value="OT">One-time (OT)</option>
+              </select>
+            </label>
+            <label>
+              GST %
+              <input type="number" [(ngModel)]="headDraft.gstRate" name="headGst" min="0" step="0.5" />
+            </label>
           </div>
+          <label class="fin-check">
+            <input type="checkbox" [(ngModel)]="headDraft.taxable" name="taxable" />
+            Taxable (GST)
+          </label>
           <label class="fin-check">
             <input type="checkbox" [(ngModel)]="headDraft.refundable" name="refundable" />
             Refundable
@@ -393,47 +411,100 @@
     }
 
     @if (tab === 'structures') {
-      <section class="panel">
-        <div class="fin-section-head">
-          <h3 class="form-section-title">Fee structures</h3>
-          <input
-            class="fin-inline-search"
-            type="search"
-            [(ngModel)]="structuresQ"
-            name="structuresQ"
-            placeholder="Search structures…"
-          />
-        </div>
-        <div class="fin-structure-grid">
-          @for (s of filteredStructures; track s.definitionKey || s.id) {
-            <article class="fin-structure-card">
-              <div class="fin-structure-top">
-                <div>
-                  <h4>{{ payload(s).name || s.definitionKey }}</h4>
-                  <p class="muted mono">{{ s.definitionKey }} · v{{ s.version || 1 }}</p>
-                </div>
-                <div class="fin-structure-total money">{{ formatMoney(structureTotal(s)) }}</div>
-              </div>
-              <div class="fin-line-list">
-                @for (line of payload(s).lines || []; track line.headKey) {
-                  <div class="fin-line">
-                    <span>{{ line.headKey }}</span>
-                    <strong class="money">{{ formatMoney(line.amount) }}</strong>
+      <div class="fin-split">
+        <section class="panel">
+          <div class="fin-section-head">
+            <h3 class="form-section-title">Fee structures</h3>
+            <input
+              class="fin-inline-search"
+              type="search"
+              [(ngModel)]="structuresQ"
+              name="structuresQ"
+              placeholder="Search structures…"
+            />
+          </div>
+          <div class="fin-structure-grid">
+            @for (s of filteredStructures; track s.definitionKey || s.id) {
+              <article class="fin-structure-card">
+                <div class="fin-structure-top">
+                  <div>
+                    <h4>{{ payload(s).name || s.definitionKey }}</h4>
+                    <p class="muted mono">{{ s.definitionKey }} · v{{ s.version || 1 }}</p>
                   </div>
-                }
-              </div>
-              <div class="fin-structure-actions">
-                <span class="badge badge-ok">Active</span>
-                <button type="button" class="tiny" (click)="structureKey = s.definitionKey; setTab('demand')">
-                  Use in demand
-                </button>
-              </div>
-            </article>
-          } @empty {
-            <p class="muted">No fee structures configured.</p>
-          }
-        </div>
-      </section>
+                  <div class="fin-structure-total money">{{ formatMoney(structureTotal(s)) }}</div>
+                </div>
+                <div class="fin-line-list">
+                  @for (line of payload(s).lines || []; track line.headKey) {
+                    <div class="fin-line">
+                      <span>{{ line.headKey }}{{ line.frequency ? ' · ' + line.frequency : '' }}</span>
+                      <strong class="money">{{ formatMoney(line.amount) }}</strong>
+                    </div>
+                  }
+                </div>
+                <div class="fin-structure-actions">
+                  <button type="button" class="tiny secondary" (click)="editStructure(s)">Edit</button>
+                  <button type="button" class="tiny" (click)="structureKey = s.definitionKey; setTab('demand')">
+                    Use in demand
+                  </button>
+                </div>
+              </article>
+            } @empty {
+              <p class="muted">No fee structures configured.</p>
+            }
+          </div>
+        </section>
+
+        <section class="panel" id="fin-structure-form">
+          <h3 class="form-section-title">
+            {{ editingStructureKey ? 'Update structure' : 'Create structure' }}
+          </h3>
+          <p class="muted">Lines format: <code>HEAD,amount,frequency</code> (one per line). Frequencies: M / Q / HY / Y / OT.</p>
+          <div class="grid two">
+            <label>
+              Key
+              <input
+                [(ngModel)]="structureDraft.definitionKey"
+                name="structKey"
+                placeholder="GRADE_9_ANNUAL"
+                [disabled]="!!editingStructureKey"
+              />
+            </label>
+            <label>
+              Name
+              <input [(ngModel)]="structureDraft.name" name="structName" placeholder="Grade 9 Annual" />
+            </label>
+            <label>
+              Class / section eligibility
+              <input [(ngModel)]="structureDraft.classSection" name="structClass" placeholder="Grade 9-A" />
+            </label>
+            <label>
+              Academic session
+              <input [(ngModel)]="structureDraft.academicSessionId" name="structSession" placeholder="2025-26" />
+            </label>
+          </div>
+          <label>
+            Lines
+            <textarea
+              [(ngModel)]="structureDraft.linesText"
+              name="structLines"
+              rows="6"
+              placeholder="ANNUAL,5000,Y&#10;TUITION,12000,M"
+            ></textarea>
+          </label>
+          <label>
+            Notes
+            <input [(ngModel)]="structureDraft.notes" name="structNotes" />
+          </label>
+          <div class="form-actions actions">
+            <button type="button" (click)="saveStructure()" [disabled]="busy">
+              {{ editingStructureKey ? 'Update structure' : 'Save structure' }}
+            </button>
+            @if (editingStructureKey) {
+              <button type="button" class="secondary" (click)="resetStructureDraft()">Cancel</button>
+            }
+          </div>
+        </section>
+      </div>
     }
 
     @if (tab === 'concessions') {
@@ -474,7 +545,7 @@
         <section class="panel">
           <h3 class="form-section-title">Generate / preview demand</h3>
           <sf-student-lookup
-            label="Student (optional)"
+            label="Search student"
             [includeApplicants]="true"
             (studentSelected)="onStudentSelected($event)"
             (cleared)="onStudentCleared()"
@@ -503,25 +574,65 @@
             </label>
             <label>
               Student ref
-              <input [(ngModel)]="studentRef" name="studentRef" placeholder="Admission no" />
+              <input
+                [(ngModel)]="studentRef"
+                name="studentRef"
+                placeholder="Auto-filled from search"
+                [readonly]="!!selectedStudent"
+              />
             </label>
             <label>
               Student name
-              <input [(ngModel)]="studentName" name="studentName" />
+              <input
+                [(ngModel)]="studentName"
+                name="studentName"
+                placeholder="Auto-filled from search"
+                [readonly]="!!selectedStudent"
+              />
             </label>
             <label>
               Class / section
-              <input [(ngModel)]="classSection" name="classSection" />
+              <input
+                [(ngModel)]="classSection"
+                name="classSection"
+                placeholder="Auto-filled from search"
+              />
+            </label>
+            <label>
+              Period key
+              <input [(ngModel)]="periodKey" name="periodKey" placeholder="2025-26-APR or leave blank" />
+            </label>
+            <label>
+              Pending days (late fee)
+              <input type="number" [(ngModel)]="pendingDays" name="pendingDays" min="0" />
+            </label>
+            <label>
+              Hostel monthly fee (optional)
+              <input type="number" [(ngModel)]="hostelMonthlyFee" name="hostelFee" min="0" />
+            </label>
+            <label>
+              Transport fare (optional)
+              <input type="number" [(ngModel)]="transportFare" name="transportFare" min="0" />
             </label>
           </div>
           <div class="form-actions actions">
             <button type="button" (click)="previewDemand()" [disabled]="busy">
               {{ busy ? 'Working…' : 'Preview demand' }}
             </button>
+            <button type="button" (click)="generateDemand()" [disabled]="busy">Generate &amp; open collection</button>
+            <button type="button" class="secondary" (click)="generateBulkDemands()" [disabled]="busy">
+              Bulk by class
+            </button>
             <a routerLink="/admin/fee" [queryParams]="{ new: '1' }" class="btn-link-inline">
               Collect fee →
             </a>
           </div>
+          @if (bulkResult) {
+            <p class="muted">
+              Bulk: {{ bulkResult.created || 0 }} created / {{ bulkResult.failed || 0 }} failed of
+              {{ bulkResult.requested || 0 }}
+            </p>
+          }
           @if (demand) {
             <div class="fin-demand">
               <div class="fin-demand-metrics">
@@ -533,21 +644,69 @@
                   <span>Discount</span>
                   <strong class="money">{{ formatMoney(demand.discountAmount) }}</strong>
                 </div>
+                <div>
+                  <span>GST</span>
+                  <strong class="money">{{ formatMoney(demand.gstAmount) }}</strong>
+                </div>
+                <div>
+                  <span>Late fee</span>
+                  <strong class="money">{{ formatMoney(demand.lateFeeAmount) }}</strong>
+                </div>
                 <div class="is-net">
                   <span>Net due</span>
                   <strong class="money">{{ formatMoney(demand.netAmount) }}</strong>
                 </div>
               </div>
               <div class="fin-line-list">
-                @for (line of demand.lines || []; track line.headKey) {
+                @for (line of demand.lines || []; track line.headKey + (line.source || '')) {
                   <div class="fin-line">
-                    <span>{{ line.headKey }}</span>
+                    <span>
+                      {{ line.label || line.headKey }}
+                      @if (line.frequency) {
+                        <span class="muted"> · {{ line.frequency }}</span>
+                      }
+                      @if (line.gstAmount) {
+                        <span class="muted"> · GST {{ formatMoney(line.gstAmount) }}</span>
+                      }
+                    </span>
                     <strong class="money">{{ formatMoney(line.amount) }}</strong>
                   </div>
                 }
               </div>
             </div>
           }
+
+          <h3 class="form-section-title" style="margin-top: 1.25rem">Waive / refund</h3>
+          <div class="grid two">
+            <label>
+              Type
+              <select [(ngModel)]="adjustDraft.type" name="adjType">
+                <option value="waive">Waive</option>
+                <option value="refund">Refund</option>
+              </select>
+            </label>
+            <label>
+              Amount
+              <input type="number" [(ngModel)]="adjustDraft.amount" name="adjAmount" min="0" />
+            </label>
+            <label>
+              Head
+              <input [(ngModel)]="adjustDraft.headKey" name="adjHead" placeholder="TUITION" />
+            </label>
+            <label>
+              Student ref
+              <input [(ngModel)]="adjustDraft.studentRef" name="adjStudent" [placeholder]="studentRef || 'Admission no'" />
+            </label>
+            <label>
+              Reason
+              <input [(ngModel)]="adjustDraft.reason" name="adjReason" placeholder="Required" />
+            </label>
+          </div>
+          <div class="form-actions actions">
+            <button type="button" class="secondary" (click)="postAdjustment()" [disabled]="busy">
+              Post {{ adjustDraft.type }}
+            </button>
+          </div>
         </section>
 
         <section class="panel">

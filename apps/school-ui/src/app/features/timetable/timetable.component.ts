@@ -476,9 +476,59 @@ export class TimetableComponent implements OnInit {
   }
 
   sectionSubjects(): any[] {
-    return this.selectedSectionId
-      ? this.subjects.filter((subject) => subject.status !== 'INACTIVE')
-      : [];
+    if (!this.selectedSectionId) {
+      return [];
+    }
+    const active = (this.subjects ?? []).filter((subject) => subject.status !== 'INACTIVE');
+    // Prefer clean catalog names (skip load-test "Math 202607…" duplicates by code).
+    const byCode = new Map<string, any>();
+    const withoutCode: any[] = [];
+    for (const subject of active) {
+      const code = String(subject.code || '')
+        .trim()
+        .toUpperCase();
+      if (!code) {
+        withoutCode.push(subject);
+        continue;
+      }
+      const existing = byCode.get(code);
+      if (!existing) {
+        byCode.set(code, subject);
+        continue;
+      }
+      const preferNew = this.isCleanSubjectName(subject.name) && !this.isCleanSubjectName(existing.name);
+      if (preferNew) {
+        byCode.set(code, subject);
+      }
+    }
+    return [...byCode.values(), ...withoutCode].sort((a, b) =>
+      String(a.name || '').localeCompare(String(b.name || '')),
+    );
+  }
+
+  /** Sections shown in the class picker — hide load-test junk and duplicate labels. */
+  selectableSections(): any[] {
+    const seen = new Set<string>();
+    const out: any[] = [];
+    for (const section of this.sections ?? []) {
+      const label = String(section.studentLabel || section.name || '').trim();
+      if (!label) continue;
+      if (/^(Roster|Alert|Gradebook|ReportCard|Insight)-/i.test(label)) continue;
+      const key = label.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push(section);
+    }
+    return out.sort((a, b) =>
+      String(a.studentLabel || a.name || '').localeCompare(String(b.studentLabel || b.name || '')),
+    );
+  }
+
+  private isCleanSubjectName(name: unknown): boolean {
+    const n = String(name || '').trim();
+    if (!n) return false;
+    // Load/test subjects often append timestamps like "Math 20260718181600"
+    return !/\d{8,}/.test(n);
   }
 
   teacherOptions(day: number, periodId: string): TeacherOption[] {
@@ -487,8 +537,9 @@ export class TimetableComponent implements OnInit {
       (assignment) => !current.subjectId || assignment.subjectId === current.subjectId,
     );
     const mappedNames = new Set(
-      mapped.map((assignment) => assignment.teacherUsername).filter((name) => !!name),
+      mapped.map((assignment) => assignment.teacherUsername).filter((name: string) => !!name),
     );
+    // Prefer mapped teachers for the selected subject; otherwise all known teachers.
     let options = mappedNames.size
       ? this.teachers.filter((teacher) => mappedNames.has(teacher.username))
       : this.teachers;

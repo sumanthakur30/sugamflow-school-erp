@@ -59,6 +59,29 @@ public interface StaffRecordRepository extends JpaRepository<StaffRecordEntity, 
             AND (:designationBlank = true OR lower(coalesce(s.answers->>'designation', '')) = lower(cast(:designation as text)))
             AND (:employmentTypeBlank = true OR lower(coalesce(s.answers->>'employmentType', '')) = lower(cast(:employmentType as text)))
             AND (:genderBlank = true OR lower(coalesce(s.answers->>'gender', '')) = lower(cast(:gender as text)))
+            AND (
+              :staffGroupBlank = true
+              OR (
+                upper(cast(:staffGroup as text)) = 'TEACHER'
+                AND (
+                  lower(coalesce(s.answers->>'designation', '')) LIKE '%teacher%'
+                  OR lower(coalesce(s.answers->>'designation', '')) LIKE '%principal%'
+                  OR lower(coalesce(s.answers->>'designation', '')) LIKE '%coordinator%'
+                )
+              )
+              OR (
+                upper(cast(:staffGroup as text)) = 'NON_TEACHING'
+                AND NOT (
+                  lower(coalesce(s.answers->>'designation', '')) LIKE '%teacher%'
+                  OR lower(coalesce(s.answers->>'designation', '')) LIKE '%principal%'
+                  OR lower(coalesce(s.answers->>'designation', '')) LIKE '%coordinator%'
+                )
+              )
+            )
+            AND (
+              :joinedWithinDaysBlank = true
+              OR s.created_at >= (CURRENT_TIMESTAMP - (cast(:joinedWithinDays as integer) * INTERVAL '1 day'))
+            )
           ORDER BY s.updated_at DESC
           """,
       countQuery =
@@ -82,6 +105,29 @@ public interface StaffRecordRepository extends JpaRepository<StaffRecordEntity, 
             AND (:designationBlank = true OR lower(coalesce(s.answers->>'designation', '')) = lower(cast(:designation as text)))
             AND (:employmentTypeBlank = true OR lower(coalesce(s.answers->>'employmentType', '')) = lower(cast(:employmentType as text)))
             AND (:genderBlank = true OR lower(coalesce(s.answers->>'gender', '')) = lower(cast(:gender as text)))
+            AND (
+              :staffGroupBlank = true
+              OR (
+                upper(cast(:staffGroup as text)) = 'TEACHER'
+                AND (
+                  lower(coalesce(s.answers->>'designation', '')) LIKE '%teacher%'
+                  OR lower(coalesce(s.answers->>'designation', '')) LIKE '%principal%'
+                  OR lower(coalesce(s.answers->>'designation', '')) LIKE '%coordinator%'
+                )
+              )
+              OR (
+                upper(cast(:staffGroup as text)) = 'NON_TEACHING'
+                AND NOT (
+                  lower(coalesce(s.answers->>'designation', '')) LIKE '%teacher%'
+                  OR lower(coalesce(s.answers->>'designation', '')) LIKE '%principal%'
+                  OR lower(coalesce(s.answers->>'designation', '')) LIKE '%coordinator%'
+                )
+              )
+            )
+            AND (
+              :joinedWithinDaysBlank = true
+              OR s.created_at >= (CURRENT_TIMESTAMP - (cast(:joinedWithinDays as integer) * INTERVAL '1 day'))
+            )
           """,
       nativeQuery = true)
   Page<StaffRecordEntity> searchDirectory(
@@ -100,5 +146,9 @@ public interface StaffRecordRepository extends JpaRepository<StaffRecordEntity, 
       @Param("employmentTypeBlank") boolean employmentTypeBlank,
       @Param("gender") String gender,
       @Param("genderBlank") boolean genderBlank,
+      @Param("staffGroup") String staffGroup,
+      @Param("staffGroupBlank") boolean staffGroupBlank,
+      @Param("joinedWithinDays") Integer joinedWithinDays,
+      @Param("joinedWithinDaysBlank") boolean joinedWithinDaysBlank,
       Pageable pageable);
 }

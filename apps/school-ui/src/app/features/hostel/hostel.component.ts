@@ -98,11 +98,7 @@ export class HostelComponent implements OnInit {
         this.formKey = boot.formKey;
         this.workflowKey = boot.workflowKey;
         this.fields = this.extractFields(boot.form);
-        for (const f of this.fields) {
-          if (this.answers[f.key] === undefined) {
-            this.answers[f.key] = f.type === 'CHECKBOX' ? false : f.type === 'NUMBER' ? 0 : '';
-          }
-        }
+        this.resetWorkflowAnswers();
         this.loading = false;
         this.loadRecords();
         this.loadBeds();
@@ -410,6 +406,7 @@ export class HostelComponent implements OnInit {
     this.setAnswer(['classSection', 'class'], student.classSection || '');
     this.setAnswer(['email', 'studentEmail'], student.email || '');
     this.setAnswer(['mobile', 'phone', 'studentMobile'], student.mobile || '');
+    this.ensureDefaultStartDate();
     this.error = '';
   }
 
@@ -423,11 +420,13 @@ export class HostelComponent implements OnInit {
   }
 
   onWorkflowBedSelected(bedId: string): void {
-    this.workflowBedId = bedId;
-    const bed = this.beds.find((b) => String(b.id) === String(bedId));
-    this.setAnswer(['hostelBlock', 'blockKey', 'block'], bed?.blockKey || '');
-    this.setAnswer(['roomNo', 'room'], bed?.roomNo || '');
-    this.setAnswer(['bedNo', 'bed'], bed?.bedNo ?? '');
+    this.workflowBedId = bedId || '';
+    this.syncBedAnswersFromSelection();
+    this.error = '';
+  }
+
+  get canSubmitWorkflow(): boolean {
+    return !!this.workflowStudent && !!this.workflowBedId;
   }
 
   isDateField(field: { key: string; type: string }): boolean {
@@ -563,9 +562,24 @@ export class HostelComponent implements OnInit {
   }
 
   submit(): void {
-    this.submitting = true;
     this.error = '';
     this.statusMsg = '';
+    if (!this.workflowStudent) {
+      this.error = 'Select a student before submitting.';
+      return;
+    }
+    if (!this.workflowBedId) {
+      this.error = 'Select a vacant bed before submitting.';
+      return;
+    }
+    this.syncBedAnswersFromSelection();
+    this.ensureDefaultStartDate();
+    const missing = this.missingMandatoryLabels();
+    if (missing.length) {
+      this.error = `Please fill required fields: ${missing.join(', ')}.`;
+      return;
+    }
+    this.submitting = true;
     this.api
       .post<any>('/api/hostel/records', {
         formKey: this.formKey,
@@ -581,9 +595,7 @@ export class HostelComponent implements OnInit {
           this.workflowStudent = null;
           this.workflowBedId = '';
           this.workflowLookupNonce++;
-          for (const f of this.fields) {
-            this.answers[f.key] = f.type === 'CHECKBOX' ? false : f.type === 'NUMBER' ? 0 : '';
-          }
+          this.resetWorkflowAnswers();
           this.loadRecords();
         },
         error: (err) => {
@@ -669,6 +681,65 @@ export class HostelComponent implements OnInit {
       out[f.key] = v;
     }
     return out;
+  }
+
+  private resetWorkflowAnswers(): void {
+    for (const f of this.fields) {
+      if (f.type === 'CHECKBOX') {
+        this.answers[f.key] = false;
+      } else if (f.type === 'NUMBER' && this.isWorkflowAutoField(f.key)) {
+        this.answers[f.key] = '';
+      } else if (f.type === 'NUMBER') {
+        this.answers[f.key] = 0;
+      } else {
+        this.answers[f.key] = '';
+      }
+    }
+    this.ensureDefaultStartDate();
+  }
+
+  private ensureDefaultStartDate(): void {
+    const today = this.todayIsoDate();
+    for (const f of this.fields) {
+      if (!this.isDateField(f)) continue;
+      const current = this.answers[f.key];
+      if (current == null || String(current).trim() === '') {
+        this.answers[f.key] = today;
+      }
+    }
+  }
+
+  private syncBedAnswersFromSelection(): void {
+    if (!this.workflowBedId) {
+      this.setAnswer(['hostelBlock', 'blockKey', 'block'], '');
+      this.setAnswer(['roomNo', 'room'], '');
+      this.setAnswer(['bedNo', 'bed'], '');
+      return;
+    }
+    const bed = this.beds.find((b) => String(b.id) === String(this.workflowBedId));
+    this.setAnswer(['hostelBlock', 'blockKey', 'block'], bed?.blockKey || '');
+    this.setAnswer(['roomNo', 'room'], bed?.roomNo || '');
+    this.setAnswer(['bedNo', 'bed'], bed ? bed.bedNo : '');
+  }
+
+  private todayIsoDate(): string {
+    const d = new Date();
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}`;
+  }
+
+  private missingMandatoryLabels(): string[] {
+    const missing: string[] = [];
+    for (const f of this.fields) {
+      if (!f.mandatory) continue;
+      const v = this.answers[f.key];
+      if (v == null || String(v).trim() === '') {
+        missing.push(f.label || f.key);
+      }
+    }
+    return missing;
   }
 
   private extractFields(

@@ -77,6 +77,11 @@ public interface StudentRecordRepository extends JpaRepository<StudentRecordEnti
               lower(coalesce(s.answers->>'classApplied', '')) LIKE lower(concat('%', cast(:q as text), '%')) OR
               lower(coalesce(s.answers->>'house', '')) LIKE lower(concat('%', cast(:q as text), '%')) OR
               lower(coalesce(s.answers->>'aadhaar', '')) LIKE lower(concat('%', cast(:q as text), '%')) OR
+              lower(coalesce(s.answers->>'aadhaarNumber', '')) LIKE lower(concat('%', cast(:q as text), '%')) OR
+              lower(coalesce(s.answers->>'penNumber', '')) LIKE lower(concat('%', cast(:q as text), '%')) OR
+              lower(coalesce(s.answers->>'apaarId', '')) LIKE lower(concat('%', cast(:q as text), '%')) OR
+              lower(coalesce(s.answers->>'samagraId', '')) LIKE lower(concat('%', cast(:q as text), '%')) OR
+              lower(coalesce(s.answers->>'schoolStudentId', '')) LIKE lower(concat('%', cast(:q as text), '%')) OR
               lower(coalesce(s.answers->>'rfid', '')) LIKE lower(concat('%', cast(:q as text), '%')) OR
               lower(coalesce(s.answers->>'cardNo', '')) LIKE lower(concat('%', cast(:q as text), '%')) OR
               lower(coalesce(s.answers->>'barcode', '')) LIKE lower(concat('%', cast(:q as text), '%')) OR
@@ -125,6 +130,11 @@ public interface StudentRecordRepository extends JpaRepository<StudentRecordEnti
               lower(coalesce(s.answers->>'classApplied', '')) LIKE lower(concat('%', cast(:q as text), '%')) OR
               lower(coalesce(s.answers->>'house', '')) LIKE lower(concat('%', cast(:q as text), '%')) OR
               lower(coalesce(s.answers->>'aadhaar', '')) LIKE lower(concat('%', cast(:q as text), '%')) OR
+              lower(coalesce(s.answers->>'aadhaarNumber', '')) LIKE lower(concat('%', cast(:q as text), '%')) OR
+              lower(coalesce(s.answers->>'penNumber', '')) LIKE lower(concat('%', cast(:q as text), '%')) OR
+              lower(coalesce(s.answers->>'apaarId', '')) LIKE lower(concat('%', cast(:q as text), '%')) OR
+              lower(coalesce(s.answers->>'samagraId', '')) LIKE lower(concat('%', cast(:q as text), '%')) OR
+              lower(coalesce(s.answers->>'schoolStudentId', '')) LIKE lower(concat('%', cast(:q as text), '%')) OR
               lower(coalesce(s.answers->>'rfid', '')) LIKE lower(concat('%', cast(:q as text), '%')) OR
               lower(coalesce(s.answers->>'cardNo', '')) LIKE lower(concat('%', cast(:q as text), '%')) OR
               lower(coalesce(s.answers->>'barcode', '')) LIKE lower(concat('%', cast(:q as text), '%')) OR

@@ -173,7 +173,10 @@ public class TimetableService {
           message + ". Resolve conflicts or explicitly save with allowConflicts.");
     }
 
+    // Flush the delete before inserts so uq_timetable_slot_section_cell is not violated
+    // when replacing an existing Monday/Period cell in the same transaction.
     slots.deleteByOrganizationIdAndSectionId(scope.organizationId(), sectionId);
+    slots.flush();
 
     List<TimetableSlotEntity> toSave = new ArrayList<>();
     for (Object item : list) {

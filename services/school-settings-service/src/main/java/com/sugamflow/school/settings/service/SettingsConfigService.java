@@ -468,6 +468,25 @@ public class SettingsConfigService {
     changed |= putIfAbsent(settings, "defaultStatusPolicyKey", "default_statuses");
     changed |= putIfAbsent(settings, "defaultTcPolicyKey", "default_tc");
     changed |= putIfAbsent(settings, "currentSessionKey", "2025-26");
+    // Phase A/B — NEP identity + media (configuration toggles; no school-specific code)
+    changed |= putIfAbsent(settings, "enableAadhaar", true);
+    changed |= putIfAbsent(settings, "enablePen", true);
+    changed |= putIfAbsent(settings, "enableApaar", true);
+    changed |= putIfAbsent(settings, "enableSamagra", false);
+    changed |= putIfAbsent(settings, "enableSchoolStudentId", true);
+    changed |= putIfAbsent(settings, "maskAadhaar", true);
+    changed |= putIfAbsent(settings, "aadhaarMandatory", false);
+    changed |= putIfAbsent(settings, "penMandatory", false);
+    changed |= putIfAbsent(settings, "enableStudentPhoto", true);
+    changed |= putIfAbsent(settings, "enableGuardianPhoto", true);
+    changed |= putIfAbsent(settings, "enableDocumentVault", true);
+    changed |= putIfAbsent(settings, "maxPhotoKb", 512);
+    changed |= putIfAbsent(settings, "maxDocumentKb", 2048);
+    changed |=
+        putIfAbsent(
+            settings,
+            "allowedPhotoTypes",
+            List.of("image/jpeg", "image/png", "image/webp"));
     return changed;
   }
 
@@ -495,6 +514,19 @@ public class SettingsConfigService {
     changed |= putIfAbsent(settings, "financeMastersEnabled", true);
     changed |= putIfAbsent(settings, "defaultStructureKey", "grade_8_annual");
     changed |= putIfAbsent(settings, "defaultCurrency", "INR");
+    changed |= putIfAbsent(settings, "gstEnabled", true);
+    changed |= putIfAbsent(settings, "defaultGstRate", 0);
+    changed |= putIfAbsent(settings, "lateFeeEnabled", true);
+    changed |= putIfAbsent(settings, "lateFeePolicyKey", "late_per_day_10");
+    changed |= putIfAbsent(settings, "scholarshipConcessionKey", "scholarship_50");
+    changed |= putIfAbsent(settings, "autoApplyScholarship", true);
+    changed |= putIfAbsent(settings, "hostelHeadKey", "HOSTEL");
+    changed |= putIfAbsent(settings, "transportHeadKey", "TRANSPORT");
+    changed |= putIfAbsent(settings, "defaultHostelMonthlyFee", 4500);
+    changed |= putIfAbsent(settings, "defaultTransportFare", 1200);
+    changed |= putIfAbsent(settings, "includeHostelInDemand", true);
+    changed |= putIfAbsent(settings, "includeTransportInDemand", true);
+    changed |= putIfAbsent(settings, "bulkDemandBatchSize", 200);
     return changed;
   }
 

@@ -214,6 +214,12 @@ public class FeeCollectionService {
     return toDetailDto(repository.save(entity));
   }
 
+  /** Isolated submit so demand generation is not rolled back when collection validation fails. */
+  @Transactional(propagation = org.springframework.transaction.annotation.Propagation.REQUIRES_NEW)
+  public Map<String, Object> submitIsolated(Map<String, Object> body) {
+    return submit(body);
+  }
+
   @Transactional
   public Map<String, Object> act(UUID id, Map<String, Object> body) {
     TenantScope scope = TenantContext.require();

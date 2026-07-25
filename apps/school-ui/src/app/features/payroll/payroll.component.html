@@ -32,30 +32,24 @@
 
       <section class="form-section panel">
         <h3 class="form-section-title">Employee and payroll period</h3>
-        <div class="grid three" [attr.aria-busy]="submitting || staffLoading">
-          <label class="employee-picker" [class.invalid]="fieldInvalid('employeeName')">
-            <span class="field-title">Employee <span class="req">*</span></span>
-            <input
-              [(ngModel)]="staffSearch"
-              name="staffSearch"
-              list="activeStaffOptions"
-              autocomplete="off"
-              placeholder="{{ staffLoading ? 'Loading active staff…' : 'Search name or employee ID…' }}"
-              [disabled]="submitting || staffLoading"
-              (change)="selectStaffByLabel()"
+        <div class="employee-lookup-block" [class.invalid]="fieldInvalid('employeeName')">
+          <span class="field-title">Employee <span class="req">*</span></span>
+          @for (_ of [lookupNonce]; track lookupNonce) {
+            <sf-staff-lookup
+              label="Search staff"
+              [disabled]="submitting"
+              (staffSelected)="onStaffSelected($event)"
+              (cleared)="onStaffCleared()"
             />
-            <datalist id="activeStaffOptions">
-              @for (staff of staffOptions; track staff.id) {
-                <option [value]="staffLabel(staff)"></option>
-              }
-            </datalist>
-            @if (fieldErrors['employeeName']) {
-              <span class="field-error">{{ fieldErrors['employeeName'] }}</span>
-            } @else {
-              <span class="field-help">Select from active staff records.</span>
-            }
-          </label>
+          }
+          @if (fieldErrors['employeeName']) {
+            <span class="field-error">{{ fieldErrors['employeeName'] }}</span>
+          } @else if (!selectedStaff) {
+            <span class="field-help">Search by name, employee ID, department, or mobile - do not type payee identity by hand.</span>
+          }
+        </div>
 
+        <div class="grid three" [attr.aria-busy]="submitting">
           <label>
             <span class="field-title">Month <span class="req">*</span></span>
             <select

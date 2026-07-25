@@ -33,10 +33,15 @@ public final class DirectoryCatalog {
     return List.of(
         col("admissionNo", "Admission No", true, true),
         col("fullName", "Student Name", true, true),
+        col("photoUrl", "Photo", true, false),
         col("classSection", "Class / Section", true, true),
         col("gender", "Gender", true, true),
         col("status", "Status", true, true),
         col("mobile", "Mobile", true, false),
+        col("penNumber", "PEN", true, true),
+        col("apaarId", "APAAR", true, true),
+        col("samagraId", "Samagra", false, true),
+        col("schoolStudentId", "School Student ID", false, true),
         col("branchId", "Branch", true, true),
         col("academicSessionId", "Session", true, false),
         col("category", "Category", false, true),
@@ -53,6 +58,9 @@ public final class DirectoryCatalog {
         filter("gender", "Gender", "SELECT", List.of("Male", "Female", "Other")),
         filter("category", "Category", "TEXT", List.of()),
         filter("house", "House", "TEXT", List.of()),
+        filter("penNumber", "PEN Number", "TEXT", List.of()),
+        filter("apaarId", "APAAR ID", "TEXT", List.of()),
+        filter("samagraId", "Samagra ID", "TEXT", List.of()),
         filter("transport", "Transport Students", "BOOLEAN", List.of()),
         filter("hostel", "Hostel Students", "BOOLEAN", List.of()),
         filter("scholarship", "Scholarship", "BOOLEAN", List.of()),
@@ -68,7 +76,11 @@ public final class DirectoryCatalog {
         Map.of("key", "mobile", "label", "Mobile Number"),
         Map.of("key", "parentName", "label", "Parent Name"),
         Map.of("key", "email", "label", "Email"),
-        Map.of("key", "aadhaar", "label", "Aadhaar / Student ID"),
+        Map.of("key", "aadhaar", "label", "Aadhaar"),
+        Map.of("key", "penNumber", "label", "PEN Number"),
+        Map.of("key", "apaarId", "label", "APAAR ID"),
+        Map.of("key", "samagraId", "label", "Samagra ID"),
+        Map.of("key", "schoolStudentId", "label", "School Student ID"),
         Map.of("key", "rfid", "label", "RFID / Card Number"));
   }
 

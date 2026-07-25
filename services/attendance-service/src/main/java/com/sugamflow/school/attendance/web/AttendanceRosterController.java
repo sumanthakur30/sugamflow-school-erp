@@ -34,6 +34,15 @@ public class AttendanceRosterController {
     return ApiResponse.ok(service.roster(sectionId, date, periodId));
   }
 
+  @GetMapping("/roster/register")
+  public ApiResponse<Map<String, Object>> register(
+      @RequestParam("sectionId") UUID sectionId,
+      @RequestParam("date") @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
+      @RequestParam(name = "periodId", required = false) UUID periodId,
+      @RequestParam(name = "format", defaultValue = "PDF") String format) {
+    return ApiResponse.ok(service.registerExport(sectionId, date, periodId, format));
+  }
+
   @PutMapping("/sessions/bulk")
   public ApiResponse<Map<String, Object>> bulkMark(@RequestBody Map<String, Object> body) {
     return ApiResponse.ok(service.bulkMark(body));

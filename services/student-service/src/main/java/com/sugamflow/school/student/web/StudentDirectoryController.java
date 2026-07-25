@@ -47,4 +47,13 @@ public class StudentDirectoryController {
         .contentType(new MediaType("text", "csv"))
         .body(body);
   }
+
+  @GetMapping("/export")
+  public ApiResponse<Map<String, Object>> exportWorkbook(
+      @RequestParam Map<String, String> params,
+      @RequestParam(name = "format", defaultValue = "EXCEL") String format) {
+    Map<String, String> p = params != null ? new LinkedHashMap<>(params) : new LinkedHashMap<>();
+    p.remove("format");
+    return ApiResponse.ok(service.exportWorkbook(p, format));
+  }
 }

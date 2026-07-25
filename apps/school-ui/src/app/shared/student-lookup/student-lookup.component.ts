@@ -52,7 +52,7 @@ export class StudentLookupComponent implements OnInit, AfterViewInit, OnDestroy 
   readonly listId = `slu-list-${this.uid}`;
 
   @Input() placeholder =
-    'Search name, admission no, roll no, mobile, class, parent…';
+    'Search by name, admission no, roll no, mobile, or student ID…';
   @Input() minChars = 2;
   @Input() pageSize = 10;
   @Input() debounceMs = 300;
@@ -76,11 +76,14 @@ export class StudentLookupComponent implements OnInit, AfterViewInit, OnDestroy 
    * (needed for fee collection at Reception before Student Master enrollment).
    */
   @Input() includeApplicants = false;
+  /** Show camera / barcode scan control (USB wedge scanners always work via Enter). */
+  @Input() enableScan = true;
 
   @Output() studentSelected = new EventEmitter<StudentLookupRow>();
   @Output() cleared = new EventEmitter<void>();
 
   @ViewChild('searchInput') searchInput?: ElementRef<HTMLInputElement>;
+  @ViewChild('scanVideo') scanVideo?: ElementRef<HTMLVideoElement>;
 
   q = '';
   open = false;
@@ -90,6 +93,14 @@ export class StudentLookupComponent implements OnInit, AfterViewInit, OnDestroy 
   highlightIndex = -1;
   selected: StudentLookupRow | null = null;
   emptyHint = '';
+  scanOpen = false;
+  scanBusy = false;
+  scanHint = '';
+  private scanStream: MediaStream | null = null;
+  private scanTimer: ReturnType<typeof setInterval> | null = null;
+  private lastKeyAt = 0;
+  private wedgeBuffer = '';
+  private scanResolvePending = false;
 
   @HostBinding('class.slu-host-open')
   get hostOpen(): boolean {
@@ -112,7 +123,8 @@ export class StudentLookupComponent implements OnInit, AfterViewInit, OnDestroy 
         distinctUntilChanged(),
         switchMap((term) => {
           const t = term.trim();
-          if (t.length < this.minChars && !this.hasActiveFilters()) {
+          const needed = this.charsRequired(t);
+          if (t.length < needed && !this.hasActiveFilters()) {
             this.results = [];
             this.searching = false;
             this.open = false;
@@ -174,6 +186,7 @@ export class StudentLookupComponent implements OnInit, AfterViewInit, OnDestroy 
 
   ngOnDestroy(): void {
     this.sub?.unsubscribe();
+    this.stopScan();
   }
 
   onQueryChange(value: string): void {
@@ -187,7 +200,8 @@ export class StudentLookupComponent implements OnInit, AfterViewInit, OnDestroy 
 
   onFocus(): void {
     if (this.disabled) return;
-    if (this.results.length || this.q.trim().length >= this.minChars || this.hasActiveFilters()) {
+    const needed = this.charsRequired(this.q.trim());
+    if (this.results.length || this.q.trim().length >= needed || this.hasActiveFilters()) {
       this.open = true;
     }
   }
@@ -233,12 +247,41 @@ export class StudentLookupComponent implements OnInit, AfterViewInit, OnDestroy 
 
   onKeydown(ev: KeyboardEvent): void {
     if (this.disabled) return;
+    const now = Date.now();
+    // USB barcode wedges type very fast then send Enter.
+    if (ev.key.length === 1) {
+      if (now - this.lastKeyAt > 80) {
+        this.wedgeBuffer = '';
+      }
+      this.wedgeBuffer += ev.key;
+      this.lastKeyAt = now;
+    }
     if (ev.key === 'Escape') {
       this.open = false;
+      if (this.scanOpen) {
+        this.stopScan();
+      }
       return;
     }
+    if (ev.key === 'Enter') {
+      const wedge = this.wedgeBuffer.trim();
+      this.wedgeBuffer = '';
+      if (wedge.length >= 3 && now - this.lastKeyAt < 80) {
+        ev.preventDefault();
+        void this.applyScannedCode(wedge);
+        return;
+      }
+      // Also treat Enter on a filled admission-like query as a scan resolve.
+      const typed = this.q.trim();
+      if (typed && /^(adm|sf|st)[-_]?\w+/i.test(typed) && (!this.open || !this.results.length)) {
+        ev.preventDefault();
+        void this.applyScannedCode(typed);
+        return;
+      }
+    }
     if (!this.open && (ev.key === 'ArrowDown' || ev.key === 'Enter')) {
-      if (this.q.trim().length >= this.minChars || this.hasActiveFilters()) {
+      const needed = this.charsRequired(this.q.trim());
+      if (this.q.trim().length >= needed || this.hasActiveFilters()) {
         this.open = true;
         this.search$.next(this.q);
       }
@@ -257,6 +300,192 @@ export class StudentLookupComponent implements OnInit, AfterViewInit, OnDestroy 
       const row = this.results[this.highlightIndex];
       if (row) this.selectRow(row);
     }
+  }
+
+  async openScan(): Promise<void> {
+    if (this.disabled || this.scanOpen) return;
+    this.error = '';
+    this.scanHint = 'Point the camera at the ID barcode or QR…';
+    this.scanOpen = true;
+    this.scanBusy = true;
+    try {
+      this.scanStream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: { ideal: 'environment' } },
+        audio: false,
+      });
+      await new Promise<void>((resolve) => setTimeout(resolve, 50));
+      const video = this.scanVideo?.nativeElement;
+      if (!video) {
+        throw new Error('Camera preview unavailable');
+      }
+      video.srcObject = this.scanStream;
+      await video.play();
+      this.scanBusy = false;
+      this.startBarcodeLoop(video);
+    } catch (err: any) {
+      this.scanBusy = false;
+      this.scanOpen = false;
+      this.stopScan();
+      this.error =
+        err?.name === 'NotAllowedError'
+          ? 'Camera permission denied. Use a USB barcode scanner into the search box instead.'
+          : err?.message || 'Camera scan unavailable. Type or scan with a USB wedge scanner.';
+    }
+  }
+
+  stopScan(): void {
+    if (this.scanTimer) {
+      clearInterval(this.scanTimer);
+      this.scanTimer = null;
+    }
+    if (this.scanStream) {
+      for (const track of this.scanStream.getTracks()) {
+        track.stop();
+      }
+      this.scanStream = null;
+    }
+    const video = this.scanVideo?.nativeElement;
+    if (video) {
+      video.srcObject = null;
+    }
+    this.scanOpen = false;
+    this.scanBusy = false;
+    this.scanHint = '';
+  }
+
+  /** Resolve admission no / barcode payload to a student and select it. */
+  async applyScannedCode(raw: string): Promise<void> {
+    const code = this.normalizeScanPayload(raw);
+    if (!code || this.scanResolvePending) {
+      return;
+    }
+    this.scanResolvePending = true;
+    this.q = code;
+    this.searching = true;
+    this.error = '';
+    this.stopScan();
+    try {
+      const exact = await this.lookupByAdmission(code);
+      if (exact) {
+        this.selectRow(exact);
+        return;
+      }
+      const rows = await new Promise<StudentLookupRow[]>((resolve) => {
+        this.searchStudents(code).subscribe({
+          next: (items) => resolve(items),
+          error: () => resolve([]),
+        });
+      });
+      const match =
+        rows.find(
+          (r) => String(r.admissionNo || '').trim().toLowerCase() === code.toLowerCase(),
+        ) ||
+        rows.find((r) => String(r.id || '').trim().toLowerCase() === code.toLowerCase()) ||
+        (rows.length === 1 ? rows[0] : null);
+      if (match) {
+        this.selectRow(match);
+      } else {
+        this.results = rows;
+        this.open = true;
+        this.highlightIndex = rows.length ? 0 : -1;
+        this.emptyHint = rows.length
+          ? 'Select the matching student from scan results.'
+          : `No student found for code “${code}”.`;
+        this.error = rows.length ? '' : `No student found for “${code}”.`;
+      }
+    } finally {
+      this.searching = false;
+      this.scanResolvePending = false;
+    }
+  }
+
+  private normalizeScanPayload(raw: string): string {
+    let code = String(raw || '').trim();
+    // QR payloads may be URLs or key=value blobs containing admission no.
+    const admMatch = code.match(/(ADM[-_][A-Z0-9-]+)/i);
+    if (admMatch) {
+      return admMatch[1].toUpperCase();
+    }
+    try {
+      if (code.includes('://')) {
+        const url = new URL(code);
+        code =
+          url.searchParams.get('admissionNo') ||
+          url.searchParams.get('adm') ||
+          url.pathname.split('/').filter(Boolean).pop() ||
+          code;
+      }
+    } catch {
+      /* plain text */
+    }
+    return code.trim();
+  }
+
+  private lookupByAdmission(admissionNo: string) {
+    return new Promise<StudentLookupRow | null>((resolve) => {
+      this.api
+        .get<any>(`/api/student/students/by-admission/${encodeURIComponent(admissionNo)}`)
+        .pipe(
+          timeout(4000),
+          catchError(() => of(null)),
+        )
+        .subscribe((detail) => {
+          if (!detail) {
+            resolve(null);
+            return;
+          }
+          const answers = detail.answers ?? {};
+          const row: StudentLookupRow = {
+            id: String(detail.id),
+            source: 'STUDENT',
+            admissionNo: detail.admissionNo || answers.admissionNo || admissionNo,
+            fullName: answers.fullName || answers.studentName || detail.fullName,
+            classSection: answers.classSection || answers.classApplied,
+            rollNo: answers.rollNo ? String(answers.rollNo) : undefined,
+            parentName: answers.fatherName || answers.parentName,
+            mobile: answers.mobile ? String(answers.mobile) : undefined,
+            email: answers.email ? String(answers.email) : undefined,
+            status: detail.status || 'ACTIVE',
+            branchId: detail.branchId,
+            academicSessionId: detail.academicSessionId,
+          };
+          resolve(this.isSelectable(row) ? row : null);
+        });
+    });
+  }
+
+  private startBarcodeLoop(video: HTMLVideoElement): void {
+    const Detector = (window as any).BarcodeDetector as
+      | (new (opts?: { formats?: string[] }) => {
+          detect: (source: CanvasImageSource) => Promise<Array<{ rawValue?: string }>>;
+        })
+      | undefined;
+    if (!Detector) {
+      this.scanHint =
+        'Live QR needs Chrome/Edge. You can still use a USB barcode scanner in the search box.';
+      return;
+    }
+    let detector: { detect: (source: CanvasImageSource) => Promise<Array<{ rawValue?: string }>> };
+    try {
+      detector = new Detector({
+        formats: ['qr_code', 'code_128', 'code_39', 'ean_13', 'ean_8', 'upc_a', 'upc_e'],
+      });
+    } catch {
+      this.scanHint = 'BarcodeDetector unavailable. Use a USB scanner in the search box.';
+      return;
+    }
+    this.scanTimer = setInterval(async () => {
+      if (!this.scanOpen || video.readyState < 2) return;
+      try {
+        const codes = await detector.detect(video);
+        const value = codes?.[0]?.rawValue?.trim();
+        if (value) {
+          void this.applyScannedCode(value);
+        }
+      } catch {
+        /* keep scanning */
+      }
+    }, 450);
   }
 
   trackById(_: number, row: StudentLookupRow): string {
@@ -408,6 +637,14 @@ export class StudentLookupComponent implements OnInit, AfterViewInit, OnDestroy 
     if (this.filters.status) return this.filters.status;
     if (this.defaultStatus) return this.defaultStatus;
     return undefined;
+  }
+
+  private charsRequired(term: string): number {
+    // Admission nos / short numeric IDs should search after 1 character.
+    if (/^\d+$/i.test(term) || /^(adm|sf|st)[-_]?\w*/i.test(term)) {
+      return 1;
+    }
+    return this.minChars;
   }
 
   private hasActiveFilters(): boolean {

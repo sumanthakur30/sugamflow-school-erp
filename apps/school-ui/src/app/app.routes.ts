@@ -2,6 +2,8 @@ import { Routes } from '@angular/router';
 import { ShellComponent } from './layout/shell.component';
 import { authGuard } from './core/auth.guard';
 import { featureGuard } from './core/feature.guard';
+import { UnknownRouteComponent } from './core/unknown-route.component';
+import { unknownRouteGuard } from './core/unknown-route.guard';
 
 const PLATFORM_ADMIN_ROLES = ['SHOP_OWNER', 'SUPER_ADMIN', 'ADMIN'];
 const CAMPUS_ADMIN_ROLES = [...PLATFORM_ADMIN_ROLES, 'PRINCIPAL'];
@@ -450,5 +452,9 @@ export const routes: Routes = [
       },
     ],
   },
-  { path: '**', redirectTo: 'login' },
+  {
+    path: '**',
+    canActivate: [unknownRouteGuard],
+    component: UnknownRouteComponent,
+  },
 ];

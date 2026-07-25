@@ -1,5 +1,13 @@
 # School ERP — Phase A deploy on existing SugamFlow EC2
 
+> **Follow-along runbook (recommended):** [`EC2_SCHOOL_PHASE_A_FOLLOW_ALONG.md`](./EC2_SCHOOL_PHASE_A_FOLLOW_ALONG.md)
+>
+> Production files (school-specific names):
+> - `docker-compose.school.ec2-rds.yml`
+> - `.env.school.production` (from `.env.school.production.example`)
+> - `EC2-FILES-TO-COPY.txt`
+
+
 Target host (remembered): **`sugamflows`** · `m7i-flex.xlarge` · **16 GiB / 4 vCPU** · `eu-north-1`.
 
 SugamFlow already runs via `D:\sugamFlow\docker-compose.ec2-rds.yml` (Compose project `sumanthakur30`).  

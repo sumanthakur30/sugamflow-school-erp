@@ -76,8 +76,13 @@ public class ConfigEngineClient {
 
   public Map<String, Object> renderReport(
       TenantScope scope, String templateKey, Map<String, Object> data) {
+    return renderReport(scope, templateKey, data, "PDF");
+  }
+
+  public Map<String, Object> renderReport(
+      TenantScope scope, String templateKey, Map<String, Object> data, String format) {
     Map<String, Object> payload = new LinkedHashMap<>();
-    payload.put("format", "PDF");
+    payload.put("format", format == null || format.isBlank() ? "PDF" : format);
     payload.put("data", data != null ? data : Map.of());
     Map<String, Object> result =
         post(

@@ -5,6 +5,8 @@ import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { Subscription, forkJoin, of } from 'rxjs';
 import { catchError } from 'rxjs/operators';
 import { ApiService, PageResult } from '../../core/api.service';
+import { AuthSessionService } from '../../core/auth-session.service';
+import { ThemeService } from '../../core/theme.service';
 import { ListPagerComponent } from '../../shared/list-toolbar/list-pager.component';
 import {
   ListSortOption,
@@ -15,10 +17,11 @@ import {
 import { parseListViewParams } from '../../shared/list-toolbar/list-view-route';
 import { StudentLookupComponent } from '../../shared/student-lookup/student-lookup.component';
 import { StudentLookupRow } from '../../shared/student-lookup/student-lookup.models';
+import { STUDENT_IDENTITY_FIELD_KEYS } from '../../shared/student-lookup/student-identity';
 import { StudentFeeHistoryComponent } from '../../shared/student-fee-history/student-fee-history.component';
 
 /** Fee form keys filled from Student Master — never typed manually. */
-const IDENTITY_FIELD_KEYS = new Set(['studentName', 'admissionNo', 'email', 'mobile']);
+const IDENTITY_FIELD_KEYS = STUDENT_IDENTITY_FIELD_KEYS;
 
 type DatePreset = '' | 'today' | 'yesterday' | 'last7' | 'last30' | 'month';
 type DueFilter = '' | 'has_due' | 'no_due' | 'due_gt_500';
@@ -46,6 +49,8 @@ export class FeeComponent implements OnInit, OnDestroy {
   private readonly api = inject(ApiService);
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
+  private readonly auth = inject(AuthSessionService);
+  private readonly theme = inject(ThemeService);
   private routeSub?: Subscription;
 
   loading = true;
@@ -81,6 +86,28 @@ export class FeeComponent implements OnInit, OnDestroy {
     { key: 'ONLINE', label: 'Online / Gateway' },
     { key: 'OTHER', label: 'Other' },
   ];
+  readonly monthOptions = [
+    'January',
+    'February',
+    'March',
+    'April',
+    'May',
+    'June',
+    'July',
+    'August',
+    'September',
+    'October',
+    'November',
+    'December',
+  ];
+  readonly yearOptions = Array.from({ length: 3 }, (_, i) => new Date().getFullYear() - 1 + i);
+  /** Ensure Payment-for-month exists even before form-builder enrich runs. */
+  private readonly feeMonthField = {
+    key: 'feeMonth',
+    label: 'Payment for month',
+    type: 'TEXTBOX',
+    mandatory: true,
+  };
   studentLoading = false;
   lookupSeed = '';
   /** Remount lookup when opening a fresh New Collection form. */
@@ -558,35 +585,7 @@ export class FeeComponent implements OnInit, OnDestroy {
     if (!row?.id) return;
     this.error = '';
     this.statusMsg = '';
-
-    // Always allow Print: prefer PDF receipt when available, otherwise thermal HTML slip.
-    if (this.canPrint(row)) {
-      this.statusMsg = 'Preparing receipt…';
-      this.api.getBlob(`/api/fee/collections/${row.id}/receipt`).subscribe({
-        next: (blob) => {
-          this.statusMsg = '';
-          const ok = this.printPdfBlob(blob, `fee-receipt-${row.id}.pdf`);
-          if (!ok) {
-            // Fallback download if print frame failed
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `fee-receipt-${row.id}.pdf`;
-            a.click();
-            URL.revokeObjectURL(url);
-            this.statusMsg = 'Receipt downloaded.';
-          } else {
-            this.statusMsg = 'Print dialog opened.';
-          }
-        },
-        error: () => {
-          this.statusMsg = '';
-          this.printThermalReceipt(row, false);
-        },
-      });
-      return;
-    }
-    this.printThermalReceipt(row, false);
+    this.printOfficialReceipt(row);
   }
 
   canPrint(row: any): boolean {
@@ -634,7 +633,17 @@ export class FeeComponent implements OnInit, OnDestroy {
   }
 
   get collectionFields(): Array<{ key: string; label: string; type: string; mandatory: boolean }> {
-    return this.fields.filter((f) => !IDENTITY_FIELD_KEYS.has(f.key));
+    const base = this.fields.filter((f) => !IDENTITY_FIELD_KEYS.has(f.key));
+    if (base.some((f) => f.key === 'feeMonth')) {
+      return base;
+    }
+    const headIdx = base.findIndex((f) => f.key === 'feeHead');
+    if (headIdx >= 0) {
+      const next = [...base];
+      next.splice(headIdx + 1, 0, this.feeMonthField);
+      return next;
+    }
+    return [this.feeMonthField, ...base];
   }
 
   clearListFilters(): void {
@@ -737,11 +746,234 @@ export class FeeComponent implements OnInit, OnDestroy {
     this.statusMsg = 'Thermal print dialog opened.';
   }
 
+  printOfficialReceipt(row: any): void {
+    if (!row?.id) return;
+    this.error = '';
+    const html = this.buildOfficialReceiptHtml(row);
+    const ok = this.printHtmlViaIframe(html);
+    if (!ok) {
+      this.error = 'Could not open print dialog. Check browser print settings and try again.';
+      return;
+    }
+    this.statusMsg = 'Receipt print dialog opened.';
+  }
+
+  private schoolDisplayName(): string {
+    const branding = this.theme.theme()?.branding ?? {};
+    return String(branding['schoolName'] || document.title || 'School').trim() || 'School';
+  }
+
+  private buildOfficialReceiptHtml(row: any): string {
+    const school = this.escapeHtml(this.schoolDisplayName());
+    const student = row?.student || {};
+    const answers = row?.answers ?? {};
+    const name = this.escapeHtml(
+      student.fullName || this.studentName(row),
+    );
+    const admissionNo = this.escapeHtml(
+      student.admissionNo || this.answer(row, 'admissionNo'),
+    );
+    const cls = this.escapeHtml(
+      student.classSection ||
+        [student.className, student.section].filter(Boolean).join('-') ||
+        this.answer(row, 'classSection') ||
+        this.answer(row, 'classApplied'),
+    );
+    const father = this.escapeHtml(
+      student.fatherName || answers.fatherName || answers.parentName || '—',
+    );
+    const mobile = this.escapeHtml(student.mobile || this.answer(row, 'mobile'));
+    const rollNo = this.escapeHtml(student.rollNo || answers.rollNo || '—');
+    const feeHead = this.escapeHtml(this.answer(row, 'feeHead'));
+    const feeMonth = this.escapeHtml(this.feeMonthLabel(row));
+    const mode = this.escapeHtml(this.answer(row, 'paymentMode'));
+    const amount = this.escapeHtml(this.formatMoney(answers.amount));
+    const status = this.escapeHtml(String(row?.status || '—').toUpperCase());
+    const when = this.escapeHtml(this.formatWhen(row?.updatedAt || row?.createdAt));
+    const receipt =
+      answers.receiptRef ||
+      answers.receiptNo ||
+      (row?.hasFeeReceipt ? `RCP-${String(row.id).slice(0, 8).toUpperCase()}` : this.collectionIdShort(row));
+    const receiptNo = this.escapeHtml(String(receipt));
+    const collectedBy = this.escapeHtml(String(row?.createdBy || '—'));
+    const branch = this.escapeHtml(
+      String(student.branchId || row?.branchId || this.auth.getBranchId() || '—'),
+    );
+    const session = this.escapeHtml(
+      String(student.academicSessionId || row?.academicSessionId || this.auth.getSessionId() || '—'),
+    );
+    const printedAt = this.escapeHtml(
+      new Date().toLocaleString(undefined, {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+      }),
+    );
+
+    return `<!doctype html>
+<html><head><meta charset="utf-8" /><title>Fee Receipt ${receiptNo}</title>
+<style>
+  @page { size: A4; margin: 14mm; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    color: #111;
+    font-family: "Segoe UI", "Source Sans 3", Arial, sans-serif;
+    font-size: 12.5px;
+    line-height: 1.35;
+  }
+  .sheet { max-width: 720px; margin: 0 auto; }
+  .header {
+    display: flex;
+    justify-content: space-between;
+    gap: 16px;
+    align-items: flex-start;
+    border-bottom: 2px solid #0b6e4f;
+    padding-bottom: 12px;
+    margin-bottom: 16px;
+  }
+  .brand h1 {
+    margin: 0;
+    font-size: 22px;
+    font-family: Georgia, "Times New Roman", serif;
+    color: #0b3d2e;
+  }
+  .brand p { margin: 4px 0 0; color: #555; }
+  .doc-meta { text-align: right; }
+  .doc-meta strong {
+    display: block;
+    font-size: 16px;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: #0b6e4f;
+  }
+  .badge {
+    display: inline-block;
+    margin-top: 6px;
+    padding: 2px 8px;
+    border-radius: 999px;
+    border: 1px solid #15803d;
+    color: #166534;
+    background: #ecfdf5;
+    font-size: 11px;
+    font-weight: 700;
+  }
+  h2 {
+    margin: 0 0 8px;
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: #334155;
+  }
+  .grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px 18px;
+    margin-bottom: 16px;
+  }
+  .field span {
+    display: block;
+    color: #64748b;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  .field strong {
+    display: block;
+    margin-top: 2px;
+    font-size: 13px;
+    font-weight: 650;
+    word-break: break-word;
+  }
+  .amount-box {
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    padding: 14px 16px;
+    margin: 8px 0 18px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: #f8fafc;
+  }
+  .amount-box .label { color: #475569; font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; }
+  .amount-box .value { font-size: 26px; font-weight: 750; color: #0b3d2e; }
+  .footer {
+    display: flex;
+    justify-content: space-between;
+    gap: 24px;
+    margin-top: 28px;
+    padding-top: 12px;
+    border-top: 1px dashed #94a3b8;
+    color: #64748b;
+    font-size: 11px;
+  }
+  .sign { min-width: 160px; text-align: center; }
+  .sign .line {
+    margin-top: 36px;
+    border-top: 1px solid #94a3b8;
+    padding-top: 6px;
+  }
+  .note { margin-top: 10px; color: #64748b; font-size: 11px; }
+  @media print {
+    body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  }
+</style></head><body>
+  <div class="sheet">
+    <header class="header">
+      <div class="brand">
+        <h1>${school}</h1>
+        <p>Fee Collection Receipt</p>
+        <p>Campus: ${branch} · Session: ${session}</p>
+      </div>
+      <div class="doc-meta">
+        <strong>Receipt</strong>
+        <div>${receiptNo}</div>
+        <span class="badge">${status}</span>
+      </div>
+    </header>
+
+    <h2>Student</h2>
+    <div class="grid">
+      <div class="field"><span>Student name</span><strong>${name}</strong></div>
+      <div class="field"><span>Admission no</span><strong>${admissionNo}</strong></div>
+      <div class="field"><span>Class</span><strong>${cls}</strong></div>
+      <div class="field"><span>Roll no</span><strong>${rollNo}</strong></div>
+      <div class="field"><span>Father name</span><strong>${father}</strong></div>
+      <div class="field"><span>Mobile</span><strong>${mobile}</strong></div>
+    </div>
+
+    <h2>Payment</h2>
+    <div class="grid">
+      <div class="field"><span>Fee head</span><strong>${feeHead}</strong></div>
+      <div class="field"><span>Payment for month</span><strong>${feeMonth}</strong></div>
+      <div class="field"><span>Payment mode</span><strong>${mode}</strong></div>
+      <div class="field"><span>Payment date</span><strong>${when}</strong></div>
+      <div class="field"><span>Collected by</span><strong>${collectedBy}</strong></div>
+    </div>
+
+    <div class="amount-box">
+      <div class="label">Amount paid</div>
+      <div class="value">₹ ${amount}</div>
+    </div>
+
+    <p class="note">This is a computer-generated fee receipt. Please retain for your records.</p>
+
+    <footer class="footer">
+      <div>Printed: ${printedAt}</div>
+      <div class="sign"><div class="line">Authorized signatory</div></div>
+    </footer>
+  </div>
+</body></html>`;
+  }
+
   private buildThermalReceiptHtml(row: any): string {
     const name = this.escapeHtml(this.studentName(row));
     const admissionNo = this.escapeHtml(this.answer(row, 'admissionNo'));
     const mobile = this.escapeHtml(this.answer(row, 'mobile'));
     const feeHead = this.escapeHtml(this.answer(row, 'feeHead'));
+    const feeMonth = this.escapeHtml(this.feeMonthLabel(row));
     const mode = this.escapeHtml(this.answer(row, 'paymentMode'));
     const amount = this.escapeHtml(this.formatMoney(row?.answers?.amount));
     const status = this.escapeHtml(this.paymentLabel(row));
@@ -767,6 +999,7 @@ export class FeeComponent implements OnInit, OnDestroy {
   <div class="row"><span>Mobile</span><span>${mobile}</span></div>
   <div class="line"></div>
   <div class="row"><span>Fee head</span><span>${feeHead}</span></div>
+  <div class="row"><span>For month</span><span>${feeMonth}</span></div>
   <div class="row"><span>Mode</span><span>${mode}</span></div>
   <div class="row"><span>Status</span><span>${status}</span></div>
   <div class="row"><span>Date</span><span>${when}</span></div>
@@ -1057,7 +1290,7 @@ export class FeeComponent implements OnInit, OnDestroy {
 
   printReceipt(): void {
     if (!this.selected) return;
-    this.downloadReceiptFor(this.selected);
+    this.printOfficialReceipt(this.selected);
   }
 
   latestApproveDelivery(): any[] {
@@ -1126,6 +1359,7 @@ export class FeeComponent implements OnInit, OnDestroy {
     return [
       { label: 'Receipt No', value: String(receipt) },
       { label: 'Fee Head', value: this.answer(this.selected, 'feeHead') },
+      { label: 'Payment for month', value: this.feeMonthLabel(this.selected) },
       { label: 'Amount', value: this.formatMoney(a.amount), money: true },
       { label: 'Payment Mode', value: this.answer(this.selected, 'paymentMode') },
       { label: 'Payment Date', value: this.formatWhen(this.selected?.updatedAt || this.selected?.createdAt) },
@@ -1147,6 +1381,7 @@ export class FeeComponent implements OnInit, OnDestroy {
       'email',
       'mobile',
       'feeHead',
+      'feeMonth',
       'amount',
       'paymentMode',
       'pendingDays',
@@ -1163,7 +1398,8 @@ export class FeeComponent implements OnInit, OnDestroy {
   }
 
   printStudentCard(): void {
-    window.print();
+    if (!this.selected) return;
+    this.printOfficialReceipt(this.selected);
   }
 
   formatMoney(raw: unknown): string {
@@ -1255,22 +1491,50 @@ export class FeeComponent implements OnInit, OnDestroy {
     for (const f of this.fields) {
       next[f.key] = f.type === 'CHECKBOX' ? false : f.type === 'NUMBER' ? 0 : '';
     }
+    // Always capture billing month, even if form catalog is not yet enriched.
+    if (next['feeMonth'] === undefined || next['feeMonth'] === '') {
+      next['feeMonth'] = this.defaultFeeMonth();
+    }
     this.answers = next;
   }
 
   private normalizeAnswers(): Record<string, unknown> {
     const out: Record<string, unknown> = {};
-    for (const f of this.fields) {
-      let v = this.answers[f.key];
-      if (f.type === 'NUMBER' && v !== '' && v != null) {
+    const keys = new Set(this.fields.map((f) => f.key));
+    keys.add('feeMonth');
+    for (const key of keys) {
+      const field = this.fields.find((f) => f.key === key);
+      let v = this.answers[key];
+      if (field?.type === 'NUMBER' && v !== '' && v != null) {
         v = Number(v);
       }
-      if (f.type === 'CHECKBOX') {
+      if (field?.type === 'CHECKBOX') {
         v = !!v;
       }
-      out[f.key] = v;
+      if (key === 'feeMonth') {
+        v = String(v || this.defaultFeeMonth()).trim();
+      }
+      out[key] = v;
     }
     return out;
+  }
+
+  private defaultFeeMonth(): string {
+    const now = new Date();
+    const month = this.monthOptions[now.getMonth()] || 'January';
+    return `${month} ${now.getFullYear()}`;
+  }
+
+  /** Prefer stored feeMonth; otherwise derive from payment/created timestamp. */
+  feeMonthLabel(row: any = this.selected): string {
+    const stored = String(row?.answers?.feeMonth || '').trim();
+    if (stored) return stored;
+    const raw = row?.updatedAt || row?.createdAt;
+    if (!raw) return '—';
+    const d = new Date(String(raw));
+    if (Number.isNaN(d.getTime())) return '—';
+    const month = this.monthOptions[d.getMonth()] || '';
+    return month ? `${month} ${d.getFullYear()}` : '—';
   }
 
   private prettyLabel(key: string): string {

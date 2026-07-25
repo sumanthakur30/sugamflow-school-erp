@@ -1,0 +1,371 @@
+# School ERP — EC2 + AWS RDS (pull-only images).
+# Distinct from SugamFlow filenames so they never clash on the same EC2:
+#   SugamFlow:  docker-compose.ec2-rds.yml  + .env.production
+#   School:     docker-compose.school.ec2-rds.yml + .env.school.production
+#
+# Target host: sugamflows (m7i-flex.xlarge, ~16 GiB) — Phase A + forms/workflow for Admissions.
+# Joins the EXISTING SugamFlow Docker network (discovery/gateway already running).
+# Does NOT publish school ports to the host — traffic enters via gateway :9090.
+#
+# Prerequisites:
+#   1) SugamFlow up: docker-compose.ec2-rds.yml (project name: sumanthakur30)
+#   2) RDS school_* databases + users created
+#   3) Images on Docker Hub: ${IMAGE_PREFIX}/<service>:${IMAGE_TAG}
+#   4) .env.school.production filled from .env.school.production.example
+#
+# Usage on EC2 (folder containing this file + .env.school.production):
+#   docker network ls | grep sumanthakur30
+#   docker compose -f docker-compose.school.ec2-rds.yml --env-file .env.school.production pull
+#   docker compose -f docker-compose.school.ec2-rds.yml --env-file .env.school.production up -d
+#   docker compose -f docker-compose.school.ec2-rds.yml --env-file .env.school.production ps
+#
+# Verify:
+#   curl -sS http://127.0.0.1:9090/actuator/health
+#   curl -sS -o /dev/null -w "%{http_code}\n" http://127.0.0.1:9090/api/student/health
+#
+# Stop school stack only (shop untouched):
+#   docker compose -f docker-compose.school.ec2-rds.yml --env-file .env.school.production down
+#
+# Flyway: each service migrates its own school_*_db on first start.
+
+name: school
+
+x-logging: &docker-logging
+  driver: json-file
+  options:
+    max-size: "25m"
+    max-file: "3"
+
+x-jvm-service: &jvm-service
+  restart: unless-stopped
+  logging: *docker-logging
+  mem_limit: ${JVM_SERVICE_MEM_LIMIT:-384m}
+  oom_score_adj: 300
+  networks:
+    - sugamflow_net
+
+x-common-env: &common-env
+  SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-prod}
+  TZ: Asia/Kolkata
+  JAVA_TOOL_OPTIONS: ${JAVA_TOOL_OPTIONS:--Duser.timezone=Asia/Kolkata -Xms96m -Xmx192m -XX:+ExitOnOutOfMemoryError}
+  SPRING_CLOUD_CONFIG_URI: http://config-service:8888
+  EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://discovery-service:8761/eureka
+  EUREKA_INSTANCE_PREFER_IP_ADDRESS: "true"
+  EUREKA_INSTANCE_LEASE_RENEWAL_INTERVAL_IN_SECONDS: "10"
+  EUREKA_INSTANCE_LEASE_EXPIRATION_DURATION_IN_SECONDS: "30"
+  SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE: ${DB_POOL_MAX_SIZE:-3}
+  SPRING_DATASOURCE_HIKARI_MINIMUM_IDLE: ${DB_POOL_MIN_IDLE:-1}
+  SPRING_DATASOURCE_HIKARI_IDLE_TIMEOUT: ${DB_POOL_IDLE_TIMEOUT_MS:-120000}
+  SPRING_DATASOURCE_HIKARI_MAX_LIFETIME: ${DB_POOL_MAX_LIFETIME_MS:-600000}
+  SPRING_DATASOURCE_HIKARI_CONNECTION_TIMEOUT: ${DB_POOL_CONNECTION_TIMEOUT_MS:-30000}
+  SECURITY_JWT_ENFORCE: "${SECURITY_JWT_ENFORCE:-true}"
+  SECURITY_JWT_SECRET: "${SECURITY_JWT_SECRET}"
+  SECURITY_INVITE_INTERNAL_KEY: "${SECURITY_INVITE_INTERNAL_KEY:-}"
+
+networks:
+  sugamflow_net:
+    external: true
+    # Compose project "sumanthakur30" → network sumanthakur30_default
+    name: ${SUGAMFLOW_DOCKER_NETWORK:-sumanthakur30_default}
+
+services:
+  school-settings-service:
+    <<: *jvm-service
+    image: ${IMAGE_PREFIX:-sumanthakur30}/school-settings-service:${IMAGE_TAG:-1.0.0}
+    environment:
+      <<: *common-env
+      EUREKA_INSTANCE_HOSTNAME: school-settings-service
+      SERVER_PORT: 8181
+      SCHOOL_SETTINGS_DB_URL: ${SCHOOL_SETTINGS_DB_URL}
+      SCHOOL_SETTINGS_DB_USERNAME: ${SCHOOL_SETTINGS_DB_USERNAME}
+      SCHOOL_SETTINGS_DB_PASSWORD: ${SCHOOL_SETTINGS_DB_PASSWORD}
+      SPRING_DATASOURCE_URL: ${SCHOOL_SETTINGS_DB_URL}
+      SPRING_DATASOURCE_USERNAME: ${SCHOOL_SETTINGS_DB_USERNAME}
+      SPRING_DATASOURCE_PASSWORD: ${SCHOOL_SETTINGS_DB_PASSWORD}
+      # Docker DNS (never use localhost inside containers)
+      SETTINGS_SUBSCRIPTION_URL: http://subscription-service:8182
+      SETTINGS_PUBLIC_API_URL: http://gateway-service:9090
+
+  subscription-service:
+    <<: *jvm-service
+    image: ${IMAGE_PREFIX:-sumanthakur30}/subscription-service:${IMAGE_TAG:-1.0.0}
+    environment:
+      <<: *common-env
+      EUREKA_INSTANCE_HOSTNAME: subscription-service
+      SERVER_PORT: 8182
+      SCHOOL_SUBSCRIPTION_DB_URL: ${SCHOOL_SUBSCRIPTION_DB_URL}
+      SCHOOL_SUBSCRIPTION_DB_USERNAME: ${SCHOOL_SUBSCRIPTION_DB_USERNAME}
+      SCHOOL_SUBSCRIPTION_DB_PASSWORD: ${SCHOOL_SUBSCRIPTION_DB_PASSWORD}
+      SPRING_DATASOURCE_URL: ${SCHOOL_SUBSCRIPTION_DB_URL}
+      SPRING_DATASOURCE_USERNAME: ${SCHOOL_SUBSCRIPTION_DB_USERNAME}
+      SPRING_DATASOURCE_PASSWORD: ${SCHOOL_SUBSCRIPTION_DB_PASSWORD}
+
+  admission-service:
+    <<: *jvm-service
+    image: ${IMAGE_PREFIX:-sumanthakur30}/admission-service:${IMAGE_TAG:-1.0.0}
+    environment:
+      <<: *common-env
+      EUREKA_INSTANCE_HOSTNAME: admission-service
+      SERVER_PORT: 8189
+      SCHOOL_ADMISSION_DB_URL: ${SCHOOL_ADMISSION_DB_URL}
+      SCHOOL_ADMISSION_DB_USERNAME: ${SCHOOL_ADMISSION_DB_USERNAME}
+      SCHOOL_ADMISSION_DB_PASSWORD: ${SCHOOL_ADMISSION_DB_PASSWORD}
+      SPRING_DATASOURCE_URL: ${SCHOOL_ADMISSION_DB_URL}
+      SPRING_DATASOURCE_USERNAME: ${SCHOOL_ADMISSION_DB_USERNAME}
+      SPRING_DATASOURCE_PASSWORD: ${SCHOOL_ADMISSION_DB_PASSWORD}
+      ADMISSION_SUBSCRIPTION_URL: http://subscription-service:8182
+      ADMISSION_SETTINGS_URL: http://school-settings-service:8181
+      ADMISSION_STUDENT_URL: http://student-service:8191
+      ADMISSION_PUBLIC_API_URL: http://gateway-service:9090
+      # Phase B+ services (safe defaults if not deployed yet)
+      ADMISSION_FORMS_URL: http://form-builder-service:8183
+      ADMISSION_WORKFLOWS_URL: http://workflow-service:8184
+      ADMISSION_RULES_URL: http://rule-engine-service:8185
+
+  fee-service:
+    <<: *jvm-service
+    image: ${IMAGE_PREFIX:-sumanthakur30}/fee-service:${IMAGE_TAG:-1.0.0}
+    environment:
+      <<: *common-env
+      EUREKA_INSTANCE_HOSTNAME: fee-service
+      SERVER_PORT: 8190
+      SCHOOL_FEE_DB_URL: ${SCHOOL_FEE_DB_URL}
+      SCHOOL_FEE_DB_USERNAME: ${SCHOOL_FEE_DB_USERNAME}
+      SCHOOL_FEE_DB_PASSWORD: ${SCHOOL_FEE_DB_PASSWORD}
+      SPRING_DATASOURCE_URL: ${SCHOOL_FEE_DB_URL}
+      SPRING_DATASOURCE_USERNAME: ${SCHOOL_FEE_DB_USERNAME}
+      SPRING_DATASOURCE_PASSWORD: ${SCHOOL_FEE_DB_PASSWORD}
+      FEE_SUBSCRIPTION_URL: http://subscription-service:8182
+      FEE_SETTINGS_URL: http://school-settings-service:8181
+      FEE_STUDENT_URL: http://student-service:8191
+      FEE_PUBLIC_API_URL: http://gateway-service:9090
+      FEE_FORMS_URL: http://form-builder-service:8183
+      FEE_WORKFLOWS_URL: http://workflow-service:8184
+      FEE_RULES_URL: http://rule-engine-service:8185
+
+  student-service:
+    <<: *jvm-service
+    image: ${IMAGE_PREFIX:-sumanthakur30}/student-service:${IMAGE_TAG:-1.0.0}
+    environment:
+      <<: *common-env
+      EUREKA_INSTANCE_HOSTNAME: student-service
+      SERVER_PORT: 8191
+      SCHOOL_STUDENT_DB_URL: ${SCHOOL_STUDENT_DB_URL}
+      SCHOOL_STUDENT_DB_USERNAME: ${SCHOOL_STUDENT_DB_USERNAME}
+      SCHOOL_STUDENT_DB_PASSWORD: ${SCHOOL_STUDENT_DB_PASSWORD}
+      SPRING_DATASOURCE_URL: ${SCHOOL_STUDENT_DB_URL}
+      SPRING_DATASOURCE_USERNAME: ${SCHOOL_STUDENT_DB_USERNAME}
+      SPRING_DATASOURCE_PASSWORD: ${SCHOOL_STUDENT_DB_PASSWORD}
+      STUDENT_SUBSCRIPTION_URL: http://subscription-service:8182
+      STUDENT_SETTINGS_URL: http://school-settings-service:8181
+      STUDENT_ACADEMIC_URL: http://academic-structure-service:8199
+      STUDENT_FEE_URL: http://fee-service:8190
+      STUDENT_FORMS_URL: http://form-builder-service:8183
+
+  staff-service:
+    <<: *jvm-service
+    image: ${IMAGE_PREFIX:-sumanthakur30}/staff-service:${IMAGE_TAG:-1.0.0}
+    environment:
+      <<: *common-env
+      EUREKA_INSTANCE_HOSTNAME: staff-service
+      SERVER_PORT: 8198
+      SCHOOL_STAFF_DB_URL: ${SCHOOL_STAFF_DB_URL}
+      SCHOOL_STAFF_DB_USERNAME: ${SCHOOL_STAFF_DB_USERNAME}
+      SCHOOL_STAFF_DB_PASSWORD: ${SCHOOL_STAFF_DB_PASSWORD}
+      SPRING_DATASOURCE_URL: ${SCHOOL_STAFF_DB_URL}
+      SPRING_DATASOURCE_USERNAME: ${SCHOOL_STAFF_DB_USERNAME}
+      SPRING_DATASOURCE_PASSWORD: ${SCHOOL_STAFF_DB_PASSWORD}
+      STAFF_SUBSCRIPTION_URL: http://subscription-service:8182
+      STAFF_SETTINGS_URL: http://school-settings-service:8181
+      STAFF_FORMS_URL: http://form-builder-service:8183
+
+  academic-structure-service:
+    <<: *jvm-service
+    image: ${IMAGE_PREFIX:-sumanthakur30}/academic-structure-service:${IMAGE_TAG:-1.0.0}
+    environment:
+      <<: *common-env
+      EUREKA_INSTANCE_HOSTNAME: academic-structure-service
+      SERVER_PORT: 8199
+      SCHOOL_ACADEMIC_DB_URL: ${SCHOOL_ACADEMIC_DB_URL}
+      SCHOOL_ACADEMIC_DB_USERNAME: ${SCHOOL_ACADEMIC_DB_USERNAME}
+      SCHOOL_ACADEMIC_DB_PASSWORD: ${SCHOOL_ACADEMIC_DB_PASSWORD}
+      SPRING_DATASOURCE_URL: ${SCHOOL_ACADEMIC_DB_URL}
+      SPRING_DATASOURCE_USERNAME: ${SCHOOL_ACADEMIC_DB_USERNAME}
+      SPRING_DATASOURCE_PASSWORD: ${SCHOOL_ACADEMIC_DB_PASSWORD}
+      ACADEMIC_SUBSCRIPTION_URL: http://subscription-service:8182
+      ACADEMIC_SETTINGS_URL: http://school-settings-service:8181
+
+  form-builder-service:
+    <<: *jvm-service
+    image: ${IMAGE_PREFIX:-sumanthakur30}/form-builder-service:${IMAGE_TAG:-1.0.0}
+    environment:
+      <<: *common-env
+      EUREKA_INSTANCE_HOSTNAME: form-builder-service
+      SERVER_PORT: 8183
+      SCHOOL_FORMS_DB_URL: ${SCHOOL_FORMS_DB_URL}
+      SCHOOL_FORMS_DB_USERNAME: ${SCHOOL_FORMS_DB_USERNAME}
+      SCHOOL_FORMS_DB_PASSWORD: ${SCHOOL_FORMS_DB_PASSWORD}
+      SPRING_DATASOURCE_URL: ${SCHOOL_FORMS_DB_URL}
+      SPRING_DATASOURCE_USERNAME: ${SCHOOL_FORMS_DB_USERNAME}
+      SPRING_DATASOURCE_PASSWORD: ${SCHOOL_FORMS_DB_PASSWORD}
+
+  workflow-service:
+    <<: *jvm-service
+    image: ${IMAGE_PREFIX:-sumanthakur30}/workflow-service:${IMAGE_TAG:-1.0.0}
+    environment:
+      <<: *common-env
+      EUREKA_INSTANCE_HOSTNAME: workflow-service
+      SERVER_PORT: 8184
+      SCHOOL_WORKFLOW_DB_URL: ${SCHOOL_WORKFLOW_DB_URL}
+      SCHOOL_WORKFLOW_DB_USERNAME: ${SCHOOL_WORKFLOW_DB_USERNAME}
+      SCHOOL_WORKFLOW_DB_PASSWORD: ${SCHOOL_WORKFLOW_DB_PASSWORD}
+      SPRING_DATASOURCE_URL: ${SCHOOL_WORKFLOW_DB_URL}
+      SPRING_DATASOURCE_USERNAME: ${SCHOOL_WORKFLOW_DB_USERNAME}
+      SPRING_DATASOURCE_PASSWORD: ${SCHOOL_WORKFLOW_DB_PASSWORD}
+
+  payroll-service:
+    <<: *jvm-service
+    image: ${IMAGE_PREFIX:-sumanthakur30}/payroll-service:${IMAGE_TAG:-1.0.0}
+    environment:
+      <<: *common-env
+      EUREKA_INSTANCE_HOSTNAME: payroll-service
+      SERVER_PORT: 8197
+      SCHOOL_PAYROLL_DB_URL: ${SCHOOL_PAYROLL_DB_URL}
+      SCHOOL_PAYROLL_DB_USERNAME: ${SCHOOL_PAYROLL_DB_USERNAME}
+      SCHOOL_PAYROLL_DB_PASSWORD: ${SCHOOL_PAYROLL_DB_PASSWORD}
+      SPRING_DATASOURCE_URL: ${SCHOOL_PAYROLL_DB_URL}
+      SPRING_DATASOURCE_USERNAME: ${SCHOOL_PAYROLL_DB_USERNAME}
+      SPRING_DATASOURCE_PASSWORD: ${SCHOOL_PAYROLL_DB_PASSWORD}
+      PAYROLL_SUBSCRIPTION_URL: http://subscription-service:8182
+      PAYROLL_SETTINGS_URL: http://school-settings-service:8181
+      PAYROLL_FORMS_URL: http://form-builder-service:8183
+      PAYROLL_WORKFLOWS_URL: http://workflow-service:8184
+      PAYROLL_PUBLIC_API_URL: http://gateway-service:9090
+
+  attendance-service:
+    <<: *jvm-service
+    image: ${IMAGE_PREFIX:-sumanthakur30}/attendance-service:${IMAGE_TAG:-1.0.0}
+    environment:
+      <<: *common-env
+      EUREKA_INSTANCE_HOSTNAME: attendance-service
+      SERVER_PORT: 8192
+      SCHOOL_ATTENDANCE_DB_URL: ${SCHOOL_ATTENDANCE_DB_URL}
+      SCHOOL_ATTENDANCE_DB_USERNAME: ${SCHOOL_ATTENDANCE_DB_USERNAME}
+      SCHOOL_ATTENDANCE_DB_PASSWORD: ${SCHOOL_ATTENDANCE_DB_PASSWORD}
+      SPRING_DATASOURCE_URL: ${SCHOOL_ATTENDANCE_DB_URL}
+      SPRING_DATASOURCE_USERNAME: ${SCHOOL_ATTENDANCE_DB_USERNAME}
+      SPRING_DATASOURCE_PASSWORD: ${SCHOOL_ATTENDANCE_DB_PASSWORD}
+      ATTENDANCE_SUBSCRIPTION_URL: http://subscription-service:8182
+      ATTENDANCE_SETTINGS_URL: http://school-settings-service:8181
+      ATTENDANCE_FORMS_URL: http://form-builder-service:8183
+      ATTENDANCE_WORKFLOWS_URL: http://workflow-service:8184
+      ATTENDANCE_STUDENT_URL: http://student-service:8191
+      ATTENDANCE_ACADEMIC_URL: http://academic-structure-service:8199
+      ATTENDANCE_PUBLIC_API_URL: http://gateway-service:9090
+      # Cap pool so RDS does not run out of slots
+      ATTENDANCE_DB_POOL_MAX_SIZE: ${ATTENDANCE_DB_POOL_MAX_SIZE:-5}
+      ATTENDANCE_DB_POOL_MIN_IDLE: ${ATTENDANCE_DB_POOL_MIN_IDLE:-0}
+
+  exam-service:
+    <<: *jvm-service
+    image: ${IMAGE_PREFIX:-sumanthakur30}/exam-service:${IMAGE_TAG:-1.0.0}
+    environment:
+      <<: *common-env
+      EUREKA_INSTANCE_HOSTNAME: exam-service
+      SERVER_PORT: 8193
+      SCHOOL_EXAM_DB_URL: ${SCHOOL_EXAM_DB_URL}
+      SCHOOL_EXAM_DB_USERNAME: ${SCHOOL_EXAM_DB_USERNAME}
+      SCHOOL_EXAM_DB_PASSWORD: ${SCHOOL_EXAM_DB_PASSWORD}
+      SPRING_DATASOURCE_URL: ${SCHOOL_EXAM_DB_URL}
+      SPRING_DATASOURCE_USERNAME: ${SCHOOL_EXAM_DB_USERNAME}
+      SPRING_DATASOURCE_PASSWORD: ${SCHOOL_EXAM_DB_PASSWORD}
+      EXAM_SUBSCRIPTION_URL: http://subscription-service:8182
+      EXAM_SETTINGS_URL: http://school-settings-service:8181
+      EXAM_FORMS_URL: http://form-builder-service:8183
+      EXAM_WORKFLOWS_URL: http://workflow-service:8184
+      EXAM_STUDENT_URL: http://student-service:8191
+      EXAM_ACADEMIC_URL: http://academic-structure-service:8199
+      EXAM_PUBLIC_API_URL: http://gateway-service:9090
+      EXAM_DB_POOL_MAX_SIZE: ${EXAM_DB_POOL_MAX_SIZE:-5}
+      EXAM_DB_POOL_MIN_IDLE: ${EXAM_DB_POOL_MIN_IDLE:-0}
+
+  library-service:
+    <<: *jvm-service
+    image: ${IMAGE_PREFIX:-sumanthakur30}/library-service:${IMAGE_TAG:-1.0.0}
+    environment:
+      <<: *common-env
+      EUREKA_INSTANCE_HOSTNAME: library-service
+      SERVER_PORT: 8194
+      SCHOOL_LIBRARY_DB_URL: ${SCHOOL_LIBRARY_DB_URL}
+      SCHOOL_LIBRARY_DB_USERNAME: ${SCHOOL_LIBRARY_DB_USERNAME}
+      SCHOOL_LIBRARY_DB_PASSWORD: ${SCHOOL_LIBRARY_DB_PASSWORD}
+      SPRING_DATASOURCE_URL: ${SCHOOL_LIBRARY_DB_URL}
+      SPRING_DATASOURCE_USERNAME: ${SCHOOL_LIBRARY_DB_USERNAME}
+      SPRING_DATASOURCE_PASSWORD: ${SCHOOL_LIBRARY_DB_PASSWORD}
+      LIBRARY_SUBSCRIPTION_URL: http://subscription-service:8182
+      LIBRARY_SETTINGS_URL: http://school-settings-service:8181
+      LIBRARY_FORMS_URL: http://form-builder-service:8183
+      LIBRARY_WORKFLOWS_URL: http://workflow-service:8184
+      LIBRARY_PUBLIC_API_URL: http://gateway-service:9090
+      DB_POOL_MAX_SIZE: ${DB_POOL_MAX_SIZE:-5}
+      DB_POOL_MIN_IDLE: ${DB_POOL_MIN_IDLE:-0}
+
+  hostel-service:
+    <<: *jvm-service
+    image: ${IMAGE_PREFIX:-sumanthakur30}/hostel-service:${IMAGE_TAG:-1.0.0}
+    environment:
+      <<: *common-env
+      EUREKA_INSTANCE_HOSTNAME: hostel-service
+      SERVER_PORT: 8195
+      SCHOOL_HOSTEL_DB_URL: ${SCHOOL_HOSTEL_DB_URL}
+      SCHOOL_HOSTEL_DB_USERNAME: ${SCHOOL_HOSTEL_DB_USERNAME}
+      SCHOOL_HOSTEL_DB_PASSWORD: ${SCHOOL_HOSTEL_DB_PASSWORD}
+      SPRING_DATASOURCE_URL: ${SCHOOL_HOSTEL_DB_URL}
+      SPRING_DATASOURCE_USERNAME: ${SCHOOL_HOSTEL_DB_USERNAME}
+      SPRING_DATASOURCE_PASSWORD: ${SCHOOL_HOSTEL_DB_PASSWORD}
+      HOSTEL_SUBSCRIPTION_URL: http://subscription-service:8182
+      HOSTEL_SETTINGS_URL: http://school-settings-service:8181
+      HOSTEL_FORMS_URL: http://form-builder-service:8183
+      HOSTEL_WORKFLOWS_URL: http://workflow-service:8184
+      HOSTEL_PUBLIC_API_URL: http://gateway-service:9090
+      DB_POOL_MAX_SIZE: ${DB_POOL_MAX_SIZE:-5}
+      DB_POOL_MIN_IDLE: ${DB_POOL_MIN_IDLE:-0}
+
+  transport-service:
+    <<: *jvm-service
+    image: ${IMAGE_PREFIX:-sumanthakur30}/transport-service:${IMAGE_TAG:-1.0.0}
+    environment:
+      <<: *common-env
+      EUREKA_INSTANCE_HOSTNAME: transport-service
+      SERVER_PORT: 8196
+      SCHOOL_TRANSPORT_DB_URL: ${SCHOOL_TRANSPORT_DB_URL}
+      SCHOOL_TRANSPORT_DB_USERNAME: ${SCHOOL_TRANSPORT_DB_USERNAME}
+      SCHOOL_TRANSPORT_DB_PASSWORD: ${SCHOOL_TRANSPORT_DB_PASSWORD}
+      SPRING_DATASOURCE_URL: ${SCHOOL_TRANSPORT_DB_URL}
+      SPRING_DATASOURCE_USERNAME: ${SCHOOL_TRANSPORT_DB_USERNAME}
+      SPRING_DATASOURCE_PASSWORD: ${SCHOOL_TRANSPORT_DB_PASSWORD}
+      TRANSPORT_SUBSCRIPTION_URL: http://subscription-service:8182
+      TRANSPORT_SETTINGS_URL: http://school-settings-service:8181
+      TRANSPORT_FORMS_URL: http://form-builder-service:8183
+      TRANSPORT_WORKFLOWS_URL: http://workflow-service:8184
+      TRANSPORT_PUBLIC_API_URL: http://gateway-service:9090
+      DB_POOL_MAX_SIZE: ${DB_POOL_MAX_SIZE:-5}
+      DB_POOL_MIN_IDLE: ${DB_POOL_MIN_IDLE:-0}
+
+  school-notification-config-service:
+    <<: *jvm-service
+    image: ${IMAGE_PREFIX:-sumanthakur30}/school-notification-config-service:${IMAGE_TAG:-1.0.0}
+    environment:
+      <<: *common-env
+      EUREKA_INSTANCE_HOSTNAME: school-notification-config-service
+      SERVER_PORT: 8187
+      SCHOOL_NOTIF_CFG_DB_URL: ${SCHOOL_NOTIF_CFG_DB_URL}
+      SCHOOL_NOTIF_CFG_DB_USERNAME: ${SCHOOL_NOTIF_CFG_DB_USERNAME}
+      SCHOOL_NOTIF_CFG_DB_PASSWORD: ${SCHOOL_NOTIF_CFG_DB_PASSWORD}
+      SPRING_DATASOURCE_URL: ${SCHOOL_NOTIF_CFG_DB_URL}
+      SPRING_DATASOURCE_USERNAME: ${SCHOOL_NOTIF_CFG_DB_USERNAME}
+      SPRING_DATASOURCE_PASSWORD: ${SCHOOL_NOTIF_CFG_DB_PASSWORD}
+      SCHOOL_STUDENT_BASE_URL: http://student-service:8191
+      NOTIFICATION_DELIVERY_BASE_URL: http://notification-service:8087
+      DB_POOL_MAX_SIZE: ${DB_POOL_MAX_SIZE:-5}
+      DB_POOL_MIN_IDLE: ${DB_POOL_MIN_IDLE:-0}

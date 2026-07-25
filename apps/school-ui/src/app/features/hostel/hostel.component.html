@@ -436,9 +436,10 @@
           <label>
             Select bed
             <select
-              [(ngModel)]="workflowBedId"
+              [ngModel]="workflowBedId"
               name="workflowBedId"
               (ngModelChange)="onWorkflowBedSelected($event)"
+              (change)="onWorkflowBedSelected($any($event.target).value)"
             >
               <option value="">Select a vacant bed… ({{ vacantBeds.length }} available)</option>
               @for (b of vacantBeds; track b.id) {
@@ -499,7 +500,7 @@
           }
         </div>
         <div class="actions">
-          <button type="button" (click)="submit()" [disabled]="submitting || !workflowStudent">
+          <button type="button" (click)="submit()" [disabled]="submitting || !canSubmitWorkflow">
             {{ submitting ? 'Submitting…' : 'Submit request' }}
           </button>
         </div>

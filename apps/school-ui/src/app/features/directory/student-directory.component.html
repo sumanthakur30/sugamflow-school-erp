@@ -16,6 +16,7 @@
         {{ trashMode ? 'Exit trash' : 'Trash' }}
       </button>
       <button type="button" class="secondary" (click)="exportCsv()">Export CSV</button>
+      <button type="button" class="secondary" (click)="exportExcel()">Export Excel</button>
     </div>
   </header>
 
@@ -297,17 +298,48 @@
                 @for (col of displayColumns; track col.key) {
                   @if (isNameKey(col.key)) {
                     <td class="col-student">
-                      <a
-                        class="student-name"
-                        [routerLink]="['/admin/students']"
-                        [queryParams]="{ id: row.id }"
-                        [title]="'Open profile for ' + displayName(row)"
-                      >
-                        {{ displayName(row) }}
-                      </a>
-                      <div class="student-sub">{{ cell(row, 'admissionNo') }}</div>
-                      @if (row.deleteReason) {
-                        <div class="student-sub delete-reason">{{ row.deleteReason }}</div>
+                      <div class="student-identity">
+                        @if (row.photoUrl) {
+                          <img
+                            class="student-avatar"
+                            [src]="row.photoUrl"
+                            alt=""
+                            width="36"
+                            height="36"
+                          />
+                        } @else {
+                          <span class="student-avatar placeholder" aria-hidden="true">
+                            {{ displayName(row).charAt(0) || '?' }}
+                          </span>
+                        }
+                        <div class="student-identity-text">
+                          <a
+                            class="student-name"
+                            [routerLink]="['/admin/students']"
+                            [queryParams]="{ id: row.id }"
+                            [title]="'Open profile for ' + displayName(row)"
+                          >
+                            {{ displayName(row) }}
+                          </a>
+                          <div class="student-sub">{{ cell(row, 'admissionNo') }}</div>
+                          @if (row.deleteReason) {
+                            <div class="student-sub delete-reason">{{ row.deleteReason }}</div>
+                          }
+                        </div>
+                      </div>
+                    </td>
+                  } @else if (col.key === 'photoUrl') {
+                    <td class="col-photo">
+                      @if (row.photoUrl) {
+                        <img
+                          class="student-avatar"
+                          [src]="row.photoUrl"
+                          alt=""
+                          width="36"
+                          height="36"
+                        />
+                      } @else {
+                        <span class="muted">—</span>
                       }
                     </td>
                   } @else if (col.key === 'status') {

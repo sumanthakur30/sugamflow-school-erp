@@ -138,6 +138,10 @@ public final class ReportElementCatalog {
     student.put("name", "Priya Nair");
     student.put("admissionNo", "ADM-1001");
     student.put("classApplied", "Grade 8");
+    student.put("classSection", "Grade 8-A");
+    student.put("penNumber", "PEN1234567");
+    student.put("apaarId", "APAAR-998877");
+    student.put("photoBase64", "");
     Map<String, Object> application = new LinkedHashMap<>();
     application.put("fullName", "Priya Nair");
     application.put("classApplied", "Grade 8");

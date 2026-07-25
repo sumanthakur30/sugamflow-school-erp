@@ -1,22 +1,12 @@
-# Phase A — School ERP on the SAME EC2 / Docker network as SugamFlow.
+# Phase A — School ERP (legacy filename).
 #
-# Target host: sugamflows (m7i-flex.xlarge, 16 GiB) — do NOT start all 19 services yet.
-# Phase A services: settings, subscription, admission, fee, student, staff, academic-structure.
+# Prefer school-specific names (do not clash with SugamFlow on EC2):
+#   docker-compose.school.ec2-rds.yml
+#   .env.school.production   (from .env.school.production.example)
 #
-# Prerequisites:
-#   1) SugamFlow stack already up via docker-compose.ec2-rds.yml (project name: sumanthakur30)
-#   2) RDS school_* databases created (see infra/postgres/01-create-school-databases-simple.sql)
-#   3) Images pushed: ${IMAGE_PREFIX}/<module>:${SCHOOL_IMAGE_TAG}
-#   4) .env.school.phase-a filled from .env.school.phase-a.example (use *_DB_USERNAME)
+#   docker compose -f docker-compose.school.ec2-rds.yml --env-file .env.school.production up -d
 #
-# Usage on EC2 (from a checkout of D:\school or copied compose files):
-#   docker network ls | grep sumanthakur30
-#   docker compose -f docker-compose.ec2-phase-a.yml --env-file .env.school.phase-a pull
-#   docker compose -f docker-compose.ec2-phase-a.yml --env-file .env.school.phase-a up -d
-#
-# Verify:
-#   docker exec -it <discovery> wget -qO- http://localhost:8761/eureka/apps | head
-#   curl -sS https://YOUR_HOST/api/student/...  (via existing gateway :9090)
+# See: EC2-FILES-TO-COPY.txt and docs/EC2_SCHOOL_PHASE_A_FOLLOW_ALONG.md
 
 name: school-phase-a
 

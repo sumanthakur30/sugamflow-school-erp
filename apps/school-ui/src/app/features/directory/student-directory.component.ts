@@ -96,6 +96,10 @@ export class StudentDirectoryComponent implements OnInit {
       if (c.key === 'admissionNo' && hasName) {
         return false;
       }
+      // Photo renders as avatar beside the name.
+      if (c.key === 'photoUrl' && hasName) {
+        return false;
+      }
       // Prefer fullName over duplicate studentName.
       if (c.key === 'studentName' && cols.some((x) => x.key === 'fullName')) {
         return false;
@@ -570,6 +574,39 @@ export class StudentDirectoryComponent implements OnInit {
         URL.revokeObjectURL(url);
       },
       error: (err) => (this.error = err?.error?.message ?? 'Export failed'),
+    });
+  }
+
+  exportExcel(): void {
+    const qs = new URLSearchParams();
+    const filters = this.filterParams();
+    for (const [k, v] of Object.entries(filters)) {
+      if (v !== null && v !== undefined && v !== '') {
+        qs.set(k, String(v));
+      }
+    }
+    qs.set('format', 'EXCEL');
+    this.api.get<any>(`/api/student/directory/export?${qs.toString()}`).subscribe({
+      next: (res) => {
+        const b64 = String(res?.contentBase64 || '');
+        if (!b64) {
+          this.error = 'Excel export returned empty content';
+          return;
+        }
+        const bin = atob(b64);
+        const bytes = new Uint8Array(bin.length);
+        for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+        const blob = new Blob([bytes], {
+          type: res.contentType || 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = res.fileName || 'student-directory.xlsx';
+        a.click();
+        URL.revokeObjectURL(url);
+      },
+      error: (err) => (this.error = err?.error?.message ?? 'Excel export failed'),
     });
   }
 

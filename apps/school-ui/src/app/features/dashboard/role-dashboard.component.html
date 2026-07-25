@@ -23,7 +23,12 @@
   } @else {
     <section class="metric-grid" aria-label="Role metrics">
       @for (metric of metrics; track metric.id) {
-        <a class="panel metric-card" [class]="'panel metric-card tone-' + metric.tone" [routerLink]="metric.route">
+        <a
+          class="panel metric-card"
+          [class]="'panel metric-card tone-' + metric.tone"
+          [routerLink]="metric.route"
+          [queryParams]="metric.queryParams || {}"
+        >
           <span class="metric-label">{{ metric.label }}</span>
           <strong>{{ metric.value }}</strong>
           <span class="metric-hint">{{ metric.hint }}</span>
@@ -41,7 +46,7 @@
         </div>
         <div class="action-grid">
           @for (action of actions; track action.route + action.label) {
-            <a class="action-card" [routerLink]="action.route">
+            <a class="action-card" [routerLink]="action.route" [queryParams]="action.queryParams || {}">
               <strong>{{ action.label }}</strong>
               <span>{{ action.description }}</span>
               <span class="action-arrow" aria-hidden="true">→</span>
@@ -61,9 +66,9 @@
           <p class="muted">Nothing needs attention right now.</p>
         } @else {
           <ul class="activity-list">
-            @for (item of activity; track item.route + item.label) {
+            @for (item of activity; track item.route + item.label + (item.queryParams?.['id'] || '')) {
               <li>
-                <a [routerLink]="item.route">
+                <a [routerLink]="item.route" [queryParams]="item.queryParams || {}">
                   <span>{{ item.label }}</span>
                   <strong>{{ item.value }}</strong>
                 </a>

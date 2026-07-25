@@ -43,6 +43,14 @@ public class AdmissionController {
     return ApiResponse.ok(service.list(page, size, q, status, sortBy, sortDir));
   }
 
+  @GetMapping("/register")
+  public ApiResponse<Map<String, Object>> register(
+      @RequestParam(required = false) String status,
+      @RequestParam(required = false) String q,
+      @RequestParam(name = "format", defaultValue = "PDF") String format) {
+    return ApiResponse.ok(service.registerExport(status, q, format));
+  }
+
   @GetMapping("/applications/{id}")
   public ApiResponse<Map<String, Object>> get(@PathVariable("id") UUID id) {
     return ApiResponse.ok(service.get(id));

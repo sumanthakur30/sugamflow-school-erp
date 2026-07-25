@@ -30,12 +30,57 @@
     <p class="panel">Staff Directory requires FEATURE_STAFF_MASTER.</p>
   } @else {
     @if (!showForm) {
-      <section class="panel summary-strip">
-      <div class="stat"><span>Total</span><strong>{{ summary['total'] ?? 0 }}</strong></div>
-      <div class="stat"><span>Active</span><strong>{{ summary['active'] ?? 0 }}</strong></div>
-      <div class="stat"><span>Teachers</span><strong>{{ summary['teachers'] ?? 0 }}</strong></div>
-      <div class="stat"><span>Non-teaching</span><strong>{{ summary['nonTeaching'] ?? 0 }}</strong></div>
-      <div class="stat"><span>New (30d)</span><strong>{{ summary['newJoinings'] ?? 0 }}</strong></div>
+      <section class="panel summary-strip" aria-label="Staff directory summary">
+        <button
+          type="button"
+          class="stat"
+          [class.active]="activeSummary === 'all'"
+          (click)="applySummaryFilter('all')"
+          title="Show all staff"
+        >
+          <span>Total</span>
+          <strong>{{ summary['total'] ?? 0 }}</strong>
+        </button>
+        <button
+          type="button"
+          class="stat"
+          [class.active]="activeSummary === 'active'"
+          (click)="applySummaryFilter('active')"
+          title="Filter active staff"
+        >
+          <span>Active</span>
+          <strong>{{ summary['active'] ?? 0 }}</strong>
+        </button>
+        <button
+          type="button"
+          class="stat"
+          [class.active]="activeSummary === 'teachers'"
+          (click)="applySummaryFilter('teachers')"
+          title="Filter teachers / academic roles"
+        >
+          <span>Teachers</span>
+          <strong>{{ summary['teachers'] ?? 0 }}</strong>
+        </button>
+        <button
+          type="button"
+          class="stat"
+          [class.active]="activeSummary === 'nonTeaching'"
+          (click)="applySummaryFilter('nonTeaching')"
+          title="Filter non-teaching staff"
+        >
+          <span>Non-teaching</span>
+          <strong>{{ summary['nonTeaching'] ?? 0 }}</strong>
+        </button>
+        <button
+          type="button"
+          class="stat"
+          [class.active]="activeSummary === 'new'"
+          (click)="applySummaryFilter('new')"
+          title="Joined in the last 30 days"
+        >
+          <span>New (30d)</span>
+          <strong>{{ summary['newJoinings'] ?? 0 }}</strong>
+        </button>
       </section>
 
       <section class="panel filters">

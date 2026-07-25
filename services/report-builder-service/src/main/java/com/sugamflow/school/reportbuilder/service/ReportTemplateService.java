@@ -20,14 +20,17 @@ public class ReportTemplateService {
 
   private final ReportTemplateRepository repo;
   private final ReportPdfRenderService pdfRenderService;
+  private final ReportTabularExportService tabularExportService;
   private final ConfigEngineClient engines;
 
   public ReportTemplateService(
       ReportTemplateRepository repo,
       ReportPdfRenderService pdfRenderService,
+      ReportTabularExportService tabularExportService,
       ConfigEngineClient engines) {
     this.repo = repo;
     this.pdfRenderService = pdfRenderService;
+    this.tabularExportService = tabularExportService;
     this.engines = engines;
   }
 
@@ -114,8 +117,27 @@ public class ReportTemplateService {
       data = ReportElementCatalog.samplePreviewData();
     }
     String format = String.valueOf(body != null ? body.getOrDefault("format", "PDF") : "PDF");
-    if (!"PDF".equalsIgnoreCase(format)) {
-      throw new IllegalArgumentException("Unsupported format: " + format + " (PDF only)");
+    String fmt = format.trim().toUpperCase();
+    boolean registerKey =
+        key != null
+            && (key.endsWith("_register")
+                || "student_directory".equals(key)
+                || "student_profile".equals(key));
+    if (tabularExportService.isTabular(data)
+        && (registerKey || !"PDF".equals(fmt) || "PRINT".equals(fmt))) {
+      // Prefer explicit title from template name when missing.
+      if (!data.containsKey("title") || String.valueOf(data.get("title")).isBlank()) {
+        data = new LinkedHashMap<>(data);
+        data.put("title", String.valueOf(template.getOrDefault("name", key)));
+      }
+      return tabularExportService.export(fmt, data);
+    }
+    if (!"PDF".equals(fmt) && !"PRINT".equals(fmt)) {
+      if (tabularExportService.isTabular(data)) {
+        return tabularExportService.export(fmt, data);
+      }
+      throw new IllegalArgumentException(
+          "Unsupported format: " + format + " (provide data.columns + data.rows for EXCEL/CSV)");
     }
     return pdfRenderService.render(template, data);
   }
@@ -189,6 +211,10 @@ public class ReportTemplateService {
       return;
     }
     ensureTemplate("offer_letter");
+    ensureTemplate("attendance_register");
+    ensureTemplate("admission_register");
+    ensureTemplate("student_directory");
+    ensureTemplate("student_profile");
     ensureFeeReceiptEnriched();
     ensureTransferCertificateEnriched();
     ensureStudentDocumentTemplates();
@@ -254,6 +280,12 @@ public class ReportTemplateService {
     }
     if ("id_card".equals(key)) {
       return idCardTemplate();
+    }
+    if ("attendance_register".equals(key)
+        || "admission_register".equals(key)
+        || "student_directory".equals(key)
+        || "student_profile".equals(key)) {
+      return tabularTemplate(key);
     }
     if ("bonafide".equals(key)) {
       return certificateTemplate(
@@ -497,7 +529,12 @@ public class ReportTemplateService {
         .ifPresentOrElse(
             e -> {
               String payload = String.valueOf(e.getPayload());
-              if (payload.contains(marker) && payload.contains("\"type\":\"qr\"")) {
+              // Refresh when QR/verify marker missing, or id_card still lacks photo slot.
+              boolean hasQr = payload.contains(marker) && payload.contains("\"type\":\"qr\"");
+              boolean needsPhoto =
+                  "id_card".equals(key)
+                      && (!payload.contains("photoBase64") || !payload.contains("penNumber"));
+              if (hasQr && !needsPhoto) {
                 return;
               }
               e.setPayload(canonical);
@@ -524,22 +561,43 @@ public class ReportTemplateService {
         List.of(
             element("heading", "STUDENT IDENTITY CARD", 40, 48, 18, 420, 28),
             element("box", "", 40, 90, 11, 520, 220),
+            element("image", "{{student.photoBase64}}", 400, 110, 11, 120, 140),
             element("text", "Name: {{student.name}}", 60, 110, 12, 300, 24),
             element("text", "Admission No: {{student.admissionNo}}", 60, 140, 11, 300, 24),
             element("text", "Class: {{student.classSection}}", 60, 170, 11, 300, 24),
-            element("text", "Session: {{context.academicSessionId}}", 60, 200, 11, 300, 24),
-            element("text", "Ref: {{document.referenceNo}}", 60, 230, 10, 300, 24),
-            element("qr", "{{context.verifyUrl}}", 420, 120, 11, 120, 120),
-            element("text", "Scan to verify", 420, 250, 9, 120, 20),
+            element("text", "PEN: {{student.penNumber}}", 60, 200, 10, 300, 20),
+            element("text", "APAAR: {{student.apaarId}}", 60, 220, 10, 300, 20),
+            element("text", "Session: {{context.academicSessionId}}", 60, 245, 11, 300, 20),
+            element("text", "Ref: {{document.referenceNo}}", 60, 265, 10, 300, 20),
+            element("qr", "{{context.verifyUrl}}", 420, 270, 11, 100, 100),
+            element("text", "Scan to verify", 420, 380, 9, 120, 20),
             element(
                 "text",
                 "Organization: {{context.organizationId}} · Branch: {{context.branchId}}",
                 40,
-                340,
+                420,
                 10,
                 520,
                 24),
-            element("text", "Issued at {{context.issuedAt}}", 40, 370, 10, 400, 24)));
+            element("text", "Issued at {{context.issuedAt}}", 40, 450, 10, 400, 24)));
+    t.put("charts", List.of());
+    t.put("filters", List.of());
+    t.put("calculatedFields", List.of());
+    t.put("schedule", Map.of("enabled", false, "channels", List.of("EMAIL")));
+    return normalizeTemplate(t);
+  }
+
+  private Map<String, Object> tabularTemplate(String key) {
+    Map<String, Object> t = new LinkedHashMap<>();
+    t.put("templateKey", key);
+    t.put("name", key.replace('_', ' '));
+    t.put("layoutMode", "TABULAR");
+    t.put("layout", Map.of("width", 1123, "height", 794, "units", "px", "paper", "A4-landscape"));
+    t.put(
+        "elements",
+        List.of(
+            element("heading", key.replace('_', ' ').toUpperCase(), 40, 40, 16, 600, 28),
+            element("text", "Tabular register — supply data.columns + data.rows", 40, 80, 10, 600, 24)));
     t.put("charts", List.of());
     t.put("filters", List.of());
     t.put("calculatedFields", List.of());

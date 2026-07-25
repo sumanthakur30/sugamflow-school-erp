@@ -119,6 +119,87 @@ public class AdmissionApplicationService {
         result.map(this::toDto).getContent(), pq.page(), pq.size(), result.getTotalElements());
   }
 
+  /** Admission register export (PDF/Excel/CSV) — columns are config-friendly answer keys. */
+  @Transactional(readOnly = true)
+  public Map<String, Object> registerExport(String status, String q, String format) {
+    TenantScope scope = TenantContext.require();
+    requireFeature(scope);
+    PageResult<Map<String, Object>> page = list(0, 500, q, status, "updatedAt", "DESC");
+    List<Map<String, Object>> columns =
+        List.of(
+            Map.of("key", "fullName", "label", "Applicant"),
+            Map.of("key", "mobile", "label", "Mobile"),
+            Map.of("key", "classApplied", "label", "Class"),
+            Map.of("key", "classGrade", "label", "Grade"),
+            Map.of("key", "sectionLetter", "label", "Section"),
+            Map.of("key", "penNumber", "label", "PEN"),
+            Map.of("key", "apaarId", "label", "APAAR"),
+            Map.of("key", "samagraId", "label", "Samagra"),
+            Map.of("key", "schoolStudentId", "label", "School Student ID"),
+            Map.of("key", "status", "label", "Status"),
+            Map.of("key", "createdAt", "label", "Applied On"),
+            Map.of("key", "email", "label", "Email"));
+    List<Map<String, Object>> rows = new ArrayList<>();
+    for (Map<String, Object> app : page.items()) {
+      @SuppressWarnings("unchecked")
+      Map<String, Object> answers =
+          app.get("answers") instanceof Map<?, ?> m
+              ? new LinkedHashMap<>((Map<String, Object>) m)
+              : Map.of();
+      Map<String, Object> row = new LinkedHashMap<>();
+      row.put("fullName", firstNonBlank(str(answers.get("fullName")), str(app.get("fullName"))));
+      row.put("mobile", firstNonBlank(str(answers.get("mobile")), str(app.get("mobile"))));
+      row.put(
+          "classApplied",
+          firstNonBlank(str(answers.get("classApplied")), str(app.get("classApplied"))));
+      row.put(
+          "classGrade",
+          firstNonBlank(str(answers.get("classGrade")), str(answers.get("grade"))));
+      row.put(
+          "sectionLetter",
+          firstNonBlank(
+              str(answers.get("sectionLetter")),
+              firstNonBlank(str(answers.get("section")), str(answers.get("sectionName")))));
+      row.put("penNumber", str(answers.get("penNumber")));
+      row.put(
+          "apaarId",
+          firstNonBlank(str(answers.get("apaarId")), str(answers.get("apaarNumber"))));
+      row.put("samagraId", str(answers.get("samagraId")));
+      row.put("schoolStudentId", str(answers.get("schoolStudentId")));
+      row.put("status", str(app.get("status")));
+      row.put("createdAt", str(app.get("createdAt")));
+      row.put("email", firstNonBlank(str(answers.get("email")), str(app.get("email"))));
+      rows.add(row);
+    }
+    Map<String, Object> data = new LinkedHashMap<>();
+    data.put("title", "Admission Register");
+    data.put(
+        "subtitle",
+        "Org "
+            + scope.organizationId()
+            + (status != null && !status.isBlank() ? " · Status " + status : "")
+            + " · "
+            + rows.size()
+            + " rows");
+    data.put("columns", columns);
+    data.put("rows", rows);
+    Map<String, Object> rendered =
+        engines.renderReport(scope, "admission_register", data, format == null ? "PDF" : format);
+    if (rendered == null || rendered.get("contentBase64") == null) {
+      throw new AdmissionException("RENDER_FAILED", "Admission register render returned no content");
+    }
+    return rendered;
+  }
+
+  private static String str(Object v) {
+    return v == null ? "" : String.valueOf(v).trim();
+  }
+
+  private static String firstNonBlank(String a, String b) {
+    if (a != null && !a.isBlank()) return a;
+    return b == null ? "" : b;
+  }
+
   @Transactional(readOnly = true)
   public Map<String, Object> get(UUID id) {
     TenantScope scope = TenantContext.require();

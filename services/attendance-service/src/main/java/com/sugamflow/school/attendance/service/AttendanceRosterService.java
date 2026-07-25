@@ -1,6 +1,7 @@
 package com.sugamflow.school.attendance.service;
 
 import com.sugamflow.school.attendance.integration.AcademicClient;
+import com.sugamflow.school.attendance.integration.ConfigEngineClient;
 import com.sugamflow.school.attendance.integration.StudentAccessClient;
 import com.sugamflow.school.attendance.integration.StudentDirectoryClient;
 import com.sugamflow.school.attendance.persistence.entity.AttendanceMarkEntity;
@@ -37,6 +38,7 @@ public class AttendanceRosterService {
   private final AcademicClient academic;
   private final StudentAccessClient studentAccess;
   private final AttendanceAlertService alerts;
+  private final ConfigEngineClient engines;
 
   public AttendanceRosterService(
       AttendanceSessionRepository sessions,
@@ -44,13 +46,15 @@ public class AttendanceRosterService {
       StudentDirectoryClient directory,
       AcademicClient academic,
       StudentAccessClient studentAccess,
-      AttendanceAlertService alerts) {
+      AttendanceAlertService alerts,
+      ConfigEngineClient engines) {
     this.sessions = sessions;
     this.marks = marks;
     this.directory = directory;
     this.academic = academic;
     this.studentAccess = studentAccess;
     this.alerts = alerts;
+    this.engines = engines;
   }
 
   @Transactional(readOnly = true)
@@ -100,6 +104,7 @@ public class AttendanceRosterService {
           "studentName",
           firstNonBlank(asString(row.get("fullName")), asString(row.get("studentName")), admission));
       out.put("classSection", firstNonBlank(asString(row.get("classSection")), label));
+      out.put("photoUrl", asString(row.get("photoUrl")));
       out.put("markStatus", existing == null ? null : existing.getStatus());
       out.put("remark", existing == null ? null : existing.getRemark());
       students.add(out);
@@ -113,6 +118,58 @@ public class AttendanceRosterService {
     result.put("session", session == null ? null : sessionToMap(session));
     result.put("students", students);
     return result;
+  }
+
+  /** Printable class attendance register (PDF/Excel/CSV via report-builder tabular export). */
+  @Transactional(readOnly = true)
+  public Map<String, Object> registerExport(
+      UUID sectionId, LocalDate date, UUID periodId, String format) {
+    TenantScope scope = TenantContext.require();
+    Map<String, Object> roster = roster(sectionId, date, periodId);
+    List<Map<String, Object>> columns =
+        List.of(
+            Map.of("key", "admissionNo", "label", "Admission No"),
+            Map.of("key", "studentName", "label", "Student Name"),
+            Map.of("key", "classSection", "label", "Class"),
+            Map.of("key", "markStatus", "label", "Status"),
+            Map.of("key", "remark", "label", "Remark"));
+    @SuppressWarnings("unchecked")
+    List<Map<String, Object>> students =
+        roster.get("students") instanceof List<?> list
+            ? (List<Map<String, Object>>) list
+            : List.of();
+    List<Map<String, Object>> rows = new ArrayList<>();
+    for (Map<String, Object> s : students) {
+      Map<String, Object> row = new LinkedHashMap<>();
+      row.put("admissionNo", s.get("admissionNo"));
+      row.put("studentName", s.get("studentName"));
+      row.put("classSection", s.get("classSection"));
+      row.put("markStatus", s.get("markStatus") == null ? "" : s.get("markStatus"));
+      row.put("remark", s.get("remark") == null ? "" : s.get("remark"));
+      rows.add(row);
+    }
+    Map<String, Object> data = new LinkedHashMap<>();
+    data.put("title", "Attendance Register");
+    data.put(
+        "subtitle",
+        stringOr(roster.get("sectionLabel"), "")
+            + " · "
+            + date
+            + (periodId != null ? " · Period " + periodId : ""));
+    data.put("columns", columns);
+    data.put("rows", rows);
+    Map<String, Object> rendered =
+        engines.renderReport(scope, "attendance_register", data, format == null ? "PDF" : format);
+    if (rendered == null || rendered.get("contentBase64") == null) {
+      throw new AttendanceException("RENDER_FAILED", "Attendance register render returned no content");
+    }
+    return rendered;
+  }
+
+  private static String stringOr(Object v, String fallback) {
+    if (v == null) return fallback;
+    String s = String.valueOf(v).trim();
+    return s.isEmpty() ? fallback : s;
   }
 
   @Transactional

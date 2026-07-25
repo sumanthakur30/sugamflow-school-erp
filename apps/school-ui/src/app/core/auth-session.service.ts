@@ -2,6 +2,15 @@ import { Injectable, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { BehaviorSubject, Observable, tap } from 'rxjs';
 import { environment } from '../environments/environment';
+import {
+  SESSION_ACADEMIC_KEY,
+  SESSION_BRANCH_KEY,
+  SESSION_DATA_KEY,
+  SESSION_ROLE_KEY,
+  SESSION_TENANT_KEY,
+  SESSION_TOKEN_KEY,
+  SESSION_USER_KEY,
+} from './session-keys';
 
 export interface AuthResponse {
   accountId?: number | null;
@@ -28,9 +37,6 @@ interface JwtPayload {
   exp?: number;
 }
 
-const TOKEN_KEY = 'sf.accessToken';
-const SESSION_KEY = 'sf.session';
-
 @Injectable({ providedIn: 'root' })
 export class AuthSessionService {
   private readonly http = inject(HttpClient);
@@ -50,13 +56,13 @@ export class AuthSessionService {
   }
 
   logout(): void {
-    localStorage.removeItem(TOKEN_KEY);
-    localStorage.removeItem(SESSION_KEY);
-    localStorage.removeItem('sf.tenantId');
-    localStorage.removeItem('sf.branchId');
-    localStorage.removeItem('sf.sessionId');
-    localStorage.removeItem('sf.userId');
-    localStorage.removeItem('sf.role');
+    localStorage.removeItem(SESSION_TOKEN_KEY);
+    localStorage.removeItem(SESSION_DATA_KEY);
+    localStorage.removeItem(SESSION_TENANT_KEY);
+    localStorage.removeItem(SESSION_BRANCH_KEY);
+    localStorage.removeItem(SESSION_ACADEMIC_KEY);
+    localStorage.removeItem(SESSION_USER_KEY);
+    localStorage.removeItem(SESSION_ROLE_KEY);
     this.loggedIn.next(false);
   }
 
@@ -65,11 +71,11 @@ export class AuthSessionService {
   }
 
   getAccessToken(): string | null {
-    return localStorage.getItem(TOKEN_KEY);
+    return localStorage.getItem(SESSION_TOKEN_KEY);
   }
 
   getSession(): AuthResponse | null {
-    const raw = localStorage.getItem(SESSION_KEY);
+    const raw = localStorage.getItem(SESSION_DATA_KEY);
     if (!raw) {
       return null;
     }
@@ -81,52 +87,52 @@ export class AuthSessionService {
   }
 
   getRole(): string | null {
-    return localStorage.getItem('sf.role') ?? this.getSession()?.role ?? this.decodeToken()?.role ?? null;
+    return localStorage.getItem(SESSION_ROLE_KEY) ?? this.getSession()?.role ?? this.decodeToken()?.role ?? null;
   }
 
   /** Override role header for portal experiences (PARENT / TEACHER) without re-login. */
   setActiveRole(role: string): void {
     if (role && role.trim()) {
-      localStorage.setItem('sf.role', role.trim().toUpperCase());
+      localStorage.setItem(SESSION_ROLE_KEY, role.trim().toUpperCase());
     }
   }
 
   /** Organization slug for school APIs (maps from auth shopId). */
   getOrganizationId(): string {
-    return localStorage.getItem('sf.tenantId') ?? this.getSession()?.shopId ?? 'demo-school';
+    return localStorage.getItem(SESSION_TENANT_KEY) ?? this.getSession()?.shopId ?? 'demo-school';
   }
 
   getBranchId(): string {
-    return localStorage.getItem('sf.branchId') ?? 'main';
+    return localStorage.getItem(SESSION_BRANCH_KEY) ?? 'main';
   }
 
   setBranchId(branchKey: string): void {
     const key = (branchKey || 'main').trim();
-    localStorage.setItem('sf.branchId', key || 'main');
+    localStorage.setItem(SESSION_BRANCH_KEY, key || 'main');
   }
 
   getSessionId(): string {
-    return localStorage.getItem('sf.sessionId') ?? '2025-26';
+    return localStorage.getItem(SESSION_ACADEMIC_KEY) ?? '2025-26';
   }
 
   setSessionId(sessionId: string): void {
-    localStorage.setItem('sf.sessionId', (sessionId || '2025-26').trim());
+    localStorage.setItem(SESSION_ACADEMIC_KEY, (sessionId || '2025-26').trim());
   }
 
   applySessionContext(response: AuthResponse): void {
-    const previousOrg = localStorage.getItem('sf.tenantId');
+    const previousOrg = localStorage.getItem(SESSION_TENANT_KEY);
     const nextOrg = response.shopId;
-    localStorage.setItem('sf.tenantId', nextOrg);
+    localStorage.setItem(SESSION_TENANT_KEY, nextOrg);
     // Never carry campus/session from another school into a newly registered org.
     if (!previousOrg || previousOrg !== nextOrg) {
-      localStorage.setItem('sf.branchId', 'main');
-      localStorage.setItem('sf.sessionId', '2025-26');
+      localStorage.setItem(SESSION_BRANCH_KEY, 'main');
+      localStorage.setItem(SESSION_ACADEMIC_KEY, '2025-26');
     } else {
-      localStorage.setItem('sf.branchId', localStorage.getItem('sf.branchId') ?? 'main');
-      localStorage.setItem('sf.sessionId', localStorage.getItem('sf.sessionId') ?? '2025-26');
+      localStorage.setItem(SESSION_BRANCH_KEY, localStorage.getItem(SESSION_BRANCH_KEY) ?? 'main');
+      localStorage.setItem(SESSION_ACADEMIC_KEY, localStorage.getItem(SESSION_ACADEMIC_KEY) ?? '2025-26');
     }
-    localStorage.setItem('sf.userId', response.username);
-    localStorage.setItem('sf.role', response.role);
+    localStorage.setItem(SESSION_USER_KEY, response.username);
+    localStorage.setItem(SESSION_ROLE_KEY, response.role);
   }
 
   toScopedUsername(baseUsername: string, shopId: string): string {
@@ -144,8 +150,8 @@ export class AuthSessionService {
     if (!token) {
       return;
     }
-    localStorage.setItem(TOKEN_KEY, token);
-    localStorage.setItem(SESSION_KEY, JSON.stringify(response));
+    localStorage.setItem(SESSION_TOKEN_KEY, token);
+    localStorage.setItem(SESSION_DATA_KEY, JSON.stringify(response));
     this.applySessionContext(response);
     this.loggedIn.next(true);
   }

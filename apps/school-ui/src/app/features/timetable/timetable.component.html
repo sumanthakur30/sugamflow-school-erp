@@ -185,7 +185,7 @@
               (ngModelChange)="onSectionChange()"
             >
               <option value="">Choose a class to build its timetable…</option>
-              @for (s of sections; track s.id) {
+              @for (s of selectableSections(); track s.id) {
                 <option [value]="s.id">{{ s.studentLabel || s.name }}</option>
               }
             </select>
@@ -230,6 +230,25 @@
               <span><strong>{{ sectionAssignments().length }}</strong> mappings</span>
             </div>
           </div>
+
+          @if (sectionSubjects().length < 3) {
+            <div class="mapping-warning subjects-hint">
+              <div>
+                <strong>
+                  {{
+                    sectionSubjects().length === 0
+                      ? 'No subjects available for this timetable'
+                      : 'Few subjects in the Subject dropdown'
+                  }}
+                </strong>
+                <p>
+                  Add more subjects under Academics, then map teachers to this class so Period 1 and
+                  Period 2 can use different subjects.
+                </p>
+              </div>
+              <a routerLink="/admin/academic">Manage subjects &amp; teachers</a>
+            </div>
+          }
 
           @if (!sectionAssignments().length) {
             <div class="mapping-warning">
@@ -410,43 +429,52 @@
                       </td>
                     } @else {
                       @for (d of days; track d.value) {
-                        <td [class.slot-filled]="isCellFilled(d.value, p.id)">
+                        <td class="slot-cell" [class.slot-filled]="isCellFilled(d.value, p.id)">
                           <div class="cell-edit">
-                            <select
-                              [(ngModel)]="cell(d.value, p.id).subjectId"
-                              [name]="'sub-' + d.value + '-' + p.id"
-                              [disabled]="!canManage || busy"
-                              (ngModelChange)="onSubjectChange(d.value, p.id)"
-                              [attr.aria-label]="d.fullLabel + ' ' + p.label + ' subject'"
-                            >
-                              <option value="">Subject…</option>
-                              @for (s of sectionSubjects(); track s.id) {
-                                <option [value]="s.id">
-                                  {{ s.name }}{{ s.code ? ' (' + s.code + ')' : '' }}
-                                </option>
-                              }
-                            </select>
-                            <select
-                              [(ngModel)]="cell(d.value, p.id).teacherUsername"
-                              [name]="'tch-' + d.value + '-' + p.id"
-                              [disabled]="!canManage || busy"
-                              [attr.aria-label]="d.fullLabel + ' ' + p.label + ' teacher'"
-                            >
-                              <option value="">Teacher…</option>
-                              @for (
-                                teacher of teacherOptions(d.value, p.id);
-                                track teacher.username
-                              ) {
-                                <option [value]="teacher.username">{{ teacher.label }}</option>
-                              }
-                            </select>
-                            <input
-                              [(ngModel)]="cell(d.value, p.id).room"
-                              [name]="'rm-' + d.value + '-' + p.id"
-                              placeholder="Room (optional)"
-                              [disabled]="!canManage || busy"
-                              [attr.aria-label]="d.fullLabel + ' ' + p.label + ' room'"
-                            />
+                            <label class="cell-field">
+                              <span class="cell-field-label">Subject</span>
+                              <select
+                                [(ngModel)]="cell(d.value, p.id).subjectId"
+                                [name]="'sub-' + d.value + '-' + p.id"
+                                [disabled]="!canManage || busy"
+                                (ngModelChange)="onSubjectChange(d.value, p.id)"
+                                [attr.aria-label]="d.fullLabel + ' ' + p.label + ' subject'"
+                              >
+                                <option value="">Select subject…</option>
+                                @for (s of sectionSubjects(); track s.id) {
+                                  <option [value]="s.id">
+                                    {{ s.name }}{{ s.code ? ' (' + s.code + ')' : '' }}
+                                  </option>
+                                }
+                              </select>
+                            </label>
+                            <label class="cell-field">
+                              <span class="cell-field-label">Teacher</span>
+                              <select
+                                [(ngModel)]="cell(d.value, p.id).teacherUsername"
+                                [name]="'tch-' + d.value + '-' + p.id"
+                                [disabled]="!canManage || busy"
+                                [attr.aria-label]="d.fullLabel + ' ' + p.label + ' teacher'"
+                              >
+                                <option value="">Select teacher…</option>
+                                @for (
+                                  teacher of teacherOptions(d.value, p.id);
+                                  track teacher.username
+                                ) {
+                                  <option [value]="teacher.username">{{ teacher.label }}</option>
+                                }
+                              </select>
+                            </label>
+                            <label class="cell-field">
+                              <span class="cell-field-label">Room</span>
+                              <input
+                                [(ngModel)]="cell(d.value, p.id).room"
+                                [name]="'rm-' + d.value + '-' + p.id"
+                                placeholder="Optional"
+                                [disabled]="!canManage || busy"
+                                [attr.aria-label]="d.fullLabel + ' ' + p.label + ' room'"
+                              />
+                            </label>
                           </div>
                         </td>
                       }

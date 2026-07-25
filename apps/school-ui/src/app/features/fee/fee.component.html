@@ -123,6 +123,19 @@
                       <option [value]="h.key">{{ h.label }}</option>
                     }
                   </select>
+                } @else if (field.key === 'feeMonth') {
+                  <select
+                    [(ngModel)]="answers[field.key]"
+                    [name]="field.key"
+                    [disabled]="submitting"
+                  >
+                    <option value="">Select month</option>
+                    @for (year of [yearOptions[0], yearOptions[1], yearOptions[2]]; track year) {
+                      @for (month of monthOptions; track month) {
+                        <option [value]="month + ' ' + year">{{ month }} {{ year }}</option>
+                      }
+                    }
+                  </select>
                 } @else if (field.key === 'paymentMode') {
                   <select
                     [(ngModel)]="answers[field.key]"
@@ -251,7 +264,7 @@
                 Fee history
               </button>
               <button type="button" class="tiny secondary" (click)="printStudentCard()">
-                Print student details
+                Print receipt
               </button>
             </div>
             @if (detailStudent().fromAnswersOnly) {
@@ -271,6 +284,11 @@
               ({{ selected.assigneeRole }})
             }
           </p>
+          @if (canPrint(selected)) {
+            <button type="button" (click)="printReceipt()" [disabled]="submitting">
+              Print receipt
+            </button>
+          }
           <button type="button" class="secondary" (click)="closeDetail()" [disabled]="submitting">
             Back to list
           </button>
@@ -302,7 +320,7 @@
         </div>
       </section>
 
-      <section class="form-section panel">
+      <section class="form-section panel no-print">
         <h3 class="form-section-title">Workflow action</h3>
         <label>
           Comment
@@ -337,7 +355,7 @@
       </section>
 
       @if (latestApproveDelivery().length) {
-        <section class="form-section panel">
+        <section class="form-section panel no-print">
           <h3 class="form-section-title">Notifications</h3>
           <ul class="history">
             @for (d of latestApproveDelivery(); track d.at) {
@@ -347,7 +365,7 @@
         </section>
       }
 
-      <section class="form-section panel">
+      <section class="form-section panel no-print">
         <h3 class="form-section-title">History</h3>
         @if (!selected.history?.length) {
           <p class="muted">No history yet.</p>

@@ -26,4 +26,5 @@ docs/hsn-2026-*
 
 # Local / EC2 secrets (keep *.example committed)
 .env.school.phase-a
+.env.school.production
 .env.production

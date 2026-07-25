@@ -15,11 +15,24 @@ import {
   sortRows,
 } from '../../shared/list-toolbar/list-controls';
 import { parseListViewParams } from '../../shared/list-toolbar/list-view-route';
+import {
+  StudentLookupComponent,
+  StudentLookupRow,
+  applyStudentLookupToAnswers,
+  clearStudentLookupAnswers,
+  filterNonIdentityFields,
+} from '../../shared/student-lookup';
 
 @Component({
   selector: 'sf-exam',
   standalone: true,
-  imports: [CommonModule, FormsModule, ListToolbarComponent, ListPagerComponent],
+  imports: [
+    CommonModule,
+    FormsModule,
+    ListToolbarComponent,
+    ListPagerComponent,
+    StudentLookupComponent,
+  ],
   templateUrl: './exam.component.html',
   styleUrls: [
     '../../shared/admin-page.scss',
@@ -43,6 +56,8 @@ export class ExamComponent implements OnInit, OnDestroy {
   workflowKey = 'exam';
   fields: Array<{ key: string; label: string; type: string; mandatory: boolean }> = [];
   answers: Record<string, unknown> = {};
+  selectedStudent: StudentLookupRow | null = null;
+  lookupNonce = 0;
   records: any[] = [];
   selectedId: string | null = null;
   selected: any = null;
@@ -125,6 +140,8 @@ export class ExamComponent implements OnInit, OnDestroy {
       this.error = '';
       this.statusMsg = '';
       this.resetAnswers();
+      this.clearStudentSelection();
+      this.lookupNonce++;
       return;
     }
     this.formOpen = false;
@@ -271,6 +288,10 @@ export class ExamComponent implements OnInit, OnDestroy {
 
   submit(): void {
     if (this.submitLocked || this.submitting) return;
+    if (!this.selectedStudent) {
+      this.error = 'Search and select a student before submitting marks.';
+      return;
+    }
     this.submitLocked = true;
     this.submitting = true;
     this.error = '';
@@ -304,6 +325,25 @@ export class ExamComponent implements OnInit, OnDestroy {
           this.error = err?.error?.message ?? 'Submit failed';
         },
       });
+  }
+
+  get entryFields(): Array<{ key: string; label: string; type: string; mandatory: boolean }> {
+    return filterNonIdentityFields(this.fields);
+  }
+
+  onStudentSelected(row: StudentLookupRow): void {
+    this.selectedStudent = row;
+    this.error = '';
+    applyStudentLookupToAnswers(this.answers, row);
+  }
+
+  onStudentCleared(): void {
+    this.clearStudentSelection();
+  }
+
+  private clearStudentSelection(): void {
+    this.selectedStudent = null;
+    clearStudentLookupAnswers(this.answers);
   }
 
   select(row: any): void {

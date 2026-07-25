@@ -7,6 +7,7 @@ import com.sugamflow.school.common.tenant.TenantScope;
 import com.sugamflow.school.fee.config.FeeProperties;
 import com.sugamflow.school.fee.finance.FinanceCatalog;
 import com.sugamflow.school.fee.integration.ConfigEngineClient;
+import com.sugamflow.school.fee.integration.StudentProfileClient;
 import com.sugamflow.school.fee.payment.GatewayOrderResult;
 import com.sugamflow.school.fee.payment.PaymentGatewayAdapter;
 import com.sugamflow.school.fee.payment.PaymentGatewayRegistry;
@@ -41,6 +42,7 @@ public class FinanceService {
   private final FeeProperties properties;
   private final PaymentGatewayRegistry gatewayRegistry;
   private final FeeCollectionService feeCollections;
+  private final StudentProfileClient studentProfiles;
   private final ObjectMapper objectMapper;
 
   public FinanceService(
@@ -50,6 +52,7 @@ public class FinanceService {
       FeeProperties properties,
       PaymentGatewayRegistry gatewayRegistry,
       @Lazy FeeCollectionService feeCollections,
+      StudentProfileClient studentProfiles,
       ObjectMapper objectMapper) {
     this.definitionRepo = definitionRepo;
     this.transactionRepo = transactionRepo;
@@ -57,6 +60,7 @@ public class FinanceService {
     this.properties = properties;
     this.gatewayRegistry = gatewayRegistry;
     this.feeCollections = feeCollections;
+    this.studentProfiles = studentProfiles;
     this.objectMapper = objectMapper;
   }
 
@@ -74,7 +78,9 @@ public class FinanceService {
     out.put("heads", listDefinitions(FinanceCatalog.TYPE_FEE_HEAD));
     out.put("structures", listDefinitions(FinanceCatalog.TYPE_FEE_STRUCTURE));
     out.put("concessions", listDefinitions(FinanceCatalog.TYPE_CONCESSION));
+    out.put("lateFeePolicies", listDefinitions(FinanceCatalog.TYPE_LATE_FEE_POLICY));
     out.put("providers", listDefinitions(FinanceCatalog.TYPE_PAYMENT_PROVIDER));
+    out.put("feeSettings", feeModuleSettings(scope));
     return out;
   }
 
@@ -98,7 +104,12 @@ public class FinanceService {
     if (key == null || key.isBlank()) {
       throw new FeeException("VALIDATION", "definitionKey is required");
     }
-    key = key.trim().toUpperCase().replace(' ', '_');
+    key = key.trim();
+    if (!FinanceCatalog.TYPE_FEE_STRUCTURE.equals(type)) {
+      key = key.toUpperCase().replace(' ', '_');
+    } else {
+      key = key.replace(' ', '_');
+    }
     Map<String, Object> payload = new LinkedHashMap<>(body);
     payload.put("definitionKey", key);
     payload.remove("id");
@@ -133,70 +144,486 @@ public class FinanceService {
 
   @Transactional
   public Map<String, Object> previewDemand(Map<String, Object> body) {
+    return buildDemand(body, false);
+  }
+
+  /** Persist FEE_DEMAND txn and optionally open a pending fee collection. */
+  @Transactional
+  public Map<String, Object> generateDemand(Map<String, Object> body) {
+    TenantScope scope = TenantContext.require();
+    requireFee(scope);
+    Map<String, Object> demand = buildDemand(body, true);
+    String periodKey =
+        stringOr(body.get("periodKey"), stringOr(demand.get("periodKey"), "CURRENT"));
+    String studentRef = stringOr(demand.get("studentRef"), "");
+    String structureKey = stringOr(demand.get("structureKey"), "");
+    String idem =
+        stringOr(
+            body.get("idempotencyKey"),
+            "DEMAND|" + scope.organizationId() + "|" + studentRef + "|" + structureKey + "|" + periodKey);
+
+    var existing = transactionRepo.findByOrganizationIdAndIdempotencyKey(scope.organizationId(), idem);
+    if (existing.isPresent()) {
+      Map<String, Object> out = toTxnDto(existing.get());
+      out.put("demand", demand);
+      out.put("idempotentReplay", true);
+      return out;
+    }
+
+    FinanceTransactionEntity txn = new FinanceTransactionEntity();
+    txn.setId(UUID.randomUUID());
+    txn.setOrganizationId(scope.organizationId());
+    txn.setBranchId(scope.branchId());
+    txn.setAcademicSessionId(scope.academicSessionId());
+    txn.setTransactionType("FEE_DEMAND");
+    txn.setStatus("OPEN");
+    txn.setStudentRef(studentRef.isBlank() ? null : studentRef);
+    txn.setCurrency(stringOr(demand.get("currency"), "INR"));
+    txn.setGrossAmount(toDecimal(demand.get("grossAmount")));
+    txn.setNetAmount(toDecimal(demand.get("netAmount")));
+    txn.setReferenceNo("DM-" + txn.getId().toString().substring(0, 8).toUpperCase());
+    txn.setIdempotencyKey(idem);
+    Map<String, Object> payload = new LinkedHashMap<>(demand);
+    payload.put("periodKey", periodKey);
+    txn.setPayload(payload);
+    txn.setCreatedAt(Instant.now());
+    txn.setUpdatedAt(Instant.now());
+
+    boolean createCollection = !Boolean.FALSE.equals(body.get("createCollection"));
+    Map<String, Object> collection = null;
+    if (createCollection && !studentRef.isBlank()) {
+      @SuppressWarnings("unchecked")
+      Map<String, Object> answers =
+          demand.get("suggestedAnswers") instanceof Map<?, ?> m
+              ? new LinkedHashMap<>((Map<String, Object>) m)
+              : new LinkedHashMap<>();
+      answers.putIfAbsent("admissionNo", studentRef);
+      answers.putIfAbsent("studentName", stringOr(demand.get("studentName"), ""));
+      answers.put("demandReference", txn.getReferenceNo());
+      answers.put("periodKey", periodKey);
+      answers.put("structureKey", structureKey);
+      answers.putIfAbsent("feeMonth", periodKey);
+      answers.putIfAbsent("paymentMode", "CASH");
+      answers.putIfAbsent("amount", demand.get("netAmount"));
+      Object suggested = demand.get("suggestedAnswers");
+      if (suggested instanceof Map<?, ?> sa) {
+        answers.putIfAbsent("feeHead", stringOr(sa.get("feeHead"), "TUITION"));
+      } else {
+        answers.putIfAbsent("feeHead", "TUITION");
+      }
+      answers.put("discountAmount", demand.get("discountAmount"));
+      answers.put("gstAmount", demand.get("gstAmount"));
+      answers.put("lateFeeAmount", demand.get("lateFeeAmount"));
+      try {
+        collection = feeCollections.submitIsolated(Map.of("answers", answers));
+        if (collection != null && collection.get("id") != null) {
+          txn.setSourceCollectionId(UUID.fromString(String.valueOf(collection.get("id"))));
+          payload.put("collectionId", collection.get("id"));
+          txn.setPayload(payload);
+        }
+      } catch (Exception ex) {
+        // Do not mark outer txn rollback — demand should still persist.
+        log.warn("Demand persisted but collection create failed: {}", ex.getMessage());
+        payload.put("collectionError", ex.getMessage());
+        txn.setPayload(payload);
+        collection = null;
+      }
+    }
+
+    Map<String, Object> out = toTxnDto(transactionRepo.save(txn));
+    out.put("demand", demand);
+    out.put("collection", collection);
+    return out;
+  }
+
+  @Transactional
+  public Map<String, Object> generateBulkDemands(Map<String, Object> body) {
     TenantScope scope = TenantContext.require();
     requireFee(scope);
     ensureDefaults(scope);
-    String structureKey = stringOr(body.get("structureKey"), null);
-    if (structureKey == null || structureKey.isBlank()) {
-      throw new FeeException("VALIDATION", "structureKey is required");
-    }
-    Map<String, Object> structure = requireDefinition(scope, FinanceCatalog.TYPE_FEE_STRUCTURE, structureKey);
-    List<Map<String, Object>> linesRaw = new ArrayList<>();
-    Object rawLines = structure.get("lines");
-    if (rawLines instanceof List<?> list) {
+    Map<String, Object> settings = feeModuleSettings(scope);
+    int batchSize = intOr(settings.get("bulkDemandBatchSize"), 200);
+
+    List<Map<String, Object>> targets = new ArrayList<>();
+    Object rawRefs = body.get("studentRefs");
+    if (rawRefs instanceof List<?> list) {
       for (Object item : list) {
         if (item instanceof Map<?, ?> m) {
           @SuppressWarnings("unchecked")
           Map<String, Object> cast = (Map<String, Object>) m;
-          linesRaw.add(cast);
+          targets.add(cast);
+        } else if (item != null) {
+          targets.add(Map.of("studentRef", String.valueOf(item)));
         }
       }
     }
-
-    List<Map<String, Object>> lines = new ArrayList<>();
-    BigDecimal gross = BigDecimal.ZERO;
-    for (Map<String, Object> line : linesRaw) {
-      String headKey = stringOr(line.get("headKey"), "");
-      BigDecimal amount = toDecimal(line.get("amount"));
-      Map<String, Object> outLine = new LinkedHashMap<>();
-      outLine.put("headKey", headKey);
-      outLine.put("amount", amount);
-      outLine.put("optional", Boolean.TRUE.equals(line.get("optional")));
-      lines.add(outLine);
-      gross = gross.add(amount);
+    String classSection = stringOr(body.get("classSection"), null);
+    if (targets.isEmpty() && classSection != null && !classSection.isBlank()) {
+      List<Map<String, Object>> rows =
+          studentProfiles.searchDirectory(
+              scope,
+              Map.of(
+                  "classSection", classSection,
+                  "status", "ACTIVE",
+                  "size", String.valueOf(batchSize)));
+      for (Map<String, Object> row : rows) {
+        Map<String, Object> t = new LinkedHashMap<>();
+        t.put("studentRef", stringOr(row.get("admissionNo"), ""));
+        String name = stringOr(row.get("fullName"), "");
+        if (name.isBlank() && row.get("answers") instanceof Map<?, ?> a) {
+          name = stringOr(a.get("fullName"), "");
+        }
+        t.put("studentName", name);
+        t.put("classSection", stringOr(row.get("classSection"), classSection));
+        if (row.get("answers") instanceof Map<?, ?> ans) {
+          t.put("answers", ans);
+        }
+        if (!stringOr(t.get("studentRef"), "").isBlank()) {
+          targets.add(t);
+        }
+      }
+    }
+    if (targets.isEmpty()) {
+      throw new FeeException("VALIDATION", "Provide studentRefs[] or classSection for bulk demand");
+    }
+    if (targets.size() > batchSize) {
+      targets = targets.subList(0, batchSize);
     }
 
+    List<Map<String, Object>> created = new ArrayList<>();
+    List<Map<String, Object>> errors = new ArrayList<>();
+    for (Map<String, Object> t : targets) {
+      Map<String, Object> req = new LinkedHashMap<>(body);
+      req.put("studentRef", t.get("studentRef"));
+      req.put("studentName", t.get("studentName"));
+      req.put("classSection", stringOr(t.get("classSection"), classSection));
+      if (t.get("answers") != null) {
+        req.put("studentAnswers", t.get("answers"));
+      }
+      req.remove("studentRefs");
+      try {
+        created.add(generateDemand(req));
+      } catch (Exception ex) {
+        errors.add(
+            Map.of(
+                "studentRef", stringOr(t.get("studentRef"), ""),
+                "error", ex.getMessage() == null ? "failed" : ex.getMessage()));
+      }
+    }
+    Map<String, Object> out = new LinkedHashMap<>();
+    out.put("requested", targets.size());
+    out.put("created", created.size());
+    out.put("failed", errors.size());
+    out.put("items", created);
+    out.put("errors", errors);
+    return out;
+  }
+
+  @Transactional
+  public Map<String, Object> waive(Map<String, Object> body) {
+    return postAdjustment("FEE_WAIVE", body);
+  }
+
+  @Transactional
+  public Map<String, Object> refund(Map<String, Object> body) {
+    return postAdjustment("FEE_REFUND", body);
+  }
+
+  private Map<String, Object> postAdjustment(String type, Map<String, Object> body) {
+    TenantScope scope = TenantContext.require();
+    requireFee(scope);
+    BigDecimal amount = toDecimal(body.get("amount"));
+    if (amount.compareTo(BigDecimal.ZERO) <= 0) {
+      throw new FeeException("VALIDATION", "amount must be > 0");
+    }
+    String reason = stringOr(body.get("reason"), null);
+    if (reason == null || reason.isBlank()) {
+      throw new FeeException("VALIDATION", "reason is required");
+    }
+    String headKey = stringOr(body.get("headKey"), "MISC");
+    try {
+      Map<String, Object> head = requireDefinition(scope, FinanceCatalog.TYPE_FEE_HEAD, headKey);
+      if ("FEE_REFUND".equals(type) && Boolean.FALSE.equals(head.get("refundable"))) {
+        throw new FeeException("VALIDATION", "Head " + headKey + " is not refundable");
+      }
+    } catch (FeeException ex) {
+      if ("NOT_FOUND".equals(ex.getCode()) && "FEE_REFUND".equals(type)) {
+        throw ex;
+      }
+      // waive may target LATE_FEE even if head missing from older orgs
+    }
+
+    UUID collectionId = parseUuid(body.get("collectionId"));
+    FinanceTransactionEntity txn = new FinanceTransactionEntity();
+    txn.setId(UUID.randomUUID());
+    txn.setOrganizationId(scope.organizationId());
+    txn.setBranchId(scope.branchId());
+    txn.setAcademicSessionId(scope.academicSessionId());
+    txn.setTransactionType(type);
+    txn.setStatus("POSTED");
+    txn.setStudentRef(stringOr(body.get("studentRef"), null));
+    txn.setCurrency(stringOr(body.get("currency"), "INR"));
+    txn.setGrossAmount(amount);
+    txn.setNetAmount(amount);
+    txn.setReferenceNo(
+        ("FEE_WAIVE".equals(type) ? "WV-" : "RF-")
+            + txn.getId().toString().substring(0, 8).toUpperCase());
+    txn.setSourceCollectionId(collectionId);
+    txn.setIdempotencyKey(stringOr(body.get("idempotencyKey"), null));
+    Map<String, Object> payload = new LinkedHashMap<>();
+    payload.put("headKey", headKey);
+    payload.put("reason", reason);
+    payload.put("amount", amount);
+    payload.put("postedBy", scope.userId());
+    txn.setPayload(payload);
+    txn.setCreatedAt(Instant.now());
+    txn.setUpdatedAt(Instant.now());
+
+    if (collectionId != null) {
+      try {
+        Map<String, Object> detail = feeCollections.get(collectionId);
+        if (detail != null && detail.get("answers") instanceof Map<?, ?> raw) {
+          @SuppressWarnings("unchecked")
+          Map<String, Object> answers = new LinkedHashMap<>((Map<String, Object>) raw);
+          if ("FEE_WAIVE".equals(type)) {
+            BigDecimal prev = toDecimal(answers.get("waivedAmount"));
+            answers.put("waivedAmount", prev.add(amount));
+            answers.put("waiveReason", reason);
+          } else {
+            BigDecimal prev = toDecimal(answers.get("refundAmount"));
+            answers.put("refundAmount", prev.add(amount));
+            answers.put("refundReason", reason);
+          }
+          // Best-effort annotate via act is not available; store on txn only if get is read-only.
+          payload.put("collectionAnswersSnapshot", answers);
+          txn.setPayload(payload);
+        }
+      } catch (Exception ex) {
+        log.debug("Could not annotate collection for {}: {}", type, ex.getMessage());
+      }
+    }
+    return toTxnDto(transactionRepo.save(txn));
+  }
+
+  @SuppressWarnings("unchecked")
+  private Map<String, Object> buildDemand(Map<String, Object> body, boolean forPersist) {
+    TenantScope scope = TenantContext.require();
+    requireFee(scope);
+    ensureDefaults(scope);
+    Map<String, Object> settings = feeModuleSettings(scope);
+
+    String structureKey = stringOr(body.get("structureKey"), null);
+    if (structureKey == null || structureKey.isBlank()) {
+      structureKey = stringOr(settings.get("defaultStructureKey"), "grade_8_annual");
+    }
+    Map<String, Object> structure =
+        requireDefinition(scope, FinanceCatalog.TYPE_FEE_STRUCTURE, structureKey);
+
+    String studentRef = stringOr(body.get("studentRef"), "");
+    String studentName = stringOr(body.get("studentName"), "");
+    String classSection = stringOr(body.get("classSection"), "");
+    Map<String, Object> studentAnswers = new LinkedHashMap<>();
+    if (body.get("studentAnswers") instanceof Map<?, ?> m) {
+      studentAnswers.putAll((Map<String, Object>) m);
+    } else if (!studentRef.isBlank()) {
+      Map<String, Object> profile = studentProfiles.byAdmissionNo(scope, studentRef);
+      if (profile.get("answers") instanceof Map<?, ?> a) {
+        studentAnswers.putAll((Map<String, Object>) a);
+      }
+      if (studentName.isBlank()) {
+        studentName = stringOr(studentAnswers.get("fullName"), stringOr(profile.get("fullName"), ""));
+      }
+      if (classSection.isBlank()) {
+        classSection =
+            stringOr(
+                studentAnswers.get("classApplied"),
+                stringOr(studentAnswers.get("classSection"), stringOr(profile.get("classSection"), "")));
+      }
+    }
+
+    Map<String, Object> headIndex = headIndex(scope);
+    List<Map<String, Object>> lines = new ArrayList<>();
+    BigDecimal gross = BigDecimal.ZERO;
+    Object rawLines = structure.get("lines");
+    if (rawLines instanceof List<?> list) {
+      for (Object item : list) {
+        if (!(item instanceof Map<?, ?> m)) continue;
+        Map<String, Object> line = (Map<String, Object>) m;
+        String headKey = stringOr(line.get("headKey"), "");
+        if (headKey.isBlank()) continue;
+        BigDecimal amount = toDecimal(line.get("amount"));
+        Map<String, Object> head = (Map<String, Object>) headIndex.getOrDefault(headKey, Map.of());
+        Map<String, Object> outLine = enrichLine(headKey, amount, line, head, settings);
+        lines.add(outLine);
+        gross = gross.add(amount);
+      }
+    }
+
+    // Hostel / transport add-ons from ops flags or explicit amounts.
+    if (bool(settings.get("includeHostelInDemand"), true)) {
+      BigDecimal hostelFee =
+          firstPositive(
+              toDecimal(body.get("hostelMonthlyFee")),
+              truthy(studentAnswers.get("hostel"))
+                  ? toDecimal(settings.get("defaultHostelMonthlyFee"))
+                  : BigDecimal.ZERO);
+      if (hostelFee.compareTo(BigDecimal.ZERO) > 0 && !hasHead(lines, stringOr(settings.get("hostelHeadKey"), "HOSTEL"))) {
+        String headKey = stringOr(settings.get("hostelHeadKey"), "HOSTEL");
+        Map<String, Object> head = (Map<String, Object>) headIndex.getOrDefault(headKey, Map.of());
+        Map<String, Object> outLine =
+            enrichLine(headKey, hostelFee, Map.of("frequency", "M", "source", "hostel"), head, settings);
+        lines.add(outLine);
+        gross = gross.add(hostelFee);
+      }
+    }
+    if (bool(settings.get("includeTransportInDemand"), true)) {
+      BigDecimal transportFare =
+          firstPositive(
+              toDecimal(body.get("transportFare")),
+              truthy(studentAnswers.get("transport"))
+                  ? toDecimal(settings.get("defaultTransportFare"))
+                  : BigDecimal.ZERO);
+      if (transportFare.compareTo(BigDecimal.ZERO) > 0
+          && !hasHead(lines, stringOr(settings.get("transportHeadKey"), "TRANSPORT"))) {
+        String headKey = stringOr(settings.get("transportHeadKey"), "TRANSPORT");
+        Map<String, Object> head = (Map<String, Object>) headIndex.getOrDefault(headKey, Map.of());
+        Map<String, Object> outLine =
+            enrichLine(
+                headKey, transportFare, Map.of("frequency", "M", "source", "transport"), head, settings);
+        lines.add(outLine);
+        gross = gross.add(transportFare);
+      }
+    }
+
+    BigDecimal gstAmount = BigDecimal.ZERO;
+    if (bool(settings.get("gstEnabled"), true)) {
+      for (Map<String, Object> line : lines) {
+        gstAmount = gstAmount.add(toDecimal(line.get("gstAmount")));
+      }
+    }
+
+    // Concession / scholarship
     BigDecimal discount = BigDecimal.ZERO;
     String concessionKey = stringOr(body.get("concessionKey"), null);
     Map<String, Object> concessionApplied = null;
+    if ((concessionKey == null || concessionKey.isBlank())
+        && bool(settings.get("autoApplyScholarship"), true)
+        && truthy(studentAnswers.get("scholarship"))) {
+      concessionKey = stringOr(settings.get("scholarshipConcessionKey"), "scholarship_50");
+    }
     if (concessionKey != null && !concessionKey.isBlank()) {
-      Map<String, Object> concession =
-          requireDefinition(scope, FinanceCatalog.TYPE_CONCESSION, concessionKey);
-      discount = computeConcession(concession, lines, gross);
-      concessionApplied = Map.of(
-          "definitionKey", concessionKey,
-          "name", stringOr(concession.get("name"), concessionKey),
-          "discountAmount", discount);
+      try {
+        Map<String, Object> concession =
+            requireDefinition(scope, FinanceCatalog.TYPE_CONCESSION, concessionKey);
+        discount = computeConcession(concession, lines, gross);
+        concessionApplied =
+            Map.of(
+                "definitionKey",
+                concessionKey,
+                "name",
+                stringOr(concession.get("name"), concessionKey),
+                "discountAmount",
+                discount);
+      } catch (FeeException ex) {
+        if (forPersist) throw ex;
+        log.debug("Concession {} skipped: {}", concessionKey, ex.getMessage());
+      }
     }
 
-    BigDecimal net = gross.subtract(discount).max(BigDecimal.ZERO).setScale(2, RoundingMode.HALF_UP);
+    BigDecimal taxableBase = gross.subtract(discount).max(BigDecimal.ZERO);
+    // Re-scale GST proportionally after discount when GST is enabled.
+    if (bool(settings.get("gstEnabled"), true) && gross.compareTo(BigDecimal.ZERO) > 0 && discount.compareTo(BigDecimal.ZERO) > 0) {
+      BigDecimal factor =
+          taxableBase.divide(gross, 6, RoundingMode.HALF_UP);
+      gstAmount = gstAmount.multiply(factor).setScale(2, RoundingMode.HALF_UP);
+    }
+
+    BigDecimal lateFee = BigDecimal.ZERO;
+    Map<String, Object> lateFeeApplied = null;
+    int pendingDays = intOr(body.get("pendingDays"), 0);
+    if (bool(settings.get("lateFeeEnabled"), true) && pendingDays > 0) {
+      String policyKey = stringOr(body.get("lateFeePolicyKey"), stringOr(settings.get("lateFeePolicyKey"), "late_per_day_10"));
+      try {
+        Map<String, Object> policy =
+            requireDefinition(scope, FinanceCatalog.TYPE_LATE_FEE_POLICY, policyKey);
+        lateFee = computeLateFee(policy, pendingDays, taxableBase);
+        if (lateFee.compareTo(BigDecimal.ZERO) > 0) {
+          lateFeeApplied =
+              Map.of(
+                  "definitionKey",
+                  policyKey,
+                  "name",
+                  stringOr(policy.get("name"), policyKey),
+                  "pendingDays",
+                  pendingDays,
+                  "lateFeeAmount",
+                  lateFee);
+          Map<String, Object> head =
+              (Map<String, Object>) headIndex.getOrDefault("LATE_FEE", Map.of());
+          lines.add(
+              enrichLine(
+                  "LATE_FEE",
+                  lateFee,
+                  Map.of("frequency", "OT", "source", "lateFee"),
+                  head,
+                  settings));
+        }
+      } catch (FeeException ex) {
+        log.debug("Late fee policy skipped: {}", ex.getMessage());
+      }
+    }
+
+    BigDecimal net =
+        taxableBase
+            .add(gstAmount)
+            .add(lateFee)
+            .max(BigDecimal.ZERO)
+            .setScale(2, RoundingMode.HALF_UP);
+
+    String periodKey =
+        stringOr(
+            body.get("periodKey"),
+            stringOr(scope.academicSessionId(), "CURRENT") + "-DEMAND");
+
     Map<String, Object> out = new LinkedHashMap<>();
     out.put("structureKey", structureKey);
     out.put("structureName", stringOr(structure.get("name"), structureKey));
-    out.put("studentRef", stringOr(body.get("studentRef"), null));
-    out.put("classSection", stringOr(body.get("classSection"), null));
-    out.put("currency", stringOr(structure.get("currency"), "INR"));
+    out.put("studentRef", studentRef.isBlank() ? null : studentRef);
+    out.put("studentName", studentName.isBlank() ? null : studentName);
+    out.put("classSection", classSection.isBlank() ? null : classSection);
+    out.put("periodKey", periodKey);
+    out.put("currency", stringOr(structure.get("currency"), stringOr(settings.get("defaultCurrency"), "INR")));
     out.put("lines", lines);
     out.put("grossAmount", gross.setScale(2, RoundingMode.HALF_UP));
     out.put("discountAmount", discount.setScale(2, RoundingMode.HALF_UP));
+    out.put("gstAmount", gstAmount.setScale(2, RoundingMode.HALF_UP));
+    out.put("lateFeeAmount", lateFee.setScale(2, RoundingMode.HALF_UP));
     out.put("netAmount", net);
     out.put("concession", concessionApplied);
-    out.put("suggestedAnswers", Map.of(
-        "feeHead", lines.isEmpty() ? "TUITION" : String.valueOf(lines.get(0).get("headKey")),
-        "amount", net,
-        "paymentMode", "CASH",
-        "admissionNo", stringOr(body.get("studentRef"), ""),
-        "studentName", stringOr(body.get("studentName"), "")));
+    out.put("lateFee", lateFeeApplied);
+    out.put(
+        "suggestedAnswers",
+        Map.of(
+            "feeHead",
+            lines.isEmpty() ? "TUITION" : String.valueOf(lines.get(0).get("headKey")),
+            "amount",
+            net,
+            "paymentMode",
+            "CASH",
+            "admissionNo",
+            studentRef,
+            "studentName",
+            studentName,
+            "discountAmount",
+            discount,
+            "gstAmount",
+            gstAmount,
+            "lateFeeAmount",
+            lateFee,
+            "periodKey",
+            periodKey,
+            "structureKey",
+            structureKey));
     return out;
   }
 
@@ -463,31 +890,20 @@ public class FinanceService {
 
   @Transactional
   public void ensureDefaults(TenantScope scope) {
-    if (!definitionRepo.existsByOrganizationIdAndDefinitionType(
-        scope.organizationId(), FinanceCatalog.TYPE_FEE_HEAD)) {
-      for (Map<String, Object> head : FinanceCatalog.defaultHeads()) {
-        saveSeed(scope, FinanceCatalog.TYPE_FEE_HEAD, head);
-      }
-    }
-    if (!definitionRepo.existsByOrganizationIdAndDefinitionType(
-        scope.organizationId(), FinanceCatalog.TYPE_FEE_STRUCTURE)) {
-      for (Map<String, Object> s : FinanceCatalog.defaultStructures()) {
-        saveSeed(scope, FinanceCatalog.TYPE_FEE_STRUCTURE, s);
-      }
-    }
-    if (!definitionRepo.existsByOrganizationIdAndDefinitionType(
-        scope.organizationId(), FinanceCatalog.TYPE_CONCESSION)) {
-      for (Map<String, Object> c : FinanceCatalog.defaultConcessions()) {
-        saveSeed(scope, FinanceCatalog.TYPE_CONCESSION, c);
-      }
-    }
+    seedMissing(
+        scope, FinanceCatalog.TYPE_FEE_HEAD, FinanceCatalog.defaultHeads());
+    seedMissing(
+        scope, FinanceCatalog.TYPE_FEE_STRUCTURE, FinanceCatalog.defaultStructures());
+    seedMissing(
+        scope, FinanceCatalog.TYPE_CONCESSION, FinanceCatalog.defaultConcessions());
+    seedMissing(
+        scope, FinanceCatalog.TYPE_LATE_FEE_POLICY, FinanceCatalog.defaultLateFeePolicies());
     if (!definitionRepo.existsByOrganizationIdAndDefinitionType(
         scope.organizationId(), FinanceCatalog.TYPE_PAYMENT_PROVIDER)) {
       for (Map<String, Object> p : FinanceCatalog.defaultProviders()) {
         saveSeed(scope, FinanceCatalog.TYPE_PAYMENT_PROVIDER, p);
       }
     } else {
-      // Backfill Razorpay provider definition when older orgs only have "simulated".
       boolean hasRazorpay =
           definitionRepo
               .findFirstByOrganizationIdAndDefinitionTypeAndDefinitionKeyAndStatusOrderByVersionDesc(
@@ -500,6 +916,34 @@ public class FinanceService {
         FinanceCatalog.defaultProviders().stream()
             .filter(p -> "razorpay".equalsIgnoreCase(String.valueOf(p.get("definitionKey"))))
             .forEach(p -> saveSeed(scope, FinanceCatalog.TYPE_PAYMENT_PROVIDER, p));
+      }
+    }
+  }
+
+  private void seedMissing(TenantScope scope, String type, List<Map<String, Object>> defaults) {
+    if (!definitionRepo.existsByOrganizationIdAndDefinitionType(scope.organizationId(), type)) {
+      for (Map<String, Object> item : defaults) {
+        saveSeed(scope, type, item);
+      }
+      return;
+    }
+    for (Map<String, Object> item : defaults) {
+      String key = String.valueOf(item.get("definitionKey"));
+      var existing =
+          definitionRepo
+              .findFirstByOrganizationIdAndDefinitionTypeAndDefinitionKeyAndStatusOrderByVersionDesc(
+                  scope.organizationId(), type, key, "ACTIVE");
+      if (existing.isEmpty()) {
+        saveSeed(scope, type, item);
+        continue;
+      }
+      // Refresh sample annual structure once so Phase C lines (ANNUAL/COMPUTER/…) appear.
+      if (FinanceCatalog.TYPE_FEE_STRUCTURE.equals(type)
+          && "grade_8_annual".equalsIgnoreCase(key)) {
+        String payload = String.valueOf(existing.get().getPayload());
+        if (!payload.contains("ANNUAL") || !payload.contains("\"frequency\"")) {
+          saveDefinition(type, item);
+        }
       }
     }
   }
@@ -570,6 +1014,133 @@ public class FinanceService {
   private void requireFee(TenantScope scope) {
     if (!engines.isFeatureEnabled(scope, FeeCollectionService.FEATURE_FEE)) {
       throw new FeeException("FEATURE_OFF", "FEATURE_FEE is off for this subscription plan.");
+    }
+  }
+
+  @SuppressWarnings("unchecked")
+  private Map<String, Object> feeModuleSettings(TenantScope scope) {
+    Map<String, Object> module = engines.getModuleSettings(scope, "fee");
+    Object settings = module != null ? module.get("settings") : null;
+    if (settings instanceof Map<?, ?> m) {
+      return new LinkedHashMap<>((Map<String, Object>) m);
+    }
+    return new LinkedHashMap<>();
+  }
+
+  private Map<String, Object> headIndex(TenantScope scope) {
+    Map<String, Object> index = new LinkedHashMap<>();
+    for (Map<String, Object> dto : listDefinitions(FinanceCatalog.TYPE_FEE_HEAD)) {
+      Object payload = dto.get("payload");
+      if (payload instanceof Map<?, ?> m) {
+        @SuppressWarnings("unchecked")
+        Map<String, Object> cast = (Map<String, Object>) m;
+        index.put(stringOr(cast.get("definitionKey"), stringOr(dto.get("definitionKey"), "")), cast);
+      }
+    }
+    return index;
+  }
+
+  private Map<String, Object> enrichLine(
+      String headKey,
+      BigDecimal amount,
+      Map<String, Object> line,
+      Map<String, Object> head,
+      Map<String, Object> settings) {
+    Map<String, Object> out = new LinkedHashMap<>();
+    out.put("headKey", headKey);
+    out.put("label", stringOr(head.get("label"), headKey));
+    out.put("amount", amount.setScale(2, RoundingMode.HALF_UP));
+    out.put(
+        "frequency",
+        stringOr(line.get("frequency"), stringOr(head.get("frequency"), FinanceCatalog.FREQ_ONE_TIME)));
+    out.put("optional", Boolean.TRUE.equals(line.get("optional")));
+    if (line.get("source") != null) {
+      out.put("source", line.get("source"));
+    }
+    double gstRate =
+        doubleOr(line.get("gstRate"), doubleOr(head.get("gstRate"), doubleOr(settings.get("defaultGstRate"), 0)));
+    boolean taxable =
+        bool(line.get("taxable"), bool(head.get("taxable"), gstRate > 0))
+            && bool(settings.get("gstEnabled"), true);
+    BigDecimal gst = BigDecimal.ZERO;
+    if (taxable && gstRate > 0) {
+      gst =
+          amount
+              .multiply(BigDecimal.valueOf(gstRate))
+              .divide(BigDecimal.valueOf(100), 2, RoundingMode.HALF_UP);
+      // Split equally CGST/SGST for intra-state school billing default.
+      BigDecimal half = gst.divide(BigDecimal.valueOf(2), 2, RoundingMode.HALF_UP);
+      out.put("cgst", half);
+      out.put("sgst", gst.subtract(half));
+    }
+    out.put("gstRate", gstRate);
+    out.put("gstAmount", gst);
+    out.put("taxable", taxable);
+    return out;
+  }
+
+  private BigDecimal computeLateFee(Map<String, Object> policy, int pendingDays, BigDecimal base) {
+    if (!bool(policy.get("enabled"), true)) {
+      return BigDecimal.ZERO;
+    }
+    int grace = intOr(policy.get("graceDays"), 0);
+    int chargeable = Math.max(0, pendingDays - grace);
+    if (chargeable <= 0 && toDecimal(policy.get("flatAmount")).compareTo(BigDecimal.ZERO) <= 0) {
+      return BigDecimal.ZERO;
+    }
+    BigDecimal perDay = toDecimal(policy.get("perDayAmount"));
+    BigDecimal flat = toDecimal(policy.get("flatAmount"));
+    BigDecimal fee = flat.add(perDay.multiply(BigDecimal.valueOf(chargeable)));
+    BigDecimal cap = toDecimal(policy.get("capAmount"));
+    if (cap.compareTo(BigDecimal.ZERO) > 0 && fee.compareTo(cap) > 0) {
+      fee = cap;
+    }
+    return fee.max(BigDecimal.ZERO).setScale(2, RoundingMode.HALF_UP);
+  }
+
+  private static boolean hasHead(List<Map<String, Object>> lines, String headKey) {
+    for (Map<String, Object> line : lines) {
+      if (headKey.equalsIgnoreCase(String.valueOf(line.get("headKey")))) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  private static BigDecimal firstPositive(BigDecimal a, BigDecimal b) {
+    if (a != null && a.compareTo(BigDecimal.ZERO) > 0) return a;
+    if (b != null && b.compareTo(BigDecimal.ZERO) > 0) return b;
+    return BigDecimal.ZERO;
+  }
+
+  private static boolean truthy(Object v) {
+    if (v == null) return false;
+    if (v instanceof Boolean b) return b;
+    String s = String.valueOf(v).trim();
+    return "true".equalsIgnoreCase(s) || "1".equals(s) || "yes".equalsIgnoreCase(s);
+  }
+
+  private static boolean bool(Object v, boolean def) {
+    if (v == null) return def;
+    if (v instanceof Boolean b) return b;
+    return Boolean.parseBoolean(String.valueOf(v));
+  }
+
+  private static int intOr(Object v, int def) {
+    if (v instanceof Number n) return n.intValue();
+    try {
+      return v != null ? Integer.parseInt(String.valueOf(v).trim()) : def;
+    } catch (NumberFormatException ex) {
+      return def;
+    }
+  }
+
+  private static double doubleOr(Object v, double def) {
+    if (v instanceof Number n) return n.doubleValue();
+    try {
+      return v != null ? Double.parseDouble(String.valueOf(v).trim()) : def;
+    } catch (NumberFormatException ex) {
+      return def;
     }
   }
 

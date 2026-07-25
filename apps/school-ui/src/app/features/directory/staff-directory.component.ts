@@ -46,6 +46,9 @@ export class StaffDirectoryComponent implements OnInit {
   designation = '';
   employmentType = '';
   gender = '';
+  staffGroup = '';
+  joinedWithinDays: number | null = null;
+  activeSummary: 'all' | 'active' | 'teachers' | 'nonTeaching' | 'new' = 'all';
   showAdvancedFilters = false;
   sortBy = 'updatedAt';
   sortDir: 'ASC' | 'DESC' = 'DESC';
@@ -181,6 +184,9 @@ export class StaffDirectoryComponent implements OnInit {
       !!this.designation.trim() ||
       !!this.employmentType ||
       !!this.gender ||
+      !!this.staffGroup ||
+      this.joinedWithinDays != null ||
+      this.activeSummary !== 'all' ||
       this.sortBy !== 'updatedAt' ||
       this.sortDir !== 'DESC' ||
       this.page.size !== 50
@@ -222,9 +228,38 @@ export class StaffDirectoryComponent implements OnInit {
     this.designation = '';
     this.employmentType = '';
     this.gender = '';
+    this.staffGroup = '';
+    this.joinedWithinDays = null;
+    this.activeSummary = 'all';
     this.sortBy = 'updatedAt';
     this.sortDir = 'DESC';
     this.page = { ...this.page, size: 50 };
+    this.search(0);
+  }
+
+  applySummaryFilter(kind: 'all' | 'active' | 'teachers' | 'nonTeaching' | 'new'): void {
+    this.q = '';
+    this.department = '';
+    this.designation = '';
+    this.employmentType = '';
+    this.gender = '';
+    this.activeSummary = kind;
+    this.staffGroup = '';
+    this.joinedWithinDays = null;
+    if (kind === 'active') {
+      this.status = 'ACTIVE';
+    } else if (kind === 'teachers') {
+      this.status = '';
+      this.staffGroup = 'TEACHER';
+    } else if (kind === 'nonTeaching') {
+      this.status = '';
+      this.staffGroup = 'NON_TEACHING';
+    } else if (kind === 'new') {
+      this.status = '';
+      this.joinedWithinDays = 30;
+    } else {
+      this.status = '';
+    }
     this.search(0);
   }
 
@@ -455,7 +490,7 @@ export class StaffDirectoryComponent implements OnInit {
   }
 
   private filterParams(): Record<string, string> {
-    return {
+    const params: Record<string, string> = {
       q: this.q,
       status: this.status,
       department: this.department,
@@ -463,6 +498,13 @@ export class StaffDirectoryComponent implements OnInit {
       employmentType: this.employmentType,
       gender: this.gender,
     };
+    if (this.staffGroup) {
+      params['staffGroup'] = this.staffGroup;
+    }
+    if (this.joinedWithinDays != null) {
+      params['joinedWithinDays'] = String(this.joinedWithinDays);
+    }
+    return params;
   }
 
   private resetDraft(): void {
