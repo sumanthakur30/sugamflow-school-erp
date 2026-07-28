@@ -1,0 +1,431 @@
+{
+  "root_group": {
+    "checks": [
+      {
+        "path": "::parent-bootstrap not 5xx",
+        "id": "1c0c78c8326e08445bebd28054b1f3f3",
+        "passes": 451,
+        "fails": 0,
+        "name": "parent-bootstrap not 5xx"
+      },
+      {
+        "name": "parent-bootstrap not 401",
+        "path": "::parent-bootstrap not 401",
+        "id": "214ea4865d91521cbd4e15b4fd997b46",
+        "passes": 451,
+        "fails": 0
+      },
+      {
+        "name": "teacher-bootstrap not 5xx",
+        "path": "::teacher-bootstrap not 5xx",
+        "id": "8e70c9a3440461ee3683c56e78381810",
+        "passes": 417,
+        "fails": 0
+      },
+      {
+        "path": "::teacher-bootstrap not 401",
+        "id": "17212cfea562c71935d5c440de698c48",
+        "passes": 417,
+        "fails": 0,
+        "name": "teacher-bootstrap not 401"
+      },
+      {
+        "name": "parent-homework-mine not 5xx",
+        "path": "::parent-homework-mine not 5xx",
+        "id": "9c2a1118a3e424c59a31038ad77377bf",
+        "passes": 451,
+        "fails": 0
+      },
+      {
+        "name": "parent-homework-mine not 401",
+        "path": "::parent-homework-mine not 401",
+        "id": "0312dccb525e83715acc0e52f96d5ea3",
+        "passes": 451,
+        "fails": 0
+      },
+      {
+        "name": "parent-fees not 5xx",
+        "path": "::parent-fees not 5xx",
+        "id": "395ac43b92db4617c44e8e63d2241529",
+        "passes": 451,
+        "fails": 0
+      },
+      {
+        "fails": 0,
+        "name": "parent-fees not 401",
+        "path": "::parent-fees not 401",
+        "id": "f51cf819c9e15a814ffd166f9c008196",
+        "passes": 451
+      },
+      {
+        "id": "e04b53af175b7e8db3462b88f62f27fb",
+        "passes": 417,
+        "fails": 0,
+        "name": "teacher-scope not 5xx",
+        "path": "::teacher-scope not 5xx"
+      },
+      {
+        "name": "teacher-scope not 401",
+        "path": "::teacher-scope not 401",
+        "id": "c3a65f7ebf2107587441bc22c8e51886",
+        "passes": 417,
+        "fails": 0
+      },
+      {
+        "name": "parent-students not 5xx",
+        "path": "::parent-students not 5xx",
+        "id": "90dc9435b4ad735e54b1895418a70220",
+        "passes": 451,
+        "fails": 0
+      },
+      {
+        "path": "::parent-students not 401",
+        "id": "f6a984f0d0a94275f3df138e1b5fbb17",
+        "passes": 451,
+        "fails": 0,
+        "name": "parent-students not 401"
+      },
+      {
+        "path": "::teacher-homework not 5xx",
+        "id": "e08af7e0cb4a0d1d8cbc1199430c169b",
+        "passes": 417,
+        "fails": 0,
+        "name": "teacher-homework not 5xx"
+      },
+      {
+        "name": "teacher-homework not 401",
+        "path": "::teacher-homework not 401",
+        "id": "f68917c171b07a7525c1e97ab8a694a6",
+        "passes": 417,
+        "fails": 0
+      },
+      {
+        "name": "teacher-students not 5xx",
+        "path": "::teacher-students not 5xx",
+        "id": "4b7acbfe6909d21832b92a9c0fd93d45",
+        "passes": 417,
+        "fails": 0
+      },
+      {
+        "name": "teacher-students not 401",
+        "path": "::teacher-students not 401",
+        "id": "8c61b9f917cfd6ff8175866601b89e5e",
+        "passes": 417,
+        "fails": 0
+      }
+    ],
+    "name": "",
+    "path": "",
+    "id": "d41d8cd98f00b204e9800998ecf8427e",
+    "groups": [
+      {
+        "path": "::setup",
+        "id": "5c0f8025f7e0b6654089e5b00e950f1a",
+        "groups": [],
+        "checks": [
+            {
+              "id": "647055af8ffe21e58084ae4b140cdda0",
+              "passes": 12,
+              "fails": 0,
+              "name": "login 200",
+              "path": "::setup::login 200"
+            },
+            {
+              "path": "::setup::login token",
+              "id": "c50caa093e0fd4b1a28108e7449453f2",
+              "passes": 12,
+              "fails": 0,
+              "name": "login token"
+            }
+          ],
+        "name": "setup"
+      }
+    ]
+  },
+  "options": {
+    "summaryTrendStats": [
+      "avg",
+      "min",
+      "med",
+      "max",
+      "p(90)",
+      "p(95)"
+    ],
+    "summaryTimeUnit": "",
+    "noColor": true
+  },
+  "state": {
+    "isStdOutTTY": false,
+    "isStdErrTTY": false,
+    "testRunDurationMs": 77981.2838
+  },
+  "metrics": {
+    "http_req_receiving": {
+      "type": "trend",
+      "contains": "time",
+      "values": {
+        "med": 0.4815,
+        "max": 619.2083,
+        "p(90)": 32.192139999999945,
+        "p(95)": 61.22591999999989,
+        "avg": 12.061081578192256,
+        "min": 0
+      }
+    },
+    "http_req_tls_handshaking": {
+      "type": "trend",
+      "contains": "time",
+      "values": {
+        "avg": 0,
+        "min": 0,
+        "med": 0,
+        "max": 0,
+        "p(90)": 0,
+        "p(95)": 0
+      }
+    },
+    "iterations": {
+      "type": "counter",
+      "contains": "default",
+      "values": {
+        "count": 868,
+        "rate": 11.130875996170763
+      }
+    },
+    "vus": {
+      "type": "gauge",
+      "contains": "default",
+      "values": {
+        "value": 12,
+        "min": 0,
+        "max": 12
+      }
+    },
+    "http_req_duration{expected_response:true}": {
+      "type": "trend",
+      "contains": "time",
+      "values": {
+        "avg": 166.29552218077458,
+        "min": 7.214,
+        "med": 123.6375,
+        "max": 3348.2691,
+        "p(90)": 351.78504000000004,
+        "p(95)": 450.5036999999999
+      }
+    },
+    "checks": {
+      "type": "rate",
+      "contains": "default",
+      "values": {
+        "rate": 1,
+        "passes": 6968,
+        "fails": 0
+      }
+    },
+    "portal_login_ms": {
+      "type": "trend",
+      "contains": "time",
+      "values": {
+        "min": 146,
+        "med": 196,
+        "max": 270,
+        "p(90)": 246.9,
+        "p(95)": 257.9,
+        "avg": 201.08333333333334
+      },
+      "thresholds": {
+        "p(95)<3000": {
+          "ok": true
+        }
+      }
+    },
+    "http_req_failed": {
+      "type": "rate",
+      "contains": "default",
+      "values": {
+        "rate": 0,
+        "passes": 0,
+        "fails": 3485
+      },
+      "thresholds": {
+        "rate<0.12": {
+          "ok": true
+        }
+      }
+    },
+    "data_sent": {
+      "type": "counter",
+      "contains": "data",
+      "values": {
+        "count": 1900395,
+        "rate": 24369.886046938867
+      }
+    },
+    "data_received": {
+      "type": "counter",
+      "contains": "data",
+      "values": {
+        "count": 8578732,
+        "rate": 110010.14066403457
+      }
+    },
+    "portal_read_ms": {
+      "type": "trend",
+      "contains": "time",
+      "values": {
+        "avg": 166.99395161290323,
+        "min": 7,
+        "med": 123,
+        "max": 3349,
+        "p(90)": 353,
+        "p(95)": 454.34999999999945
+      },
+      "thresholds": {
+        "p(95)<2500": {
+          "ok": true
+        }
+      }
+    },
+    "portal_tenant_leak": {
+      "thresholds": {
+        "count==0": {
+          "ok": true
+        }
+      },
+      "type": "counter",
+      "contains": "default",
+      "values": {
+        "rate": 0,
+        "count": 0
+      }
+    },
+    "portal_fail_rate": {
+      "type": "rate",
+      "contains": "default",
+      "values": {
+        "rate": 0,
+        "passes": 0,
+        "fails": 3484
+      },
+      "thresholds": {
+        "rate<0.15": {
+          "ok": true
+        }
+      }
+    },
+    "http_reqs": {
+      "type": "counter",
+      "contains": "default",
+      "values": {
+        "count": 3485,
+        "rate": 44.69021065282847
+      }
+    },
+    "http_req_duration": {
+      "contains": "time",
+      "values": {
+        "max": 3348.2691,
+        "p(90)": 351.78504000000004,
+        "p(95)": 450.5036999999999,
+        "avg": 166.29552218077458,
+        "min": 7.214,
+        "med": 123.6375
+      },
+      "type": "trend"
+    },
+    "iteration_duration": {
+      "contains": "time",
+      "values": {
+        "max": 4034.5156,
+        "p(90)": 1612.3147600000007,
+        "p(95)": 1897.3216499999994,
+        "avg": 1039.65558801843,
+        "min": 414.2428,
+        "med": 959.8396499999999
+      },
+      "type": "trend"
+    },
+    "http_req_waiting": {
+      "type": "trend",
+      "contains": "time",
+      "values": {
+        "med": 109.963,
+        "max": 3339.7079,
+        "p(90)": 325.1277,
+        "p(95)": 421.67631999999963,
+        "avg": 153.95684619799127,
+        "min": 6.708
+      }
+    },
+    "http_req_blocked": {
+      "type": "trend",
+      "contains": "time",
+      "values": {
+        "p(90)": 0,
+        "p(95)": 0,
+        "avg": 0.07884206599713055,
+        "min": 0,
+        "med": 0,
+        "max": 193.1378
+      }
+    },
+    "http_req_sending": {
+      "type": "trend",
+      "contains": "time",
+      "values": {
+        "avg": 0.2775944045911048,
+        "min": 0,
+        "med": 0,
+        "max": 303.9392,
+        "p(90)": 0,
+        "p(95)": 0
+      }
+    },
+    "portal_by_role": {
+      "type": "counter",
+      "contains": "default",
+      "values": {
+        "count": 3472,
+        "rate": 44.52350398468305
+      }
+    },
+    "http_req_connecting": {
+      "type": "trend",
+      "contains": "time",
+      "values": {
+        "avg": 0.005096212338593974,
+        "min": 0,
+        "med": 0,
+        "max": 3.5484,
+        "p(90)": 0,
+        "p(95)": 0
+      }
+    },
+    "vus_max": {
+      "contains": "default",
+      "values": {
+        "min": 12,
+        "max": 12,
+        "value": 12
+      },
+      "type": "gauge"
+    }
+  },
+  "setup_data": {
+    "schoolCount": 6,
+    "tokens": {
+      "load-school-04:parent": "eyJhbGciOiJIUzI1NiJ9.eyJzaG9wSWQiOiJsb2FkLXNjaG9vbC0wNCIsInRlbmFudElkIjoyMDQsInJvbGUiOiJQQVJFTlQiLCJwZXJtaXNzaW9ucyI6W10sInN1YiI6InBhcmVudF9sb2FkLXNjaG9vbC0wNCIsImlhdCI6MTc4NDgyOTMwNiwiZXhwIjoxNzg0ODU4MTA2fQ.2I68mVvAjSh4RrvIecfFFsZt8Z1IowconD_IcRBuVlA",
+      "load-school-04:teacher": "eyJhbGciOiJIUzI1NiJ9.eyJzaG9wSWQiOiJsb2FkLXNjaG9vbC0wNCIsInRlbmFudElkIjoyMDQsInJvbGUiOiJURUFDSEVSIiwicGVybWlzc2lvbnMiOltdLCJzdWIiOiJ0ZWFjaGVyX2xvYWQtc2Nob29sLTA0IiwiaWF0IjoxNzg0ODI5MzA2LCJleHAiOjE3ODQ4NTgxMDZ9.fvQXFWQlN8YpK4ejWJMLXJvsDGTR6ugS_Z9NP-E5QW0",
+      "demo-school:parent": "eyJhbGciOiJIUzI1NiJ9.eyJzaG9wSWQiOiJkZW1vLXNjaG9vbCIsInRlbmFudElkIjoxMDAsInJvbGUiOiJQQVJFTlQiLCJwZXJtaXNzaW9ucyI6W10sInN1YiI6InBhcmVudF9kZW1vLXNjaG9vbCIsImlhdCI6MTc4NDgyOTMwNSwiZXhwIjoxNzg0ODU4MTA1fQ.SU4HZ6pEe3Dzel8XkSvKgkNZ2l8QK9YgeBFOdWSscOs",
+      "load-school-01:parent": "eyJhbGciOiJIUzI1NiJ9.eyJzaG9wSWQiOiJsb2FkLXNjaG9vbC0wMSIsInRlbmFudElkIjoyMDEsInJvbGUiOiJQQVJFTlQiLCJwZXJtaXNzaW9ucyI6W10sInN1YiI6InBhcmVudF9sb2FkLXNjaG9vbC0wMSIsImlhdCI6MTc4NDgyOTMwNSwiZXhwIjoxNzg0ODU4MTA1fQ.sklBsedhImEux_U-aNDpXkODoNd3XqDz31qDbR7ZXfg",
+      "load-school-03:parent": "eyJhbGciOiJIUzI1NiJ9.eyJzaG9wSWQiOiJsb2FkLXNjaG9vbC0wMyIsInRlbmFudElkIjoyMDMsInJvbGUiOiJQQVJFTlQiLCJwZXJtaXNzaW9ucyI6W10sInN1YiI6InBhcmVudF9sb2FkLXNjaG9vbC0wMyIsImlhdCI6MTc4NDgyOTMwNiwiZXhwIjoxNzg0ODU4MTA2fQ.rmZBW2Ys08A1RS_YDet9djr7JKf-SKVgBXj8fmMmvSM",
+      "load-school-05:parent": "eyJhbGciOiJIUzI1NiJ9.eyJzaG9wSWQiOiJsb2FkLXNjaG9vbC0wNSIsInRlbmFudElkIjoyMDUsInJvbGUiOiJQQVJFTlQiLCJwZXJtaXNzaW9ucyI6W10sInN1YiI6InBhcmVudF9sb2FkLXNjaG9vbC0wNSIsImlhdCI6MTc4NDgyOTMwNywiZXhwIjoxNzg0ODU4MTA3fQ.xV1JFZb2YNy_CJ-DIPFdeR5orxzu7QcLSf9lC_Epo8U",
+      "load-school-05:teacher": "eyJhbGciOiJIUzI1NiJ9.eyJzaG9wSWQiOiJsb2FkLXNjaG9vbC0wNSIsInRlbmFudElkIjoyMDUsInJvbGUiOiJURUFDSEVSIiwicGVybWlzc2lvbnMiOltdLCJzdWIiOiJ0ZWFjaGVyX2xvYWQtc2Nob29sLTA1IiwiaWF0IjoxNzg0ODI5MzA3LCJleHAiOjE3ODQ4NTgxMDd9.XnHw_3aFms3Hooqr_RFBFcCtcOxitBLLWaHBqTwHySQ",
+      "demo-school:teacher": "eyJhbGciOiJIUzI1NiJ9.eyJzaG9wSWQiOiJkZW1vLXNjaG9vbCIsInRlbmFudElkIjoxMDAsInJvbGUiOiJURUFDSEVSIiwicGVybWlzc2lvbnMiOltdLCJzdWIiOiJ0ZWFjaGVyX2RlbW8tc2Nob29sIiwiaWF0IjoxNzg0ODI5MzA1LCJleHAiOjE3ODQ4NTgxMDV9.MZOfqlIedByCd24bPyiUwuKaD8BTj1bn1vnyuBVuiUc",
+      "load-school-01:teacher": "eyJhbGciOiJIUzI1NiJ9.eyJzaG9wSWQiOiJsb2FkLXNjaG9vbC0wMSIsInRlbmFudElkIjoyMDEsInJvbGUiOiJURUFDSEVSIiwicGVybWlzc2lvbnMiOltdLCJzdWIiOiJ0ZWFjaGVyX2xvYWQtc2Nob29sLTAxIiwiaWF0IjoxNzg0ODI5MzA1LCJleHAiOjE3ODQ4NTgxMDV9.os_pGV8g8o2ZAU1-aiXwlSULrjhlwLkmRAW_JKh3pEc",
+      "load-school-02:parent": "eyJhbGciOiJIUzI1NiJ9.eyJzaG9wSWQiOiJsb2FkLXNjaG9vbC0wMiIsInRlbmFudElkIjoyMDIsInJvbGUiOiJQQVJFTlQiLCJwZXJtaXNzaW9ucyI6W10sInN1YiI6InBhcmVudF9sb2FkLXNjaG9vbC0wMiIsImlhdCI6MTc4NDgyOTMwNiwiZXhwIjoxNzg0ODU4MTA2fQ.84AURUMCWjxvvHETPS-C0-ahCNqoFPbhFntzvirkviY",
+      "load-school-02:teacher": "eyJhbGciOiJIUzI1NiJ9.eyJzaG9wSWQiOiJsb2FkLXNjaG9vbC0wMiIsInRlbmFudElkIjoyMDIsInJvbGUiOiJURUFDSEVSIiwicGVybWlzc2lvbnMiOltdLCJzdWIiOiJ0ZWFjaGVyX2xvYWQtc2Nob29sLTAyIiwiaWF0IjoxNzg0ODI5MzA1LCJleHAiOjE3ODQ4NTgxMDV9.RfBQwjDCYWstIQoR27eNx80VkoDUDwDPStbv4rkgqUk",
+      "load-school-03:teacher": "eyJhbGciOiJIUzI1NiJ9.eyJzaG9wSWQiOiJsb2FkLXNjaG9vbC0wMyIsInRlbmFudElkIjoyMDMsInJvbGUiOiJURUFDSEVSIiwicGVybWlzc2lvbnMiOltdLCJzdWIiOiJ0ZWFjaGVyX2xvYWQtc2Nob29sLTAzIiwiaWF0IjoxNzg0ODI5MzA2LCJleHAiOjE3ODQ4NTgxMDZ9.Hb7HOb0J1bLXodbqCD8RhRMvmXdT3FFeDf4TZUL2_IE"
+    }
+  }
+}

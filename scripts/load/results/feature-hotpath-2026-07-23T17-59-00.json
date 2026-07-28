@@ -1,0 +1,332 @@
+{
+  "root_group": {
+    "groups": [],
+    "checks": [
+        {
+          "id": "646953185cae2a0555c2f252ceb9499d",
+          "passes": 1848,
+          "fails": 0,
+          "name": "staff <500",
+          "path": "::staff <500"
+        },
+        {
+          "name": "staff not 401",
+          "path": "::staff not 401",
+          "id": "d30d0b32fe6837e26139f678c0846ec1",
+          "passes": 1848,
+          "fails": 0
+        },
+        {
+          "id": "214de87a747fb3462bb0192147683e84",
+          "passes": 1848,
+          "fails": 0,
+          "name": "student <500",
+          "path": "::student <500"
+        },
+        {
+          "name": "student not 401",
+          "path": "::student not 401",
+          "id": "902c737af91fc0c2acbe6af50831cb65",
+          "passes": 1848,
+          "fails": 0
+        }
+      ],
+    "name": "",
+    "path": "",
+    "id": "d41d8cd98f00b204e9800998ecf8427e"
+  },
+  "options": {
+    "summaryTrendStats": [
+      "avg",
+      "min",
+      "med",
+      "max",
+      "p(90)",
+      "p(95)"
+    ],
+    "summaryTimeUnit": "",
+    "noColor": true
+  },
+  "state": {
+    "isStdErrTTY": false,
+    "testRunDurationMs": 62019.4182,
+    "isStdOutTTY": false
+  },
+  "metrics": {
+    "hot_fail_rate": {
+      "thresholds": {
+        "rate<0.15": {
+          "ok": true
+        }
+      },
+      "type": "rate",
+      "contains": "default",
+      "values": {
+        "rate": 0,
+        "passes": 0,
+        "fails": 3696
+      }
+    },
+    "hot_roster_ms": {
+      "type": "trend",
+      "contains": "time",
+      "values": {
+        "avg": 0,
+        "min": 0,
+        "med": 0,
+        "max": 0,
+        "p(90)": 0,
+        "p(95)": 0
+      },
+      "thresholds": {
+        "p(95)<3000": {
+          "ok": true
+        }
+      }
+    },
+    "iteration_duration": {
+      "type": "trend",
+      "contains": "time",
+      "values": {
+        "avg": 391.4665370129861,
+        "min": 215.5764,
+        "med": 369.58545000000004,
+        "max": 1015.5104,
+        "p(90)": 550.8138999999999,
+        "p(95)": 626.5864299999996
+      }
+    },
+    "hot_student_ms": {
+      "contains": "time",
+      "values": {
+        "avg": 58.65530303030303,
+        "min": 4,
+        "med": 37,
+        "max": 432,
+        "p(90)": 139,
+        "p(95)": 170
+      },
+      "thresholds": {
+        "p(95)<2500": {
+          "ok": true
+        }
+      },
+      "type": "trend"
+    },
+    "http_req_receiving": {
+      "type": "trend",
+      "contains": "time",
+      "values": {
+        "avg": 4.590617927321665,
+        "min": 0,
+        "med": 0,
+        "max": 225.7436,
+        "p(90)": 12.51038,
+        "p(95)": 25.074029999999986
+      }
+    },
+    "data_sent": {
+      "type": "counter",
+      "contains": "data",
+      "values": {
+        "count": 4343373,
+        "rate": 70032.46928233842
+      }
+    },
+    "http_req_duration": {
+      "type": "trend",
+      "contains": "time",
+      "values": {
+        "p(90)": 209.035,
+        "p(95)": 267.81474999999995,
+        "avg": 94.71270855989239,
+        "min": 3.6378,
+        "med": 63.6519,
+        "max": 721.6925
+      }
+    },
+    "http_req_tls_handshaking": {
+      "contains": "time",
+      "values": {
+        "p(95)": 0,
+        "avg": 0,
+        "min": 0,
+        "med": 0,
+        "max": 0,
+        "p(90)": 0
+      },
+      "type": "trend"
+    },
+    "vus": {
+      "type": "gauge",
+      "contains": "default",
+      "values": {
+        "value": 12,
+        "min": 0,
+        "max": 12
+      }
+    },
+    "data_received": {
+      "type": "counter",
+      "contains": "data",
+      "values": {
+        "count": 3960204,
+        "rate": 63854.259116542315
+      }
+    },
+    "http_req_blocked": {
+      "type": "trend",
+      "contains": "time",
+      "values": {
+        "max": 4.3482,
+        "p(90)": 0,
+        "p(95)": 0,
+        "avg": 0.008207994616419922,
+        "min": 0,
+        "med": 0
+      }
+    },
+    "iterations": {
+      "type": "counter",
+      "contains": "default",
+      "values": {
+        "rate": 29.797119251273468,
+        "count": 1848
+      }
+    },
+    "checks": {
+      "type": "rate",
+      "contains": "default",
+      "values": {
+        "rate": 1,
+        "passes": 7392,
+        "fails": 0
+      }
+    },
+    "http_req_connecting": {
+      "contains": "time",
+      "values": {
+        "max": 1.5341,
+        "p(90)": 0,
+        "p(95)": 0,
+        "avg": 0.0014130820995962314,
+        "min": 0,
+        "med": 0
+      },
+      "type": "trend"
+    },
+    "http_req_failed": {
+      "thresholds": {
+        "rate<0.12": {
+          "ok": true
+        }
+      },
+      "type": "rate",
+      "contains": "default",
+      "values": {
+        "rate": 0,
+        "passes": 0,
+        "fails": 3715
+      }
+    },
+    "http_req_duration{expected_response:true}": {
+      "values": {
+        "avg": 94.71270855989239,
+        "min": 3.6378,
+        "med": 63.6519,
+        "max": 721.6925,
+        "p(90)": 209.035,
+        "p(95)": 267.81474999999995
+      },
+      "type": "trend",
+      "contains": "time"
+    },
+    "hot_staff_ms": {
+      "values": {
+        "avg": 131.13257575757575,
+        "min": 10,
+        "med": 109,
+        "max": 722,
+        "p(90)": 258,
+        "p(95)": 332
+      },
+      "thresholds": {
+        "p(95)<2500": {
+          "ok": true
+        }
+      },
+      "type": "trend",
+      "contains": "time"
+    },
+    "http_req_waiting": {
+      "type": "trend",
+      "contains": "time",
+      "values": {
+        "avg": 90.09268444145356,
+        "min": 3.6378,
+        "med": 58.5406,
+        "max": 721.6925,
+        "p(90)": 199.68488,
+        "p(95)": 260.15054999999995
+      }
+    },
+    "vus_max": {
+      "type": "gauge",
+      "contains": "default",
+      "values": {
+        "value": 12,
+        "min": 12,
+        "max": 12
+      }
+    },
+    "http_reqs": {
+      "type": "counter",
+      "contains": "default",
+      "values": {
+        "count": 3715,
+        "rate": 59.90059416584466
+      }
+    },
+    "http_req_sending": {
+      "type": "trend",
+      "contains": "time",
+      "values": {
+        "p(90)": 0,
+        "p(95)": 0,
+        "avg": 0.029406191117092875,
+        "min": 0,
+        "med": 0,
+        "max": 18.2987
+      }
+    }
+  },
+  "setup_data": {
+    "ctx": {
+      "demo-school": {
+        "sectionId": "",
+        "token": "eyJhbGciOiJIUzI1NiJ9.eyJzaG9wSWQiOiJkZW1vLXNjaG9vbCIsInRlbmFudElkIjoxMDAsInJvbGUiOiJTSE9QX09XTkVSIiwicGVybWlzc2lvbnMiOlsiTUFOQUdFX1BST0RVQ1RTIiwiTUFOQUdFX09SREVSUyIsIk1BTkFHRV9TVE9DS1MiLCJNQU5BR0VfQ1VTVE9NRVJTIiwiTUFOQUdFX1NUQUZGIiwiTUFOQUdFX0NPTlNVTFRBVElPTlMiLCJWSUVXX0RPQ1RPUl9EQVNIQk9BUkQiLCJXUklURV9QUkVTQ1JJUFRJT04iLCJNQU5BR0VfQVBQT0lOVE1FTlRTIiwiTUFOQUdFX1FVRVVFIiwiTUFOQUdFX0RPQ1RPUlMiLCJWSUVXX1BBVElFTlRfSElTVE9SWSIsIk1BTkFHRV9MQUJfT1JERVJTIiwiTUFOQUdFX0xBQl9SRVNVTFRTIiwiRElTUEVOU0VfTUVESUNJTkVTIiwiSU1QT1JUX1BST0RVQ1RTIiwiRVhQT1JUX1BST0RVQ1RTIiwiU1VCTUlUX0ZFRURCQUNLIiwiUFJPQ1VSRU1FTlRfVklFVyIsIlBST0NVUkVNRU5UX1JFQ0VJVkUiLCJQUk9DVVJFTUVOVF9BUFBST1ZFIiwiUFJPQ1VSRU1FTlRfRklOQU5DRSIsIk1BTkFHRV9GSU5BTkNFIiwiTUFOQUdFX0dTVCJdLCJzdWIiOiJhZG1pbl9kZW1vLXNjaG9vbCIsImlhdCI6MTc4NDgyOTQ3OCwiZXhwIjoxNzg0ODU4Mjc4fQ.cmaAcNgPW3SwgePgdQ2SdlI9iRIDFSwS1Me5WLrFmgs"
+      },
+      "load-school-01": {
+        "sectionId": "",
+        "token": "eyJhbGciOiJIUzI1NiJ9.eyJzaG9wSWQiOiJsb2FkLXNjaG9vbC0wMSIsInRlbmFudElkIjoyMDEsInJvbGUiOiJTSE9QX09XTkVSIiwicGVybWlzc2lvbnMiOlsiTUFOQUdFX1BST0RVQ1RTIiwiTUFOQUdFX09SREVSUyIsIk1BTkFHRV9TVE9DS1MiLCJNQU5BR0VfQ1VTVE9NRVJTIiwiTUFOQUdFX1NUQUZGIiwiTUFOQUdFX0NPTlNVTFRBVElPTlMiLCJWSUVXX0RPQ1RPUl9EQVNIQk9BUkQiLCJXUklURV9QUkVTQ1JJUFRJT04iLCJNQU5BR0VfQVBQT0lOVE1FTlRTIiwiTUFOQUdFX1FVRVVFIiwiTUFOQUdFX0RPQ1RPUlMiLCJWSUVXX1BBVElFTlRfSElTVE9SWSIsIk1BTkFHRV9MQUJfT1JERVJTIiwiTUFOQUdFX0xBQl9SRVNVTFRTIiwiRElTUEVOU0VfTUVESUNJTkVTIiwiSU1QT1JUX1BST0RVQ1RTIiwiRVhQT1JUX1BST0RVQ1RTIiwiU1VCTUlUX0ZFRURCQUNLIiwiUFJPQ1VSRU1FTlRfVklFVyIsIlBST0NVUkVNRU5UX1JFQ0VJVkUiLCJQUk9DVVJFTUVOVF9BUFBST1ZFIiwiUFJPQ1VSRU1FTlRfRklOQU5DRSIsIk1BTkFHRV9GSU5BTkNFIiwiTUFOQUdFX0dTVCJdLCJzdWIiOiJhZG1pbl9sb2FkLXNjaG9vbC0wMSIsImlhdCI6MTc4NDgyOTQ3OCwiZXhwIjoxNzg0ODU4Mjc4fQ.7N6S8WAzaOT-AAuNtHTFVF-j-ieUsfhqDJa81_ARyeI"
+      },
+      "load-school-02": {
+        "sectionId": "",
+        "token": "eyJhbGciOiJIUzI1NiJ9.eyJzaG9wSWQiOiJsb2FkLXNjaG9vbC0wMiIsInRlbmFudElkIjoyMDIsInJvbGUiOiJTSE9QX09XTkVSIiwicGVybWlzc2lvbnMiOlsiTUFOQUdFX1BST0RVQ1RTIiwiTUFOQUdFX09SREVSUyIsIk1BTkFHRV9TVE9DS1MiLCJNQU5BR0VfQ1VTVE9NRVJTIiwiTUFOQUdFX1NUQUZGIiwiTUFOQUdFX0NPTlNVTFRBVElPTlMiLCJWSUVXX0RPQ1RPUl9EQVNIQk9BUkQiLCJXUklURV9QUkVTQ1JJUFRJT04iLCJNQU5BR0VfQVBQT0lOVE1FTlRTIiwiTUFOQUdFX1FVRVVFIiwiTUFOQUdFX0RPQ1RPUlMiLCJWSUVXX1BBVElFTlRfSElTVE9SWSIsIk1BTkFHRV9MQUJfT1JERVJTIiwiTUFOQUdFX0xBQl9SRVNVTFRTIiwiRElTUEVOU0VfTUVESUNJTkVTIiwiSU1QT1JUX1BST0RVQ1RTIiwiRVhQT1JUX1BST0RVQ1RTIiwiU1VCTUlUX0ZFRURCQUNLIiwiUFJPQ1VSRU1FTlRfVklFVyIsIlBST0NVUkVNRU5UX1JFQ0VJVkUiLCJQUk9DVVJFTUVOVF9BUFBST1ZFIiwiUFJPQ1VSRU1FTlRfRklOQU5DRSIsIk1BTkFHRV9GSU5BTkNFIiwiTUFOQUdFX0dTVCJdLCJzdWIiOiJhZG1pbl9sb2FkLXNjaG9vbC0wMiIsImlhdCI6MTc4NDgyOTQ3OSwiZXhwIjoxNzg0ODU4Mjc5fQ.UinQMsOjLjVfEtZs8IchN8NF_TesmOWKsFCBZYibL5U"
+      },
+      "load-school-03": {
+        "sectionId": "",
+        "token": "eyJhbGciOiJIUzI1NiJ9.eyJzaG9wSWQiOiJsb2FkLXNjaG9vbC0wMyIsInRlbmFudElkIjoyMDMsInJvbGUiOiJTSE9QX09XTkVSIiwicGVybWlzc2lvbnMiOlsiTUFOQUdFX1BST0RVQ1RTIiwiTUFOQUdFX09SREVSUyIsIk1BTkFHRV9TVE9DS1MiLCJNQU5BR0VfQ1VTVE9NRVJTIiwiTUFOQUdFX1NUQUZGIiwiTUFOQUdFX0NPTlNVTFRBVElPTlMiLCJWSUVXX0RPQ1RPUl9EQVNIQk9BUkQiLCJXUklURV9QUkVTQ1JJUFRJT04iLCJNQU5BR0VfQVBQT0lOVE1FTlRTIiwiTUFOQUdFX1FVRVVFIiwiTUFOQUdFX0RPQ1RPUlMiLCJWSUVXX1BBVElFTlRfSElTVE9SWSIsIk1BTkFHRV9MQUJfT1JERVJTIiwiTUFOQUdFX0xBQl9SRVNVTFRTIiwiRElTUEVOU0VfTUVESUNJTkVTIiwiSU1QT1JUX1BST0RVQ1RTIiwiRVhQT1JUX1BST0RVQ1RTIiwiU1VCTUlUX0ZFRURCQUNLIiwiUFJPQ1VSRU1FTlRfVklFVyIsIlBST0NVUkVNRU5UX1JFQ0VJVkUiLCJQUk9DVVJFTUVOVF9BUFBST1ZFIiwiUFJPQ1VSRU1FTlRfRklOQU5DRSIsIk1BTkFHRV9GSU5BTkNFIiwiTUFOQUdFX0dTVCJdLCJzdWIiOiJhZG1pbl9sb2FkLXNjaG9vbC0wMyIsImlhdCI6MTc4NDgyOTQ3OSwiZXhwIjoxNzg0ODU4Mjc5fQ.JUrO8H_o9-RX1ZMCI7WZeCc_MLfWZTaJpJt4fx5gMVg"
+      },
+      "load-school-04": {
+        "sectionId": "",
+        "token": "eyJhbGciOiJIUzI1NiJ9.eyJzaG9wSWQiOiJsb2FkLXNjaG9vbC0wNCIsInRlbmFudElkIjoyMDQsInJvbGUiOiJTSE9QX09XTkVSIiwicGVybWlzc2lvbnMiOlsiTUFOQUdFX1BST0RVQ1RTIiwiTUFOQUdFX09SREVSUyIsIk1BTkFHRV9TVE9DS1MiLCJNQU5BR0VfQ1VTVE9NRVJTIiwiTUFOQUdFX1NUQUZGIiwiTUFOQUdFX0NPTlNVTFRBVElPTlMiLCJWSUVXX0RPQ1RPUl9EQVNIQk9BUkQiLCJXUklURV9QUkVTQ1JJUFRJT04iLCJNQU5BR0VfQVBQT0lOVE1FTlRTIiwiTUFOQUdFX1FVRVVFIiwiTUFOQUdFX0RPQ1RPUlMiLCJWSUVXX1BBVElFTlRfSElTVE9SWSIsIk1BTkFHRV9MQUJfT1JERVJTIiwiTUFOQUdFX0xBQl9SRVNVTFRTIiwiRElTUEVOU0VfTUVESUNJTkVTIiwiSU1QT1JUX1BST0RVQ1RTIiwiRVhQT1JUX1BST0RVQ1RTIiwiU1VCTUlUX0ZFRURCQUNLIiwiUFJPQ1VSRU1FTlRfVklFVyIsIlBST0NVUkVNRU5UX1JFQ0VJVkUiLCJQUk9DVVJFTUVOVF9BUFBST1ZFIiwiUFJPQ1VSRU1FTlRfRklOQU5DRSIsIk1BTkFHRV9GSU5BTkNFIiwiTUFOQUdFX0dTVCJdLCJzdWIiOiJhZG1pbl9sb2FkLXNjaG9vbC0wNCIsImlhdCI6MTc4NDgyOTQ3OSwiZXhwIjoxNzg0ODU4Mjc5fQ.zM6B46DJERPIE-tqMvb4Y0qWltG-16UapNNmrty-9s8"
+      },
+      "load-school-05": {
+        "sectionId": "",
+        "token": "eyJhbGciOiJIUzI1NiJ9.eyJzaG9wSWQiOiJsb2FkLXNjaG9vbC0wNSIsInRlbmFudElkIjoyMDUsInJvbGUiOiJTSE9QX09XTkVSIiwicGVybWlzc2lvbnMiOlsiTUFOQUdFX1BST0RVQ1RTIiwiTUFOQUdFX09SREVSUyIsIk1BTkFHRV9TVE9DS1MiLCJNQU5BR0VfQ1VTVE9NRVJTIiwiTUFOQUdFX1NUQUZGIiwiTUFOQUdFX0NPTlNVTFRBVElPTlMiLCJWSUVXX0RPQ1RPUl9EQVNIQk9BUkQiLCJXUklURV9QUkVTQ1JJUFRJT04iLCJNQU5BR0VfQVBQT0lOVE1FTlRTIiwiTUFOQUdFX1FVRVVFIiwiTUFOQUdFX0RPQ1RPUlMiLCJWSUVXX1BBVElFTlRfSElTVE9SWSIsIk1BTkFHRV9MQUJfT1JERVJTIiwiTUFOQUdFX0xBQl9SRVNVTFRTIiwiRElTUEVOU0VfTUVESUNJTkVTIiwiSU1QT1JUX1BST0RVQ1RTIiwiRVhQT1JUX1BST0RVQ1RTIiwiU1VCTUlUX0ZFRURCQUNLIiwiUFJPQ1VSRU1FTlRfVklFVyIsIlBST0NVUkVNRU5UX1JFQ0VJVkUiLCJQUk9DVVJFTUVOVF9BUFBST1ZFIiwiUFJPQ1VSRU1FTlRfRklOQU5DRSIsIk1BTkFHRV9GSU5BTkNFIiwiTUFOQUdFX0dTVCJdLCJzdWIiOiJhZG1pbl9sb2FkLXNjaG9vbC0wNSIsImlhdCI6MTc4NDgyOTQ3OSwiZXhwIjoxNzg0ODU4Mjc5fQ.lCx4bbQgV4Bmk-0qciMbXPZ5-KxbdBAYg4SKM2lckpE"
+      }
+    },
+    "date": "2026-07-23"
+  }
+}

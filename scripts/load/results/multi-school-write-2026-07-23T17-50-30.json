@@ -1,0 +1,365 @@
+{
+  "root_group": {
+    "path": "",
+    "id": "d41d8cd98f00b204e9800998ecf8427e",
+    "groups": [
+      {
+        "groups": [],
+        "checks": [
+            {
+              "path": "::setup::login ok",
+              "id": "65474b9d4039908543e738715d924333",
+              "passes": 6,
+              "fails": 0,
+              "name": "login ok"
+            }
+          ],
+        "name": "setup",
+        "path": "::setup",
+        "id": "5c0f8025f7e0b6654089e5b00e950f1a"
+      }
+    ],
+    "checks": [
+      {
+        "name": "enrolled",
+        "path": "::enrolled",
+        "id": "df228cf9886681d71bb2f289e32ab628",
+        "passes": 26,
+        "fails": 0
+      },
+      {
+        "fails": 0,
+        "name": "fee 2xx",
+        "path": "::fee 2xx",
+        "id": "fcfa7e8b2b6b2a8b71c65c779d7b114f",
+        "passes": 26
+      },
+      {
+        "passes": 26,
+        "fails": 0,
+        "name": "fee id",
+        "path": "::fee id",
+        "id": "6c5dfa1b10066c642f2c8f1aa338b9e5"
+      }
+    ],
+    "name": ""
+  },
+  "options": {
+    "summaryTrendStats": [
+      "avg",
+      "min",
+      "med",
+      "max",
+      "p(90)",
+      "p(95)"
+    ],
+    "summaryTimeUnit": "",
+    "noColor": true
+  },
+  "state": {
+    "isStdOutTTY": false,
+    "isStdErrTTY": false,
+    "testRunDurationMs": 129328.961
+  },
+  "metrics": {
+    "write_by_school": {
+      "type": "counter",
+      "contains": "default",
+      "values": {
+        "count": 26,
+        "rate": 0.20103772425729147
+      }
+    },
+    "http_req_waiting": {
+      "type": "trend",
+      "contains": "time",
+      "values": {
+        "max": 2933.0619,
+        "p(90)": 1156.1064600000009,
+        "p(95)": 1527.9125199999996,
+        "avg": 441.0206481927712,
+        "min": 11.8738,
+        "med": 227.5235
+      }
+    },
+    "write_fail_rate": {
+      "type": "rate",
+      "contains": "default",
+      "values": {
+        "rate": 0,
+        "passes": 0,
+        "fails": 26
+      },
+      "thresholds": {
+        "rate<0.15": {
+          "ok": true
+        }
+      }
+    },
+    "fee_create_ms": {
+      "contains": "time",
+      "values": {
+        "avg": 737.3846153846154,
+        "min": 199,
+        "med": 530,
+        "max": 1549,
+        "p(90)": 1381.5,
+        "p(95)": 1499.5
+      },
+      "thresholds": {
+        "p(95)<4000": {
+          "ok": true
+        }
+      },
+      "type": "trend"
+    },
+    "http_reqs": {
+      "type": "counter",
+      "contains": "default",
+      "values": {
+        "count": 249,
+        "rate": 1.9253228207717528
+      }
+    },
+    "write_success": {
+      "type": "counter",
+      "contains": "default",
+      "values": {
+        "rate": 0.20103772425729147,
+        "count": 26
+      }
+    },
+    "http_req_duration{expected_response:true}": {
+      "type": "trend",
+      "contains": "time",
+      "values": {
+        "avg": 449.17436586345434,
+        "min": 13.9716,
+        "med": 240.5177,
+        "max": 2935.0792,
+        "p(90)": 1170.5537000000006,
+        "p(95)": 1529.1707599999997
+      }
+    },
+    "http_req_connecting": {
+      "type": "trend",
+      "contains": "time",
+      "values": {
+        "avg": 0.09725301204819276,
+        "min": 0,
+        "med": 0,
+        "max": 6.485,
+        "p(90)": 0,
+        "p(95)": 0
+      }
+    },
+    "vus": {
+      "type": "gauge",
+      "contains": "default",
+      "values": {
+        "min": 0,
+        "max": 6,
+        "value": 1
+      }
+    },
+    "iteration_duration": {
+      "type": "trend",
+      "contains": "time",
+      "values": {
+        "max": 8059.7604,
+        "p(90)": 8040.45822,
+        "p(95)": 8051.92602,
+        "avg": 4508.071668,
+        "min": 1681.8497,
+        "med": 3580.8646
+      }
+    },
+    "http_req_duration": {
+      "values": {
+        "avg": 449.17436586345434,
+        "min": 13.9716,
+        "med": 240.5177,
+        "max": 2935.0792,
+        "p(90)": 1170.5537000000006,
+        "p(95)": 1529.1707599999997
+      },
+      "type": "trend",
+      "contains": "time"
+    },
+    "http_req_sending": {
+      "type": "trend",
+      "contains": "time",
+      "values": {
+        "avg": 0.054639357429718864,
+        "min": 0,
+        "med": 0,
+        "max": 3.0843,
+        "p(90)": 0,
+        "p(95)": 0.51506
+      }
+    },
+    "write_ms": {
+      "type": "trend",
+      "contains": "time",
+      "values": {
+        "med": 341,
+        "max": 2937,
+        "p(90)": 1370.98066,
+        "p(95)": 1758.5999999999988,
+        "avg": 560.7354827027032,
+        "min": 14
+      }
+    },
+    "iterations": {
+      "contains": "default",
+      "values": {
+        "count": 25,
+        "rate": 0.1933055040935495
+      },
+      "type": "counter"
+    },
+    "checks": {
+      "type": "rate",
+      "contains": "default",
+      "values": {
+        "rate": 1,
+        "passes": 84,
+        "fails": 0
+      }
+    },
+    "enroll_ms": {
+      "type": "trend",
+      "contains": "time",
+      "values": {
+        "min": 712,
+        "med": 2235.5,
+        "max": 6582,
+        "p(90)": 6291,
+        "p(95)": 6297.25,
+        "avg": 3060.269230769231
+      },
+      "thresholds": {
+        "p(95)<8000": {
+          "ok": true
+        }
+      }
+    },
+    "http_req_blocked": {
+      "contains": "time",
+      "values": {
+        "avg": 0.09725301204819276,
+        "min": 0,
+        "med": 0,
+        "max": 6.485,
+        "p(90)": 0,
+        "p(95)": 0
+      },
+      "type": "trend"
+    },
+    "vus_max": {
+      "type": "gauge",
+      "contains": "default",
+      "values": {
+        "max": 6,
+        "value": 6,
+        "min": 6
+      }
+    },
+    "http_req_tls_handshaking": {
+      "type": "trend",
+      "contains": "time",
+      "values": {
+        "p(95)": 0,
+        "avg": 0,
+        "min": 0,
+        "med": 0,
+        "max": 0,
+        "p(90)": 0
+      }
+    },
+    "http_req_failed": {
+      "type": "rate",
+      "contains": "default",
+      "values": {
+        "rate": 0,
+        "passes": 0,
+        "fails": 249
+      },
+      "thresholds": {
+        "rate<0.12": {
+          "ok": true
+        }
+      }
+    },
+    "http_req_receiving": {
+      "type": "trend",
+      "contains": "time",
+      "values": {
+        "avg": 8.099078313253013,
+        "min": 0,
+        "med": 1.3535,
+        "max": 158.6069,
+        "p(90)": 23.13520000000001,
+        "p(95)": 35.40334
+      }
+    },
+    "data_sent": {
+      "type": "counter",
+      "contains": "data",
+      "values": {
+        "count": 320363,
+        "rate": 2477.1172483168716
+      }
+    },
+    "data_received": {
+      "type": "counter",
+      "contains": "data",
+      "values": {
+        "count": 971389,
+        "rate": 7510.993612637158
+      }
+    }
+  },
+  "setup_data": {
+    "contexts": {
+      "load-school-04": {
+        "classId": "918a4adc-1bfb-4e4f-b0c6-835f41c12ca8",
+        "sectionId": "5b78b3ca-b976-4c32-8c78-8dacef898b74",
+        "sectionLabel": "WL-load-school-04-28900724"
+      },
+      "load-school-05": {
+        "classId": "73d83a0f-2a8f-4d04-8565-e3a03caae884",
+        "sectionId": "372168c0-408a-4aeb-afea-f438f1e4665b",
+        "sectionLabel": "WL-load-school-05-28900724"
+      },
+      "demo-school": {
+        "classId": "c330e13f-cbc8-4309-ae04-230f1b6d3925",
+        "sectionId": "d8031470-d874-4720-a314-dd5f4b3c8948",
+        "sectionLabel": "WL-demo-school-28900724"
+      },
+      "load-school-01": {
+        "classId": "7ec78e8f-f7bf-4dda-aecb-ccb0eaa7fdfe",
+        "sectionId": "12e3f050-d9dd-466b-9e41-867b0ccef844",
+        "sectionLabel": "WL-load-school-01-28900724"
+      },
+      "load-school-02": {
+        "classId": "739f1258-dc51-46a2-afd7-e7de38cdc223",
+        "sectionId": "89578697-9c7d-4a31-9db4-534cd8e6f1b6",
+        "sectionLabel": "WL-load-school-02-28900724"
+      },
+      "load-school-03": {
+        "sectionId": "723720c9-b97f-4605-86a3-bc2b0ea6ae55",
+        "sectionLabel": "WL-load-school-03-28900724",
+        "classId": "503c440d-1903-4ff5-955f-5ca0911a2b8b"
+      }
+    },
+    "tokens": {
+      "demo-school": "eyJhbGciOiJIUzI1NiJ9.eyJzaG9wSWQiOiJkZW1vLXNjaG9vbCIsInRlbmFudElkIjoxMDAsInJvbGUiOiJTSE9QX09XTkVSIiwicGVybWlzc2lvbnMiOlsiTUFOQUdFX1BST0RVQ1RTIiwiTUFOQUdFX09SREVSUyIsIk1BTkFHRV9TVE9DS1MiLCJNQU5BR0VfQ1VTVE9NRVJTIiwiTUFOQUdFX1NUQUZGIiwiTUFOQUdFX0NPTlNVTFRBVElPTlMiLCJWSUVXX0RPQ1RPUl9EQVNIQk9BUkQiLCJXUklURV9QUkVTQ1JJUFRJT04iLCJNQU5BR0VfQVBQT0lOVE1FTlRTIiwiTUFOQUdFX1FVRVVFIiwiTUFOQUdFX0RPQ1RPUlMiLCJWSUVXX1BBVElFTlRfSElTVE9SWSIsIk1BTkFHRV9MQUJfT1JERVJTIiwiTUFOQUdFX0xBQl9SRVNVTFRTIiwiRElTUEVOU0VfTUVESUNJTkVTIiwiSU1QT1JUX1BST0RVQ1RTIiwiRVhQT1JUX1BST0RVQ1RTIiwiU1VCTUlUX0ZFRURCQUNLIiwiUFJPQ1VSRU1FTlRfVklFVyIsIlBST0NVUkVNRU5UX1JFQ0VJVkUiLCJQUk9DVVJFTUVOVF9BUFBST1ZFIiwiUFJPQ1VSRU1FTlRfRklOQU5DRSIsIk1BTkFHRV9GSU5BTkNFIiwiTUFOQUdFX0dTVCJdLCJzdWIiOiJhZG1pbl9kZW1vLXNjaG9vbCIsImlhdCI6MTc4NDgyODkwMSwiZXhwIjoxNzg0ODU3NzAxfQ.USV-JYmirUzxtdofpAqxqC6S4NWKhxFa07SID2LcT_Q",
+      "load-school-01": "eyJhbGciOiJIUzI1NiJ9.eyJzaG9wSWQiOiJsb2FkLXNjaG9vbC0wMSIsInRlbmFudElkIjoyMDEsInJvbGUiOiJTSE9QX09XTkVSIiwicGVybWlzc2lvbnMiOlsiTUFOQUdFX1BST0RVQ1RTIiwiTUFOQUdFX09SREVSUyIsIk1BTkFHRV9TVE9DS1MiLCJNQU5BR0VfQ1VTVE9NRVJTIiwiTUFOQUdFX1NUQUZGIiwiTUFOQUdFX0NPTlNVTFRBVElPTlMiLCJWSUVXX0RPQ1RPUl9EQVNIQk9BUkQiLCJXUklURV9QUkVTQ1JJUFRJT04iLCJNQU5BR0VfQVBQT0lOVE1FTlRTIiwiTUFOQUdFX1FVRVVFIiwiTUFOQUdFX0RPQ1RPUlMiLCJWSUVXX1BBVElFTlRfSElTVE9SWSIsIk1BTkFHRV9MQUJfT1JERVJTIiwiTUFOQUdFX0xBQl9SRVNVTFRTIiwiRElTUEVOU0VfTUVESUNJTkVTIiwiSU1QT1JUX1BST0RVQ1RTIiwiRVhQT1JUX1BST0RVQ1RTIiwiU1VCTUlUX0ZFRURCQUNLIiwiUFJPQ1VSRU1FTlRfVklFVyIsIlBST0NVUkVNRU5UX1JFQ0VJVkUiLCJQUk9DVVJFTUVOVF9BUFBST1ZFIiwiUFJPQ1VSRU1FTlRfRklOQU5DRSIsIk1BTkFHRV9GSU5BTkNFIiwiTUFOQUdFX0dTVCJdLCJzdWIiOiJhZG1pbl9sb2FkLXNjaG9vbC0wMSIsImlhdCI6MTc4NDgyODkwMiwiZXhwIjoxNzg0ODU3NzAyfQ.dvpp7E9_cns2kSAI64kk2WP4G0hdmxXDA3N3QyXRdLM",
+      "load-school-02": "eyJhbGciOiJIUzI1NiJ9.eyJzaG9wSWQiOiJsb2FkLXNjaG9vbC0wMiIsInRlbmFudElkIjoyMDIsInJvbGUiOiJTSE9QX09XTkVSIiwicGVybWlzc2lvbnMiOlsiTUFOQUdFX1BST0RVQ1RTIiwiTUFOQUdFX09SREVSUyIsIk1BTkFHRV9TVE9DS1MiLCJNQU5BR0VfQ1VTVE9NRVJTIiwiTUFOQUdFX1NUQUZGIiwiTUFOQUdFX0NPTlNVTFRBVElPTlMiLCJWSUVXX0RPQ1RPUl9EQVNIQk9BUkQiLCJXUklURV9QUkVTQ1JJUFRJT04iLCJNQU5BR0VfQVBQT0lOVE1FTlRTIiwiTUFOQUdFX1FVRVVFIiwiTUFOQUdFX0RPQ1RPUlMiLCJWSUVXX1BBVElFTlRfSElTVE9SWSIsIk1BTkFHRV9MQUJfT1JERVJTIiwiTUFOQUdFX0xBQl9SRVNVTFRTIiwiRElTUEVOU0VfTUVESUNJTkVTIiwiSU1QT1JUX1BST0RVQ1RTIiwiRVhQT1JUX1BST0RVQ1RTIiwiU1VCTUlUX0ZFRURCQUNLIiwiUFJPQ1VSRU1FTlRfVklFVyIsIlBST0NVUkVNRU5UX1JFQ0VJVkUiLCJQUk9DVVJFTUVOVF9BUFBST1ZFIiwiUFJPQ1VSRU1FTlRfRklOQU5DRSIsIk1BTkFHRV9GSU5BTkNFIiwiTUFOQUdFX0dTVCJdLCJzdWIiOiJhZG1pbl9sb2FkLXNjaG9vbC0wMiIsImlhdCI6MTc4NDgyODkwMiwiZXhwIjoxNzg0ODU3NzAyfQ.TnlyPF3kjMLgkxQ16YkBso4Tm9lbBGa_WO78zVWcQ4Y",
+      "load-school-03": "eyJhbGciOiJIUzI1NiJ9.eyJzaG9wSWQiOiJsb2FkLXNjaG9vbC0wMyIsInRlbmFudElkIjoyMDMsInJvbGUiOiJTSE9QX09XTkVSIiwicGVybWlzc2lvbnMiOlsiTUFOQUdFX1BST0RVQ1RTIiwiTUFOQUdFX09SREVSUyIsIk1BTkFHRV9TVE9DS1MiLCJNQU5BR0VfQ1VTVE9NRVJTIiwiTUFOQUdFX1NUQUZGIiwiTUFOQUdFX0NPTlNVTFRBVElPTlMiLCJWSUVXX0RPQ1RPUl9EQVNIQk9BUkQiLCJXUklURV9QUkVTQ1JJUFRJT04iLCJNQU5BR0VfQVBQT0lOVE1FTlRTIiwiTUFOQUdFX1FVRVVFIiwiTUFOQUdFX0RPQ1RPUlMiLCJWSUVXX1BBVElFTlRfSElTVE9SWSIsIk1BTkFHRV9MQUJfT1JERVJTIiwiTUFOQUdFX0xBQl9SRVNVTFRTIiwiRElTUEVOU0VfTUVESUNJTkVTIiwiSU1QT1JUX1BST0RVQ1RTIiwiRVhQT1JUX1BST0RVQ1RTIiwiU1VCTUlUX0ZFRURCQUNLIiwiUFJPQ1VSRU1FTlRfVklFVyIsIlBST0NVUkVNRU5UX1JFQ0VJVkUiLCJQUk9DVVJFTUVOVF9BUFBST1ZFIiwiUFJPQ1VSRU1FTlRfRklOQU5DRSIsIk1BTkFHRV9GSU5BTkNFIiwiTUFOQUdFX0dTVCJdLCJzdWIiOiJhZG1pbl9sb2FkLXNjaG9vbC0wMyIsImlhdCI6MTc4NDgyODkwMiwiZXhwIjoxNzg0ODU3NzAyfQ.I7EljDhx72WrObFaN7nCPx3HptNGNpxXiJLd5B9Ro9k",
+      "load-school-04": "eyJhbGciOiJIUzI1NiJ9.eyJzaG9wSWQiOiJsb2FkLXNjaG9vbC0wNCIsInRlbmFudElkIjoyMDQsInJvbGUiOiJTSE9QX09XTkVSIiwicGVybWlzc2lvbnMiOlsiTUFOQUdFX1BST0RVQ1RTIiwiTUFOQUdFX09SREVSUyIsIk1BTkFHRV9TVE9DS1MiLCJNQU5BR0VfQ1VTVE9NRVJTIiwiTUFOQUdFX1NUQUZGIiwiTUFOQUdFX0NPTlNVTFRBVElPTlMiLCJWSUVXX0RPQ1RPUl9EQVNIQk9BUkQiLCJXUklURV9QUkVTQ1JJUFRJT04iLCJNQU5BR0VfQVBQT0lOVE1FTlRTIiwiTUFOQUdFX1FVRVVFIiwiTUFOQUdFX0RPQ1RPUlMiLCJWSUVXX1BBVElFTlRfSElTVE9SWSIsIk1BTkFHRV9MQUJfT1JERVJTIiwiTUFOQUdFX0xBQl9SRVNVTFRTIiwiRElTUEVOU0VfTUVESUNJTkVTIiwiSU1QT1JUX1BST0RVQ1RTIiwiRVhQT1JUX1BST0RVQ1RTIiwiU1VCTUlUX0ZFRURCQUNLIiwiUFJPQ1VSRU1FTlRfVklFVyIsIlBST0NVUkVNRU5UX1JFQ0VJVkUiLCJQUk9DVVJFTUVOVF9BUFBST1ZFIiwiUFJPQ1VSRU1FTlRfRklOQU5DRSIsIk1BTkFHRV9GSU5BTkNFIiwiTUFOQUdFX0dTVCJdLCJzdWIiOiJhZG1pbl9sb2FkLXNjaG9vbC0wNCIsImlhdCI6MTc4NDgyODkwMiwiZXhwIjoxNzg0ODU3NzAyfQ.1uKlLxB7fH20zmuXDDq2CeALi_T3reXpSJZmTGTPXOc",
+      "load-school-05": "eyJhbGciOiJIUzI1NiJ9.eyJzaG9wSWQiOiJsb2FkLXNjaG9vbC0wNSIsInRlbmFudElkIjoyMDUsInJvbGUiOiJTSE9QX09XTkVSIiwicGVybWlzc2lvbnMiOlsiTUFOQUdFX1BST0RVQ1RTIiwiTUFOQUdFX09SREVSUyIsIk1BTkFHRV9TVE9DS1MiLCJNQU5BR0VfQ1VTVE9NRVJTIiwiTUFOQUdFX1NUQUZGIiwiTUFOQUdFX0NPTlNVTFRBVElPTlMiLCJWSUVXX0RPQ1RPUl9EQVNIQk9BUkQiLCJXUklURV9QUkVTQ1JJUFRJT04iLCJNQU5BR0VfQVBQT0lOVE1FTlRTIiwiTUFOQUdFX1FVRVVFIiwiTUFOQUdFX0RPQ1RPUlMiLCJWSUVXX1BBVElFTlRfSElTVE9SWSIsIk1BTkFHRV9MQUJfT1JERVJTIiwiTUFOQUdFX0xBQl9SRVNVTFRTIiwiRElTUEVOU0VfTUVESUNJTkVTIiwiSU1QT1JUX1BST0RVQ1RTIiwiRVhQT1JUX1BST0RVQ1RTIiwiU1VCTUlUX0ZFRURCQUNLIiwiUFJPQ1VSRU1FTlRfVklFVyIsIlBST0NVUkVNRU5UX1JFQ0VJVkUiLCJQUk9DVVJFTUVOVF9BUFBST1ZFIiwiUFJPQ1VSRU1FTlRfRklOQU5DRSIsIk1BTkFHRV9GSU5BTkNFIiwiTUFOQUdFX0dTVCJdLCJzdWIiOiJhZG1pbl9sb2FkLXNjaG9vbC0wNSIsImlhdCI6MTc4NDgyODkwMywiZXhwIjoxNzg0ODU3NzAzfQ.OzsCJYfAfreKB7gH4g1ElA5b4lAJs7S2yyOONp1fUog"
+    }
+  }
+}

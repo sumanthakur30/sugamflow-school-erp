@@ -71,7 +71,8 @@ public class FormDefinitionService {
     for (String key : List.of(
         "student_master","parent_master","employee_master","admission_form","fee_collection","attendance_mark","exam_marks","visitor_form",
         "certificate","library","transport","hostel",
-        "library_issue","hostel_allocation","transport_route","payroll_run")) {
+        "library_issue","hostel_allocation","transport_route","payroll_run",
+        "ipd_nursing_assessment","ipd_admission_consent")) {
       if (repo.findByOrganizationIdIsNullAndFormKey(key).isPresent()) {
         if ("admission_form".equals(key)) {
           ensureAdmissionFormEnriched();
@@ -421,6 +422,12 @@ public class FormDefinitionService {
     if ("employee_master".equals(key)) {
       return employeeMasterForm();
     }
+    if ("ipd_nursing_assessment".equals(key)) {
+      return ipdNursingAssessmentForm();
+    }
+    if ("ipd_admission_consent".equals(key)) {
+      return ipdAdmissionConsentForm();
+    }
     Map<String, Object> form = new LinkedHashMap<>();
     form.put("formKey", key);
     form.put("title", key.replace('_', ' '));
@@ -724,6 +731,45 @@ public class FormDefinitionService {
             field("gender","Gender","TEXTBOX",false),
             field("joiningDate","Joining Date","TEXTBOX",true),
             field("status","Status","TEXTBOX",false)))));
+    form.put("validationRules", List.of());
+    form.put("conditionalVisibility", List.of());
+    return form;
+  }
+
+  private Map<String, Object> ipdNursingAssessmentForm() {
+    Map<String, Object> form = new LinkedHashMap<>();
+    form.put("formKey", "ipd_nursing_assessment");
+    form.put("title", "IPD Nursing Daily Assessment");
+    form.put("sections", List.of(Map.of(
+        "id", "assessment", "title", "Assessment", "repeatable", false,
+        "fields", List.of(
+            field("consciousness", "Level of consciousness", "DROPDOWN", true),
+            field("mobility", "Mobility", "DROPDOWN", true),
+            field("skinIntegrity", "Skin integrity", "DROPDOWN", true),
+            field("pressureUlcerRisk", "Pressure ulcer risk", "DROPDOWN", false),
+            field("fallRisk", "Fall risk", "DROPDOWN", true),
+            field("painScore", "Pain score (0-10)", "NUMBER", true),
+            field("ivSiteOk", "IV site satisfactory", "CHECKBOX", false),
+            field("notes", "Nurse notes", "TEXTAREA", false)))));
+    form.put("validationRules", List.of());
+    form.put("conditionalVisibility", List.of());
+    return form;
+  }
+
+  private Map<String, Object> ipdAdmissionConsentForm() {
+    Map<String, Object> form = new LinkedHashMap<>();
+    form.put("formKey", "ipd_admission_consent");
+    form.put("title", "IPD Admission Consent");
+    form.put("sections", List.of(Map.of(
+        "id", "consent", "title", "Consent", "repeatable", false,
+        "fields", List.of(
+            field("patientOrGuardian", "Patient / Guardian name", "TEXTBOX", true),
+            field("relation", "Relation to patient", "TEXTBOX", true),
+            field("understoodTreatment", "I understand the proposed treatment", "CHECKBOX", true),
+            field("consentSurgery", "Consent for procedures / surgery if advised", "CHECKBOX", false),
+            field("consentData", "Consent to process health data", "CHECKBOX", true),
+            field("signatureName", "Signature (type full name)", "TEXTBOX", true),
+            field("signedAt", "Signed date", "DATE", true)))));
     form.put("validationRules", List.of());
     form.put("conditionalVisibility", List.of());
     return form;
