@@ -2,7 +2,7 @@
 
 **Status:** Accepted  
 **Date:** 2026-07-30  
-**Phase:** 3 — Scale (Campaigns + UTM)  
+**Phase:** 3b — Scale ops (scoring, calendar/calls/approvals/forecast, reports/ACL, inbound adapters)  
 **Branch:** `feature/crm-platform-mvp` (school + gateway + crm-service + crm-ui)
 
 ## Context
