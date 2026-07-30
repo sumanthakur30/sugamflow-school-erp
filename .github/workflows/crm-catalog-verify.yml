@@ -1,0 +1,25 @@
+name: CRM catalog verify
+
+on:
+  push:
+    paths:
+      - 'services/subscription-service/src/main/resources/db/migration/V17__crm_standalone_catalog.sql'
+      - 'docs/qa/verify-crm-catalog.sql'
+      - '.github/workflows/crm-catalog-verify.yml'
+  pull_request:
+    paths:
+      - 'services/subscription-service/src/main/resources/db/migration/V17__crm_standalone_catalog.sql'
+      - 'docs/qa/verify-crm-catalog.sql'
+
+jobs:
+  assert-sql-present:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Assert CRM catalog migration and verify script
+        run: |
+          test -f services/subscription-service/src/main/resources/db/migration/V17__crm_standalone_catalog.sql
+          test -f docs/qa/verify-crm-catalog.sql
+          grep -q "FEATURE_CRM" services/subscription-service/src/main/resources/db/migration/V17__crm_standalone_catalog.sql
+          grep -q "crm-professional" services/subscription-service/src/main/resources/db/migration/V17__crm_standalone_catalog.sql
+          grep -q "FEATURE_CRM" docs/qa/verify-crm-catalog.sql
