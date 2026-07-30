@@ -2,7 +2,7 @@
 
 **Status:** Accepted  
 **Date:** 2026-07-30  
-**Phase:** 2 — Revenue (Opportunity + GST Quotation + templates)  
+**Phase:** 3 — Scale (Campaigns + UTM)  
 **Branch:** `feature/crm-platform-mvp` (school + gateway + crm-service + crm-ui)
 
 ## Context
