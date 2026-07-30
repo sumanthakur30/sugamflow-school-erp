@@ -2,7 +2,7 @@
 
 **Status:** Accepted  
 **Date:** 2026-07-30  
-**Phase:** 3b — Scale ops (scoring, calendar/calls/approvals/forecast, reports/ACL, inbound adapters)  
+**Phase:** 4 — Enterprise AI (summaries/NBA/win-predict/OCR/drafts) + residency/SSO/audit export  
 **Branch:** `feature/crm-platform-mvp` (school + gateway + crm-service + crm-ui)
 
 ## Context
