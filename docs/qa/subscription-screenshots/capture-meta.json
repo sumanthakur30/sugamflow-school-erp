@@ -1,0 +1,22 @@
+{
+  "startedAt": "2026-07-29T05:06:33.392Z",
+  "loginOk": true,
+  "loginError": null,
+  "screenshots": [
+    "desktop-plans.png",
+    "desktop-catalog.png",
+    "desktop-license.png",
+    "desktop-usage.png",
+    "tablet-plans.png",
+    "tablet-catalog.png",
+    "tablet-license.png",
+    "tablet-usage.png",
+    "mobile-login.png",
+    "mobile-plans.png",
+    "mobile-catalog.png",
+    "mobile-license.png",
+    "mobile-usage.png"
+  ],
+  "notes": [],
+  "finishedAt": "2026-07-29T05:07:28.186Z"
+}

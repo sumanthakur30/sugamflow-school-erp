@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<title>School Subscription Admin QA Report — Phases 1–7</title>
+<style>
+  :root { --ink:#1e293b; --muted:#64748b; --line:#e2e8f0; --pass:#166534; --fail:#b91c1c; --bg:#f8fafc; }
+  * { box-sizing: border-box; }
+  body { font-family: "Segoe UI", Georgia, serif; color: var(--ink); margin: 0; padding: 24px 32px 64px; background: #fff; line-height: 1.45; }
+  h1 { font-size: 1.75rem; margin: 0 0 0.25rem; }
+  h2 { font-size: 1.25rem; margin-top: 2rem; border-bottom: 2px solid var(--ink); padding-bottom: 0.3rem; }
+  h3 { font-size: 1.05rem; margin-top: 1.25rem; }
+  .meta { color: var(--muted); margin-bottom: 1.5rem; }
+  .meta strong { color: var(--ink); }
+  ol.howto { background: var(--bg); padding: 1rem 1rem 1rem 2.2rem; border-radius: 8px; border: 1px solid var(--line); }
+  .pass { color: var(--pass); font-weight: 700; }
+  .fail { color: var(--fail); font-weight: 700; }
+  .partial { color: #a16207; font-weight: 700; }
+  table { width: 100%; border-collapse: collapse; font-size: 0.82rem; margin: 0.75rem 0 1.25rem; }
+  th, td { border: 1px solid var(--line); padding: 0.4rem 0.5rem; text-align: left; vertical-align: top; }
+  th { background: var(--bg); }
+  td.url { max-width: 280px; word-break: break-all; }
+  code { font-size: 0.75rem; word-break: break-all; }
+  .shots { display: grid; grid-template-columns: 1fr; gap: 1rem; margin: 1rem 0; }
+  .shot { border: 1px solid var(--line); border-radius: 8px; overflow: hidden; page-break-inside: avoid; }
+  .shot figcaption { background: var(--bg); padding: 0.4rem 0.6rem; font-size: 0.85rem; font-weight: 600; }
+  .shot img { width: 100%; display: block; }
+  .checklist li { margin: 0.35rem 0; }
+  .gap { background: #fff7ed; border: 1px solid #fed7aa; padding: 0.75rem 1rem; border-radius: 8px; }
+  .summary-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; }
+  .card { border: 1px solid var(--line); border-radius: 8px; padding: 0.75rem 1rem; background: var(--bg); }
+  @media print {
+    body { padding: 12px; }
+    .shot img { max-height: 520px; object-fit: contain; object-position: top; }
+  }
+</style>
+</head>
+<body>
+<h1>School Subscription Admin QA Report</h1>
+<p class="meta">
+  <strong>Date:</strong> 2026-07-29 &nbsp;|&nbsp;
+  <strong>Branch:</strong> feature/subscription-plans &nbsp;|&nbsp;
+  <strong>Surface:</strong> Phases 1–7 (Plans, Catalog, License, Usage) &nbsp;|&nbsp;
+  <strong>Note:</strong> after rebuild
+</p>
+
+<div class="summary-grid">
+  <div class="card"><strong>API overall:</strong> <span class="pass">22 PASS</span> / <span class="fail">1 FAIL</span> (23 calls) — after rebuild</div>
+  <div class="card"><strong>Service:</strong> <span class="pass">Rebuilt &amp; restarted</span> on :8182 (-Xms128m -Xmx384m SerialGC); health UP</div>
+  <div class="card"><strong>UI login:</strong> <span class="pass">PASS</span> (admin / demo-school)</div>
+  <div class="card"><strong>UI host:</strong> http://localhost:4300 (4200 was Lab UI)</div>
+</div>
+
+<h2>How to follow</h2>
+<ol class="howto">
+  <li>Ensure <code>school-ui</code> is running (this QA used <code>ng serve --port 4300</code>; default script uses 4200 when free).</li>
+  <li>Open <code>/login</code> → Organization ID <code>demo-school</code>, Username <code>admin</code>, Password <code>password</code>, destination School Admin.</li>
+  <li>After sign-in, go to <strong>Admin → Subscription</strong> (<code>/admin/subscription</code>).</li>
+  <li>Walk tabs: <strong>Plans</strong> → <strong>Catalog</strong> → <strong>License</strong> → <strong>Usage</strong>.</li>
+  <li>Compare screenshots below (desktop 1440×900, tablet 768×1024, mobile 390×844).</li>
+</ol>
+
+<h2>Plans</h2>
+<p><strong>API verdict:</strong> <span class="pass">PASS (6/6)</span> —
+  list/get plans, projection, projection/modules, entitlements, and feature-flags all 200 after rebuild.</p>
+<p><strong>UI tested:</strong> Plans tab loads plan cards, entitlements chips; Edit/Assign actions present.</p>
+<div class="shots">
+  <figure class="shot"><figcaption>Desktop — Plans</figcaption><img src="subscription-screenshots/desktop-plans.png" alt="desktop plans"/></figure>
+  <figure class="shot"><figcaption>Tablet — Plans</figcaption><img src="subscription-screenshots/tablet-plans.png" alt="tablet plans"/></figure>
+  <figure class="shot"><figcaption>Mobile — Plans</figcaption><img src="subscription-screenshots/mobile-plans.png" alt="mobile plans"/></figure>
+</div>
+
+<h2>Catalog</h2>
+<p><strong>API verdict:</strong> <span class="pass">PASS (7/7)</span> —
+  GET business-types/modules/features/limits OK; PUT upsert + deactivate module returned 200 after rebuild.</p>
+<p><strong>UI tested:</strong> Catalog filters (business type, module, entity) and modules table.</p>
+<div class="shots">
+  <figure class="shot"><figcaption>Desktop — Catalog</figcaption><img src="subscription-screenshots/desktop-catalog.png" alt="desktop catalog"/></figure>
+  <figure class="shot"><figcaption>Tablet — Catalog</figcaption><img src="subscription-screenshots/tablet-catalog.png" alt="tablet catalog"/></figure>
+  <figure class="shot"><figcaption>Mobile — Catalog</figcaption><img src="subscription-screenshots/mobile-catalog.png" alt="mobile catalog"/></figure>
+</div>
+
+<h2>License</h2>
+<p><strong>API verdict:</strong> <span class="pass">PASS</span> — GET <code>/tenants/current/license</code> 200 after rebuild.</p>
+<p><strong>UI tested:</strong> License tab renders (empty/error state if API missing).</p>
+<div class="shots">
+  <figure class="shot"><figcaption>Desktop — License</figcaption><img src="subscription-screenshots/desktop-license.png" alt="desktop license"/></figure>
+  <figure class="shot"><figcaption>Tablet — License</figcaption><img src="subscription-screenshots/tablet-license.png" alt="tablet license"/></figure>
+  <figure class="shot"><figcaption>Mobile — License</figcaption><img src="subscription-screenshots/mobile-license.png" alt="mobile license"/></figure>
+</div>
+
+<h2>Usage</h2>
+<p><strong>API verdict:</strong> <span class="pass">PASS</span> — limits/usage/events/validate-limit/validate-feature all 200 after rebuild.</p>
+<p><strong>UI tested:</strong> Usage tab with empty metering messaging.</p>
+<div class="shots">
+  <figure class="shot"><figcaption>Desktop — Usage</figcaption><img src="subscription-screenshots/desktop-usage.png" alt="desktop usage"/></figure>
+  <figure class="shot"><figcaption>Tablet — Usage</figcaption><img src="subscription-screenshots/tablet-usage.png" alt="tablet usage"/></figure>
+  <figure class="shot"><figcaption>Mobile — Usage</figcaption><img src="subscription-screenshots/mobile-usage.png" alt="mobile usage"/></figure>
+</div>
+
+<h2>Login (mobile)</h2>
+<figure class="shot"><figcaption>Mobile — Login</figcaption><img src="subscription-screenshots/mobile-login.png" alt="mobile login"/></figure>
+
+<h2>Gateway &amp; cache</h2>
+<ul>
+  <li>Gateway login: <span class="pass">PASS</span> status 200, token present</li>
+  <li>Gateway entitlements: <span class="fail">FAIL</span> status 401 (Unauthorized — gateway auth; direct :8182 with X-Internal-Service works)</li>
+  <li>Entitlements cache double-GET: <span class="pass">PASS</span> (both 200 with Redis/cache off)</li>
+</ul>
+
+<h2>Responsive checklist</h2>
+<ul class="checklist">
+  <li>Tabs wrap / stack as full-width buttons on ≤640px — <strong>CSS added</strong> in <code>subscription.component.scss</code></li>
+  <li>Grids (.grid.two / .grid.three) stack to 1 column at 640px — <strong>CSS added</strong></li>
+  <li>Tables: <code>.table-wrap</code> overflow-x + <code>min-width: 32rem</code> — <strong>CSS added</strong></li>
+  <li>Inputs/selects/textareas 16px on mobile (avoid iOS zoom) — <strong>CSS added</strong></li>
+  <li>Screenshots captured before/with SCSS change; rebuild/hot-reload school-ui to verify visually</li>
+</ul>
+
+<h2>Known gaps / recommendations</h2>
+<div class="gap">
+<ul>
+  <li><strong>Done:</strong> subscription-service rebuilt and restarted on :8182; Phase 2–7 APIs (projection, license, usage, validate, catalog PUT) now live.</li>
+  <li><strong>Gateway 401</strong> for unauthenticated <code>/api/subscription/tenants/current/entitlements</code> — send JWT from gateway login or fix internal-service header passthrough; direct :8182 works.</li>
+  <li>Port <strong>4200</strong> may be Lab/shop UI; run school-ui on a free port (QA used <strong>4300</strong>).</li>
+  <li>Eureka registration warns when discovery server is down (non-blocking for direct :8182).</li>
+</ul>
+</div>
+
+<h2>API results summary</h2>
+<table>
+<thead>
+<tr><th>Name</th><th>Method</th><th>URL</th><th>Status</th><th>Result</th><th>Snippet</th></tr>
+</thead>
+<tbody>
+<tr><td>1_plans</td><td>GET</td><td class='url'>http://localhost:8182/api/subscription/plans</td><td>200</td><td><span class="pass">PASS</span></td><td><code>{&quot;success&quot;:true,&quot;data&quot;:[{&quot;id&quot;:&quot;government&quot;,&quot;code&quot;:&quot;GOVERNMENT&quot;,&quot;name&quot;:&quot;Government&quot;,&quot;planType&quot;:&quot;GOVERNMENT&quot;,&quot;active&quot;:true</code></td></tr>
+<tr><td>2_plan_starter</td><td>GET</td><td class='url'>http://localhost:8182/api/subscription/plans/starter</td><td>200</td><td><span class="pass">PASS</span></td><td><code>{&quot;success&quot;:true,&quot;data&quot;:{&quot;id&quot;:&quot;starter&quot;,&quot;code&quot;:&quot;STARTER&quot;,&quot;name&quot;:&quot;Starter&quot;,&quot;planType&quot;:&quot;STARTER&quot;,&quot;active&quot;:true,&quot;limits&quot;:{&quot;m</code></td></tr>
+<tr><td>3_projection</td><td>GET</td><td class='url'>http://localhost:8182/api/subscription/plans/starter/projection</td><td>200</td><td><span class="pass">PASS</span></td><td><code>{&quot;success&quot;:true,&quot;data&quot;:{&quot;planId&quot;:&quot;starter&quot;,&quot;sourceOfTruth&quot;:&quot;subscription_plan JSON&quot;,&quot;features&quot;:[{&quot;featureCode&quot;:&quot;FEATURE_</code></td></tr>
+<tr><td>4_projection_modules</td><td>GET</td><td class='url'>http://localhost:8182/api/subscription/plans/starter/projection/modules</td><td>200</td><td><span class="pass">PASS</span></td><td><code>{&quot;success&quot;:true,&quot;data&quot;:[{&quot;moduleCode&quot;:&quot;SCHOOL_ACADEMIC&quot;,&quot;enabled&quot;:true},{&quot;moduleCode&quot;:&quot;SCHOOL_ADMISSION&quot;,&quot;enabled&quot;:true}</code></td></tr>
+<tr><td>5_business_types</td><td>GET</td><td class='url'>http://localhost:8182/api/subscription/catalog/business-types</td><td>200</td><td><span class="pass">PASS</span></td><td><code>{&quot;success&quot;:true,&quot;data&quot;:[{&quot;code&quot;:&quot;SCHOOL&quot;,&quot;name&quot;:&quot;School ERP&quot;,&quot;description&quot;:&quot;K-12 / campus education management&quot;,&quot;sortOrd</code></td></tr>
+<tr><td>6_modules</td><td>GET</td><td class='url'>http://localhost:8182/api/subscription/catalog/modules?businessType=SCHOOL</td><td>200</td><td><span class="pass">PASS</span></td><td><code>{&quot;success&quot;:true,&quot;data&quot;:[{&quot;code&quot;:&quot;SCHOOL_CORE&quot;,&quot;businessTypeCode&quot;:&quot;SCHOOL&quot;,&quot;name&quot;:&quot;Core Administration&quot;,&quot;description&quot;:&quot;Ad</code></td></tr>
+<tr><td>7_features</td><td>GET</td><td class='url'>http://localhost:8182/api/subscription/catalog/features?module=SCHOOL_FEE</td><td>200</td><td><span class="pass">PASS</span></td><td><code>{&quot;success&quot;:true,&quot;data&quot;:[{&quot;code&quot;:&quot;FEATURE_FEE&quot;,&quot;moduleCode&quot;:&quot;SCHOOL_FEE&quot;,&quot;name&quot;:&quot;Fee collection&quot;,&quot;description&quot;:null,&quot;sort</code></td></tr>
+<tr><td>8_limits</td><td>GET</td><td class='url'>http://localhost:8182/api/subscription/catalog/limits?businessType=SCHOOL</td><td>200</td><td><span class="pass">PASS</span></td><td><code>{&quot;success&quot;:true,&quot;data&quot;:[{&quot;code&quot;:&quot;maxStudents&quot;,&quot;businessTypeCode&quot;:&quot;SCHOOL&quot;,&quot;name&quot;:&quot;Maximum students&quot;,&quot;unit&quot;:&quot;COUNT&quot;,&quot;aggr</code></td></tr>
+<tr><td>9_entitlements</td><td>GET</td><td class='url'>http://localhost:8182/api/subscription/tenants/current/entitlements</td><td>200</td><td><span class="pass">PASS</span></td><td><code>{&quot;success&quot;:true,&quot;data&quot;:{&quot;organizationId&quot;:&quot;demo-school&quot;,&quot;planId&quot;:&quot;starter&quot;,&quot;limits&quot;:{&quot;maxSms&quot;:500,&quot;maxUsers&quot;:30,&quot;maxEmail</code></td></tr>
+<tr><td>10_feature_flag</td><td>GET</td><td class='url'>http://localhost:8182/api/subscription/feature-flags/FEATURE_FEE</td><td>200</td><td><span class="pass">PASS</span></td><td><code>{&quot;success&quot;:true,&quot;data&quot;:{&quot;planId&quot;:&quot;starter&quot;,&quot;flag&quot;:&quot;FEATURE_FEE&quot;,&quot;enabled&quot;:true},&quot;message&quot;:null}</code></td></tr>
+<tr><td>11_license</td><td>GET</td><td class='url'>http://localhost:8182/api/subscription/tenants/current/license</td><td>200</td><td><span class="pass">PASS</span></td><td><code>{&quot;success&quot;:true,&quot;data&quot;:{&quot;organizationId&quot;:&quot;demo-school&quot;,&quot;planId&quot;:&quot;starter&quot;,&quot;resolvedStatus&quot;:&quot;ACTIVE&quot;,&quot;enforcementEnabled&quot;</code></td></tr>
+<tr><td>12_limits_tenant</td><td>GET</td><td class='url'>http://localhost:8182/api/subscription/tenants/current/limits</td><td>200</td><td><span class="pass">PASS</span></td><td><code>{&quot;success&quot;:true,&quot;data&quot;:{&quot;organizationId&quot;:&quot;demo-school&quot;,&quot;planId&quot;:&quot;starter&quot;,&quot;limits&quot;:[{&quot;limitCode&quot;:&quot;maxSms&quot;,&quot;limit&quot;:500,&quot;u</code></td></tr>
+<tr><td>13_usage</td><td>GET</td><td class='url'>http://localhost:8182/api/subscription/tenants/current/usage</td><td>200</td><td><span class="pass">PASS</span></td><td><code>{&quot;success&quot;:true,&quot;data&quot;:{&quot;organizationId&quot;:&quot;demo-school&quot;,&quot;counters&quot;:[]},&quot;message&quot;:null}</code></td></tr>
+<tr><td>14_usage_events</td><td>GET</td><td class='url'>http://localhost:8182/api/subscription/tenants/current/usage/events</td><td>200</td><td><span class="pass">PASS</span></td><td><code>{&quot;success&quot;:true,&quot;data&quot;:[],&quot;message&quot;:null}</code></td></tr>
+<tr><td>15_validate_limit</td><td>POST</td><td class='url'>http://localhost:8182/api/subscription/subscriptions/validate-limit</td><td>200</td><td><span class="pass">PASS</span></td><td><code>{&quot;success&quot;:true,&quot;data&quot;:{&quot;organizationId&quot;:&quot;demo-school&quot;,&quot;limitCode&quot;:&quot;maxStudents&quot;,&quot;delta&quot;:1,&quot;planId&quot;:&quot;starter&quot;,&quot;limit&quot;:20</code></td></tr>
+<tr><td>16_validate_feature</td><td>POST</td><td class='url'>http://localhost:8182/api/subscription/subscriptions/validate-feature</td><td>200</td><td><span class="pass">PASS</span></td><td><code>{&quot;success&quot;:true,&quot;data&quot;:{&quot;organizationId&quot;:&quot;demo-school&quot;,&quot;featureCode&quot;:&quot;FEATURE_FEE&quot;,&quot;planId&quot;:&quot;starter&quot;,&quot;allowed&quot;:true,&quot;re</code></td></tr>
+<tr><td>17_upsert_module</td><td>PUT</td><td class='url'>http://localhost:8182/api/subscription/catalog/modules</td><td>200</td><td><span class="pass">PASS</span></td><td><code>{&quot;success&quot;:true,&quot;data&quot;:{&quot;code&quot;:&quot;SCHOOL_QA_PHASE7&quot;,&quot;businessTypeCode&quot;:&quot;SCHOOL&quot;,&quot;name&quot;:&quot;QA Phase7 Temp Module&quot;,&quot;descriptio</code></td></tr>
+<tr><td>17b_confirm_modules</td><td>GET</td><td class='url'>http://localhost:8182/api/subscription/catalog/modules?businessType=SCHOOL</td><td>200</td><td><span class="pass">PASS</span></td><td><code>{&quot;success&quot;:true,&quot;data&quot;:[{&quot;code&quot;:&quot;SCHOOL_CORE&quot;,&quot;businessTypeCode&quot;:&quot;SCHOOL&quot;,&quot;name&quot;:&quot;Core Administration&quot;,&quot;description&quot;:&quot;Ad</code></td></tr>
+<tr><td>17c_deactivate_module</td><td>PUT</td><td class='url'>http://localhost:8182/api/subscription/catalog/modules</td><td>200</td><td><span class="pass">PASS</span></td><td><code>{&quot;success&quot;:true,&quot;data&quot;:{&quot;code&quot;:&quot;SCHOOL_QA_PHASE7&quot;,&quot;businessTypeCode&quot;:&quot;SCHOOL&quot;,&quot;name&quot;:&quot;QA Phase7 Temp Module&quot;,&quot;descriptio</code></td></tr>
+<tr><td>18a_entitlements_cache1</td><td>GET</td><td class='url'>http://localhost:8182/api/subscription/tenants/current/entitlements</td><td>200</td><td><span class="pass">PASS</span></td><td><code>{&quot;success&quot;:true,&quot;data&quot;:{&quot;organizationId&quot;:&quot;demo-school&quot;,&quot;planId&quot;:&quot;starter&quot;,&quot;limits&quot;:{&quot;maxSms&quot;:500,&quot;maxUsers&quot;:30,&quot;maxEmail</code></td></tr>
+<tr><td>18b_entitlements_cache2</td><td>GET</td><td class='url'>http://localhost:8182/api/subscription/tenants/current/entitlements</td><td>200</td><td><span class="pass">PASS</span></td><td><code>{&quot;success&quot;:true,&quot;data&quot;:{&quot;organizationId&quot;:&quot;demo-school&quot;,&quot;planId&quot;:&quot;starter&quot;,&quot;limits&quot;:{&quot;maxSms&quot;:500,&quot;maxUsers&quot;:30,&quot;maxEmail</code></td></tr>
+<tr><td>gateway_entitlements</td><td>GET</td><td class='url'>http://localhost:9090/api/subscription/tenants/current/entitlements</td><td>401</td><td><span class="fail">FAIL</span></td><td><code></code></td></tr>
+<tr><td>gateway_login</td><td>POST</td><td class='url'>http://localhost:9090/api/v1/auth/login</td><td>200</td><td><span class="pass">PASS</span></td><td><code>{&quot;accountId&quot;:72,&quot;shopId&quot;:&quot;demo-school&quot;,&quot;tenantId&quot;:100,&quot;username&quot;:&quot;admin_demo-school&quot;,&quot;role&quot;:&quot;SHOP_OWNER&quot;,&quot;promoterId&quot;:nu</code></td></tr>
+
+</tbody>
+</table>
+
+<p class="meta">Generated 2026-07-29T10:46:03.8760486+05:30 — artifacts under <code>D:\school\docs\qa\</code> — note: after rebuild</p>
+</body>
+</html>

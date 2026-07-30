@@ -1,0 +1,34 @@
+{
+    "timestamp":  "2026-07-29T11:08:10.2073234+05:30",
+    "gateway":  "http://localhost:9090",
+    "schoolSubscriptionUri":  "http://host.docker.internal:8182",
+    "loginVia":  "gateway:9090",
+    "loginOk":  true,
+    "entitlements":  [
+                         {
+                             "label":  "branch-main",
+                             "headers":  [
+                                             "X-Branch-Id",
+                                             "Authorization"
+                                         ],
+                             "statusCode":  200,
+                             "bodySnippet":  "{\"success\":true,\"data\":{\"organizationId\":\"demo-school\",\"planId\":\"starter\",\"limits\":{\"maxSms\":500,\"maxUsers\":30,\"maxEmails\":1000,\"maxClasses\":20,\"maxReports\":20,\"maxApiCalls\":10000,\"maxBranches\":3,\"maxSections\":40,\"maxSessions\":2,\"maxStudents\":200,\"maxSubjects\":30,\"maxTeachers\":20,\"maxWhatsApp\":200,\"aiUsageUnits\":0,\"maxStorageGb\":5,\"maxCustomFields\":10},\"featureFlags\":{\"FEATURE_AI\":true,\"FEATURE_HR\":true,\"FEATURE_FEE\":true,\"FEATURE_GPS\":true,\"FEATURE_LMS\":true,\"FEATURE_EXAM\":true,\"FEATURE_HOSTEL\":true,\"FEATURE_LIBRARY\":true,\"FEATURE_PAYROLL\":true,\"FEATURE_VISITOR\":false,\"FEATURE_ADMISSION\":true,\"FEATURE_BIOMETRIC\":true,\"FEATURE_COMMS_HUB\":true,\"FEATURE_INVENTORY\":false,\"FEATURE_OPS_DEPTH\":true,\"FEATURE_TRANSPORT\":true,\"FEATURE_ACCOUNTING\":false,\"FEATURE_API_ACCESS\":false,\"FEATURE_ATTENDANCE",
+                             "hasPlanId":  true,
+                             "planId":  "starter",
+                             "organizationId":  "demo-school"
+                         },
+                         {
+                             "label":  "branch-main-tenant-demo-school",
+                             "headers":  [
+                                             "Authorization",
+                                             "X-Tenant-Id",
+                                             "X-Branch-Id"
+                                         ],
+                             "statusCode":  200,
+                             "bodySnippet":  "{\"success\":true,\"data\":{\"organizationId\":\"demo-school\",\"planId\":\"starter\",\"limits\":{\"maxSms\":500,\"maxUsers\":30,\"maxEmails\":1000,\"maxClasses\":20,\"maxReports\":20,\"maxApiCalls\":10000,\"maxBranches\":3,\"maxSections\":40,\"maxSessions\":2,\"maxStudents\":200,\"maxSubjects\":30,\"maxTeachers\":20,\"maxWhatsApp\":200,\"aiUsageUnits\":0,\"maxStorageGb\":5,\"maxCustomFields\":10},\"featureFlags\":{\"FEATURE_AI\":true,\"FEATURE_HR\":true,\"FEATURE_FEE\":true,\"FEATURE_GPS\":true,\"FEATURE_LMS\":true,\"FEATURE_EXAM\":true,\"FEATURE_HOSTEL\":true,\"FEATURE_LIBRARY\":true,\"FEATURE_PAYROLL\":true,\"FEATURE_VISITOR\":false,\"FEATURE_ADMISSION\":true,\"FEATURE_BIOMETRIC\":true,\"FEATURE_COMMS_HUB\":true,\"FEATURE_INVENTORY\":false,\"FEATURE_OPS_DEPTH\":true,\"FEATURE_TRANSPORT\":true,\"FEATURE_ACCOUNTING\":false,\"FEATURE_API_ACCESS\":false,\"FEATURE_ATTENDANCE",
+                             "hasPlanId":  true,
+                             "planId":  "starter",
+                             "organizationId":  "demo-school"
+                         }
+                     ]
+}

@@ -1,34 +1,378 @@
-<section class="page">
+<section class="page subscription-admin">
   <div class="page-head">
-    <h2>Subscription Configuration</h2>
-    <p>Plans, limits, and feature flags — no hardcoded entitlements in domain code.</p>
+    <h2>Subscription Administration</h2>
+    <p>
+      Tenant view of plans, catalog, license, and usage. Global configure lives in SugamFlow Super Admin →
+      Platform Subscription; this school UI does not replace that control plane.
+    </p>
   </div>
 
-  <div class="panel">
-    <h3>Plans</h3>
-    <div class="grid two">
-      @for (plan of plans; track plan.id) {
-        <div class="panel">
-          <h3>{{ plan.name }} <small>({{ plan.planType }})</small></h3>
-          <p>Students: {{ plan.limits.maxStudents }} · Branches: {{ plan.limits.maxBranches }}</p>
-          <div class="actions">
-            <button type="button" (click)="assign(plan.id)">Assign to school</button>
+  <div class="tabs">
+    <button type="button" [class.active]="tab === 'plans'" (click)="setTab('plans')">Plans</button>
+    <button type="button" [class.active]="tab === 'catalog'" (click)="setTab('catalog')">
+      Catalog
+    </button>
+    <button type="button" [class.active]="tab === 'license'" (click)="setTab('license')">
+      License
+    </button>
+    <button type="button" [class.active]="tab === 'usage'" (click)="setTab('usage')">Usage</button>
+  </div>
+
+  @if (status) {
+    <p class="status">{{ status }}</p>
+  }
+  @if (error) {
+    <p class="error">{{ error }}</p>
+  }
+
+  @if (tab === 'plans') {
+    <div class="panel">
+      <h3>Plans</h3>
+      <div class="grid two">
+        @for (plan of plans; track plan.id) {
+          <div class="panel nested">
+            <h3>{{ plan.name }} <small>({{ plan.planType }})</small></h3>
+            <p class="muted">
+              Students: {{ plan.limits?.maxStudents ?? '—' }} · Branches:
+              {{ plan.limits?.maxBranches ?? '—' }}
+            </p>
+            <div class="actions">
+              <button type="button" (click)="selectPlan(plan)">Edit</button>
+              <button type="button" class="secondary" (click)="assign(plan.id)">
+                Assign to school
+              </button>
+            </div>
           </div>
+        }
+      </div>
+    </div>
+
+    @if (selectedPlan) {
+      <div class="panel">
+        <h3>Edit plan — {{ selectedPlan.id }}</h3>
+        <div class="grid two">
+          <label>
+            Name
+            <input [(ngModel)]="selectedPlan.name" name="planName" />
+          </label>
+          <label>
+            Plan type
+            <input [(ngModel)]="selectedPlan.planType" name="planType" />
+          </label>
         </div>
+        <label>
+          Limits JSON (−1 = unlimited)
+          <textarea rows="10" [(ngModel)]="editingLimitsText" name="limitsJson"></textarea>
+        </label>
+        <label>
+          Feature flags JSON
+          <textarea rows="10" [(ngModel)]="editingFlagsText" name="flagsJson"></textarea>
+        </label>
+        <div class="actions">
+          <button type="button" (click)="saveSelectedPlan()">Save plan</button>
+        </div>
+        @if (planProjection) {
+          <p class="muted">
+            Projection: {{ planProjection.features?.length || 0 }} features ·
+            {{ planProjection.limits?.length || 0 }} limits ·
+            {{ planProjection.modules?.length || 0 }} modules (source of truth remains plan JSON)
+          </p>
+        }
+      </div>
+    }
+
+    @if (entitlements) {
+      <div class="panel">
+        <h3>Current entitlements ({{ entitlements.planId }})</h3>
+        <div class="chip-list">
+          @for (entry of limitEntries(); track entry[0]) {
+            <span class="chip">{{ entry[0] }}: {{ entry[1] }}</span>
+          }
+        </div>
+        <div class="chip-list">
+          @for (entry of flagEntries(); track entry[0]) {
+            <span class="chip" [class.on]="entry[1]" [class.off]="!entry[1]">
+              {{ entry[0] }}: {{ entry[1] ? 'ON' : 'OFF' }}
+            </span>
+          }
+        </div>
+      </div>
+    }
+  }
+
+  @if (tab === 'catalog') {
+    <div class="panel">
+      <h3>Platform catalog</h3>
+      <div class="grid three">
+        <label>
+          Business type
+          <select [(ngModel)]="catalogBusinessType" name="bt" (ngModelChange)="onBusinessTypeChange()">
+            <option value="">All</option>
+            @for (bt of businessTypes; track bt.code) {
+              <option [value]="bt.code">{{ bt.name }} ({{ bt.code }})</option>
+            }
+          </select>
+        </label>
+        <label>
+          Module filter (features)
+          <select [(ngModel)]="catalogModule" name="mod" (ngModelChange)="onModuleChange()">
+            <option value="">All modules</option>
+            @for (m of modules; track m.code) {
+              <option [value]="m.code">{{ m.name }} ({{ m.code }})</option>
+            }
+          </select>
+        </label>
+        <label>
+          Entity
+          <select [(ngModel)]="catalogKind" name="kind">
+            <option value="modules">Modules</option>
+            <option value="features">Features</option>
+            <option value="limits">Limits</option>
+          </select>
+        </label>
+      </div>
+      <div class="actions">
+        <button type="button" (click)="startCatalogCreate()">New {{ catalogKind }}</button>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h3>
+        @if (catalogKind === 'modules') {
+          Modules ({{ modules.length }})
+        } @else if (catalogKind === 'features') {
+          Features ({{ features.length }})
+        } @else {
+          Limits ({{ catalogLimits.length }})
+        }
+      </h3>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            @if (catalogKind === 'modules') {
+              <tr>
+                <th>Code</th>
+                <th>Name</th>
+                <th>Business type</th>
+                <th></th>
+              </tr>
+            } @else if (catalogKind === 'features') {
+              <tr>
+                <th>Code</th>
+                <th>Name</th>
+                <th>Module</th>
+                <th></th>
+              </tr>
+            } @else {
+              <tr>
+                <th>Code</th>
+                <th>Name</th>
+                <th>Unit</th>
+                <th>Aggregation</th>
+                <th></th>
+              </tr>
+            }
+          </thead>
+          <tbody>
+            @if (catalogKind === 'modules') {
+              @for (row of modules; track row.code) {
+                <tr>
+                  <td>{{ row.code }}</td>
+                  <td>{{ row.name }}</td>
+                  <td>{{ row.businessTypeCode }}</td>
+                  <td><button type="button" class="linkish" (click)="editCatalogRow(row)">Edit</button></td>
+                </tr>
+              }
+            } @else if (catalogKind === 'features') {
+              @for (row of features; track row.code) {
+                <tr>
+                  <td>{{ row.code }}</td>
+                  <td>{{ row.name }}</td>
+                  <td>{{ row.moduleCode }}</td>
+                  <td><button type="button" class="linkish" (click)="editCatalogRow(row)">Edit</button></td>
+                </tr>
+              }
+            } @else {
+              @for (row of catalogLimits; track row.code) {
+                <tr>
+                  <td>{{ row.code }}</td>
+                  <td>{{ row.name }}</td>
+                  <td>{{ row.unit }}</td>
+                  <td>{{ row.aggregation }}</td>
+                  <td><button type="button" class="linkish" (click)="editCatalogRow(row)">Edit</button></td>
+                </tr>
+              }
+            }
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    @if (catalogDraft) {
+      <div class="panel">
+        <h3>{{ catalogDraft.code ? 'Edit' : 'New' }} {{ catalogKind }}</h3>
+        <div class="grid two">
+          <label>
+            Code
+            <input [(ngModel)]="catalogDraft.code" name="cCode" />
+          </label>
+          <label>
+            Name
+            <input [(ngModel)]="catalogDraft.name" name="cName" />
+          </label>
+          @if (catalogKind === 'modules' || catalogKind === 'limits') {
+            <label>
+              Business type code
+              <input [(ngModel)]="catalogDraft.businessTypeCode" name="cBt" />
+            </label>
+          }
+          @if (catalogKind === 'features') {
+            <label>
+              Module code
+              <input [(ngModel)]="catalogDraft.moduleCode" name="cMod" />
+            </label>
+          }
+          @if (catalogKind === 'limits') {
+            <label>
+              Unit
+              <input [(ngModel)]="catalogDraft.unit" name="cUnit" />
+            </label>
+            <label>
+              Aggregation
+              <select [(ngModel)]="catalogDraft.aggregation" name="cAgg">
+                <option value="NUMERIC">NUMERIC</option>
+                <option value="MONTHLY">MONTHLY</option>
+                <option value="PERIOD">PERIOD</option>
+              </select>
+            </label>
+          }
+          <label>
+            Sort order
+            <input type="number" [(ngModel)]="catalogDraft.sortOrder" name="cSort" />
+          </label>
+        </div>
+        <label>
+          Description
+          <input [(ngModel)]="catalogDraft.description" name="cDesc" />
+        </label>
+        <div class="actions">
+          <button type="button" (click)="saveCatalogDraft()">Save catalog entry</button>
+          <button type="button" class="secondary" (click)="catalogDraft = null">Cancel</button>
+        </div>
+      </div>
+    }
+  }
+
+  @if (tab === 'license') {
+    <div class="panel">
+      <h3>Current license</h3>
+      @if (license) {
+        <div class="chip-list">
+          <span class="chip">Plan: {{ license.planId }}</span>
+          <span class="chip">Status: {{ license.resolvedStatus }}</span>
+          <span class="chip" [class.on]="license.accessAllowed" [class.off]="!license.accessAllowed">
+            Access: {{ license.accessAllowed ? 'ALLOWED' : 'DENIED' }}
+          </span>
+          <span class="chip">Expires: {{ license.expiresAt || 'never' }}</span>
+          <span class="chip">Trial ends: {{ license.trialEndsAt || '—' }}</span>
+          <span class="chip">Grace ends: {{ license.graceEndsAt || '—' }}</span>
+        </div>
+        <p class="muted">
+          Entitlements still resolve from plan JSON until callers opt into license enforcement.
+        </p>
+      } @else {
+        <p class="muted">No license loaded.</p>
       }
     </div>
-  </div>
 
-  @if (entitlements) {
     <div class="panel">
-      <h3>Current entitlements ({{ entitlements.planId }})</h3>
-      <div class="chip-list">
-        @for (entry of flagEntries(); track entry[0]) {
-          <span class="chip">{{ entry[0] }}: {{ entry[1] ? 'ON' : 'OFF' }}</span>
-        }
+      <h3>Manage license</h3>
+      <div class="grid two">
+        <label>
+          Renew for days
+          <input type="number" [(ngModel)]="renewDays" name="days" min="1" />
+        </label>
+        <label class="checkbox">
+          <span>Enable enforcement (accessAllowed)</span>
+          <input type="checkbox" [(ngModel)]="enforcementEnabled" name="enf" />
+        </label>
+      </div>
+      <label>
+        Notes
+        <input [(ngModel)]="licenseNotes" name="notes" />
+      </label>
+      <div class="actions">
+        <button type="button" (click)="renew()">Renew</button>
+        <button type="button" class="secondary" (click)="saveLicenseFlags()">Save settings</button>
+        <button type="button" class="danger" (click)="suspend()">Suspend</button>
+        <button type="button" class="secondary" (click)="resume()">Resume</button>
       </div>
     </div>
   }
 
-  @if (status) { <p class="status">{{ status }}</p> }
+  @if (tab === 'usage') {
+    <div class="panel">
+      <h3>Limits &amp; usage</h3>
+      @if (usageLimits?.limits?.length) {
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Limit</th>
+                <th>Cap</th>
+                <th>Used</th>
+                <th>Remaining</th>
+                <th>Period</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (row of usageLimits.limits; track row.limitCode) {
+                <tr>
+                  <td>{{ row.limitCode }}</td>
+                  <td>{{ row.unlimited ? '∞' : row.limit }}</td>
+                  <td>{{ row.used }}</td>
+                  <td>{{ row.unlimited ? '∞' : row.remaining }}</td>
+                  <td>{{ row.periodKey }}</td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      } @else {
+        <p class="muted">No usage rows yet (metering is optional).</p>
+      }
+    </div>
+
+    <div class="panel">
+      <h3>Recent usage events</h3>
+      @if (usageEvents.length) {
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>When</th>
+                <th>Limit</th>
+                <th>Delta</th>
+                <th>Used after</th>
+                <th>Reason</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (ev of usageEvents; track ev.id) {
+                <tr>
+                  <td>{{ ev.createdAt }}</td>
+                  <td>{{ ev.limitCode }}</td>
+                  <td>{{ ev.delta }}</td>
+                  <td>{{ ev.usedAfter }}</td>
+                  <td>{{ ev.reason || '—' }}</td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      } @else {
+        <p class="muted">No events.</p>
+      }
+    </div>
+  }
 </section>

@@ -1,0 +1,14 @@
+---
+description: Always cut a feature branch from latest base before making code changes
+alwaysApply: true
+---
+
+# Branch before changes
+
+Before starting any implementation work:
+
+1. `git fetch origin` and update onto the latest integration branch for this repo.
+2. Create and check out a new branch with a meaningful name (`feature/…`, `fix/…`, `chore/…`).
+3. Only then edit files and commit on that branch.
+
+Do not commit feature work directly on `main` / default branch unless the user explicitly asks.

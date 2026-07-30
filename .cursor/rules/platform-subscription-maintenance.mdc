@@ -1,0 +1,26 @@
+---
+description: Platform subscription maintenance — configure once, enforce in runtimes
+alwaysApply: true
+---
+
+# Platform subscription maintenance
+
+Practical rule for School + SugamFlow (Retail, Hospital, PathLab, Pharmacy, …):
+
+1. **Configure** only in SugamFlow **Super Admin → Platform Subscription** against the platform `subscription-service` (catalog, plans, assign/renew).
+2. **Enforce** only in existing runtimes: shop-service `effective-config` / gates, and School entitlements / feature-flags.
+3. **Never** duplicate plan/module/limit logic inside feature services or UI feature modules.
+
+## Do
+
+- Add business types / modules / features / limits via catalog APIs or Super Admin.
+- Assign plans to org/shop ids via platform tenant APIs.
+- Keep `shop.platform.subscription.enabled` off until a shop is ready to pull platform snapshots.
+
+## Do not
+
+- Hardcode Hospital/PathLab/Retail module lists in Java or Angular feature code.
+- Build a second editable plan catalog in shop-service long-term.
+- Call platform subscription-service on every `@RequiresModule` hot path (use cached effective-config).
+- Put global Super Admin plan CRUD only inside School UI (School UI = tenant self-view).
+---

@@ -1,0 +1,141 @@
+.subscription-admin .tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  margin-bottom: 1rem;
+}
+
+.subscription-admin .tabs button {
+  background: color-mix(in srgb, var(--sf-panel) 80%, #94a3b8);
+  color: var(--sf-text);
+  font-weight: 600;
+}
+
+.subscription-admin .tabs button.active {
+  background: var(--sf-button);
+  color: #fff;
+}
+
+.subscription-admin .panel.nested {
+  margin-bottom: 0;
+}
+
+.subscription-admin .muted {
+  color: color-mix(in srgb, var(--sf-text) 65%, #64748b);
+  font-size: 0.92rem;
+}
+
+.subscription-admin .error {
+  color: var(--sf-error, #b91c1c);
+  font-weight: 600;
+}
+
+.subscription-admin button.secondary {
+  background: color-mix(in srgb, var(--sf-button) 35%, #64748b);
+}
+
+.subscription-admin button.danger {
+  background: #b91c1c;
+}
+
+.subscription-admin button.linkish {
+  background: transparent;
+  color: var(--sf-button);
+  padding: 0.2rem 0.4rem;
+  box-shadow: none;
+}
+
+.subscription-admin .chip-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin: 0.6rem 0;
+}
+
+.subscription-admin .chip {
+  display: inline-flex;
+  padding: 0.25rem 0.55rem;
+  border-radius: var(--sf-radius);
+  border: 1px solid color-mix(in srgb, var(--sf-menu) 22%, transparent);
+  font-size: 0.82rem;
+  background: color-mix(in srgb, var(--sf-panel) 88%, #e2e8f0);
+}
+
+.subscription-admin .chip.on {
+  border-color: color-mix(in srgb, #15803d 45%, transparent);
+}
+
+.subscription-admin .chip.off {
+  opacity: 0.7;
+}
+
+.subscription-admin .table-wrap {
+  overflow: auto;
+}
+
+.subscription-admin table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.92rem;
+}
+
+.subscription-admin th,
+.subscription-admin td {
+  text-align: left;
+  padding: 0.45rem 0.55rem;
+  border-bottom: 1px solid color-mix(in srgb, var(--sf-menu) 16%, transparent);
+}
+
+.subscription-admin label.checkbox {
+  flex-direction: row;
+  align-items: center;
+  gap: 0.6rem;
+  margin-top: 1.4rem;
+}
+
+.subscription-admin textarea {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.85rem;
+  min-height: 8rem;
+}
+
+/* Mobile / tablet responsive ? Phase 7 QA */
+@media (max-width: 640px) {
+  .subscription-admin .tabs {
+    flex-direction: column;
+  }
+
+  .subscription-admin .tabs button {
+    width: 100%;
+    justify-content: center;
+    text-align: center;
+  }
+
+  .subscription-admin .grid.three,
+  .subscription-admin .grid.two {
+    grid-template-columns: 1fr;
+  }
+
+  .subscription-admin .table-wrap {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .subscription-admin table {
+    min-width: 32rem;
+  }
+
+  .subscription-admin input,
+  .subscription-admin select,
+  .subscription-admin textarea {
+    font-size: 16px; /* avoid iOS zoom */
+  }
+
+  .subscription-admin .actions {
+    flex-wrap: wrap;
+  }
+
+  .subscription-admin .actions button {
+    flex: 1 1 auto;
+  }
+}

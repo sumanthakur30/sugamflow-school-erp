@@ -1,5 +1,6 @@
 package com.sugamflow.school.subscription.service;
 
+import com.sugamflow.school.subscription.cache.SubscriptionCacheSupport;
 import com.sugamflow.school.subscription.model.SubscriptionPlan;
 import com.sugamflow.school.subscription.persistence.entity.SubscriptionPlanEntity;
 import com.sugamflow.school.subscription.persistence.repo.SubscriptionPlanRepository;
@@ -18,11 +19,18 @@ public class SubscriptionPlanSeeder implements ApplicationRunner {
 
   private final SubscriptionPlanRepository planRepository;
   private final SubscriptionService subscriptionService;
+  private final PlanProjectionService planProjectionService;
+  private final SubscriptionCacheSupport cache;
 
   public SubscriptionPlanSeeder(
-      SubscriptionPlanRepository planRepository, SubscriptionService subscriptionService) {
+      SubscriptionPlanRepository planRepository,
+      SubscriptionService subscriptionService,
+      PlanProjectionService planProjectionService,
+      SubscriptionCacheSupport cache) {
     this.planRepository = planRepository;
     this.subscriptionService = subscriptionService;
+    this.planProjectionService = planProjectionService;
+    this.cache = cache;
   }
 
   @Override
@@ -72,6 +80,10 @@ public class SubscriptionPlanSeeder implements ApplicationRunner {
     ensureFlagOnAllPlans("FEATURE_ACADEMIC_LIFECYCLE");
     ensureFlagOnAllPlans("FEATURE_OPS_DEPTH");
     ensureLimitAtLeast("maxBranches", 3L);
+    // Phase 2: project current plan JSON into plan_feature / plan_limit / plan_module.
+    planProjectionService.syncAllPlans();
+    // Phase 7: seed/flag merges may bypass savePlan — clear Redis snapshots.
+    cache.evictAll();
   }
 
   private void ensureLimitAtLeast(String limitKey, long minValue) {

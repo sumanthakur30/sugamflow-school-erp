@@ -1,5 +1,6 @@
 package com.sugamflow.school.subscription.service;
 
+import com.sugamflow.school.subscription.cache.SubscriptionCacheSupport;
 import com.sugamflow.school.subscription.model.SubscriptionPlan;
 import com.sugamflow.school.subscription.persistence.entity.SubscriptionPlanEntity;
 import com.sugamflow.school.subscription.persistence.entity.TenantSubscriptionEntity;
@@ -18,29 +19,46 @@ public class SubscriptionService {
 
   private final SubscriptionPlanRepository planRepository;
   private final TenantSubscriptionRepository tenantSubscriptionRepository;
+  private final PlanProjectionService planProjectionService;
+  private final SubscriptionLifecycleService lifecycleService;
+  private final SubscriptionCacheSupport cache;
 
   public SubscriptionService(
       SubscriptionPlanRepository planRepository,
-      TenantSubscriptionRepository tenantSubscriptionRepository) {
+      TenantSubscriptionRepository tenantSubscriptionRepository,
+      PlanProjectionService planProjectionService,
+      SubscriptionLifecycleService lifecycleService,
+      SubscriptionCacheSupport cache) {
     this.planRepository = planRepository;
     this.tenantSubscriptionRepository = tenantSubscriptionRepository;
+    this.planProjectionService = planProjectionService;
+    this.lifecycleService = lifecycleService;
+    this.cache = cache;
   }
 
   @Transactional(readOnly = true)
   public List<SubscriptionPlan> listPlans() {
-    return planRepository.findAll().stream().map(this::toModel).collect(Collectors.toList());
+    return cache.getPlans(
+        () -> planRepository.findAll().stream().map(this::toModel).collect(Collectors.toList()));
   }
 
   @Transactional(readOnly = true)
   public SubscriptionPlan getPlan(String planId) {
-    return planRepository.findById(planId).map(this::toModel).orElse(null);
+    return cache.getPlan(planId, () -> planRepository.findById(planId).map(this::toModel).orElse(null));
   }
 
   @Transactional
   public SubscriptionPlan savePlan(SubscriptionPlan plan) {
     SubscriptionPlanEntity entity = toEntity(plan);
     entity.setUpdatedAt(Instant.now());
-    return toModel(planRepository.save(entity));
+    // Flush parent before plan_feature projection dual-write (FK plan_feature_plan_id_fkey).
+    SubscriptionPlanEntity saved = planRepository.saveAndFlush(entity);
+    // Dual-write projection; entitlements continue to read JSON only.
+    planProjectionService.syncFromPlanEntity(saved);
+    // Plan JSON change affects every tenant on this plan — clear plan + entitlement caches.
+    cache.evictPlan(saved.getId());
+    cache.evictAllEntitlements();
+    return toModel(saved);
   }
 
   @Transactional
@@ -54,16 +72,34 @@ public class SubscriptionService {
     entity.setPlanId(planId);
     entity.setAssignedAt(Instant.now());
     tenantSubscriptionRepository.save(entity);
+    // Phase 3: ensure ACTIVE-forever lifecycle with enforcement off (idempotent).
+    lifecycleService.ensureActiveForever(organizationId);
+    cache.evictEntitlements(organizationId);
 
     Map<String, Object> result = new LinkedHashMap<>();
     result.put("organizationId", organizationId);
     result.put("planId", planId);
     result.put("plan", getPlan(planId));
+    result.put("license", lifecycleService.getLicense(organizationId));
     return result;
   }
 
   @Transactional(readOnly = true)
   public Map<String, Object> entitlements(String organizationId) {
+    return cache.getEntitlements(organizationId, () -> loadEntitlements(organizationId));
+  }
+
+  @Transactional(readOnly = true)
+  public Map<String, Object> flag(String organizationId, String flag) {
+    Map<String, Object> entitlements = entitlements(organizationId);
+    @SuppressWarnings("unchecked")
+    Map<String, Boolean> flags = (Map<String, Boolean>) entitlements.get("featureFlags");
+    boolean enabled = flags != null && Boolean.TRUE.equals(flags.get(flag));
+    return Map.of(
+        "flag", flag, "enabled", enabled, "planId", String.valueOf(entitlements.get("planId")));
+  }
+
+  private Map<String, Object> loadEntitlements(String organizationId) {
     String planId =
         tenantSubscriptionRepository
             .findById(organizationId)
@@ -80,16 +116,6 @@ public class SubscriptionService {
     result.put("limits", plan.getLimits());
     result.put("featureFlags", plan.getFeatureFlags());
     return result;
-  }
-
-  @Transactional(readOnly = true)
-  public Map<String, Object> flag(String organizationId, String flag) {
-    Map<String, Object> entitlements = entitlements(organizationId);
-    @SuppressWarnings("unchecked")
-    Map<String, Boolean> flags = (Map<String, Boolean>) entitlements.get("featureFlags");
-    boolean enabled = flags != null && Boolean.TRUE.equals(flags.get(flag));
-    return Map.of(
-        "flag", flag, "enabled", enabled, "planId", String.valueOf(entitlements.get("planId")));
   }
 
   private SubscriptionPlan toModel(SubscriptionPlanEntity entity) {
