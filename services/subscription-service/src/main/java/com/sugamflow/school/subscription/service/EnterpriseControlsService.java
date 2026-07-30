@@ -210,18 +210,27 @@ public class EnterpriseControlsService {
   }
 
   public Map<String, Object> dashboard() {
-    long orgsWithSso =
-        settingsRepository.findAll().stream().filter(EnterpriseOrgSettingsEntity::isSsoEnabled).count();
-    long orgsWithWl =
-        settingsRepository.findAll().stream()
-            .filter(EnterpriseOrgSettingsEntity::isWhiteLabelEnabled)
-            .count();
+    List<EnterpriseOrgSettingsEntity> all = settingsRepository.findAll();
+    List<Map<String, Object>> orgs = all.stream().map(this::settingsToMap).toList();
+    long orgsWithSso = all.stream().filter(EnterpriseOrgSettingsEntity::isSsoEnabled).count();
+    long orgsWithWl = all.stream().filter(EnterpriseOrgSettingsEntity::isWhiteLabelEnabled).count();
+    List<Map<String, Object>> recentEvents =
+        auditEventRepository.findTop50ByOrderByCreatedAtDesc().stream()
+            .map(this::eventToMap)
+            .toList();
+    List<Map<String, Object>> recentExports =
+        exportRepository.findTop50ByOrderByCreatedAtDesc().stream()
+            .map(e -> exportToMap(e, false))
+            .toList();
     Map<String, Object> out = new LinkedHashMap<>();
-    out.put("configuredOrgs", settingsRepository.count());
+    out.put("configuredOrgs", (long) all.size());
     out.put("ssoEnabledOrgs", orgsWithSso);
     out.put("whiteLabelEnabledOrgs", orgsWithWl);
     out.put("auditEvents", auditEventRepository.count());
     out.put("exports", exportRepository.count());
+    out.put("orgs", orgs);
+    out.put("recentEvents", recentEvents);
+    out.put("recentExports", recentExports);
     return out;
   }
 

@@ -7,4 +7,6 @@ import org.springframework.data.jpa.repository.JpaRepository;
 public interface EnterpriseAuditExportRepository
     extends JpaRepository<EnterpriseAuditExportEntity, Long> {
   List<EnterpriseAuditExportEntity> findByOrganizationIdOrderByCreatedAtDesc(String organizationId);
+
+  List<EnterpriseAuditExportEntity> findTop50ByOrderByCreatedAtDesc();
 }

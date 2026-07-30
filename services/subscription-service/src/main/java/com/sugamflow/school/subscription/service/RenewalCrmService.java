@@ -91,16 +91,41 @@ public class RenewalCrmService {
     for (Object[] row : opportunityRepository.countGroupedByStage()) {
       stages.put(String.valueOf(row[0]), ((Number) row[1]).longValue());
     }
+    Instant now = Instant.now();
+    List<Map<String, Object>> allOpps = new ArrayList<>();
+    for (RenewalOpportunityEntity opp :
+        opportunityRepository.findAllByOrderByNextActionAtAscHealthScoreAsc()) {
+      TenantSubscriptionLifecycleEntity life =
+          lifecycleRepository.findById(opp.getOrganizationId()).orElse(null);
+      Instant expires = life == null ? null : life.getExpiresAt();
+      Map<String, Object> row = opportunityToMap(opp);
+      row.put("expiresAt", expires);
+      row.put(
+          "daysUntilExpiry",
+          expires == null ? null : ChronoUnit.DAYS.between(now, expires));
+      row.put("lifecycleStatus", life == null ? "ACTIVE" : life.getStatus());
+      row.put("upsellHints", List.of());
+      allOpps.add(row);
+    }
     Map<String, Object> out = new LinkedHashMap<>();
     out.put("asOf", Instant.now().toString());
     out.put("stageCounts", stages);
     out.put("pendingReminders", reminderRepository.countByStatusIgnoreCase("PENDING"));
     out.put("pipeline", pipeline(30));
+    out.put("opportunities", allOpps);
     out.put("dueReminders", listReminders("PENDING", 50));
     return out;
   }
 
   public List<Map<String, Object>> pipeline(int withinDays) {
+    return pipeline(withinDays, null);
+  }
+
+  /** When {@code stage} is set, return all opportunities in that stage (stage-box click filter). */
+  public List<Map<String, Object>> pipeline(int withinDays, String stage) {
+    if (stage != null && !stage.isBlank()) {
+      return listByStage(stage.trim());
+    }
     int days = Math.max(1, Math.min(withinDays, 365));
     Instant now = Instant.now();
     Instant horizon = now.plus(days, ChronoUnit.DAYS);
@@ -120,14 +145,7 @@ public class RenewalCrmService {
       if (!inWindow && !atRisk && !"RENEWAL_DUE".equalsIgnoreCase(opp.getStage())) {
         continue;
       }
-      Map<String, Object> row = opportunityToMap(opp);
-      row.put("expiresAt", expires);
-      row.put(
-          "daysUntilExpiry",
-          expires == null ? null : ChronoUnit.DAYS.between(now, expires));
-      row.put("lifecycleStatus", life == null ? "ACTIVE" : life.getStatus());
-      row.put("upsellHints", upsellHints(tenant.getOrganizationId()));
-      rows.add(row);
+      rows.add(enrichPipelineRow(opp, life, now));
     }
     rows.sort(
         Comparator.comparingLong(
@@ -136,6 +154,35 @@ public class RenewalCrmService {
               return d == null ? Long.MAX_VALUE : ((Number) d).longValue();
             }));
     return rows;
+  }
+
+  public List<Map<String, Object>> listByStage(String stage) {
+    String normalized = stage.toUpperCase(Locale.ROOT);
+    if (!VALID_STAGES.contains(normalized)) {
+      throw new IllegalArgumentException("Invalid stage: " + stage);
+    }
+    Instant now = Instant.now();
+    List<Map<String, Object>> rows = new ArrayList<>();
+    for (RenewalOpportunityEntity opp :
+        opportunityRepository.findByStageIgnoreCaseOrderByHealthScoreAsc(normalized)) {
+      TenantSubscriptionLifecycleEntity life =
+          lifecycleRepository.findById(opp.getOrganizationId()).orElse(null);
+      rows.add(enrichPipelineRow(opp, life, now));
+    }
+    return rows;
+  }
+
+  private Map<String, Object> enrichPipelineRow(
+      RenewalOpportunityEntity opp, TenantSubscriptionLifecycleEntity life, Instant now) {
+    Instant expires = life == null ? null : life.getExpiresAt();
+    Map<String, Object> row = opportunityToMap(opp);
+    row.put("expiresAt", expires);
+    row.put(
+        "daysUntilExpiry",
+        expires == null ? null : ChronoUnit.DAYS.between(now, expires));
+    row.put("lifecycleStatus", life == null ? "ACTIVE" : life.getStatus());
+    row.put("upsellHints", upsellHints(opp.getOrganizationId()));
+    return row;
   }
 
   public Map<String, Object> health(String organizationId) {

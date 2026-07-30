@@ -12,6 +12,8 @@ public interface RenewalOpportunityRepository
 
   List<RenewalOpportunityEntity> findAllByOrderByNextActionAtAscHealthScoreAsc();
 
+  List<RenewalOpportunityEntity> findByStageIgnoreCaseOrderByHealthScoreAsc(String stage);
+
   @Query(
       "select o.stage, count(o) from RenewalOpportunityEntity o group by o.stage order by count(o) desc")
   List<Object[]> countGroupedByStage();

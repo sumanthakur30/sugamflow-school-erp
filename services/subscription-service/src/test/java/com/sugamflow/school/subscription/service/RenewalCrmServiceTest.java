@@ -118,6 +118,29 @@ class RenewalCrmServiceTest {
   }
 
   @Test
+  void listByStageReturnsMatchingOpportunities() {
+    RenewalOpportunityEntity opp = new RenewalOpportunityEntity();
+    opp.setId(1L);
+    opp.setOrganizationId("ORG1");
+    opp.setPlanId("starter");
+    opp.setStage("ACTIVE");
+    opp.setHealthScore(80);
+    when(opportunityRepository.findByStageIgnoreCaseOrderByHealthScoreAsc("ACTIVE"))
+        .thenReturn(List.of(opp));
+    when(lifecycleRepository.findById("ORG1")).thenReturn(Optional.empty());
+    when(tenantSubscriptionRepository.findById("ORG1")).thenReturn(Optional.of(tenant("ORG1", "starter")));
+    when(subscriptionService.getPlan("starter")).thenReturn(null);
+    when(usageCounterRepository.findByOrganizationIdOrderByLimitCodeAscPeriodKeyAsc("ORG1"))
+        .thenReturn(List.of());
+    when(addonDefinitionRepository.findByActiveTrueOrderBySortOrderAsc()).thenReturn(List.of());
+
+    List<Map<String, Object>> rows = service.pipeline(30, "ACTIVE");
+    assertEquals(1, rows.size());
+    assertEquals("ORG1", rows.get(0).get("organizationId"));
+    assertEquals("ACTIVE", rows.get(0).get("stage"));
+  }
+
+  @Test
   void generateRemindersCreatesT30T14T7() {
     TenantSubscriptionEntity t = tenant("ORG1", "starter");
     when(tenantSubscriptionRepository.findAll()).thenReturn(List.of(t));

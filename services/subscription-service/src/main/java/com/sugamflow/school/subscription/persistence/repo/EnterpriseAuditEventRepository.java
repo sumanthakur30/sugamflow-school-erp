@@ -12,6 +12,8 @@ public interface EnterpriseAuditEventRepository
 
   List<EnterpriseAuditEventEntity> findByOrganizationIdOrderByCreatedAtDesc(String organizationId);
 
+  List<EnterpriseAuditEventEntity> findTop50ByOrderByCreatedAtDesc();
+
   @Query(
       """
       select e from EnterpriseAuditEventEntity e

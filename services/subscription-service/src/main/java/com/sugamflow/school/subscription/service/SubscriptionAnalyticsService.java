@@ -292,7 +292,45 @@ public class SubscriptionAnalyticsService {
     out.put("renewals", renewals(30));
     out.put("revenue", revenue(6));
     out.put("usage", usageHeatmap(25));
+    out.put("tenants", tenantDirectory());
     return out;
+  }
+
+  /** Full tenant directory for Analytics KPI drill-down (lifecycle status + plan). */
+  public List<Map<String, Object>> tenantDirectory() {
+    Instant now = Instant.now();
+    Map<String, String> plans =
+        tenantSubscriptionRepository.findAll().stream()
+            .collect(
+                Collectors.toMap(
+                    TenantSubscriptionEntity::getOrganizationId,
+                    t -> t.getPlanId() == null ? "unknown" : t.getPlanId(),
+                    (a, b) -> a,
+                    LinkedHashMap::new));
+    Map<String, TenantSubscriptionLifecycleEntity> lifeByOrg =
+        lifecycleRepository.findAll().stream()
+            .collect(
+                Collectors.toMap(
+                    TenantSubscriptionLifecycleEntity::getOrganizationId,
+                    l -> l,
+                    (a, b) -> a));
+
+    List<Map<String, Object>> rows = new ArrayList<>();
+    for (Map.Entry<String, String> e : plans.entrySet()) {
+      TenantSubscriptionLifecycleEntity life = lifeByOrg.get(e.getKey());
+      Instant expires = life == null ? null : life.getExpiresAt();
+      Map<String, Object> row = new LinkedHashMap<>();
+      row.put("organizationId", e.getKey());
+      row.put("planId", e.getValue());
+      row.put("status", life == null ? "ACTIVE" : life.getStatus());
+      row.put("expiresAt", expires);
+      row.put(
+          "daysUntilExpiry",
+          expires == null ? null : ChronoUnit.DAYS.between(now, expires));
+      rows.add(row);
+    }
+    rows.sort(Comparator.comparing(m -> String.valueOf(m.get("organizationId"))));
+    return rows;
   }
 
   private Map<String, Object> invoiceCounts() {

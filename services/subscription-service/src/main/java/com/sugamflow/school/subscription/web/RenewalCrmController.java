@@ -36,8 +36,9 @@ public class RenewalCrmController {
 
   @GetMapping({"/crm/pipeline", "/subscriptions/crm/pipeline"})
   public ApiResponse<List<Map<String, Object>>> pipeline(
-      @RequestParam(defaultValue = "30") int withinDays) {
-    return ApiResponse.ok(renewalCrmService.pipeline(withinDays));
+      @RequestParam(defaultValue = "30") int withinDays,
+      @RequestParam(required = false) String stage) {
+    return ApiResponse.ok(renewalCrmService.pipeline(withinDays, stage));
   }
 
   @GetMapping({
