@@ -2,7 +2,7 @@
 
 **Status:** Accepted  
 **Date:** 2026-07-30  
-**Phase:** 4 — Enterprise AI (summaries/NBA/win-predict/OCR/drafts) + residency/SSO/audit export  
+**Phase:** 5-pilot — RETAIL vertical, entitlements, convert sinks, accounts/merge  
 **Branch:** `feature/crm-platform-mvp` (school + gateway + crm-service + crm-ui)
 
 ## Context
