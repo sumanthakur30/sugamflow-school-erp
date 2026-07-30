@@ -29,6 +29,18 @@ mvn -q -DskipTests package -pl discovery-service,gateway-service,auth-service,sh
 
 ## Daily start (order matters)
 
+**Preferred (sequenced scripts):** see `D:\sugamFlow\scripts\sequences\README.md`
+
+```powershell
+cd D:\sugamFlow
+.\scripts\sequences\00-common-platform.ps1 -ExposeSchoolPorts -SkipMailHog
+.\scripts\sequences\03-school-erp.ps1 -WithUi
+# or from school repo:
+# .\scripts\start-school-sequence.ps1 -StartCommon -WithUi
+```
+
+### Legacy (same order)
+
 Open PowerShell and run from `D:\school`:
 
 ### 1) Platform (Eureka + auth + shop + gateway)
