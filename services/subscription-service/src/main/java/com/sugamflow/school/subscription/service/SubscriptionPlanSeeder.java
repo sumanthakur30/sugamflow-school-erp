@@ -80,15 +80,43 @@ public class SubscriptionPlanSeeder implements ApplicationRunner {
     ensureFlagOnAllPlans("FEATURE_ACADEMIC_LIFECYCLE");
     ensureFlagOnAllPlans("FEATURE_OPS_DEPTH");
     ensureLimitAtLeast("maxBranches", 3L);
+    // Phase 0 CRM: standalone sellable plans only — never merge School flags onto them.
+    ensureCrmStandalonePlans();
     // Phase 2: project current plan JSON into plan_feature / plan_limit / plan_module.
     planProjectionService.syncAllPlans();
     // Phase 7: seed/flag merges may bypass savePlan — clear Redis snapshots.
     cache.evictAll();
   }
 
+  /** Idempotent CRM SKUs (Flyway V17 is source of truth; seeder covers empty/dev DBs). */
+  private void ensureCrmStandalonePlans() {
+    seedCrmIfAbsent(SubscriptionPlan.crmStarter());
+    seedCrmIfAbsent(SubscriptionPlan.crmProfessional());
+    seedCrmIfAbsent(SubscriptionPlan.crmEnterprise());
+  }
+
+  private void seedCrmIfAbsent(SubscriptionPlan plan) {
+    if (planRepository.findById(plan.getId()).isEmpty()) {
+      log.info("Seeding CRM plan {}", plan.getId());
+      seed(plan);
+    }
+  }
+
+  private static boolean isCrmPlan(SubscriptionPlanEntity entity) {
+    if (entity == null) {
+      return false;
+    }
+    String id = entity.getId() == null ? "" : entity.getId();
+    String type = entity.getPlanType() == null ? "" : entity.getPlanType();
+    return id.startsWith("crm-") || type.regionMatches(true, 0, "CRM_", 0, 4);
+  }
+
   private void ensureLimitAtLeast(String limitKey, long minValue) {
     int updated = 0;
     for (SubscriptionPlanEntity entity : planRepository.findAll()) {
+      if (isCrmPlan(entity)) {
+        continue;
+      }
       Map<String, Object> limits = entity.getLimitsJson();
       if (limits == null) {
         continue;
@@ -129,6 +157,9 @@ public class SubscriptionPlanSeeder implements ApplicationRunner {
   private void ensureFlagOnAllPlans(String flag) {
     int updated = 0;
     for (SubscriptionPlanEntity entity : planRepository.findAll()) {
+      if (isCrmPlan(entity)) {
+        continue;
+      }
       Map<String, Object> flags = entity.getFeatureFlagsJson();
       if (flags == null) {
         continue;

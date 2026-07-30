@@ -66,6 +66,136 @@ public class SubscriptionPlan {
     return p;
   }
 
+  /** Standalone CRM Starter — no School ERP features. */
+  public static SubscriptionPlan crmStarter() {
+    return crmPlan(
+        "crm-starter",
+        "CRM Starter",
+        "CRM_STARTER",
+        Map.ofEntries(
+            Map.entry("crm.max_users", 5L),
+            Map.entry("crm.max_pipelines", 1L),
+            Map.entry("crm.max_leads", 2000L),
+            Map.entry("crm.max_storage_mb", 1024L),
+            Map.entry("crm.max_api_calls_month", 5000L),
+            Map.entry("crm.ai_calls_month", 0L),
+            Map.entry("crm.max_whatsapp_month", 200L),
+            Map.entry("maxUsers", 5L),
+            Map.entry("maxStorageGb", 1L),
+            Map.entry("maxApiCalls", 5000L),
+            Map.entry("maxWhatsApp", 200L),
+            Map.entry("maxSms", 200L),
+            Map.entry("maxEmails", 1000L)),
+        Map.ofEntries(
+            Map.entry("FEATURE_CRM", true),
+            Map.entry("FEATURE_CRM_LEADS", true),
+            Map.entry("FEATURE_CRM_PIPELINE", true),
+            Map.entry("FEATURE_CRM_ACTIVITIES", true),
+            Map.entry("FEATURE_CRM_IMPORT", true),
+            Map.entry("FEATURE_CRM_API", false),
+            Map.entry("FEATURE_CRM_QUOTE", false),
+            Map.entry("FEATURE_CRM_APPROVAL", false),
+            Map.entry("FEATURE_CRM_AUTOMATION", false),
+            Map.entry("FEATURE_CRM_SEQUENCES", false),
+            Map.entry("FEATURE_CRM_CAMPAIGN", false),
+            Map.entry("FEATURE_CRM_AI", false),
+            Map.entry("FEATURE_CRM_WHATSAPP", false),
+            Map.entry("FEATURE_CRM_SMS", false),
+            Map.entry("FEATURE_CRM_EMAIL", true)));
+  }
+
+  /** Standalone CRM Professional. */
+  public static SubscriptionPlan crmProfessional() {
+    return crmPlan(
+        "crm-professional",
+        "CRM Professional",
+        "CRM_PROFESSIONAL",
+        Map.ofEntries(
+            Map.entry("crm.max_users", 25L),
+            Map.entry("crm.max_pipelines", 10L),
+            Map.entry("crm.max_leads", 25000L),
+            Map.entry("crm.max_storage_mb", 10240L),
+            Map.entry("crm.max_api_calls_month", 100000L),
+            Map.entry("crm.ai_calls_month", 0L),
+            Map.entry("crm.max_whatsapp_month", 5000L),
+            Map.entry("maxUsers", 25L),
+            Map.entry("maxStorageGb", 10L),
+            Map.entry("maxApiCalls", 100000L),
+            Map.entry("maxWhatsApp", 5000L),
+            Map.entry("maxSms", 5000L),
+            Map.entry("maxEmails", 20000L)),
+        Map.ofEntries(
+            Map.entry("FEATURE_CRM", true),
+            Map.entry("FEATURE_CRM_LEADS", true),
+            Map.entry("FEATURE_CRM_PIPELINE", true),
+            Map.entry("FEATURE_CRM_ACTIVITIES", true),
+            Map.entry("FEATURE_CRM_IMPORT", true),
+            Map.entry("FEATURE_CRM_API", true),
+            Map.entry("FEATURE_CRM_QUOTE", true),
+            Map.entry("FEATURE_CRM_APPROVAL", true),
+            Map.entry("FEATURE_CRM_AUTOMATION", true),
+            Map.entry("FEATURE_CRM_SEQUENCES", true),
+            Map.entry("FEATURE_CRM_CAMPAIGN", false),
+            Map.entry("FEATURE_CRM_AI", false),
+            Map.entry("FEATURE_CRM_WHATSAPP", true),
+            Map.entry("FEATURE_CRM_SMS", true),
+            Map.entry("FEATURE_CRM_EMAIL", true)));
+  }
+
+  /** Standalone CRM Enterprise. */
+  public static SubscriptionPlan crmEnterprise() {
+    return crmPlan(
+        "crm-enterprise",
+        "CRM Enterprise",
+        "CRM_ENTERPRISE",
+        Map.ofEntries(
+            Map.entry("crm.max_users", -1L),
+            Map.entry("crm.max_pipelines", -1L),
+            Map.entry("crm.max_leads", -1L),
+            Map.entry("crm.max_storage_mb", -1L),
+            Map.entry("crm.max_api_calls_month", -1L),
+            Map.entry("crm.ai_calls_month", 5000L),
+            Map.entry("crm.max_whatsapp_month", -1L),
+            Map.entry("maxUsers", -1L),
+            Map.entry("maxStorageGb", -1L),
+            Map.entry("maxApiCalls", -1L),
+            Map.entry("maxWhatsApp", -1L),
+            Map.entry("maxSms", -1L),
+            Map.entry("maxEmails", -1L)),
+        Map.ofEntries(
+            Map.entry("FEATURE_CRM", true),
+            Map.entry("FEATURE_CRM_LEADS", true),
+            Map.entry("FEATURE_CRM_PIPELINE", true),
+            Map.entry("FEATURE_CRM_ACTIVITIES", true),
+            Map.entry("FEATURE_CRM_IMPORT", true),
+            Map.entry("FEATURE_CRM_API", true),
+            Map.entry("FEATURE_CRM_QUOTE", true),
+            Map.entry("FEATURE_CRM_APPROVAL", true),
+            Map.entry("FEATURE_CRM_AUTOMATION", true),
+            Map.entry("FEATURE_CRM_SEQUENCES", true),
+            Map.entry("FEATURE_CRM_CAMPAIGN", true),
+            Map.entry("FEATURE_CRM_AI", true),
+            Map.entry("FEATURE_CRM_WHATSAPP", true),
+            Map.entry("FEATURE_CRM_SMS", true),
+            Map.entry("FEATURE_CRM_EMAIL", true)));
+  }
+
+  private static SubscriptionPlan crmPlan(
+      String id,
+      String name,
+      String type,
+      Map<String, Long> limits,
+      Map<String, Boolean> flags) {
+    SubscriptionPlan p = new SubscriptionPlan();
+    p.id = id;
+    p.code = id.replace('-', '_').toUpperCase();
+    p.name = name;
+    p.planType = type;
+    p.limits = new LinkedHashMap<>(limits);
+    p.featureFlags = new LinkedHashMap<>(flags);
+    return p;
+  }
+
   private static SubscriptionPlan base(String id, String name, String type) {
     SubscriptionPlan p = new SubscriptionPlan();
     p.id = id;
