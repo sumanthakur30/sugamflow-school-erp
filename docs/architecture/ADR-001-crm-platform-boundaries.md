@@ -2,8 +2,8 @@
 
 **Status:** Accepted  
 **Date:** 2026-07-30  
-**Phase:** 0 — Prep  
-**Branch:** `feature/crm-platform-mvp` (school + gateway-service)
+**Phase:** 2 — Revenue (Opportunity + GST Quotation + templates)  
+**Branch:** `feature/crm-platform-mvp` (school + gateway + crm-service + crm-ui)
 
 ## Context
 
@@ -22,8 +22,9 @@ SugamFlow must sell a business-agnostic CRM as standalone SaaS and optionally in
 
 - Existing ERP tenants unchanged until CRM module/plan assigned.  
 - Standalone CRM customers need auth + subscription + notification (+ CRM) — not product/stock/order.  
-- Gateway reserves `/api/v1/crm/**` → `crm-service` (503 until Phase 1 service exists).  
-- School plan seeders must **skip** CRM plans when merging School feature flags.
+- Gateway routes `/api/v1/crm/**` → `crm-service`.  
+- School plan seeders must **skip** CRM plans when merging School feature flags.  
+- Phase 2: opportunities + GST quotations live only in `crm-service` / `crm-ui`; Field Force and Renewals unchanged.
 
 ## References
 
