@@ -1,31 +1,36 @@
-# CRM Phase 1 — Scaffold + Lead CRUD
+# CRM Phase 1 — Status (updated)
 
-**Branch:** `feature/crm-platform-mvp`  
-**Service:** `D:\sugamFlow\crm-service` (new git repo)
+**crm-service:** https://github.com/sumanthakur30/crm-service/tree/feature/crm-platform-mvp  
+**crm-ui:** `D:\sugamFlow\crm-ui` (local git `feature/crm-platform-mvp`)
 
-## Delivered
+## Done
 
-| Item | Detail |
-|------|--------|
-| Scaffold | Spring Boot 3.5 / Java 17 / Flyway / Eureka / port **8095** |
-| Schema | `crm_workspace`, `crm_pipeline`, `crm_stage`, `crm_lead` (JSONB attributes — no industry columns) |
-| APIs | Status, workspace bootstrap, pipelines/stages, Lead CRUD |
-| Tenant | `X-Tenant-Id` (string) — multi-tenant isolation |
-| Entitlement | Optional `FEATURE_CRM` via subscription-service (`crm.entitlement.enabled`) |
-| Isolation | Does **not** touch `/api/v1/leads` (Field Force) or Renewals |
+| Slice | Status |
+|-------|--------|
+| Scaffold + Lead CRUD + workspace/pipeline | Done (committed/pushed) |
+| CSV/XLSX import | Done |
+| Round-robin assignment + team members | Done |
+| Minimal crm-ui (tenant, list, create, import) | Done — port **4400** |
+| Compose profile `crm` | Done (optional) |
 
-## Run locally
+## Run
 
-1. `createdb crmdb` (user/pass `crmdb`)  
-2. `cd D:\sugamFlow\crm-service && mvn test && mvn spring-boot:run -Dspring-boot.run.profiles=local`  
-3. Smoke: see `crm-service/README.md`  
-4. Gateway: ensure route `[53]` + Eureka registration (or `GATEWAY_CRM_URI=http://localhost:8095`)
+```powershell
+# DB
+createdb crmdb
 
-## Still Phase 1 backlog (next slices)
+# API
+cd D:\sugamFlow\crm-service
+mvn spring-boot:run "-Dspring-boot.run.profiles=local"
 
-- CSV import · Kanban UI (`crm-ui`) · assignment round-robin · more industry templates  
-- docker-compose service entry · DB init script in shared Postgres  
+# UI
+cd D:\sugamFlow\crm-ui
+npm start
+# http://localhost:4400  (proxies /api → :8095)
+```
 
-## Non-impact
+Optional Docker: `docker compose --profile crm up -d crm-service`
 
-ERP modules unchanged. CRM off unless tenant uses these APIs / later UI.
+## Next Phase 1 / 2
+
+Kanban board · saved filters · more templates · ERP event adapters · quotes
