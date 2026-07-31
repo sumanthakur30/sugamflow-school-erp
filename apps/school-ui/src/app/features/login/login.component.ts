@@ -102,7 +102,7 @@ export class LoginComponent implements OnInit {
       const login = t.loginScreen ?? {};
       this.schoolName = b['schoolName'] || 'SugamFlow School';
       this.tagline = b['productTagline'] || 'Configuration over customization';
-      this.loginLogo = b['loginLogo'] || b['schoolLogo'] || '';
+      this.loginLogo = this.theme.resolveAssetUrl(b['loginLogo'] || b['schoolLogo'] || '');
       this.footer = b['footer'] || 'Powered by SugamFlow';
       this.showAnnouncement = login['announcementArea'] !== false;
       this.showAdmissionBanner = login['admissionBanner'] !== false;

@@ -103,7 +103,8 @@ export class ThemeService {
     const login = theme.loginScreen ?? {};
     const bg = login['backgroundImage'];
     if (typeof bg === 'string' && bg.trim()) {
-      root.style.setProperty('--sf-login-bg-image', `url("${bg.trim()}")`);
+      const resolved = this.resolveAssetUrl(bg.trim());
+      root.style.setProperty('--sf-login-bg-image', `url("${resolved}")`);
     } else {
       root.style.removeProperty('--sf-login-bg-image');
     }
@@ -127,8 +128,26 @@ export class ThemeService {
         link.rel = 'icon';
         document.head.appendChild(link);
       }
-      link.href = favicon;
+      link.href = this.resolveAssetUrl(favicon);
     }
+  }
+
+  /** Turn gateway-relative asset paths into absolute URLs for img/CSS. */
+  resolveAssetUrl(raw: string): string {
+    const value = (raw || '').trim();
+    if (!value) return '';
+    if (
+      value.startsWith('http://') ||
+      value.startsWith('https://') ||
+      value.startsWith('data:') ||
+      value.startsWith('blob:')
+    ) {
+      return value;
+    }
+    if (value.startsWith('/')) {
+      return `${this.base}${value}`;
+    }
+    return value;
   }
 
   private platformFallback(): DesignTheme {

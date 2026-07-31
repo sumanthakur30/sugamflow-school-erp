@@ -6,12 +6,15 @@
         <button type="button" class="crumb-link" (click)="closeForm()" [disabled]="submitting">
           Payroll
         </button>
-        / New
+        / {{ editingId ? 'Edit' : runType === 'CORRECTION' ? 'Correction' : runType === 'ADJUSTMENT' ? 'Adjustment' : 'New' }}
       </p>
       <header class="page-head list-head">
         <div>
-          <h2>New Payroll Run</h2>
-          <p>Enter employee pay details and submit for approval.</p>
+          <h2>{{ formTitle() }}</h2>
+          <p>{{ formSubtitle() }}</p>
+          @if (parentRecordId) {
+            <p class="muted parent-link">Linked parent: {{ parentRecordId }}</p>
+          }
         </div>
       </header>
 
@@ -172,7 +175,19 @@
 
       <div class="form-actions actions">
         <button type="button" (click)="submit()" [disabled]="submitting" [attr.aria-busy]="submitting">
-          {{ submitting ? 'Saving…' : 'Submit payroll run' }}
+          {{
+            submitting
+              ? editingId
+                ? 'Saving…'
+                : 'Saving…'
+              : editingId
+                ? 'Save changes'
+                : runType === 'CORRECTION'
+                  ? 'Submit correction'
+                  : runType === 'ADJUSTMENT'
+                    ? 'Submit adjustment'
+                    : 'Submit payroll run'
+          }}
         </button>
         <button type="button" class="secondary" (click)="closeForm()" [disabled]="submitting">
           Cancel
@@ -198,10 +213,54 @@
             @if (selected.assigneeRole) {
               ({{ selected.assigneeRole }})
             }
+            · {{ selected.runType || 'REGULAR' }}
+            @if (payoutLabel(selected)) {
+              · {{ payoutLabel(selected) }}
+            }
           </p>
+          @if (selected.parentRecordId) {
+            <p class="muted parent-link">Parent run: {{ selected.parentRecordId }}</p>
+          }
         </div>
         <div class="head-actions">
           <span [class]="statusClass(selected.status)">{{ selected.status }}</span>
+          @if (payoutLabel(selected)) {
+            <span class="payout-chip">{{ payoutLabel(selected) }}</span>
+          }
+          @if (canEdit(selected)) {
+            <button type="button" class="secondary" (click)="openEdit(selected)" [disabled]="submitting">
+              Edit
+            </button>
+            <button
+              type="button"
+              class="secondary danger"
+              (click)="cancelDraft(selected)"
+              [disabled]="submitting"
+            >
+              Cancel draft
+            </button>
+          }
+          @if (canReverse(selected)) {
+            <button type="button" class="secondary" (click)="reverseRun(selected)" [disabled]="submitting">
+              Reverse
+            </button>
+            <button type="button" (click)="correctRun(selected)" [disabled]="submitting">
+              Correct this run
+            </button>
+            <button type="button" class="secondary" (click)="markPaid(selected)" [disabled]="submitting">
+              Mark paid
+            </button>
+          }
+          @if (canCorrect(selected)) {
+            <button type="button" (click)="openCorrection(selected)" [disabled]="submitting">
+              New correction
+            </button>
+          }
+          @if (canAdjust(selected)) {
+            <button type="button" (click)="openAdjustment(selected)" [disabled]="submitting">
+              Adjustment
+            </button>
+          }
           <button type="button" class="secondary" (click)="closeDetail()" [disabled]="submitting">
             Back to list
           </button>
@@ -300,37 +359,46 @@
         </div>
       </section>
 
-      <section class="form-section panel">
-        <h3 class="form-section-title">Workflow action</h3>
-        <label>
-          Comment
-          <input
-            [(ngModel)]="actionComment"
-            name="actionComment"
-            placeholder="Optional note for this step"
-            [disabled]="submitting"
-          />
-        </label>
-        <div class="form-actions actions">
-          <button type="button" (click)="act('APPROVE')" [disabled]="submitting">
-            Approve step
-          </button>
-          <button
-            type="button"
-            class="secondary"
-            (click)="act('REQUEST_INFO')"
-            [disabled]="submitting"
-          >
-            Request info
-          </button>
-          <button type="button" class="danger" (click)="act('REJECT')" [disabled]="submitting">
-            Reject
-          </button>
-          <button type="button" class="secondary" (click)="closeDetail()" [disabled]="submitting">
-            Cancel
-          </button>
-        </div>
-      </section>
+      @if (canWorkflowAct(selected)) {
+        <section class="form-section panel">
+          <h3 class="form-section-title">Workflow action</h3>
+          <label>
+            Comment
+            <input
+              [(ngModel)]="actionComment"
+              name="actionComment"
+              placeholder="Optional note for this step"
+              [disabled]="submitting"
+            />
+          </label>
+          <div class="form-actions actions">
+            <button type="button" (click)="act('APPROVE')" [disabled]="submitting">
+              Approve step
+            </button>
+            <button
+              type="button"
+              class="secondary"
+              (click)="act('REQUEST_INFO')"
+              [disabled]="submitting"
+            >
+              Request info
+            </button>
+            <button type="button" class="danger" (click)="act('REJECT')" [disabled]="submitting">
+              Reject
+            </button>
+            <button type="button" class="secondary" (click)="closeDetail()" [disabled]="submitting">
+              Back
+            </button>
+          </div>
+        </section>
+      } @else {
+        <section class="form-section panel">
+          <h3 class="form-section-title">Lifecycle</h3>
+          <p class="muted">
+            Approved and paid history is immutable. Use Reverse (unpaid), Correction, or Adjustment — never delete.
+          </p>
+        </section>
+      }
 
       @if (latestApproveDelivery().length) {
         <section class="form-section panel">
@@ -365,7 +433,7 @@
     <header class="page-head list-head">
       <div>
         <h2>Payroll</h2>
-        <p>Search, review, and approve staff payroll runs.</p>
+        <p>Review and approve staff payroll runs.</p>
       </div>
       @if (featureEnabled && !loading) {
         <div class="head-actions">
@@ -475,14 +543,53 @@
                   <td class="mono">{{ answer(row, 'mobile') }}</td>
                   <td class="money">{{ formatMoney(row.answers?.netPay) }}</td>
                   <td>
-                    <span [class]="statusClass(row.status)">{{ row.status || '—' }}</span>
+                    <div class="status-stack">
+                      <span [class]="statusClass(row.status)">{{ row.status || '—' }}</span>
+                      @if (payoutLabel(row)) {
+                        <span class="payout-chip">{{ payoutLabel(row) }}</span>
+                      }
+                      @if (row.runType && row.runType !== 'REGULAR') {
+                        <span class="run-type-chip">{{ row.runType }}</span>
+                      }
+                    </div>
                   </td>
                   <td>
                     <span class="step-chip">{{ row.currentStepName || '—' }}</span>
                   </td>
                   <td class="muted-cell">{{ formatWhen(row.updatedAt || row.createdAt) }}</td>
                   <td class="col-actions" (click)="$event.stopPropagation()">
-                    <button type="button" class="tiny" (click)="select(row)">Open</button>
+                    <div class="action-row" role="group" [attr.aria-label]="'Actions for ' + employeeName(row)">
+                      <button type="button" class="tiny" (click)="select(row)">Open</button>
+                      @if (canEdit(row)) {
+                        <button type="button" class="tiny secondary" (click)="openEdit(row, $event)">
+                          Edit
+                        </button>
+                        <button type="button" class="tiny danger" (click)="cancelDraft(row, $event)">
+                          Cancel
+                        </button>
+                      }
+                      @if (canReverse(row)) {
+                        <button type="button" class="tiny secondary" (click)="reverseRun(row, $event)">
+                          Reverse
+                        </button>
+                        <button type="button" class="tiny secondary" (click)="correctRun(row, $event)">
+                          Correct
+                        </button>
+                        <button type="button" class="tiny secondary" (click)="markPaid(row, $event)">
+                          Mark paid
+                        </button>
+                      }
+                      @if (canCorrect(row)) {
+                        <button type="button" class="tiny secondary" (click)="openCorrection(row, $event)">
+                          Correct
+                        </button>
+                      }
+                      @if (canAdjust(row)) {
+                        <button type="button" class="tiny secondary" (click)="openAdjustment(row, $event)">
+                          Adjust
+                        </button>
+                      }
+                    </div>
                   </td>
                 </tr>
               }

@@ -90,6 +90,61 @@ button.tiny {
   min-height: 0;
 }
 
+/* Solid danger — white on red (full-size only; .tiny stays outlined via global styles) */
+button.danger:not(.linkish):not(.secondary):not(.danger-link):not(.tiny) {
+  background: #b91c1c !important;
+  color: #fff !important;
+  border: 1px solid #991b1b;
+}
+
+button.danger:not(.linkish):not(.secondary):not(.danger-link):not(.tiny):hover:not(:disabled) {
+  background: #991b1b !important;
+}
+
+button.tiny.danger {
+  background: #fff !important;
+  color: #b91c1c !important;
+  border: 1px solid color-mix(in srgb, #b91c1c 42%, #fecaca) !important;
+}
+
+button.tiny.secondary {
+  background: #fff;
+  color: var(--sf-primary);
+  border: 1px solid color-mix(in srgb, var(--sf-primary) 30%, #cbd5e1);
+}
+
+/* Text-style delete — red label, no filled pill (Academic Structure, …) */
+button.linkish.danger,
+.linkish.danger,
+button.danger-link,
+.danger-link {
+  background: transparent !important;
+  color: #b91c1c !important;
+  border: 0 !important;
+  box-shadow: none;
+}
+
+button.linkish.danger:hover:not(:disabled),
+.linkish.danger:hover:not(:disabled),
+button.danger-link:hover:not(:disabled),
+.danger-link:hover:not(:disabled) {
+  background: color-mix(in srgb, #b91c1c 10%, #fff) !important;
+  color: #991b1b !important;
+}
+
+/* Outlined remove (form/workflow builders: secondary + danger) */
+button.secondary.danger {
+  background: #fff !important;
+  color: #b91c1c !important;
+  border: 1px solid #b91c1c !important;
+}
+
+button.secondary.danger:hover:not(:disabled) {
+  background: color-mix(in srgb, #b91c1c 8%, #fff) !important;
+  color: #991b1b !important;
+  border-color: #991b1b !important;
+}
+
 .chip-list {
   display: flex;
   flex-wrap: wrap;
@@ -195,10 +250,6 @@ button.tiny {
   gap: 0.45rem;
   align-items: end;
   margin-bottom: 0.5rem;
-}
-
-.danger {
-  background: color-mix(in srgb, #b91c1c 88%, #000) !important;
 }
 
 @media (max-width: 1024px) {

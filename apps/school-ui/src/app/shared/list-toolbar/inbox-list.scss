@@ -275,8 +275,10 @@ button.tiny,
   min-height: 0;
 }
 
-button.danger {
+button.danger:not(.linkish):not(.secondary) {
   background: #b91c1c;
+  color: #fff;
+  border: 1px solid #991b1b;
 }
 
 button:disabled {

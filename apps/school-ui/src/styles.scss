@@ -47,6 +47,87 @@ textarea {
   font: inherit;
 }
 
+/* —— Shared button system (all admin pages) —— */
+button.tiny,
+.tiny {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.25rem;
+  padding: 0.32rem 0.7rem;
+  min-height: 2rem;
+  font-size: 0.8rem;
+  font-weight: 700;
+  line-height: 1.1;
+  border-radius: calc(var(--sf-radius) - 2px);
+  white-space: nowrap;
+}
+
+button.tiny.secondary,
+.tiny.secondary {
+  background: #fff;
+  color: var(--sf-primary, #0b6e4f);
+  border: 1px solid color-mix(in srgb, var(--sf-primary, #0b6e4f) 30%, #cbd5e1);
+}
+
+button.tiny.secondary:hover:not(:disabled),
+.tiny.secondary:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--sf-primary, #0b6e4f) 8%, #fff);
+}
+
+/* Outlined danger for compact list actions (Cancel) — never solid fill */
+button.tiny.danger,
+.tiny.danger {
+  background: #fff !important;
+  color: #b91c1c !important;
+  border: 1px solid color-mix(in srgb, #b91c1c 42%, #fecaca) !important;
+}
+
+button.tiny.danger:hover:not(:disabled),
+.tiny.danger:hover:not(:disabled) {
+  background: #fef2f2 !important;
+  color: #991b1b !important;
+}
+
+/* Solid danger — white on red (full-size Reject / Soft delete / Suspend) */
+button.danger:not(.linkish):not(.secondary):not(.danger-link):not(.danger-item):not(.tiny) {
+  background: #b91c1c;
+  color: #fff;
+  border: 1px solid #991b1b;
+}
+
+button.danger:not(.linkish):not(.secondary):not(.danger-link):not(.danger-item):not(.tiny):hover:not(:disabled) {
+  background: #991b1b;
+}
+
+button.linkish.danger,
+.linkish.danger,
+button.danger-link,
+.danger-link {
+  background: transparent !important;
+  color: #b91c1c !important;
+  border: 0 !important;
+}
+
+button.linkish.danger:hover:not(:disabled),
+.linkish.danger:hover:not(:disabled),
+button.danger-link:hover:not(:disabled),
+.danger-link:hover:not(:disabled) {
+  background: color-mix(in srgb, #b91c1c 10%, #fff) !important;
+  color: #991b1b !important;
+}
+
+button.secondary.danger {
+  background: #fff !important;
+  color: #b91c1c !important;
+  border: 1px solid #b91c1c !important;
+}
+
+button.secondary.danger:hover:not(:disabled) {
+  background: color-mix(in srgb, #b91c1c 8%, #fff) !important;
+  color: #991b1b !important;
+}
+
 h1,
 h2,
 h3 {

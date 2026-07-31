@@ -23,7 +23,7 @@
           @if (theme.branding?.['schoolLogo']) {
             <img
               class="context-brand-logo"
-              [src]="theme.branding?.['schoolLogo']"
+              [src]="themeService.resolveAssetUrl(theme.branding?.['schoolLogo'] || '')"
               [alt]="schoolName(theme)"
             />
           } @else {

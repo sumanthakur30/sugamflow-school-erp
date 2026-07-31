@@ -90,7 +90,14 @@
   }
 
   .linkish.danger {
-    color: var(--sf-error, #b91c1c);
+    background: transparent !important;
+    color: #b91c1c !important;
+    border: 0 !important;
+  }
+
+  .linkish.danger:hover:not(:disabled) {
+    background: color-mix(in srgb, #b91c1c 10%, #fff) !important;
+    color: #991b1b !important;
   }
 
   .table-wrap {

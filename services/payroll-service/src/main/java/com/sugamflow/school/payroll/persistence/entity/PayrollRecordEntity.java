@@ -37,6 +37,17 @@ public class PayrollRecordEntity {
   @Column(nullable = false, length = 32)
   private String status;
 
+  /** REGULAR | CORRECTION | ADJUSTMENT */
+  @Column(name = "run_type", nullable = false, length = 32)
+  private String runType = "REGULAR";
+
+  @Column(name = "parent_record_id")
+  private UUID parentRecordId;
+
+  /** UNPAID | PAID — paid runs are not edited/reversed; use ADJUSTMENT. */
+  @Column(name = "payout_status", nullable = false, length = 32)
+  private String payoutStatus = "UNPAID";
+
   @Column(name = "current_step_sequence", nullable = false)
   private int currentStepSequence = 1;
 
@@ -85,6 +96,12 @@ public class PayrollRecordEntity {
   public void setWorkflowKey(String workflowKey) { this.workflowKey = workflowKey; }
   public String getStatus() { return status; }
   public void setStatus(String status) { this.status = status; }
+  public String getRunType() { return runType; }
+  public void setRunType(String runType) { this.runType = runType; }
+  public UUID getParentRecordId() { return parentRecordId; }
+  public void setParentRecordId(UUID parentRecordId) { this.parentRecordId = parentRecordId; }
+  public String getPayoutStatus() { return payoutStatus; }
+  public void setPayoutStatus(String payoutStatus) { this.payoutStatus = payoutStatus; }
   public int getCurrentStepSequence() { return currentStepSequence; }
   public void setCurrentStepSequence(int currentStepSequence) { this.currentStepSequence = currentStepSequence; }
   public String getCurrentStepName() { return currentStepName; }

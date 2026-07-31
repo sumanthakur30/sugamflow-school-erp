@@ -32,6 +32,13 @@ public class PayrollRecordService {
   public static final String ACTION_BLOCK = "BLOCK_PAYROLL";
   public static final String ACTION_NOTIFY = "NOTIFY_PAYROLL";
 
+  public static final String RUN_REGULAR = "REGULAR";
+  public static final String RUN_CORRECTION = "CORRECTION";
+  public static final String RUN_ADJUSTMENT = "ADJUSTMENT";
+
+  public static final String PAYOUT_UNPAID = "UNPAID";
+  public static final String PAYOUT_PAID = "PAID";
+
   private final PayrollRecordRepository repository;
   private final ConfigEngineClient engines;
   private final NotificationDeliveryClient notificationDelivery;
@@ -111,6 +118,8 @@ public class PayrollRecordService {
     Map<String, Object> module = engines.getModuleSettings(scope, MODULE_PAYROLL);
     String formKey = stringOr(body.get("formKey"), resolveFormKey(module));
     String workflowKey = stringOr(body.get("workflowKey"), resolveWorkflowKey(module));
+    String runType = normalizeRunType(body.get("runType"));
+    UUID parentId = parseUuid(body.get("parentRecordId"));
 
     @SuppressWarnings("unchecked")
     Map<String, Object> answers =
@@ -124,7 +133,8 @@ public class PayrollRecordService {
     }
     validateMandatory(form, answers);
     normalizePayAmounts(answers);
-    rejectDuplicatePeriod(scope, answers);
+    PayrollRecordEntity parent = resolveParentForSubmit(scope, runType, parentId, answers);
+    rejectDuplicatePeriod(scope, answers, runType, parentId);
 
     Map<String, Object> workflow = engines.getWorkflow(scope, workflowKey);
     if (workflow == null) {
@@ -148,6 +158,9 @@ public class PayrollRecordService {
     entity.setFormKey(formKey);
     entity.setWorkflowKey(workflowKey);
     entity.setStatus("IN_PROGRESS");
+    entity.setRunType(runType);
+    entity.setParentRecordId(parent != null ? parent.getId() : null);
+    entity.setPayoutStatus(PAYOUT_UNPAID);
     entity.setCurrentStepSequence(first.sequence());
     entity.setCurrentStepName(first.name());
     entity.setAssigneeRole(first.assignRole());
@@ -158,12 +171,16 @@ public class PayrollRecordService {
     entity.setUpdatedAt(Instant.now());
 
     List<Map<String, Object>> history = new ArrayList<>();
+    String submitMsg =
+        parent != null
+            ? runType + " payroll submitted (parent " + parent.getId() + ")"
+            : "Payroll record submitted";
     history.add(
         event(
             "SUBMITTED",
             scope.userId(),
             scope.roleCode(),
-            "Payroll record submitted",
+            submitMsg,
             first.sequence(),
             first.name()));
     entity.setHistory(history);
@@ -174,6 +191,49 @@ public class PayrollRecordService {
       intents.add(recordNotification(scope, entity, "PAYROLL_RULE_NOTIFY"));
     }
     entity.setNotificationIntents(intents);
+    return toDto(repository.save(entity));
+  }
+
+  @Transactional
+  public Map<String, Object> update(UUID id, Map<String, Object> body) {
+    TenantScope scope = TenantContext.require();
+    requireFeature(scope);
+    requireModuleEnabled(scope);
+    PayrollRecordEntity entity = requireRecord(id, scope.organizationId());
+    if (!isEditableDraft(entity)) {
+      throw new PayrollException(
+          "NOT_EDITABLE",
+          "Only IN_PROGRESS or INFO_REQUESTED draft runs can be edited. Approved/paid history is immutable.");
+    }
+
+    @SuppressWarnings("unchecked")
+    Map<String, Object> answers =
+        body.get("answers") instanceof Map<?, ?> m
+            ? new LinkedHashMap<>((Map<String, Object>) m)
+            : new LinkedHashMap<>(entity.getAnswers());
+
+    Map<String, Object> form = engines.getForm(scope, entity.getFormKey());
+    if (form == null) {
+      throw new PayrollException(
+          "FORM_MISSING", "Form definition not found: " + entity.getFormKey());
+    }
+    validateMandatory(form, answers);
+    normalizePayAmounts(answers);
+    rejectDuplicatePeriod(scope, answers, entity.getRunType(), entity.getParentRecordId(), id);
+
+    entity.setAnswers(answers);
+    entity.setStatus("IN_PROGRESS");
+    entity.setUpdatedAt(Instant.now());
+    entity
+        .getHistory()
+        .add(
+            event(
+                "UPDATED",
+                scope.userId(),
+                scope.roleCode(),
+                "Draft payroll run updated",
+                entity.getCurrentStepSequence(),
+                entity.getCurrentStepName()));
     return toDto(repository.save(entity));
   }
 
@@ -193,7 +253,17 @@ public class PayrollRecordService {
     answers.put("netPay", grossPay - deductions);
   }
 
-  private void rejectDuplicatePeriod(TenantScope scope, Map<String, Object> answers) {
+  private void rejectDuplicatePeriod(
+      TenantScope scope, Map<String, Object> answers, String runType, UUID parentId) {
+    rejectDuplicatePeriod(scope, answers, runType, parentId, null);
+  }
+
+  private void rejectDuplicatePeriod(
+      TenantScope scope,
+      Map<String, Object> answers,
+      String runType,
+      UUID parentId,
+      UUID excludeId) {
     String employeeId = stringOr(answers.get("employeeId"), "");
     String month = stringOr(answers.get("month"), "");
     String year = stringOr(answers.get("year"), "");
@@ -201,14 +271,25 @@ public class PayrollRecordService {
       throw new PayrollException(
           "PAYROLL_PERIOD_REQUIRED", "Employee, payroll month, and year are required.");
     }
+    // Corrections/adjustments replace or adjust an existing period — allowed when parent is linked.
+    if (RUN_CORRECTION.equals(runType) || RUN_ADJUSTMENT.equals(runType)) {
+      if (parentId == null) {
+        throw new PayrollException(
+            "PARENT_REQUIRED", runType + " runs must link to the original payroll record.");
+      }
+      return;
+    }
     boolean duplicate =
         repository.findByOrganizationIdOrderByUpdatedAtDesc(scope.organizationId()).stream()
+            .filter(
+                record ->
+                    excludeId == null || !excludeId.equals(record.getId()))
             .filter(
                 record ->
                     Objects.equals(record.getBranchId(), scope.branchId())
                         && Objects.equals(
                             record.getAcademicSessionId(), scope.academicSessionId())
-                        && !"REJECTED".equalsIgnoreCase(record.getStatus()))
+                        && isActivePeriodHold(record.getStatus()))
             .anyMatch(
                 record ->
                     employeeId.equalsIgnoreCase(
@@ -220,8 +301,94 @@ public class PayrollRecordService {
     if (duplicate) {
       throw new PayrollException(
           "DUPLICATE_PAYROLL",
-          "A payroll run already exists for this employee for " + month + " " + year + ".");
+          "A payroll run already exists for this employee for "
+              + month
+              + " "
+              + year
+              + ". Reverse/void the prior run, or create a correction/adjustment linked to it.");
     }
+  }
+
+  private static boolean isActivePeriodHold(String status) {
+    if (status == null) {
+      return false;
+    }
+    String s = status.trim().toUpperCase();
+    return "IN_PROGRESS".equals(s)
+        || "INFO_REQUESTED".equals(s)
+        || "APPROVED".equals(s);
+  }
+
+  private static boolean isEditableDraft(PayrollRecordEntity entity) {
+    String s = entity.getStatus() == null ? "" : entity.getStatus().trim().toUpperCase();
+    return "IN_PROGRESS".equals(s) || "INFO_REQUESTED".equals(s);
+  }
+
+  private static String normalizeRunType(Object raw) {
+    String value = stringOr(raw, RUN_REGULAR).toUpperCase();
+    if (RUN_REGULAR.equals(value)
+        || RUN_CORRECTION.equals(value)
+        || RUN_ADJUSTMENT.equals(value)) {
+      return value;
+    }
+    throw new PayrollException(
+        "INVALID_RUN_TYPE", "runType must be REGULAR, CORRECTION, or ADJUSTMENT.");
+  }
+
+  private static UUID parseUuid(Object raw) {
+    if (raw == null || String.valueOf(raw).isBlank()) {
+      return null;
+    }
+    try {
+      return UUID.fromString(String.valueOf(raw).trim());
+    } catch (IllegalArgumentException ex) {
+      throw new PayrollException("INVALID_PARENT", "parentRecordId must be a valid UUID.");
+    }
+  }
+
+  private PayrollRecordEntity resolveParentForSubmit(
+      TenantScope scope, String runType, UUID parentId, Map<String, Object> answers) {
+    if (RUN_REGULAR.equals(runType)) {
+      if (parentId != null) {
+        throw new PayrollException(
+            "PARENT_NOT_ALLOWED", "REGULAR runs cannot link a parent record.");
+      }
+      return null;
+    }
+    if (parentId == null) {
+      throw new PayrollException(
+          "PARENT_REQUIRED", runType + " runs must link to the original payroll record.");
+    }
+    PayrollRecordEntity parent = requireRecord(parentId, scope.organizationId());
+    String parentStatus =
+        parent.getStatus() == null ? "" : parent.getStatus().trim().toUpperCase();
+    String payout =
+        parent.getPayoutStatus() == null
+            ? PAYOUT_UNPAID
+            : parent.getPayoutStatus().trim().toUpperCase();
+
+    if (RUN_CORRECTION.equals(runType)) {
+      if (!"REVERSED".equals(parentStatus)) {
+        throw new PayrollException(
+            "CORRECTION_PARENT",
+            "Correction requires the original APPROVED unpaid run to be reversed first.");
+      }
+    } else if (RUN_ADJUSTMENT.equals(runType)) {
+      if (!"APPROVED".equals(parentStatus) || !PAYOUT_PAID.equals(payout)) {
+        throw new PayrollException(
+            "ADJUSTMENT_PARENT",
+            "Adjustment applies to an APPROVED run that is already marked PAID.");
+      }
+    }
+
+    // Keep employee/period aligned with parent when present on parent.
+    String parentEmp = stringOr(parent.getAnswers().get("employeeId"), "");
+    String emp = stringOr(answers.get("employeeId"), "");
+    if (!parentEmp.isBlank() && !emp.isBlank() && !parentEmp.equalsIgnoreCase(emp)) {
+      throw new PayrollException(
+          "PARENT_MISMATCH", "Correction/adjustment employee must match the original run.");
+    }
+    return parent;
   }
 
   private double nonNegativeAmount(Object raw, String label) {
@@ -246,21 +413,131 @@ public class PayrollRecordService {
     String action = String.valueOf(body.getOrDefault("action", "")).trim().toUpperCase();
     String comment = body.get("comment") != null ? String.valueOf(body.get("comment")) : null;
     PayrollRecordEntity entity = requireRecord(id, scope.organizationId());
-    if ("REJECTED".equals(entity.getStatus()) || "APPROVED".equals(entity.getStatus())) {
+
+    return switch (action) {
+      case "CANCEL", "VOID_DRAFT" -> cancelDraft(entity, scope, comment);
+      case "REVERSE", "VOID" -> reverseApproved(entity, scope, comment);
+      case "MARK_PAID" -> markPaid(entity, scope, comment);
+      case "REJECT" -> {
+        assertWorkflowActionable(entity);
+        yield reject(entity, scope, comment);
+      }
+      case "REQUEST_INFO" -> {
+        assertWorkflowActionable(entity);
+        yield requestInfo(entity, scope, comment);
+      }
+      case "APPROVE" -> {
+        assertWorkflowActionable(entity);
+        Map<String, Object> workflow = engines.getWorkflow(scope, entity.getWorkflowKey());
+        if (workflow == null) {
+          throw new PayrollException(
+              "WORKFLOW_MISSING",
+              "Workflow definition not found: " + entity.getWorkflowKey());
+        }
+        yield approve(entity, scope, workflow, comment);
+      }
+      default -> throw new PayrollException(
+          "UNKNOWN_ACTION",
+          "Supported actions: APPROVE, REJECT, REQUEST_INFO, CANCEL, REVERSE, MARK_PAID");
+    };
+  }
+
+  private void assertWorkflowActionable(PayrollRecordEntity entity) {
+    String status = entity.getStatus() == null ? "" : entity.getStatus().trim().toUpperCase();
+    if ("REJECTED".equals(status)
+        || "APPROVED".equals(status)
+        || "VOIDED".equals(status)
+        || "REVERSED".equals(status)) {
       throw new PayrollException("TERMINAL", "Record is already " + entity.getStatus());
     }
-    Map<String, Object> workflow = engines.getWorkflow(scope, entity.getWorkflowKey());
-    if (workflow == null) {
+  }
+
+  private Map<String, Object> cancelDraft(
+      PayrollRecordEntity entity, TenantScope scope, String comment) {
+    if (!isEditableDraft(entity)) {
       throw new PayrollException(
-          "WORKFLOW_MISSING", "Workflow definition not found: " + entity.getWorkflowKey());
+          "NOT_CANCELLABLE",
+          "Only draft runs (IN_PROGRESS / INFO_REQUESTED) can be cancelled/voided.");
     }
-    return switch (action) {
-      case "REJECT" -> reject(entity, scope, comment);
-      case "REQUEST_INFO" -> requestInfo(entity, scope, comment);
-      case "APPROVE" -> approve(entity, scope, workflow, comment);
-      default -> throw new PayrollException(
-          "UNKNOWN_ACTION", "Supported actions: APPROVE, REJECT, REQUEST_INFO");
-    };
+    entity.setStatus("VOIDED");
+    entity.setCurrentStepName("Cancelled");
+    entity.setUpdatedAt(Instant.now());
+    entity
+        .getHistory()
+        .add(
+            event(
+                "VOIDED",
+                scope.userId(),
+                scope.roleCode(),
+                comment != null && !comment.isBlank() ? comment : "Draft payroll run cancelled",
+                entity.getCurrentStepSequence(),
+                entity.getCurrentStepName()));
+    entity.getNotificationIntents().add(recordNotification(scope, entity, "PAYROLL_VOIDED"));
+    return toDto(repository.save(entity));
+  }
+
+  private Map<String, Object> reverseApproved(
+      PayrollRecordEntity entity, TenantScope scope, String comment) {
+    String status = entity.getStatus() == null ? "" : entity.getStatus().trim().toUpperCase();
+    String payout =
+        entity.getPayoutStatus() == null
+            ? PAYOUT_UNPAID
+            : entity.getPayoutStatus().trim().toUpperCase();
+    if (!"APPROVED".equals(status)) {
+      throw new PayrollException(
+          "NOT_REVERSIBLE", "Only APPROVED unpaid runs can be reversed/voided.");
+    }
+    if (PAYOUT_PAID.equals(payout)) {
+      throw new PayrollException(
+          "ALREADY_PAID",
+          "This run is marked PAID. Create an ADJUSTMENT linked to it instead of reversing.");
+    }
+    entity.setStatus("REVERSED");
+    entity.setCurrentStepName("Reversed");
+    entity.setUpdatedAt(Instant.now());
+    entity
+        .getHistory()
+        .add(
+            event(
+                "REVERSED",
+                scope.userId(),
+                scope.roleCode(),
+                comment != null && !comment.isBlank()
+                    ? comment
+                    : "Approved payroll run reversed/voided (pre-payout)",
+                entity.getCurrentStepSequence(),
+                entity.getCurrentStepName()));
+    entity.getNotificationIntents().add(recordNotification(scope, entity, "PAYROLL_REVERSED"));
+    return toDto(repository.save(entity));
+  }
+
+  private Map<String, Object> markPaid(
+      PayrollRecordEntity entity, TenantScope scope, String comment) {
+    String status = entity.getStatus() == null ? "" : entity.getStatus().trim().toUpperCase();
+    if (!"APPROVED".equals(status)) {
+      throw new PayrollException("NOT_PAYABLE", "Only APPROVED runs can be marked PAID.");
+    }
+    String payout =
+        entity.getPayoutStatus() == null
+            ? PAYOUT_UNPAID
+            : entity.getPayoutStatus().trim().toUpperCase();
+    if (PAYOUT_PAID.equals(payout)) {
+      throw new PayrollException("ALREADY_PAID", "Record is already marked PAID.");
+    }
+    entity.setPayoutStatus(PAYOUT_PAID);
+    entity.setUpdatedAt(Instant.now());
+    entity
+        .getHistory()
+        .add(
+            event(
+                "MARKED_PAID",
+                scope.userId(),
+                scope.roleCode(),
+                comment != null && !comment.isBlank() ? comment : "Payroll marked as paid out",
+                entity.getCurrentStepSequence(),
+                entity.getCurrentStepName()));
+    entity.getNotificationIntents().add(recordNotification(scope, entity, "PAYROLL_MARKED_PAID"));
+    return toDto(repository.save(entity));
   }
 
   private Map<String, Object> reject(
@@ -618,6 +895,11 @@ public class PayrollRecordService {
     dto.put("formKey", e.getFormKey());
     dto.put("workflowKey", e.getWorkflowKey());
     dto.put("status", e.getStatus());
+    dto.put("runType", e.getRunType() != null ? e.getRunType() : RUN_REGULAR);
+    dto.put(
+        "parentRecordId",
+        e.getParentRecordId() != null ? e.getParentRecordId().toString() : null);
+    dto.put("payoutStatus", e.getPayoutStatus() != null ? e.getPayoutStatus() : PAYOUT_UNPAID);
     dto.put("currentStepSequence", e.getCurrentStepSequence());
     dto.put("currentStepName", e.getCurrentStepName());
     dto.put("assigneeRole", e.getAssigneeRole());
@@ -628,6 +910,18 @@ public class PayrollRecordService {
     dto.put("createdBy", e.getCreatedBy());
     dto.put("createdAt", e.getCreatedAt().toString());
     dto.put("updatedAt", e.getUpdatedAt().toString());
+    dto.put("canEdit", isEditableDraft(e));
+    dto.put("canCancel", isEditableDraft(e));
+    String status = e.getStatus() == null ? "" : e.getStatus().trim().toUpperCase();
+    String payout =
+        e.getPayoutStatus() == null ? PAYOUT_UNPAID : e.getPayoutStatus().trim().toUpperCase();
+    dto.put("canReverse", "APPROVED".equals(status) && PAYOUT_UNPAID.equals(payout));
+    dto.put("canMarkPaid", "APPROVED".equals(status) && PAYOUT_UNPAID.equals(payout));
+    dto.put("canCorrect", "REVERSED".equals(status));
+    dto.put("canAdjust", "APPROVED".equals(status) && PAYOUT_PAID.equals(payout));
+    dto.put(
+        "canWorkflowAct",
+        "IN_PROGRESS".equals(status) || "INFO_REQUESTED".equals(status));
     return dto;
   }
 

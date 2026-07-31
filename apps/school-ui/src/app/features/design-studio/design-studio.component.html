@@ -32,14 +32,63 @@
     <div class="grid two">
       <label>School Name<input [(ngModel)]="t.branding!['schoolName']" (ngModelChange)="preview()" /></label>
       <label>Tagline<input [(ngModel)]="t.branding!['productTagline']" (ngModelChange)="preview()" /></label>
-      <label>School Logo URL<input [(ngModel)]="t.branding!['schoolLogo']" (ngModelChange)="preview()" /></label>
-      <label>Login Logo URL<input [(ngModel)]="t.branding!['loginLogo']" (ngModelChange)="preview()" /></label>
-      <label>Mobile Splash<input [(ngModel)]="t.branding!['mobileSplash']" /></label>
-      <label>Favicon URL<input [(ngModel)]="t.branding!['favicon']" (ngModelChange)="preview()" /></label>
-      <label>Watermark<input [(ngModel)]="t.branding!['watermark']" /></label>
       <label>Footer<input [(ngModel)]="t.branding!['footer']" (ngModelChange)="preview()" /></label>
       <label>Report Header<textarea rows="2" [(ngModel)]="t.branding!['reportHeader']"></textarea></label>
       <label>Report Footer<textarea rows="2" [(ngModel)]="t.branding!['reportFooter']"></textarea></label>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h3>Logos &amp; images</h3>
+    <p class="hint brand-hint">
+      Upload from your computer, or paste a public URL. After upload, click <strong>Save Draft</strong> then
+      <strong>Publish</strong> so login uses the new logo.
+    </p>
+    @if (uploadError) {
+      <p class="upload-error" role="alert">{{ uploadError }}</p>
+    }
+    <div class="asset-grid">
+      @for (slot of imageSlots; track slot.key) {
+        <div class="asset-card">
+          <div class="asset-card__head">
+            <strong>{{ slot.label }}</strong>
+            <span class="hint">{{ slot.hint }}</span>
+          </div>
+          <div class="asset-card__preview">
+            @if (previewSrc(slot.key)) {
+              <img [src]="previewSrc(slot.key)" [alt]="slot.label + ' preview'" />
+            } @else {
+              <span class="asset-placeholder">No image</span>
+            }
+          </div>
+          <div class="asset-card__actions">
+            <label class="file-btn" [class.disabled]="uploadingKey === slot.key || serviceUnavailable">
+              {{ uploadingKey === slot.key ? 'Uploading…' : previewSrc(slot.key) ? 'Replace' : 'Upload' }}
+              <input
+                type="file"
+                accept="image/png,image/jpeg,image/jpg,image/webp,image/svg+xml,image/x-icon,.ico"
+                hidden
+                [disabled]="uploadingKey === slot.key || serviceUnavailable"
+                (change)="onFileSelected($event, slot)"
+              />
+            </label>
+            @if (previewSrc(slot.key)) {
+              <button type="button" class="secondary tiny" (click)="clearAsset(slot.key)">
+                Clear
+              </button>
+            }
+          </div>
+          <label class="url-field">
+            Or URL
+            <input
+              [ngModel]="assetUrl(slot.key)"
+              (ngModelChange)="setAssetUrl(slot.key, $event)"
+              [name]="'asset-' + slot.key"
+              placeholder="https://… or /api/config/design-studio/assets/…/content"
+            />
+          </label>
+        </div>
+      }
     </div>
   </div>
 
@@ -88,14 +137,6 @@
 
   <div class="panel">
     <h3>Login Screen</h3>
-    <div class="grid two">
-      <label
-        >Background Image URL<input
-          [(ngModel)]="t.loginScreen!['backgroundImage']"
-          (ngModelChange)="preview()"
-      /></label>
-      <label>Video Background<input [(ngModel)]="t.loginScreen!['videoBackground']" /></label>
-    </div>
     <div class="toggle">
       <span>Announcement Area</span>
       <input type="checkbox" [(ngModel)]="t.loginScreen!['announcementArea']" (ngModelChange)="preview()" />
@@ -112,11 +153,16 @@
       <span>Admission Banner</span>
       <input type="checkbox" [(ngModel)]="t.loginScreen!['admissionBanner']" (ngModelChange)="preview()" />
     </div>
+    <label class="login-video"
+      >Video Background URL<input [(ngModel)]="t.loginScreen!['videoBackground']"
+    /></label>
   </div>
 
-  <div class="actions">
-    <button type="button" (click)="save()">Save Draft</button>
-    <button type="button" class="secondary" (click)="publish()">Publish</button>
+  <div class="actions sticky-actions">
+    <button type="button" (click)="save()" [disabled]="serviceUnavailable">Save Draft</button>
+    <button type="button" class="secondary" (click)="publish()" [disabled]="serviceUnavailable">
+      Publish
+    </button>
     @if (status) {
       <span class="status">{{ status }}</span>
     }
