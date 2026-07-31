@@ -101,7 +101,8 @@ public class SubscriptionPlan {
             Map.entry("FEATURE_CRM_AI", false),
             Map.entry("FEATURE_CRM_WHATSAPP", false),
             Map.entry("FEATURE_CRM_SMS", false),
-            Map.entry("FEATURE_CRM_EMAIL", true)));
+            Map.entry("FEATURE_CRM_EMAIL", true),
+            Map.entry("FEATURE_CRM_CASES", false)));
   }
 
   /** Standalone CRM Professional. */
@@ -139,7 +140,8 @@ public class SubscriptionPlan {
             Map.entry("FEATURE_CRM_AI", false),
             Map.entry("FEATURE_CRM_WHATSAPP", true),
             Map.entry("FEATURE_CRM_SMS", true),
-            Map.entry("FEATURE_CRM_EMAIL", true)));
+            Map.entry("FEATURE_CRM_EMAIL", true),
+            Map.entry("FEATURE_CRM_CASES", false)));
   }
 
   /** Standalone CRM Enterprise. */
@@ -177,7 +179,8 @@ public class SubscriptionPlan {
             Map.entry("FEATURE_CRM_AI", true),
             Map.entry("FEATURE_CRM_WHATSAPP", true),
             Map.entry("FEATURE_CRM_SMS", true),
-            Map.entry("FEATURE_CRM_EMAIL", true)));
+            Map.entry("FEATURE_CRM_EMAIL", true),
+            Map.entry("FEATURE_CRM_CASES", true)));
   }
 
   private static SubscriptionPlan crmPlan(
