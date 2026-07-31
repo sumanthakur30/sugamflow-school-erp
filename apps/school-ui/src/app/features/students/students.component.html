@@ -1,7 +1,7 @@
 <div class="page students-page">
   @if (selected && featureEnabled && !loading) {
-    <!-- Full-page detail (SugamFlow Edit pattern) -->
-    <div class="form-page detail-page" [class.is-busy]="savingGuardians">
+    <!-- Full-page student profile -->
+    <div class="form-page detail-page profile-page" [class.is-busy]="savingGuardians">
       <p class="crumb">
         <button type="button" class="crumb-link" (click)="closeDetail()" [disabled]="savingGuardians">
           Students
@@ -9,77 +9,101 @@
         / {{ studentName(selected) }}
       </p>
 
-      <header class="page-head list-head">
-        <div>
-          <h2>{{ studentName(selected) }}</h2>
-          <p>
-            @if (selected.admissionNo) {
-              {{ selected.admissionNo }}
+      <header class="profile-hero">
+        <div class="profile-hero-main">
+          <div class="profile-avatar" [attr.aria-label]="'Photo of ' + studentName(selected)">
+            @if (studentPhotoUrl()) {
+              <img [src]="studentPhotoUrl()" alt="" />
             } @else {
-              Student profile
+              <span class="avatar-initials">{{ studentInitials(selected) }}</span>
             }
-            @if (displayClass(selected) !== '—') {
-              · Class {{ displayClass(selected) }}
-            }
-          </p>
+          </div>
+          <div class="profile-identity">
+            <div class="profile-title-row">
+              <h1 class="profile-name">{{ studentName(selected) }}</h1>
+              <span [class]="statusClass(selected.status)">{{ selected.status || '—' }}</span>
+              @if (selected.deleted) {
+                <span class="badge badge-bad">Soft deleted</span>
+              }
+            </div>
+            <div class="profile-meta" aria-label="Student summary">
+              @if (selected.admissionNo) {
+                <span class="meta-chip mono">{{ selected.admissionNo }}</span>
+              }
+              @if (displayClass(selected) !== '—') {
+                <span class="meta-chip">{{ displayClass(selected) }}</span>
+              }
+              @if (displayHouse(selected); as house) {
+                <span class="meta-chip house-chip" [ngClass]="houseTone(house)">{{ house }} House</span>
+              } @else {
+                <span class="meta-chip meta-warn">No house</span>
+              }
+            </div>
+          </div>
         </div>
-        <div class="head-actions">
-          <span [class]="statusClass(selected.status)">{{ selected.status || '—' }}</span>
-          @if (selected.deleted) {
-            <span class="badge badge-bad">Soft deleted</span>
-          }
-          <a
-            class="secondary head-link-btn"
-            [routerLink]="['/admin/students', selected.id, '360']"
-          >
-            Student 360
-          </a>
-          @if (!selected.deleted && !editOpen) {
-            <button type="button" (click)="startEdit()" [disabled]="busyAction">Edit</button>
+
+        <div class="profile-toolbar">
+          <div class="toolbar-left">
+            <a
+              class="secondary head-link-btn"
+              [routerLink]="['/admin/students', selected.id, '360']"
+            >
+              Student 360
+            </a>
+            @if (!selected.deleted && !editOpen) {
+              <div class="toolbar-group" role="group" aria-label="Issue certificates">
+                <span class="toolbar-label">Issue</span>
+                <button
+                  type="button"
+                  class="secondary"
+                  (click)="issueDocument('ID_CARD')"
+                  [disabled]="busyAction"
+                >
+                  ID card
+                </button>
+                <button
+                  type="button"
+                  class="secondary"
+                  (click)="issueDocument('BONAFIDE')"
+                  [disabled]="busyAction"
+                >
+                  Bonafide
+                </button>
+                <button
+                  type="button"
+                  class="secondary"
+                  (click)="issueDocument('CHARACTER_CERTIFICATE')"
+                  [disabled]="busyAction"
+                >
+                  Character
+                </button>
+              </div>
+            }
+          </div>
+          <div class="toolbar-actions" role="group" aria-label="Profile actions">
+            <button type="button" class="secondary" (click)="toggleAudit()">
+              {{ showAudit ? 'Hide audit' : 'Audit' }}
+            </button>
+            @if (!selected.deleted && !editOpen) {
+              <button type="button" (click)="startEdit()" [disabled]="busyAction">Edit</button>
+              <button type="button" class="btn-delete" (click)="openDelete()" [disabled]="busyAction">
+                Delete
+              </button>
+            }
+            @if (selected.deleted) {
+              <button type="button" (click)="restoreStudent()" [disabled]="busyAction">
+                {{ busyAction ? 'Restoring…' : 'Restore' }}
+              </button>
+            }
             <button
               type="button"
               class="secondary"
-              (click)="issueDocument('ID_CARD')"
-              [disabled]="busyAction"
+              (click)="closeDetail()"
+              [disabled]="savingGuardians || savingProfile || busyAction"
             >
-              ID card
+              Back
             </button>
-            <button
-              type="button"
-              class="secondary"
-              (click)="issueDocument('BONAFIDE')"
-              [disabled]="busyAction"
-            >
-              Bonafide
-            </button>
-            <button
-              type="button"
-              class="secondary"
-              (click)="issueDocument('CHARACTER_CERTIFICATE')"
-              [disabled]="busyAction"
-            >
-              Character
-            </button>
-            <button type="button" class="danger" (click)="openDelete()" [disabled]="busyAction">
-              Delete
-            </button>
-          }
-          @if (selected.deleted) {
-            <button type="button" (click)="restoreStudent()" [disabled]="busyAction">
-              {{ busyAction ? 'Restoring…' : 'Restore' }}
-            </button>
-          }
-          <button type="button" class="secondary" (click)="toggleAudit()">
-            {{ showAudit ? 'Hide audit' : 'Audit history' }}
-          </button>
-          <button
-            type="button"
-            class="secondary"
-            (click)="closeDetail()"
-            [disabled]="savingGuardians || savingProfile || busyAction"
-          >
-            Back to list
-          </button>
+          </div>
         </div>
       </header>
 
@@ -89,49 +113,6 @@
       @if (statusMsg) {
         <p class="status panel" role="status" aria-live="polite">{{ statusMsg }}</p>
       }
-
-      <section class="form-section panel">
-        <h3 class="form-section-title">ID &amp; certificates</h3>
-        <p class="muted">
-          Issue printable PDFs with a verification QR. Recipients can scan to confirm authenticity.
-        </p>
-        @if (documentsLoading) {
-          <p class="muted">Loading documents…</p>
-        } @else if (!documents.length) {
-          <p class="muted">No documents issued yet. Use ID card / Bonafide / Character above.</p>
-        } @else {
-          <ul class="doc-list">
-            @for (doc of documents; track doc.id) {
-              <li>
-                <div>
-                  <strong>{{ documentLabel(doc.documentType) }}</strong>
-                  <span class="muted">
-                    · {{ doc.referenceNo }} · {{ doc.status }} · {{ formatWhen(doc.issuedAt) }}
-                  </span>
-                </div>
-                <div class="doc-actions">
-                  <button type="button" class="tiny" (click)="downloadDocument(doc)" [disabled]="busyAction">
-                    PDF
-                  </button>
-                  @if (doc.status === 'ISSUED') {
-                    <button
-                      type="button"
-                      class="tiny secondary"
-                      (click)="revokeDocument(doc)"
-                      [disabled]="busyAction"
-                    >
-                      Revoke
-                    </button>
-                  }
-                  @if (doc.verifyUrl) {
-                    <a class="tiny-link" [href]="doc.verifyUrl" target="_blank" rel="noopener">Verify</a>
-                  }
-                </div>
-              </li>
-            }
-          </ul>
-        }
-      </section>
 
       @if (deleteOpen) {
         <section class="form-section panel delete-panel">
@@ -155,132 +136,37 @@
         </section>
       }
 
-      @if (identity.enableStudentPhoto || identity.enableDocumentVault) {
-        <section class="form-section panel">
-          <h3 class="form-section-title">Photo &amp; documents</h3>
-          <p class="muted">Optional uploads — JPG/PNG/WEBP for photos; PDFs and images for KYC documents.</p>
-          <div class="media-grid">
-            @if (identity.enableStudentPhoto) {
-              <div class="photo-card">
-                <span class="read-label">Student photo</span>
-                @if (studentPhotoUrl()) {
-                  <img class="student-photo" [src]="studentPhotoUrl()" alt="Student photo" />
-                } @else {
-                  <div class="photo-placeholder">No photo</div>
-                }
-                <div class="doc-actions">
-                  <label class="tiny file-btn" [class.disabled]="uploadingAttachment || selected.deleted">
-                    {{ uploadingAttachment ? 'Uploading…' : studentPhotoUrl() ? 'Replace' : 'Upload' }}
-                    <input
-                      type="file"
-                      accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp"
-                      hidden
-                      (change)="onPhotoSelected($event, 'STUDENT_PHOTO')"
-                      [disabled]="uploadingAttachment || selected.deleted"
-                    />
-                  </label>
-                  @if (studentPhotoUrl()) {
-                    @for (att of attachments; track att.id) {
-                      @if (att.attachmentType === 'STUDENT_PHOTO') {
-                        <button
-                          type="button"
-                          class="tiny secondary"
-                          (click)="removeAttachment(att)"
-                          [disabled]="uploadingAttachment"
-                        >
-                          Remove
-                        </button>
-                      }
-                    }
-                  }
-                </div>
-              </div>
-            }
-            @if (identity.enableGuardianPhoto) {
-              @for (slot of guardianPhotoSlots; track slot.type) {
-                <div class="photo-card">
-                  <span class="read-label">{{ slot.label }}</span>
-                  @if (attachmentUrl(slot.type)) {
-                    <img class="student-photo" [src]="attachmentUrl(slot.type)" [alt]="slot.label" />
-                  } @else {
-                    <div class="photo-placeholder">No photo</div>
-                  }
-                  <div class="doc-actions">
-                    <label class="tiny file-btn" [class.disabled]="uploadingAttachment || selected.deleted">
-                      {{ uploadingAttachment ? 'Uploading…' : attachmentUrl(slot.type) ? 'Replace' : 'Upload' }}
-                      <input
-                        type="file"
-                        accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp"
-                        hidden
-                        (change)="onPhotoSelected($event, slot.type)"
-                        [disabled]="uploadingAttachment || selected.deleted"
-                      />
-                    </label>
-                    @if (attachmentFor(slot.type); as att) {
-                      <button
-                        type="button"
-                        class="tiny secondary"
-                        (click)="removeAttachment(att)"
-                        [disabled]="uploadingAttachment"
-                      >
-                        Remove
-                      </button>
-                    }
-                  </div>
-                </div>
-              }
-            }
-          </div>
-          @if (identity.enableDocumentVault) {
-            <div class="vault-block">
-              <div class="vault-upload">
-                <select [(ngModel)]="documentUploadType" name="documentUploadType">
-                  @for (opt of documentTypeOptions; track opt.value) {
-                    <option [value]="opt.value">{{ opt.label }}</option>
-                  }
-                </select>
-                <label class="tiny file-btn">
-                  Upload document
-                  <input
-                    type="file"
-                    accept="image/*,application/pdf,.pdf"
-                    hidden
-                    (change)="onDocumentSelected($event)"
-                    [disabled]="uploadingAttachment || selected.deleted"
-                  />
-                </label>
-              </div>
-              @if (attachmentsLoading) {
-                <p class="muted">Loading attachments…</p>
-              } @else {
-                <ul class="doc-list">
-                  @for (att of attachments; track att.id) {
-                    @if (!att.photo) {
-                      <li>
-                        <div>
-                          <strong>{{ attachmentLabel(att.attachmentType) }}</strong>
-                          <span class="muted"> · {{ att.fileName }} · {{ att.byteLength }} bytes</span>
-                        </div>
-                        <div class="doc-actions">
-                          <a class="tiny-link" [href]="att.contentUrl" target="_blank" rel="noopener">Open</a>
-                          <button type="button" class="tiny secondary" (click)="removeAttachment(att)">
-                            Remove
-                          </button>
-                        </div>
-                      </li>
-                    }
-                  }
-                </ul>
-              }
-            </div>
-          }
-        </section>
-      }
-
       @if (editOpen) {
-        <section class="form-section panel">
+        <section class="form-section panel edit-student-panel">
           <h3 class="form-section-title">Edit student</h3>
           <p class="muted">Correct mistakes carefully. Every field change is audited.</p>
+
+          <div
+            id="edit-house-field"
+            class="required-strip"
+            [class.invalid]="houseInvalid"
+          >
+            <label class="required-strip-field">
+              <span class="field-title">
+                House
+                <span class="req">*</span>
+              </span>
+              <select
+                [(ngModel)]="editAnswers['house']"
+                name="edit-house-required"
+                [disabled]="savingProfile"
+                required
+                (ngModelChange)="onHouseChange()"
+              >
+                <option value="" disabled>Select house</option>
+                @for (house of availableHouseOptions(); track house) {
+                  <option [value]="house">{{ house }} House</option>
+                }
+              </select>
+              <span class="muted">Required for activities, teams, and school events.</span>
+            </label>
+          </div>
+
           @if (visibleEditSections().length > 1) {
             <div class="form-tabs" role="tablist" aria-label="Student profile sections">
               @for (section of visibleEditSections(); track section.id) {
@@ -302,93 +188,96 @@
             @if (!activeEditSectionId || activeEditSectionId === section.id) {
               <div class="grid three" role="tabpanel">
                 @for (field of editFieldsForSection(section.id); track field.key) {
-                  <label>
-                    <span class="field-title">
-                      {{ field.label }}
-                      @if (field.mandatory) {
-                        <span class="req">*</span>
-                      }
-                    </span>
-                    @if (field.key === 'house') {
-                      <select
-                        [(ngModel)]="editAnswers[field.key]"
-                        [attr.name]="'edit-' + field.key"
-                        [disabled]="savingProfile"
-                        required
-                      >
-                        <option value="" disabled>Select house</option>
-                        @for (house of availableHouseOptions(); track house) {
-                          <option [value]="house">{{ house }} House</option>
+                  @if (field.key !== 'house') {
+                    <label [class.invalid-field]="field.key === 'house' && houseInvalid">
+                      <span class="field-title">
+                        {{ field.label }}
+                        @if (field.mandatory) {
+                          <span class="req">*</span>
                         }
-                      </select>
-                      <span class="muted">Used for activities, teams, and school events.</span>
-                    } @else if (field.key === 'classApplied' || field.key === 'classSection') {
-                      <div class="class-picker">
-                        <div class="class-picker-row">
-                          <span class="class-picker-label">Grade</span>
-                          <div class="class-picker-options">
-                            @for (g of defaultGrades; track g) {
-                              <button
-                                type="button"
-                                class="class-opt"
-                                [class.active]="editClassGrade === g"
-                                [disabled]="savingProfile"
-                                (click)="selectEditClassGrade(g)"
-                              >
-                                {{ g }}
-                              </button>
-                            }
+                      </span>
+                      @if (field.key === 'gender') {
+                        <select
+                          [(ngModel)]="editAnswers[field.key]"
+                          [attr.name]="'edit-' + field.key"
+                          [disabled]="savingProfile"
+                        >
+                          <option value="">Select gender</option>
+                          @for (g of genderOptions; track g) {
+                            <option [value]="g">{{ g }}</option>
+                          }
+                        </select>
+                      } @else if (field.key === 'classApplied' || field.key === 'classSection') {
+                        <div class="class-picker">
+                          <div class="class-picker-row">
+                            <span class="class-picker-label">Grade</span>
+                            <div class="class-picker-options">
+                              @for (g of defaultGrades; track g) {
+                                <button
+                                  type="button"
+                                  class="class-opt"
+                                  [class.active]="editClassGrade === g"
+                                  [disabled]="savingProfile"
+                                  (click)="selectEditClassGrade(g)"
+                                >
+                                  {{ g }}
+                                </button>
+                              }
+                            </div>
+                          </div>
+                          <div class="class-picker-row">
+                            <span class="class-picker-label">Section</span>
+                            <div class="class-picker-options">
+                              @for (s of defaultSections; track s) {
+                                <button
+                                  type="button"
+                                  class="class-opt"
+                                  [class.active]="editClassSection === s"
+                                  [disabled]="savingProfile || !editClassGrade"
+                                  (click)="selectEditClassSection(s)"
+                                >
+                                  {{ s }}
+                                </button>
+                              }
+                            </div>
+                          </div>
+                          <div class="class-picker-preview" [class.ready]="!!editAnswers[field.key]">
+                            {{ editAnswers[field.key] || 'Choose grade, then section' }}
                           </div>
                         </div>
-                        <div class="class-picker-row">
-                          <span class="class-picker-label">Section</span>
-                          <div class="class-picker-options">
-                            @for (s of defaultSections; track s) {
-                              <button
-                                type="button"
-                                class="class-opt"
-                                [class.active]="editClassSection === s"
-                                [disabled]="savingProfile || !editClassGrade"
-                                (click)="selectEditClassSection(s)"
-                              >
-                                {{ s }}
-                              </button>
-                            }
-                          </div>
-                        </div>
-                        <div class="class-picker-preview" [class.ready]="!!editAnswers[field.key]">
-                          {{ editAnswers[field.key] || 'Choose grade, then section' }}
-                        </div>
-                      </div>
-                    } @else if (field.type === 'CHECKBOX') {
-                      <input
-                        type="checkbox"
-                        [(ngModel)]="editAnswers[field.key]"
-                        [name]="'edit-' + field.key"
-                        [disabled]="savingProfile"
-                      />
-                    } @else if (field.type === 'NUMBER') {
-                      <input
-                        type="number"
-                        [(ngModel)]="editAnswers[field.key]"
-                        [name]="'edit-' + field.key"
-                        [disabled]="savingProfile"
-                      />
-                    } @else if (field.type === 'EMAIL') {
-                      <input
-                        type="email"
-                        [(ngModel)]="editAnswers[field.key]"
-                        [name]="'edit-' + field.key"
-                        [disabled]="savingProfile"
-                      />
-                    } @else {
-                      <input
-                        [(ngModel)]="editAnswers[field.key]"
-                        [name]="'edit-' + field.key"
-                        [disabled]="savingProfile"
-                      />
-                    }
-                  </label>
+                      } @else if (field.type === 'CHECKBOX') {
+                        <input
+                          type="checkbox"
+                          [(ngModel)]="editAnswers[field.key]"
+                          [name]="'edit-' + field.key"
+                          [disabled]="savingProfile"
+                        />
+                      } @else if (field.type === 'NUMBER') {
+                        <input
+                          type="number"
+                          [(ngModel)]="editAnswers[field.key]"
+                          [name]="'edit-' + field.key"
+                          [disabled]="savingProfile"
+                          [placeholder]="'Enter ' + field.label.toLowerCase()"
+                        />
+                      } @else if (field.type === 'EMAIL') {
+                        <input
+                          type="email"
+                          [(ngModel)]="editAnswers[field.key]"
+                          [name]="'edit-' + field.key"
+                          [disabled]="savingProfile"
+                          placeholder="name@example.com"
+                        />
+                      } @else {
+                        <input
+                          [(ngModel)]="editAnswers[field.key]"
+                          [name]="'edit-' + field.key"
+                          [disabled]="savingProfile"
+                          [placeholder]="'Enter ' + field.label.toLowerCase()"
+                        />
+                      }
+                    </label>
+                  }
                 }
               </div>
             }
@@ -412,228 +301,405 @@
           </div>
         </section>
       } @else {
-        <section class="form-section panel">
-          <h3 class="form-section-title">Student</h3>
-          <div class="read-grid">
-            @for (field of studentFields(); track field.key) {
-              <div class="read-field">
-                <span class="read-label">{{ field.label }}</span>
-                <span
-                  class="read-value"
-                  [class.mono]="field.key === 'mobile' || field.key === 'admissionNo'"
-                >
-                  {{ field.value }}
-                </span>
-              </div>
-            }
-          </div>
-          @if (selected.sourceApplicationId) {
-            <p class="enroll-note">
-              Enrolled from admission
-              <a [routerLink]="['/admin/admission']">{{ selected.sourceApplicationId }}</a>
-            </p>
-          }
-          @if (selected.deleteReason) {
-            <p class="enroll-note">Delete reason: {{ selected.deleteReason }}</p>
-          }
-        </section>
-
-        @if (!selected.deleted) {
-          <section class="form-section panel">
-            <h3 class="form-section-title">Status</h3>
-            <div class="status-row">
-              <label class="compact">
-                Status
-                <select [(ngModel)]="statusDraft" name="statusDraft">
-                  <option value="ACTIVE">ACTIVE</option>
-                  <option value="INACTIVE">INACTIVE</option>
-                  <option value="LEFT_SCHOOL">LEFT_SCHOOL</option>
-                  <option value="SUSPENDED">SUSPENDED</option>
-                  <option value="TRANSFERRED">TRANSFERRED</option>
-                  <option value="TC_ISSUED">TC_ISSUED</option>
-                  <option value="ALUMNI">ALUMNI</option>
-                  <option value="PASSED_OUT">PASSED_OUT</option>
-                  <option value="EXPELLED">EXPELLED</option>
-                </select>
-              </label>
-              <button type="button" class="secondary" (click)="applyStatus()" [disabled]="busyAction">
-                Apply status
-              </button>
-              <a
-                class="secondary head-link-btn"
-                [routerLink]="['/admin/lifecycle']"
-                [queryParams]="{ studentId: selected.id }"
-              >
-                Lifecycle / TC
-              </a>
-            </div>
-          </section>
-        }
-      }
-
-      <section class="form-section panel">
-        <h3 class="form-section-title">Quick links</h3>
-        <div class="quick-links">
-          <a [routerLink]="['/admin/students', selected.id, '360']">Student 360</a>
-          <a [routerLink]="['/admin/fee']" [queryParams]="{ admissionNo: selected.admissionNo }">
-            Fees
-          </a>
-          <a [routerLink]="['/admin/lifecycle']" [queryParams]="{ studentId: selected.id }">
-            Transfer / TC
-          </a>
-          <a routerLink="/admin/student-directory">Student directory</a>
-        </div>
-      </section>
-
-      <section class="form-section panel">
-        <div class="section-head">
-          <h3 class="form-section-title">Parents / Guardians</h3>
-          <span class="muted">{{ guardians().length }} linked</span>
-        </div>
-
-        @if (!guardians().length) {
-          <p class="muted empty-note">No guardians linked yet. Add one below.</p>
-        } @else {
-          <ul class="guardian-list">
-            @for (g of guardians(); track $index) {
-              <li class="guardian-card">
-                <div class="guardian-main">
-                  <div class="guardian-name">
-                    {{ g.fullName || 'Guardian' }}
-                    @if (g.isPrimary) {
-                      <span class="badge badge-ok">Primary</span>
-                    }
-                  </div>
-                  <div class="guardian-meta">
-                    @if (g.relation) {
-                      <span>{{ g.relation }}</span>
-                    }
-                    @if (g.mobile) {
-                      <span class="mono">{{ g.mobile }}</span>
-                    }
-                    @if (g.email) {
-                      <span>{{ g.email }}</span>
-                    }
-                  </div>
+        <div class="profile-layout">
+          <div class="profile-main-col">
+            @for (group of profileFieldGroups(); track group.id) {
+              <section class="form-section panel profile-block">
+                <h3 class="form-section-title">{{ group.title }}</h3>
+                <div class="read-grid">
+                  @for (field of group.fields; track field.key) {
+                    <div class="read-field">
+                      <span class="read-label">{{ field.label }}</span>
+                      <span
+                        class="read-value"
+                        [class.mono]="field.key === 'mobile' || field.key === 'admissionNo'"
+                      >
+                        {{ field.value }}
+                      </span>
+                    </div>
+                  }
                 </div>
-                <button
-                  type="button"
-                  class="danger tiny"
-                  (click)="removeGuardian($index)"
-                  [disabled]="savingGuardians"
-                >
-                  Remove
-                </button>
-              </li>
+              </section>
             }
-          </ul>
-        }
 
-        <div class="add-guardian">
-          <h4 class="sub-title">Add guardian</h4>
-          @if (selected.deleted) {
-            <p class="muted">Restore the student before changing guardians.</p>
-          } @else {
-          <div class="grid two">
-            @for (field of parentFields; track field.key) {
-              <label>
-                <span class="field-title">
-                  {{ field.label }}
-                  @if (field.mandatory) {
-                    <span class="req">*</span>
+            @if (selected.sourceApplicationId) {
+              <p class="enroll-note">
+                Enrolled from admission
+                <a [routerLink]="['/admin/admission']">{{ selected.sourceApplicationId }}</a>
+              </p>
+            }
+            @if (selected.deleteReason) {
+              <p class="enroll-note">Delete reason: {{ selected.deleteReason }}</p>
+            }
+
+            @if (identity.enableStudentPhoto || identity.enableDocumentVault) {
+              <section class="form-section panel profile-block">
+                <h3 class="form-section-title">Photos &amp; documents</h3>
+                <p class="muted section-lead">
+                  Optional uploads — JPG/PNG/WEBP for photos; PDFs and images for KYC documents.
+                </p>
+                <div class="media-grid">
+                  @if (identity.enableStudentPhoto) {
+                    <div class="photo-card">
+                      <span class="read-label">Student photo</span>
+                      @if (studentPhotoUrl()) {
+                        <img class="student-photo" [src]="studentPhotoUrl()" alt="Student photo" />
+                      } @else {
+                        <div class="photo-placeholder">No photo</div>
+                      }
+                      <div class="doc-actions">
+                        <label class="tiny file-btn" [class.disabled]="uploadingAttachment || selected.deleted">
+                          {{ uploadingAttachment ? 'Uploading…' : studentPhotoUrl() ? 'Replace' : 'Upload' }}
+                          <input
+                            type="file"
+                            accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp"
+                            hidden
+                            (change)="onPhotoSelected($event, 'STUDENT_PHOTO')"
+                            [disabled]="uploadingAttachment || selected.deleted"
+                          />
+                        </label>
+                        @if (studentPhotoUrl()) {
+                          @for (att of attachments; track att.id) {
+                            @if (att.attachmentType === 'STUDENT_PHOTO') {
+                              <button
+                                type="button"
+                                class="tiny secondary"
+                                (click)="removeAttachment(att)"
+                                [disabled]="uploadingAttachment"
+                              >
+                                Remove
+                              </button>
+                            }
+                          }
+                        }
+                      </div>
+                    </div>
                   }
-                </span>
-                @if (field.type === 'CHECKBOX') {
-                  <input
-                    type="checkbox"
-                    [(ngModel)]="guardianDraft[field.key]"
-                    [name]="field.key"
-                    [disabled]="savingGuardians"
-                  />
-                } @else if (field.type === 'EMAIL') {
-                  <input
-                    type="email"
-                    [(ngModel)]="guardianDraft[field.key]"
-                    [name]="field.key"
-                    [disabled]="savingGuardians"
-                  />
-                } @else {
-                  <input
-                    [(ngModel)]="guardianDraft[field.key]"
-                    [name]="field.key"
-                    [disabled]="savingGuardians"
-                  />
-                }
-              </label>
-            }
-          </div>
-          <div class="form-actions actions">
-            <button type="button" (click)="addGuardian()" [disabled]="savingGuardians">
-              {{ savingGuardians ? 'Saving…' : 'Add guardian' }}
-            </button>
-          </div>
-          }
-        </div>
-      </section>
-
-      <section class="form-section panel">
-        <h3 class="form-section-title">History</h3>
-        @if (!selected.history?.length) {
-          <p class="muted">No history yet.</p>
-        } @else {
-          <ol class="timeline">
-            @for (h of selected.history; track h.at) {
-              <li>
-                <div class="timeline-title">{{ h.type || 'EVENT' }}</div>
-                <div class="timeline-msg">{{ h.message }}</div>
-                @for (c of historyChanges(h); track c.field) {
-                  <div class="timeline-change">
-                    <strong>{{ c.field }}</strong>: {{ c.from || '—' }} → {{ c.to || '—' }}
+                  @if (identity.enableGuardianPhoto) {
+                    @for (slot of guardianPhotoSlots; track slot.type) {
+                      <div class="photo-card">
+                        <span class="read-label">{{ slot.label }}</span>
+                        @if (attachmentUrl(slot.type)) {
+                          <img class="student-photo" [src]="attachmentUrl(slot.type)" [alt]="slot.label" />
+                        } @else {
+                          <div class="photo-placeholder">No photo</div>
+                        }
+                        <div class="doc-actions">
+                          <label class="tiny file-btn" [class.disabled]="uploadingAttachment || selected.deleted">
+                            {{ uploadingAttachment ? 'Uploading…' : attachmentUrl(slot.type) ? 'Replace' : 'Upload' }}
+                            <input
+                              type="file"
+                              accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp"
+                              hidden
+                              (change)="onPhotoSelected($event, slot.type)"
+                              [disabled]="uploadingAttachment || selected.deleted"
+                            />
+                          </label>
+                          @if (attachmentFor(slot.type); as att) {
+                            <button
+                              type="button"
+                              class="tiny secondary"
+                              (click)="removeAttachment(att)"
+                              [disabled]="uploadingAttachment"
+                            >
+                              Remove
+                            </button>
+                          }
+                        </div>
+                      </div>
+                    }
+                  }
+                </div>
+                @if (identity.enableDocumentVault) {
+                  <div class="vault-block">
+                    <div class="vault-upload">
+                      <select [(ngModel)]="documentUploadType" name="documentUploadType">
+                        @for (opt of documentTypeOptions; track opt.value) {
+                          <option [value]="opt.value">{{ opt.label }}</option>
+                        }
+                      </select>
+                      <label class="tiny file-btn">
+                        Upload document
+                        <input
+                          type="file"
+                          accept="image/*,application/pdf,.pdf"
+                          hidden
+                          (change)="onDocumentSelected($event)"
+                          [disabled]="uploadingAttachment || selected.deleted"
+                        />
+                      </label>
+                    </div>
+                    @if (attachmentsLoading) {
+                      <p class="muted">Loading attachments…</p>
+                    } @else {
+                      <ul class="doc-list">
+                        @for (att of attachments; track att.id) {
+                          @if (!att.photo) {
+                            <li>
+                              <div>
+                                <strong>{{ attachmentLabel(att.attachmentType) }}</strong>
+                                <span class="muted"> · {{ att.fileName }} · {{ att.byteLength }} bytes</span>
+                              </div>
+                              <div class="doc-actions">
+                                <a class="tiny-link" [href]="att.contentUrl" target="_blank" rel="noopener">Open</a>
+                                <button type="button" class="tiny secondary" (click)="removeAttachment(att)">
+                                  Remove
+                                </button>
+                              </div>
+                            </li>
+                          }
+                        }
+                      </ul>
+                    }
                   </div>
                 }
-                <div class="timeline-at">{{ formatWhen(h.at) }}</div>
-              </li>
+              </section>
             }
-          </ol>
-        }
-      </section>
 
-      @if (showAudit) {
-        <section class="form-section panel">
-          <h3 class="form-section-title">Field audit</h3>
-          @if (auditLoading) {
-            <p class="muted">Loading audit…</p>
-          } @else if (!auditItems.length) {
-            <p class="muted">No field-level changes recorded yet.</p>
-          } @else {
-            <div class="table-wrap">
-              <table class="inbox-table">
-                <thead>
-                  <tr>
-                    <th>Field</th>
-                    <th>Old</th>
-                    <th>New</th>
-                    <th>By</th>
-                    <th>When</th>
-                    <th>Reason</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  @for (a of auditItems; track a.id) {
-                    <tr>
-                      <td>{{ a.fieldName || a.field }}</td>
-                      <td>{{ a.oldValue || '—' }}</td>
-                      <td>{{ a.newValue || '—' }}</td>
-                      <td>{{ a.changedBy || '—' }}</td>
-                      <td class="muted-cell">{{ formatWhen(a.changedAt) }}</td>
-                      <td>{{ a.reason || '—' }}</td>
-                    </tr>
+            <section class="form-section panel profile-block">
+              <div class="section-head">
+                <h3 class="form-section-title">Parents / Guardians</h3>
+                <span class="muted">{{ guardians().length }} linked</span>
+              </div>
+
+              @if (!guardians().length) {
+                <p class="muted empty-note">No guardians linked yet. Add one below.</p>
+              } @else {
+                <ul class="guardian-list">
+                  @for (g of guardians(); track $index) {
+                    <li class="guardian-card">
+                      <div class="guardian-main">
+                        <div class="guardian-name">
+                          {{ g.fullName || 'Guardian' }}
+                          @if (g.isPrimary) {
+                            <span class="badge badge-ok">Primary</span>
+                          }
+                        </div>
+                        <div class="guardian-meta">
+                          @if (g.relation) {
+                            <span>{{ g.relation }}</span>
+                          }
+                          @if (g.mobile) {
+                            <span class="mono">{{ g.mobile }}</span>
+                          }
+                          @if (g.email) {
+                            <span>{{ g.email }}</span>
+                          }
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        class="danger tiny"
+                        (click)="removeGuardian($index)"
+                        [disabled]="savingGuardians"
+                      >
+                        Remove
+                      </button>
+                    </li>
                   }
-                </tbody>
-              </table>
-            </div>
-          }
-        </section>
+                </ul>
+              }
+
+              <div class="add-guardian">
+                <h4 class="sub-title">Add guardian</h4>
+                @if (selected.deleted) {
+                  <p class="muted">Restore the student before changing guardians.</p>
+                } @else {
+                  <div class="grid two">
+                    @for (field of parentFields; track field.key) {
+                      <label>
+                        <span class="field-title">
+                          {{ field.label }}
+                          @if (field.mandatory) {
+                            <span class="req">*</span>
+                          }
+                        </span>
+                        @if (field.type === 'CHECKBOX') {
+                          <input
+                            type="checkbox"
+                            [(ngModel)]="guardianDraft[field.key]"
+                            [name]="field.key"
+                            [disabled]="savingGuardians"
+                          />
+                        } @else if (field.type === 'EMAIL') {
+                          <input
+                            type="email"
+                            [(ngModel)]="guardianDraft[field.key]"
+                            [name]="field.key"
+                            [disabled]="savingGuardians"
+                          />
+                        } @else {
+                          <input
+                            [(ngModel)]="guardianDraft[field.key]"
+                            [name]="field.key"
+                            [disabled]="savingGuardians"
+                          />
+                        }
+                      </label>
+                    }
+                  </div>
+                  <div class="form-actions actions">
+                    <button type="button" (click)="addGuardian()" [disabled]="savingGuardians">
+                      {{ savingGuardians ? 'Saving…' : 'Add guardian' }}
+                    </button>
+                  </div>
+                }
+              </div>
+            </section>
+
+            <section class="form-section panel profile-block">
+              <h3 class="form-section-title">History</h3>
+              @if (!selected.history?.length) {
+                <p class="muted">No history yet.</p>
+              } @else {
+                <ol class="timeline">
+                  @for (h of selected.history; track h.at) {
+                    <li>
+                      <div class="timeline-title">{{ h.type || 'EVENT' }}</div>
+                      <div class="timeline-msg">{{ h.message }}</div>
+                      @for (c of historyChanges(h); track c.field) {
+                        <div class="timeline-change">
+                          <strong>{{ c.field }}</strong>: {{ c.from || '—' }} → {{ c.to || '—' }}
+                        </div>
+                      }
+                      <div class="timeline-at">{{ formatWhen(h.at) }}</div>
+                    </li>
+                  }
+                </ol>
+              }
+            </section>
+
+            @if (showAudit) {
+              <section class="form-section panel profile-block">
+                <h3 class="form-section-title">Field audit</h3>
+                @if (auditLoading) {
+                  <p class="muted">Loading audit…</p>
+                } @else if (!auditItems.length) {
+                  <p class="muted">No field-level changes recorded yet.</p>
+                } @else {
+                  <div class="table-wrap">
+                    <table class="inbox-table">
+                      <thead>
+                        <tr>
+                          <th>Field</th>
+                          <th>Old</th>
+                          <th>New</th>
+                          <th>By</th>
+                          <th>When</th>
+                          <th>Reason</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        @for (a of auditItems; track a.id) {
+                          <tr>
+                            <td>{{ a.fieldName || a.field }}</td>
+                            <td>{{ a.oldValue || '—' }}</td>
+                            <td>{{ a.newValue || '—' }}</td>
+                            <td>{{ a.changedBy || '—' }}</td>
+                            <td class="muted-cell">{{ formatWhen(a.changedAt) }}</td>
+                            <td>{{ a.reason || '—' }}</td>
+                          </tr>
+                        }
+                      </tbody>
+                    </table>
+                  </div>
+                }
+              </section>
+            }
+          </div>
+
+          <aside class="profile-rail">
+            @if (!selected.deleted) {
+              <section class="form-section panel rail-card">
+                <h3 class="form-section-title">Status</h3>
+                <div class="status-stack">
+                  <label class="compact">
+                    Enrolment status
+                    <select [(ngModel)]="statusDraft" name="statusDraft">
+                      <option value="ACTIVE">ACTIVE</option>
+                      <option value="INACTIVE">INACTIVE</option>
+                      <option value="LEFT_SCHOOL">LEFT_SCHOOL</option>
+                      <option value="SUSPENDED">SUSPENDED</option>
+                      <option value="TRANSFERRED">TRANSFERRED</option>
+                      <option value="TC_ISSUED">TC_ISSUED</option>
+                      <option value="ALUMNI">ALUMNI</option>
+                      <option value="PASSED_OUT">PASSED_OUT</option>
+                      <option value="EXPELLED">EXPELLED</option>
+                    </select>
+                  </label>
+                  <button type="button" class="secondary" (click)="applyStatus()" [disabled]="busyAction">
+                    Apply status
+                  </button>
+                  <a
+                    class="rail-link"
+                    [routerLink]="['/admin/lifecycle']"
+                    [queryParams]="{ studentId: selected.id }"
+                  >
+                    Lifecycle / TC →
+                  </a>
+                </div>
+              </section>
+            }
+
+            <section class="form-section panel rail-card">
+              <div class="section-head">
+                <h3 class="form-section-title">Certificates</h3>
+                <span class="muted">{{ issuedDocuments().length }} active</span>
+              </div>
+              <p class="muted section-lead">Printable PDFs with verification QR.</p>
+              @if (documentsLoading) {
+                <p class="muted">Loading…</p>
+              } @else if (!documents.length) {
+                <p class="muted">None issued yet. Use Issue above.</p>
+              } @else {
+                <ul class="doc-list rail-docs">
+                  @for (doc of documents; track doc.id) {
+                    <li>
+                      <div>
+                        <strong>{{ documentLabel(doc.documentType) }}</strong>
+                        <span class="muted doc-meta">
+                          {{ doc.referenceNo }} · {{ formatWhen(doc.issuedAt) }}
+                        </span>
+                      </div>
+                      <div class="doc-actions">
+                        <button type="button" class="tiny" (click)="downloadDocument(doc)" [disabled]="busyAction">
+                          PDF
+                        </button>
+                        @if (doc.status === 'ISSUED') {
+                          <button
+                            type="button"
+                            class="tiny secondary"
+                            (click)="revokeDocument(doc)"
+                            [disabled]="busyAction"
+                          >
+                            Revoke
+                          </button>
+                        }
+                        @if (doc.verifyUrl) {
+                          <a class="tiny-link" [href]="doc.verifyUrl" target="_blank" rel="noopener">Verify</a>
+                        }
+                      </div>
+                    </li>
+                  }
+                </ul>
+              }
+            </section>
+
+            <section class="form-section panel rail-card">
+              <h3 class="form-section-title">Go to</h3>
+              <nav class="rail-nav" aria-label="Related student pages">
+                <a [routerLink]="['/admin/students', selected.id, '360']">Student 360</a>
+                <a [routerLink]="['/admin/fee']" [queryParams]="{ admissionNo: selected.admissionNo }">
+                  Fees
+                </a>
+                <a [routerLink]="['/admin/lifecycle']" [queryParams]="{ studentId: selected.id }">
+                  Transfer / TC
+                </a>
+                <a routerLink="/admin/student-directory">Student directory</a>
+              </nav>
+            </section>
+          </aside>
+        </div>
       }
     </div>
   } @else {

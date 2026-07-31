@@ -207,6 +207,54 @@ public class AdmissionApplicationService {
     return toDto(requireApp(id, scope.organizationId()));
   }
 
+  /**
+   * Update applicant answers on a non-terminal application (Open = view, Edit = this path).
+   * Does not advance workflow — only corrects form data.
+   */
+  @Transactional
+  public Map<String, Object> update(UUID id, Map<String, Object> body) {
+    TenantScope scope = TenantContext.require();
+    requireFeature(scope);
+    requireModuleEnabled(scope);
+
+    AdmissionApplicationEntity entity = requireApp(id, scope.organizationId());
+    // Allow correcting applicant details even after approval/rejection.
+    // Workflow status and enrollment are not changed by this path.
+
+    String formKey = stringOr(body.get("formKey"), entity.getFormKey());
+    @SuppressWarnings("unchecked")
+    Map<String, Object> answers =
+        body.get("answers") instanceof Map<?, ?> m
+            ? new LinkedHashMap<>((Map<String, Object>) m)
+            : new LinkedHashMap<>();
+
+    Map<String, Object> form = engines.getForm(scope, formKey);
+    if (form == null) {
+      throw new AdmissionException("FORM_MISSING", "Form definition not found: " + formKey);
+    }
+    validateMandatory(form, answers);
+
+    entity.setFormKey(formKey);
+    entity.setAnswers(answers);
+    entity.setUpdatedAt(Instant.now());
+
+    List<Map<String, Object>> history =
+        entity.getHistory() != null ? new ArrayList<>(entity.getHistory()) : new ArrayList<>();
+    history.add(
+        event(
+            "UPDATED",
+            scope.userId(),
+            scope.roleCode(),
+            isTerminal(entity.getStatus())
+                ? "Application details updated after " + entity.getStatus()
+                : "Application details updated",
+            entity.getCurrentStepSequence(),
+            entity.getCurrentStepName()));
+    entity.setHistory(history);
+
+    return toDto(repository.save(entity));
+  }
+
   @Transactional
   public Map<String, Object> submit(Map<String, Object> body) {
     TenantScope scope = TenantContext.require();
@@ -937,6 +985,8 @@ public class AdmissionApplicationService {
     dto.put("status", e.getStatus());
     dto.put("statusLabel", statusLabel(e.getStatus()));
     dto.put("terminal", isTerminal(e.getStatus()));
+    // Details can always be corrected; workflow actions remain gated by terminal/canAct.
+    dto.put("editable", true);
     dto.put("currentStepSequence", e.getCurrentStepSequence());
     dto.put("currentStepName", e.getCurrentStepName());
     dto.put("assigneeRole", e.getAssigneeRole());

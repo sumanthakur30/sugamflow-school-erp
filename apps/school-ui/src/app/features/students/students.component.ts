@@ -190,6 +190,8 @@ export class StudentsComponent implements OnInit, OnDestroy {
     'samagraId',
     'schoolStudentId',
   ];
+  readonly genderOptions = ['Male', 'Female', 'Other'];
+  houseInvalid = false;
 
   ngOnInit(): void {
     this.routeSub = this.route.queryParamMap.subscribe((params) => this.syncFromRoute(params));
@@ -408,7 +410,18 @@ export class StudentsComponent implements OnInit, OnDestroy {
   /** Structured student fields for the detail page (skips guardian blob). */
   studentFields(): Array<{ key: string; label: string; value: string }> {
     const answers = this.selected?.answers ?? {};
-    const skip = new Set([this.guardiansAnswerKey, 'guardians']);
+    // Skip hero duplicates + class part keys that only clutter the grid.
+    const skip = new Set([
+      this.guardiansAnswerKey,
+      'guardians',
+      'classGrade',
+      'sectionLetter',
+      'fullName',
+      'admissionNo',
+      'classApplied',
+      'classSection',
+      'house',
+    ]);
     const out: Array<{ key: string; label: string; value: string }> = [];
     const seen = new Set<string>();
 
@@ -455,15 +468,73 @@ export class StudentsComponent implements OnInit, OnDestroy {
       }
     }
 
-    // Surface top-level admissionNo if not already in answers
-    if (!seen.has('admissionNo') && this.selected?.admissionNo) {
-      out.unshift({
-        key: 'admissionNo',
-        label: 'Admission No',
-        value: String(this.selected.admissionNo),
-      });
-    }
     return out;
+  }
+
+  /** Profile body groups — one job per section. */
+  profileFieldGroups(): Array<{
+    id: string;
+    title: string;
+    fields: Array<{ key: string; label: string; value: string }>;
+  }> {
+    const all = this.studentFields();
+    const buckets: Record<string, Set<string>> = {
+      personal: new Set(['gender', 'dateOfBirth', 'age', 'bloodGroup', 'category']),
+      contact: new Set(['mobile', 'email', 'address']),
+      family: new Set(['fatherName', 'parentName', 'motherName']),
+      ids: new Set([
+        'aadhaar',
+        'aadhaarNumber',
+        'penNumber',
+        'apaarId',
+        'samagraId',
+        'schoolStudentId',
+        'rollNo',
+      ]),
+    };
+    const used = new Set<string>();
+    const pick = (keys: Set<string>) => {
+      const fields = all.filter((f) => keys.has(f.key));
+      fields.forEach((f) => used.add(f.key));
+      return fields;
+    };
+    const groups = [
+      { id: 'personal', title: 'Personal', fields: pick(buckets['personal']) },
+      { id: 'contact', title: 'Contact', fields: pick(buckets['contact']) },
+      { id: 'family', title: 'Family', fields: pick(buckets['family']) },
+      { id: 'ids', title: 'IDs & records', fields: pick(buckets['ids']) },
+    ];
+    const other = all.filter((f) => !used.has(f.key));
+    if (other.length) {
+      groups.push({ id: 'other', title: 'Other', fields: other });
+    }
+    return groups.filter((g) => g.fields.length > 0);
+  }
+
+  displayHouse(row: any): string {
+    const h = String(row?.answers?.house ?? '').trim();
+    return h || '';
+  }
+
+  houseTone(house: string): string {
+    const h = house.trim().toLowerCase();
+    if (h === 'red') return 'house-red';
+    if (h === 'blue') return 'house-blue';
+    if (h === 'green') return 'house-green';
+    if (h === 'yellow') return 'house-yellow';
+    return 'house-neutral';
+  }
+
+  studentInitials(row: any): string {
+    const name = this.studentName(row).trim();
+    if (!name || name === '—') return '?';
+    const parts = name.split(/\s+/).filter(Boolean);
+    if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+    return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+  }
+
+  issuedDocuments(): any[] {
+    return (this.documents || []).filter((d) => String(d?.status || '').toUpperCase() === 'ISSUED');
   }
 
   addGuardian(): void {
@@ -512,8 +583,15 @@ export class StudentsComponent implements OnInit, OnDestroy {
       extras.push({
         key,
         label: this.prettyLabel(key),
-        type: key === 'hostel' || key === 'transport' || key === 'scholarship' ? 'CHECKBOX' : 'TEXTBOX',
-        mandatory: false,
+        type:
+          key === 'hostel' || key === 'transport' || key === 'scholarship'
+            ? 'CHECKBOX'
+            : key === 'gender'
+              ? 'DROPDOWN'
+              : key === 'house'
+                ? 'DROPDOWN'
+                : 'TEXTBOX',
+        mandatory: key === 'house',
         sectionId: '_more',
       });
     }
@@ -724,17 +802,23 @@ export class StudentsComponent implements OnInit, OnDestroy {
   cancelEdit(): void {
     this.editOpen = false;
     this.editReason = '';
+    this.houseInvalid = false;
   }
 
   saveEdit(): void {
     if (!this.selected?.id || this.savingProfile) return;
+    this.houseInvalid = false;
     const house = String(this.editAnswers['house'] ?? '').trim();
     if (!house) {
+      this.houseInvalid = true;
       this.error = 'Select a house before saving the student profile.';
+      this.focusHouseField();
       return;
     }
     if (!this.availableHouseOptions().includes(house)) {
+      this.houseInvalid = true;
       this.error = 'Select a valid school house.';
+      this.focusHouseField();
       return;
     }
     const aadhaar = String(this.editAnswers['aadhaar'] ?? '').replace(/\D/g, '');
@@ -755,9 +839,11 @@ export class StudentsComponent implements OnInit, OnDestroy {
       next: (full) => {
         this.savingProfile = false;
         this.editOpen = false;
+        this.houseInvalid = false;
         this.selected = full;
         this.statusDraft = String(full?.status || 'ACTIVE');
         this.statusMsg = 'Student profile updated.';
+        window.alert('Student profile updated successfully.');
         this.loadStudents();
         if (this.showAudit) this.loadAudit();
       },
@@ -765,8 +851,27 @@ export class StudentsComponent implements OnInit, OnDestroy {
         this.savingProfile = false;
         this.statusMsg = '';
         this.error = err?.error?.message ?? 'Failed to update student';
+        window.alert(this.error);
       },
     });
+  }
+
+  /** Jump to the tab that contains House and scroll it into view. */
+  private focusHouseField(): void {
+    const houseField = this.editFields().find((f) => f.key === 'house');
+    const sectionId = houseField?.sectionId || '_more';
+    this.activeEditSectionId = sectionId;
+    queueMicrotask(() => {
+      const el = document.getElementById('edit-house-field');
+      el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    });
+  }
+
+  onHouseChange(): void {
+    this.houseInvalid = false;
+    if (this.error?.includes('house')) {
+      this.error = '';
+    }
   }
 
   availableHouseOptions(): string[] {
@@ -1136,8 +1241,11 @@ export class StudentsComponent implements OnInit, OnDestroy {
       classSection: 'Class section',
       dateOfBirth: 'Date of birth',
       bloodGroup: 'Blood group',
+      house: 'House',
+      gender: 'Gender',
+      category: 'Category',
       fatherName: 'Father name',
-      parentName: 'Parent name',
+      parentName: 'Parent / mother name',
       rollNo: 'Roll no',
       aadhaar: 'Aadhaar',
       penNumber: 'PEN number',

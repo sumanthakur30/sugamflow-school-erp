@@ -2,12 +2,13 @@
 # Prefer: .\scripts\start-platform.ps1 first (discovery + gateway).
 #
 # When the API gateway runs in Docker (start-common-platform / compose-local), jars must
-# advertise host.docker.internal — not 127.0.0.1 — or the gateway gets Connection refused.
+# advertise host.docker.internal - not 127.0.0.1 - or the gateway gets Connection refused.
 param(
   [switch]$Restart,  # stop school service JVMs on 8181-8199 before build/start
-  # Eureka advertise address reachable FROM the Docker gateway container.
-  # Default host.docker.internal. Use 127.0.0.1 only if gateway also runs as a host jar.
-  [string]$AdvertiseIp = $(if ($env:SCHOOL_EUREKA_ADVERTISE_IP) { $env:SCHOOL_EUREKA_ADVERTISE_IP } else { 'host.docker.internal' })
+  # Eureka advertise address reachable FROM the gateway.
+  # Host-jar gateway (start-platform.ps1): 127.0.0.1
+  # Docker gateway (start-common-platform): host.docker.internal
+  [string]$AdvertiseIp = ''
 )
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
@@ -65,7 +66,7 @@ function Get-SchoolJavaProcesses {
     }
 }
 
-# Oracle javapath\java.exe is a shim that spawns jdk\bin\java.exe — count only leaf JVMs.
+# Oracle javapath\java.exe is a shim that spawns jdk\bin\java.exe - count only leaf JVMs.
 function Get-SchoolLeafJavaProcesses {
   Get-SchoolJavaProcesses | Where-Object {
     $_.ExecutablePath -and ($_.ExecutablePath -notmatch '\\Oracle\\Java\\javapath\\')
@@ -163,9 +164,47 @@ $eurekaZone = if ($env:EUREKA_CLIENT_SERVICEURL_DEFAULTZONE) {
   'http://localhost:8761/eureka'
 }
 
+function Test-DockerGatewayRunning {
+  # Docker Desktop publishes :9090 via wslrelay/com.docker.backend — CommandLine often has no "docker".
+  try {
+    $dockerCmd = Get-Command docker -ErrorAction SilentlyContinue
+    if ($dockerCmd) {
+      $gw = & docker ps --format '{{.Names}}' 2>$null | Where-Object { $_ -match 'gateway-service' }
+      if ($gw) { return $true }
+    }
+  } catch { }
+  try {
+    $listeners = @(Get-NetTCPConnection -LocalPort 9090 -State Listen -ErrorAction SilentlyContinue)
+    foreach ($l in $listeners) {
+      $proc = Get-CimInstance Win32_Process -Filter "ProcessId=$($l.OwningProcess)" -ErrorAction SilentlyContinue
+      if (-not $proc) { continue }
+      $blob = @($proc.Name, $proc.ExecutablePath, $proc.CommandLine) -join ' '
+      if ($blob -match 'docker|wslrelay|vpnkit|com\.docker') { return $true }
+    }
+  } catch { }
+  return $false
+}
+
+if (-not $AdvertiseIp) {
+  if ($env:SCHOOL_EUREKA_ADVERTISE_IP) {
+    $AdvertiseIp = $env:SCHOOL_EUREKA_ADVERTISE_IP
+  } else {
+    # Host-jar gateway (start-platform.ps1): 127.0.0.1
+    # Docker gateway (start-common-platform / SEQ 00): host.docker.internal
+    if (Test-DockerGatewayRunning) {
+      $AdvertiseIp = 'host.docker.internal'
+    } else {
+      $AdvertiseIp = '127.0.0.1'
+    }
+  }
+}
+
 $javaExe = Get-JavaExe
 Write-Host "Java: $javaExe"
-Write-Host "Eureka advertise IP (for Docker gateway): $AdvertiseIp" -ForegroundColor Yellow
+Write-Host "Eureka advertise IP: $AdvertiseIp" -ForegroundColor Yellow
+if ($AdvertiseIp -eq '127.0.0.1') {
+  Write-Host '  (host-jar gateway mode - pass -AdvertiseIp host.docker.internal if gateway runs in Docker)' -ForegroundColor DarkGray
+}
 
 if (-not (Wait-Http 'http://localhost:8761/actuator/health' 5)) {
   Write-Warning "Eureka not healthy at http://localhost:8761 - run .\scripts\start-platform.ps1 first."

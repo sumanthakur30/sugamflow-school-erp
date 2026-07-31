@@ -2,11 +2,17 @@
   @if (formOpen && featureEnabled && !loading) {
     <!-- Full-page form (SugamFlow Add Product pattern) -->
     <div class="form-page" [class.is-busy]="submitting">
-      <p class="crumb">Admission / New</p>
+      <p class="crumb">Admission / {{ editingId ? 'Edit' : 'New' }}</p>
       <header class="page-head list-head">
         <div>
-          <h2>New Application</h2>
-          <p>Enter applicant and guardian details, then submit once.</p>
+          <h2>{{ editingId ? 'Edit Application' : 'New Application' }}</h2>
+          <p>
+            {{
+              editingId
+                ? 'Update applicant and guardian details, then save changes.'
+                : 'Enter applicant and guardian details, then submit once.'
+            }}
+          </p>
         </div>
       </header>
 
@@ -216,7 +222,15 @@
           [disabled]="submitting"
           [attr.aria-busy]="submitting"
         >
-          {{ submitting ? 'Saving application…' : 'Submit application' }}
+          {{
+            submitting
+              ? editingId
+                ? 'Saving changes…'
+                : 'Saving application…'
+              : editingId
+                ? 'Save changes'
+                : 'Submit application'
+          }}
         </button>
         <button type="button" class="secondary" (click)="closeForm()" [disabled]="submitting">
           Cancel
@@ -248,6 +262,11 @@
           <span [class]="statusClass(selected.status)">{{
             statusLabel(selected.status, selected.statusLabel)
           }}</span>
+          @if (canEditApp(selected)) {
+            <button type="button" (click)="openEdit(selected)" [disabled]="submitting">
+              Edit details
+            </button>
+          }
           <button type="button" class="secondary" (click)="closeDetail()" [disabled]="submitting">
             Back to list
           </button>
@@ -516,12 +535,12 @@
                   tabindex="0"
                   (keyup.enter)="select(app)"
                 >
-                  <td>
+                  <td class="col-applicant">
                     <div class="cell-primary">{{ applicantName(app) }}</div>
                     <div class="cell-sub">{{ answer(app, 'email') }}</div>
                   </td>
-                  <td class="mono">{{ answer(app, 'mobile') }}</td>
-                  <td>{{ answer(app, 'classApplied') }}</td>
+                  <td class="mono col-mobile">{{ formatMobile(app) }}</td>
+                  <td class="col-class">{{ formatClass(app) }}</td>
                   <td>
                     <span [class]="statusClass(app.status)">{{
                       statusLabel(app.status, app.statusLabel)
@@ -530,9 +549,14 @@
                   <td>
                     <span class="step-chip">{{ app.currentStepName || '—' }}</span>
                   </td>
-                  <td class="muted-cell">{{ formatWhen(app.updatedAt || app.createdAt) }}</td>
+                  <td class="muted-cell col-updated">{{ formatWhen(app.updatedAt || app.createdAt) }}</td>
                   <td class="col-actions" (click)="$event.stopPropagation()">
-                    <button type="button" class="tiny" (click)="select(app)">Open</button>
+                    <div class="action-btns">
+                      <button type="button" class="tiny secondary" (click)="openView(app)">Open</button>
+                      @if (canEditApp(app)) {
+                        <button type="button" class="tiny" (click)="openEdit(app, $event)">Edit</button>
+                      }
+                    </div>
                   </td>
                 </tr>
               }
@@ -555,27 +579,30 @@
             </p>
           }
           @for (app of applications; track app.id) {
-            <button
-              type="button"
-              class="inbox-card"
-              [class.selected]="app.id === selectedId"
-              (click)="select(app)"
-            >
-              <div class="inbox-card-top">
-                <strong>{{ applicantName(app) }}</strong>
-                <span [class]="statusClass(app.status)">{{
-                  statusLabel(app.status, app.statusLabel)
-                }}</span>
+            <div class="inbox-card" [class.selected]="app.id === selectedId">
+              <button type="button" class="inbox-card-main" (click)="openView(app)">
+                <div class="inbox-card-top">
+                  <strong>{{ applicantName(app) }}</strong>
+                  <span [class]="statusClass(app.status)">{{
+                    statusLabel(app.status, app.statusLabel)
+                  }}</span>
+                </div>
+                <div class="inbox-card-meta">
+                  <span>{{ formatClass(app) }}</span>
+                  <span class="mono">{{ formatMobile(app) }}</span>
+                </div>
+                <div class="inbox-card-foot">
+                  <span class="step-chip">{{ app.currentStepName || '—' }}</span>
+                  <span class="muted">{{ formatWhen(app.updatedAt || app.createdAt) }}</span>
+                </div>
+              </button>
+              <div class="inbox-card-actions">
+                <button type="button" class="tiny secondary" (click)="openView(app)">Open</button>
+                @if (canEditApp(app)) {
+                  <button type="button" class="tiny" (click)="openEdit(app, $event)">Edit</button>
+                }
               </div>
-              <div class="inbox-card-meta">
-                <span>{{ answer(app, 'classApplied') }}</span>
-                <span class="mono">{{ answer(app, 'mobile') }}</span>
-              </div>
-              <div class="inbox-card-foot">
-                <span class="step-chip">{{ app.currentStepName || '—' }}</span>
-                <span class="muted">{{ formatWhen(app.updatedAt || app.createdAt) }}</span>
-              </div>
-            </button>
+            </div>
           }
         </div>
 

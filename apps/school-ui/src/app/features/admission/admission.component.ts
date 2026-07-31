@@ -65,8 +65,10 @@ export class AdmissionComponent implements OnInit, OnDestroy {
   applications: any[] = [];
   selectedId: string | null = null;
   selected: any = null;
-  /** List-first: form/detail driven by ?new=1 / ?id= */
+  /** List-first: form/detail driven by ?new=1 / ?id= / ?id=&edit=1 */
   formOpen = false;
+  /** When set, form page saves via PUT (edit) instead of POST (new). */
+  editingId: string | null = null;
   actionComment = '';
   submitting = false;
   activeFormSectionId = '';
@@ -125,14 +127,33 @@ export class AdmissionComponent implements OnInit, OnDestroy {
   }
 
   openForm(): void {
+    this.editingId = null;
     void this.router.navigate([], {
       relativeTo: this.route,
       queryParams: { new: '1' },
     });
   }
 
+  /** View-only detail (Open). */
+  openView(app: any): void {
+    void this.router.navigate([], {
+      relativeTo: this.route,
+      queryParams: { id: app.id },
+    });
+  }
+
+  /** Editable form prefilled from existing application (Edit). */
+  openEdit(app: any, event?: Event): void {
+    event?.stopPropagation();
+    void this.router.navigate([], {
+      relativeTo: this.route,
+      queryParams: { id: app.id, edit: '1' },
+    });
+  }
+
   closeForm(): void {
     if (this.submitting) return;
+    this.editingId = null;
     void this.router.navigate([], { relativeTo: this.route, queryParams: {} });
   }
 
@@ -143,19 +164,29 @@ export class AdmissionComponent implements OnInit, OnDestroy {
 
   private syncFromRoute(params: import('@angular/router').ParamMap): void {
     const { mode, id } = parseListViewParams(params);
+    const editMode = params.get('edit') === '1' || params.get('edit') === 'true';
     if (mode === 'new') {
       this.formOpen = true;
+      this.editingId = null;
       this.selected = null;
       this.selectedId = null;
       this.error = '';
       this.statusMsg = '';
       this.fieldErrors = {};
+      this.resetAnswers();
       this.resetClassPicker();
       const visible = this.visibleFormSections();
       this.activeFormSectionId = visible[0]?.id || '';
       return;
     }
+    if (mode === 'detail' && id && editMode) {
+      this.formOpen = false;
+      this.selected = null;
+      this.loadDetailForEdit(id);
+      return;
+    }
     this.formOpen = false;
+    this.editingId = null;
     if (mode === 'detail' && id) {
       if (this.selectedId !== id || !this.selected) {
         this.loadDetail(id);
@@ -173,6 +204,53 @@ export class AdmissionComponent implements OnInit, OnDestroy {
       next: (full) => (this.selected = full),
       error: (err) => (this.error = err?.error?.message ?? 'Failed to load application'),
     });
+  }
+
+  private loadDetailForEdit(id: string): void {
+    this.selectedId = id;
+    this.error = '';
+    this.statusMsg = '';
+    this.api.get<any>(`/api/admission/applications/${id}`).subscribe({
+      next: (full) => {
+        this.selected = full;
+        this.editingId = id;
+        this.formOpen = true;
+        this.populateAnswersFromApp(full);
+        const visible = this.visibleFormSections();
+        this.activeFormSectionId = visible[0]?.id || '';
+      },
+      error: (err) => (this.error = err?.error?.message ?? 'Failed to load application for edit'),
+    });
+  }
+
+  private populateAnswersFromApp(app: any): void {
+    this.fieldErrors = {};
+    this.resetAnswers();
+    const src = (app?.answers ?? {}) as Record<string, unknown>;
+    for (const f of this.fields) {
+      if (src[f.key] !== undefined && src[f.key] !== null) {
+        this.answers[f.key] = src[f.key];
+      }
+    }
+    // Carry any extra keys used by class picker / enrollment
+    for (const [k, v] of Object.entries(src)) {
+      if (this.answers[k] === undefined) {
+        this.answers[k] = v;
+      }
+    }
+    const parsed =
+      this.parseClassLabel(String(src['classApplied'] ?? '')) ||
+      (src['classGrade'] && src['sectionLetter']
+        ? { grade: String(src['classGrade']), section: String(src['sectionLetter']) }
+        : null);
+    if (parsed) {
+      this.classGrade = parsed.grade;
+      this.classSectionLetter = parsed.section;
+      this.syncClassAppliedAnswer();
+    } else {
+      this.classGrade = String(src['classGrade'] ?? '');
+      this.classSectionLetter = String(src['sectionLetter'] ?? src['section'] ?? '');
+    }
   }
 
   sectionFields(sectionId: string): FormField[] {
@@ -317,7 +395,11 @@ export class AdmissionComponent implements OnInit, OnDestroy {
     const answers = this.normalizeAnswers();
     const fingerprint = this.fingerprint(answers);
     const now = Date.now();
-    if (fingerprint === this.lastSubmitFingerprint && now - this.lastSubmitAt < 15000) {
+    if (
+      !this.editingId &&
+      fingerprint === this.lastSubmitFingerprint &&
+      now - this.lastSubmitAt < 15000
+    ) {
       this.error =
         'This application was already submitted a moment ago. Check the inbox to avoid duplicates.';
       return;
@@ -325,7 +407,9 @@ export class AdmissionComponent implements OnInit, OnDestroy {
 
     this.submitLocked = true;
     this.submitting = true;
-    this.statusMsg = 'Saving application… please wait. Do not click Submit again.';
+    this.statusMsg = this.editingId
+      ? 'Saving changes… please wait.'
+      : 'Saving application… please wait. Do not click Submit again.';
 
     const payload = {
       formKey: this.formKey,
@@ -334,13 +418,26 @@ export class AdmissionComponent implements OnInit, OnDestroy {
       clientRequestId: crypto.randomUUID?.() ?? `${Date.now()}-${Math.random()}`,
     };
 
-    this.api.post<any>('/api/admission/applications', payload).subscribe({
+    const req = this.editingId
+      ? this.api.put<any>(`/api/admission/applications/${this.editingId}`, payload)
+      : this.api.post<any>('/api/admission/applications', payload);
+
+    req.subscribe({
       next: (app) => {
         this.lastSubmitFingerprint = fingerprint;
         this.lastSubmitAt = Date.now();
         this.submitting = false;
         this.submitLocked = false;
-        this.statusMsg = `Application saved successfully${app?.id ? ` (${app.id})` : ''}.`;
+        const wasEdit = !!this.editingId;
+        this.statusMsg = wasEdit
+          ? 'Application details updated successfully.'
+          : `Application saved successfully${app?.id ? ` (${app.id})` : ''}.`;
+        window.alert(
+          wasEdit
+            ? 'Application details updated successfully.'
+            : 'Application saved successfully.',
+        );
+        this.editingId = null;
         this.resetAnswers();
         this.pageIndex = 0;
         this.loadApplications();
@@ -357,16 +454,19 @@ export class AdmissionComponent implements OnInit, OnDestroy {
         this.submitting = false;
         this.submitLocked = false;
         this.statusMsg = '';
-        this.error = err?.error?.message ?? 'Submit failed';
+        this.error = err?.error?.message ?? (this.editingId ? 'Update failed' : 'Submit failed');
+        window.alert(this.error);
       },
     });
   }
 
   select(app: any): void {
-    void this.router.navigate([], {
-      relativeTo: this.route,
-      queryParams: { id: app.id },
-    });
+    this.openView(app);
+  }
+
+  canEditApp(app: any): boolean {
+    // Applicant details can be corrected for any status (including Approved).
+    return !!app?.id;
   }
 
   canRunAction(action: 'APPROVE' | 'REJECT' | 'REQUEST_INFO' | 'RESUME'): boolean {
@@ -489,6 +589,46 @@ export class AdmissionComponent implements OnInit, OnDestroy {
     return this.formatAnswer(app?.answers?.[key]);
   }
 
+  /** Normalize class labels for the list (Grade 10-B, Grade 9, IV, …). */
+  formatClass(app: any): string {
+    const fromPartsGrade = this.formatAnswer(app?.answers?.classGrade ?? app?.answers?.grade);
+    const fromPartsSection = this.formatAnswer(
+      app?.answers?.sectionLetter ?? app?.answers?.section ?? app?.answers?.sectionName,
+    );
+    if (fromPartsGrade !== '—' && fromPartsSection !== '—') {
+      return this.classAppliedLabel(fromPartsGrade, fromPartsSection);
+    }
+    if (fromPartsGrade !== '—') {
+      return `Grade ${fromPartsGrade}`;
+    }
+
+    const raw = this.formatAnswer(app?.answers?.classApplied ?? app?.answers?.classSection);
+    if (raw === '—') return '—';
+
+    const parsed = this.parseClassLabel(raw);
+    if (parsed) {
+      return this.classAppliedLabel(parsed.grade, parsed.section);
+    }
+    if (/^\d{1,2}$/.test(raw.trim())) {
+      return `Grade ${raw.trim()}`;
+    }
+    // Roman / free-text class names (e.g. IV, Nursery)
+    return raw;
+  }
+
+  /** Compact mobile for table: 88007 06661 */
+  formatMobile(app: any): string {
+    const raw = this.answer(app, 'mobile').replace(/\D/g, '');
+    if (!raw || raw === '') {
+      const fallback = this.answer(app, 'mobile');
+      return fallback === '—' ? '—' : fallback;
+    }
+    if (raw.length === 10) {
+      return `${raw.slice(0, 5)} ${raw.slice(5)}`;
+    }
+    return this.answer(app, 'mobile');
+  }
+
   firstAnswer(app: any, ...keys: string[]): string {
     for (const key of keys) {
       const raw = app?.answers?.[key];
@@ -542,12 +682,14 @@ export class AdmissionComponent implements OnInit, OnDestroy {
     if (!raw) return '—';
     const d = new Date(String(raw));
     if (Number.isNaN(d.getTime())) return String(raw);
-    return d.toLocaleString(undefined, {
+    // Compact, stable list format: 24 Jul 2026, 00:38
+    return d.toLocaleString('en-GB', {
       day: '2-digit',
       month: 'short',
       year: 'numeric',
       hour: '2-digit',
       minute: '2-digit',
+      hour12: false,
     });
   }
 

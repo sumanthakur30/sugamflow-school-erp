@@ -12,6 +12,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -59,6 +60,12 @@ public class AdmissionController {
   @PostMapping("/applications")
   public ApiResponse<Map<String, Object>> submit(@RequestBody Map<String, Object> body) {
     return ApiResponse.ok(service.submit(body));
+  }
+
+  @PutMapping("/applications/{id}")
+  public ApiResponse<Map<String, Object>> update(
+      @PathVariable("id") UUID id, @RequestBody Map<String, Object> body) {
+    return ApiResponse.ok(service.update(id, body));
   }
 
   @PostMapping("/applications/{id}/actions")

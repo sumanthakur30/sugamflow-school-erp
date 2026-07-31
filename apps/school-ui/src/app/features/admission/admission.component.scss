@@ -400,55 +400,123 @@ label.invalid select {
 .table-wrap {
   overflow-x: auto;
   margin-top: 0.5rem;
+  border-radius: 0.55rem;
 }
 
 .inbox-table {
   width: 100%;
-  border-collapse: collapse;
+  border-collapse: separate;
+  border-spacing: 0;
   font-size: 0.92rem;
+  min-width: 920px;
 }
 
 .inbox-table th,
 .inbox-table td {
   text-align: left;
   padding: 0.7rem 0.75rem;
-  border-bottom: 1px solid color-mix(in srgb, var(--sf-menu) 16%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--sf-menu) 14%, transparent);
   vertical-align: middle;
+}
+
+/* Do NOT restyle thead here — shared sortable-table.scss owns the dark header.
+   Previous light+opacity override made the Actions label look faint. */
+
+.inbox-table tbody td {
+  background: #fff;
   white-space: nowrap;
 }
 
-.inbox-table thead th {
+.inbox-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.col-applicant {
+  min-width: 11rem;
+  max-width: 16rem;
+  white-space: normal !important;
+}
+
+.col-mobile {
+  min-width: 7.5rem;
+  letter-spacing: 0.02em;
+}
+
+.col-class {
+  min-width: 6.5rem;
+  font-weight: 600;
+}
+
+.col-updated {
+  min-width: 8.5rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.col-actions {
   position: sticky;
-  top: 0;
-  z-index: 1;
-  background: color-mix(in srgb, var(--sf-panel) 94%, #e8f0ec);
-  font-size: 0.75rem;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  opacity: 0.8;
+  right: 0;
+  min-width: 9.5rem;
+  width: 9.5rem;
+  z-index: 2;
+  box-shadow: -8px 0 10px -10px rgb(15 23 42 / 18%);
+}
+
+.inbox-table thead th.col-actions {
+  z-index: 3;
+}
+
+.inbox-table tbody td.col-actions {
+  background: #fff;
+}
+
+.inbox-row:hover td.col-actions {
+  background: color-mix(in srgb, var(--sf-primary) 6%, #fff);
+}
+
+.inbox-row.selected td.col-actions {
+  background: color-mix(in srgb, var(--sf-primary) 12%, #fff);
+}
+
+.action-btns {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-wrap: nowrap;
+}
+
+.action-btns .tiny {
+  min-width: 3.6rem;
+  justify-content: center;
 }
 
 .inbox-row {
   cursor: pointer;
 }
 
-.inbox-row:hover {
-  background: color-mix(in srgb, var(--sf-primary) 6%, transparent);
+.inbox-row:hover td {
+  background: color-mix(in srgb, var(--sf-primary) 6%, #fff);
+}
+
+.inbox-row.selected td {
+  background: color-mix(in srgb, var(--sf-primary) 12%, #fff);
 }
 
 .inbox-row.selected {
-  background: color-mix(in srgb, var(--sf-primary) 12%, transparent);
-  outline: 1px solid color-mix(in srgb, var(--sf-primary) 35%, transparent);
+  outline: none;
 }
 
 .cell-primary {
   font-weight: 700;
+  color: #0f172a;
+  line-height: 1.25;
 }
 
 .cell-sub {
-  margin-top: 0.15rem;
-  font-size: 0.8rem;
-  opacity: 0.65;
+  margin-top: 0.2rem;
+  font-size: 0.78rem;
+  color: #64748b;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .mono {
@@ -458,11 +526,12 @@ label.invalid select {
 
 .muted-cell {
   font-size: 0.85rem;
-  opacity: 0.75;
+  color: #64748b;
 }
 
 .empty-row {
   padding: 1.2rem 0.75rem !important;
+  white-space: normal !important;
 }
 
 .badge {
@@ -704,7 +773,26 @@ button:disabled {
   border-radius: var(--sf-radius);
   background: color-mix(in srgb, var(--sf-panel, #fff) 96%, #e8f0ec);
   color: inherit;
+}
+
+.inbox-card-main {
+  display: grid;
+  gap: 0.45rem;
+  width: 100%;
+  text-align: left;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
   cursor: pointer;
+}
+
+.inbox-card-actions {
+  display: flex;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+  padding-top: 0.35rem;
+  border-top: 1px solid color-mix(in srgb, var(--sf-menu) 10%, transparent);
 }
 
 .inbox-card.selected {
