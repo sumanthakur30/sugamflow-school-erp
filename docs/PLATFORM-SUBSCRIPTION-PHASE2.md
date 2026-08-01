@@ -148,9 +148,31 @@ When preferred, effective-config uses **registry + business-type + mapped platfo
 1. [ ] Smoke PASS: `tools/platform-subscription-bridge-smoke.ps1 -ShopId POLY-DEMO-01 -PlanId poly-starter`  
 2. [ ] School: `read-mode=dual` then `prefer-projection=true` on a non-prod org; Admission flags unchanged  
 3. [ ] Shop: enable bridge + assign vertical plan; confirm `PLATFORM_SUBSCRIPTION_LINKED`  
-4. [ ] Shop: set `prefer-platform-modules=true`; confirm `PLATFORM_MODULES_PREFERRED` and expected `ModuleCode`s  
-5. [ ] Super Admin is the only plan editor for that shop; do not rely on shop-local plan change UI  
-6. [ ] (2.5 later) Deprecate shop `plan_definitions` as SoT for bridged shops  
+4. [ ] Shop: set `prefer-platform-modules=true` (or `cutover=true`); confirm `PLATFORM_MODULES_PREFERRED` / `PLATFORM_SUBSCRIPTION_CUTOVER`  
+5. [ ] Super Admin is the only module-plan editor; shop list “billing cycle” is not entitlement SoT  
+6. [x] (2.5) Bridged cutover skips `plan_definitions` DB read; shop UI clarifies billing vs Platform Subscription  
+
+### Phase 2.5 — Hard cutover (bridged shops)
+
+```properties
+shop.platform.subscription.enabled=true
+shop.platform.subscription.base-url=http://host.docker.internal:8182
+shop.platform.subscription.cutover=true
+# cutover implies prefer-platform-modules
+```
+
+Env: `SHOP_PLATFORM_SUBSCRIPTION_CUTOVER=true`.
+
+Behaviour when platform returns modules:
+
+- `EffectiveConfigService` **does not** call `plan_definitions` / `PlanEntitlements`
+- Features include `PLATFORM_MODULES_PREFERRED` and `PLATFORM_SUBSCRIPTION_CUTOVER`
+- Structured log: `Platform subscription cutover modules …`
+- Non-bridged shops unchanged (flag off / empty snapshot → legacy path)
+
+Shop list “Change plan” renamed to **billing cycle** — modules stay in Super Admin → Platform Subscription.
+
+`plan_definitions` table and Flyway seeds remain for legacy shops; they are no longer SoT under cutover.
 
 ---
 
@@ -181,4 +203,4 @@ When preferred, effective-config uses **registry + business-type + mapped platfo
 4. Seed/parity for retail+hospital plans (V19 + seeder) — done.  
 5. Env opt-in dual-read shop + `platform-subscription-bridge-smoke.ps1` — done (enable flag to run).  
 6. Prefer-projection / soft cutover flags — done (opt-in; enable after smoke).  
-7. Hard cutover (2.5): deprecate shop `plan_definitions` SoT for bridged shops.
+7. Hard cutover (2.5): `cutover` flag skips `plan_definitions` read; shop UI = billing cycle only — done.
