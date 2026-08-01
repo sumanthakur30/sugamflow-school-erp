@@ -17,20 +17,43 @@ Docker network (external): `sumanthakur30_default`
 
 | File | Purpose |
 |------|---------|
+| `00-full-deploy-and-flyway-check.sh` | Pull + start batches 1→3→2, then verify Flyway max versions via `psql` |
 | `01-common-start.sh` | Start shared platform |
 | `01-common-stop.sh` | Stop shared platform (both UIs lose API) |
-| `02-school-start.sh` | Start all School microservices |
+| `02-school-start.sh` | Start School microservices (Phase A default; `PHASE=b` for A+B) |
 | `02-school-stop.sh` | Stop School only |
 | `03-sugamflow-start.sh` | Start SugamFlow shop apps only |
 | `03-sugamflow-stop.sh` | Stop SugamFlow shop apps only |
+| `04-pull-recreate-all-school.sh` | Pull Hub images + recreate all School services (Phase A+B) |
+
+**PC build/push all School images:** `D:\school\scripts\build-push-all-school-images.ps1`
 
 Copy to EC2:
 
 ```bash
-# from PC via WinSCP → /opt/school/scripts/ec2/
+# from PC via WinSCP → /opt/school/scripts/ec2/  (or /home/ec2-user/opt/school/scripts/ec2/)
 # then on EC2:
 chmod +x /opt/school/scripts/ec2/*.sh
 ```
+
+**One-shot full deploy + Flyway check** (after RDS DBs exist and env files are filled):
+
+```bash
+cd /home/ec2-user/opt/school
+# Phase A school only:
+bash scripts/ec2/00-full-deploy-and-flyway-check.sh
+
+# Phase A + B school:
+SCHOOL_PHASE=b bash scripts/ec2/00-full-deploy-and-flyway-check.sh
+
+# Also start IPD overlay:
+WITH_IPD=1 SCHOOL_PHASE=b bash scripts/ec2/00-full-deploy-and-flyway-check.sh
+
+# Re-check Flyway only (no pull/start):
+CHECK_ONLY=1 bash scripts/ec2/00-full-deploy-and-flyway-check.sh
+```
+
+Script defaults: `SUGAMFLOW_DIR=/home/ec2-user/opt/sugamflow`, `SCHOOL_DIR=/home/ec2-user/opt/school`. Override if your paths differ (`/opt/sugamflow`, etc.).
 
 ### Compose + env (production)
 
@@ -259,7 +282,24 @@ git push origin sugamflow-school-erp
 
 Repo: https://github.com/sumanthakur30/sugamflow-school-erp.git
 
-### Step 1 — PC: build & push only changed School images
+### Step 1 — PC: build & push School images (all features)
+
+Preferred one-shot (fat-JAR safe Dockerfile):
+
+```powershell
+cd D:\school
+docker login -u sumanthakur30
+
+# Fresh build + push ALL modules (Phase A + B + audit/rules/reports) as tag 1.0.2
+.\scripts\build-push-all-school-images.ps1 -ImageTag 1.0.2 -NoCache -Phase all
+
+# Or Phase A+B only (matches EC2 compose profiles):
+.\scripts\build-push-all-school-images.ps1 -ImageTag 1.0.2 -NoCache -Phase b
+```
+
+Script rejects jars smaller than 5MB (prevents `no main manifest attribute` from `*-copy.jar`).
+
+Manual loop (same as before):
 
 ```powershell
 cd D:\school
@@ -286,15 +326,26 @@ SugamFlow image rebuilds (if shop code changed): use `D:\sugamflow` Dockerfiles 
 To `/opt/school/`:
 
 - `docker-compose.school.ec2-rds.yml`
-- `.env.school.production` (edit secrets on EC2; never commit)
-- `scripts/ec2/*.sh`
+- `.env.school.production` (**set `IMAGE_TAG=1.0.2`** to match push)
+- `scripts/ec2/*.sh` (include `04-pull-recreate-all-school.sh`)
 
 To `/opt/sugamflow/` (only if shop compose/env changed):
 
 - `docker-compose.ec2-rds.yml`
 - `.env.production`
 
-### Step 3 — EC2: pull & recreate changed services
+### Step 3 — EC2: pull & recreate School stack
+
+```bash
+cd /opt/school
+chmod +x scripts/ec2/*.sh
+
+# Set IMAGE_TAG in .env.school.production to the tag you pushed, then:
+bash scripts/ec2/04-pull-recreate-all-school.sh          # Phase A+B
+# PHASE=a bash scripts/ec2/04-pull-recreate-all-school.sh  # Phase A only
+```
+
+Or manual:
 
 ```bash
 # School example

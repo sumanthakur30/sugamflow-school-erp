@@ -1,16 +1,21 @@
 #!/usr/bin/env bash
-# Batch 2 — start SCHOOL domain microservices.
+# Batch 2 - start SCHOOL domain microservices.
 # Requires common platform UP (gateway :9090 + Eureka).
+#
+# Usage:
+#   bash 02-school-start.sh           # Phase A only (default)
+#   PHASE=b bash 02-school-start.sh   # Phase A + Phase B
+#   PHASE=all bash 02-school-start.sh # same as PHASE=b
 set -euo pipefail
 
-SCHOOL_DIR="${SCHOOL_DIR:-/opt/school}"
+SCHOOL_DIR="${SCHOOL_DIR:-/home/ec2-user/opt/school}"
 COMPOSE_FILE="${SCHOOL_COMPOSE:-docker-compose.school.ec2-rds.yml}"
 ENV_FILE="${SCHOOL_ENV:-.env.school.production}"
+PHASE="${PHASE:-a}"
 
 cd "$SCHOOL_DIR"
 
-# Order: foundation → domains → ops → comms
-SCHOOL_SERVICES=(
+PHASE_A=(
   school-settings-service
   subscription-service
   form-builder-service
@@ -20,6 +25,9 @@ SCHOOL_SERVICES=(
   student-service
   admission-service
   fee-service
+)
+
+PHASE_B=(
   attendance-service
   exam-service
   payroll-service
@@ -29,14 +37,21 @@ SCHOOL_SERVICES=(
   school-notification-config-service
 )
 
-echo "== School stack START =="
+SERVICES=("${PHASE_A[@]}")
+PROFILES_ARGS=()
+if [[ "$PHASE" == "b" || "$PHASE" == "all" || "$PHASE" == "phase-b" ]]; then
+  SERVICES+=("${PHASE_B[@]}")
+  PROFILES_ARGS=(--profile phase-b)
+fi
+
+echo "== School stack START (PHASE=$PHASE) =="
 echo "dir=$SCHOOL_DIR file=$COMPOSE_FILE env=$ENV_FILE"
-docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" up -d "${SCHOOL_SERVICES[@]}"
-docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" ps
+docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" "${PROFILES_ARGS[@]}" up -d "${SERVICES[@]}"
+docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" "${PROFILES_ARGS[@]}" ps
 
 echo ""
 echo "Smoke (via gateway):"
-for path in /api/student/health /api/library/bootstrap /api/hostel/bootstrap /api/transport/bootstrap /api/school/notification-config/comms/bootstrap; do
+for path in /api/student/health /api/config/design-studio/theme; do
   code=$(curl -sS -o /dev/null -w "%{http_code}" "http://127.0.0.1:9090$path" || echo "err")
   echo "  $path -> $code"
 done
