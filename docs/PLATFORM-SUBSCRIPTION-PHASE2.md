@@ -113,11 +113,44 @@ Assign a vertical plan to org id = **shopId** in Super Admin, then smoke:
 .\scripts\platform-subscription-bridge-smoke.ps1 -ShopId POLY-DEMO-01 -PlanId poly-starter
 ```
 
-## 2.3 — Catalog completeness
+## 2.4 — Prefer projection / platform (soft cutover)
 
-Flyway **V19** + seeder: `hospital-starter`, `hospital-pro`, `poly-starter`, `pharmacy-starter`, `pathlab-starter`, `retail-starter` with feature→module catalog links. School `starter` untouched; School FEATURE_* merges skip these vertical SKUs.
+**Defaults stay safe** (`json`, bridge off, prefer flags false). After a **successful** bridge smoke:
 
-Mapper also covers `RETAIL_*` → shop `ModuleCode`.
+### School
+
+```properties
+# Stage A — fill gaps from projection
+subscription.entitlements.read-mode=dual
+# Stage B — projection wins on conflicts (still dual merge)
+subscription.entitlements.prefer-projection=true
+# Stage C — projection is primary when plan_* rows exist
+subscription.entitlements.read-mode=projection
+```
+
+Env: `SUBSCRIPTION_ENTITLEMENTS_READ_MODE`, `SUBSCRIPTION_ENTITLEMENTS_PREFER_PROJECTION`.
+
+### Shop
+
+```properties
+shop.platform.subscription.enabled=true
+shop.platform.subscription.base-url=http://host.docker.internal:8182
+# After smoke: skip plan_definitions when platform returns modules
+shop.platform.subscription.prefer-platform-modules=true
+```
+
+Env: `SHOP_PLATFORM_SUBSCRIPTION_PREFER_MODULES=true`.
+
+When preferred, effective-config uses **registry + business-type + mapped platform modules** (not shop `plan_definitions` / `PlanEntitlements`). Feature flag `PLATFORM_MODULES_PREFERRED=true` appears on the config.
+
+### Cutover checklist (2.4 → 2.5)
+
+1. [ ] Smoke PASS: `tools/platform-subscription-bridge-smoke.ps1 -ShopId POLY-DEMO-01 -PlanId poly-starter`  
+2. [ ] School: `read-mode=dual` then `prefer-projection=true` on a non-prod org; Admission flags unchanged  
+3. [ ] Shop: enable bridge + assign vertical plan; confirm `PLATFORM_SUBSCRIPTION_LINKED`  
+4. [ ] Shop: set `prefer-platform-modules=true`; confirm `PLATFORM_MODULES_PREFERRED` and expected `ModuleCode`s  
+5. [ ] Super Admin is the only plan editor for that shop; do not rely on shop-local plan change UI  
+6. [ ] (2.5 later) Deprecate shop `plan_definitions` as SoT for bridged shops  
 
 ---
 
@@ -147,4 +180,5 @@ Mapper also covers `RETAIL_*` → shop `ModuleCode`.
 3. Shop `PlatformModuleCodeMapper` + adapter merge — done.  
 4. Seed/parity for retail+hospital plans (V19 + seeder) — done.  
 5. Env opt-in dual-read shop + `platform-subscription-bridge-smoke.ps1` — done (enable flag to run).  
-6. Prefer-projection / cutover only after smoke.
+6. Prefer-projection / soft cutover flags — done (opt-in; enable after smoke).  
+7. Hard cutover (2.5): deprecate shop `plan_definitions` SoT for bridged shops.

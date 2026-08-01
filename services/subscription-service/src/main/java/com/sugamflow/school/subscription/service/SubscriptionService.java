@@ -160,14 +160,20 @@ public class SubscriptionService {
     switch (mode) {
       case DUAL -> {
         featureFlags = new LinkedHashMap<>(jsonFlags);
-        for (Map.Entry<String, Boolean> e : projectionFlags.entrySet()) {
-          featureFlags.putIfAbsent(e.getKey(), e.getValue());
-        }
         limits = new LinkedHashMap<>(jsonLimits);
-        for (Map.Entry<String, Long> e : projectionLimits.entrySet()) {
-          limits.putIfAbsent(e.getKey(), e.getValue());
+        if (entitlementsProperties.isPreferProjection()) {
+          featureFlags.putAll(projectionFlags);
+          limits.putAll(projectionLimits);
+          source = "dual-prefer-projection";
+        } else {
+          for (Map.Entry<String, Boolean> e : projectionFlags.entrySet()) {
+            featureFlags.putIfAbsent(e.getKey(), e.getValue());
+          }
+          for (Map.Entry<String, Long> e : projectionLimits.entrySet()) {
+            limits.putIfAbsent(e.getKey(), e.getValue());
+          }
+          source = "dual";
         }
-        source = "dual";
       }
       case PROJECTION -> {
         if (!projectionFlags.isEmpty() || !projectionLimits.isEmpty()) {
