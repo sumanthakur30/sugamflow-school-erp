@@ -1,12 +1,21 @@
 package com.sugamflow.school.subscription.service;
 
 import com.sugamflow.school.subscription.cache.SubscriptionCacheSupport;
+import com.sugamflow.school.subscription.config.SubscriptionEntitlementsProperties;
+import com.sugamflow.school.subscription.config.SubscriptionEntitlementsProperties.ReadMode;
 import com.sugamflow.school.subscription.model.SubscriptionPlan;
+import com.sugamflow.school.subscription.persistence.entity.PlanFeatureEntity;
+import com.sugamflow.school.subscription.persistence.entity.PlanLimitEntity;
+import com.sugamflow.school.subscription.persistence.entity.PlanModuleEntity;
 import com.sugamflow.school.subscription.persistence.entity.SubscriptionPlanEntity;
 import com.sugamflow.school.subscription.persistence.entity.TenantSubscriptionEntity;
+import com.sugamflow.school.subscription.persistence.repo.PlanFeatureRepository;
+import com.sugamflow.school.subscription.persistence.repo.PlanLimitRepository;
+import com.sugamflow.school.subscription.persistence.repo.PlanModuleRepository;
 import com.sugamflow.school.subscription.persistence.repo.SubscriptionPlanRepository;
 import com.sugamflow.school.subscription.persistence.repo.TenantSubscriptionRepository;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -20,20 +29,32 @@ public class SubscriptionService {
   private final SubscriptionPlanRepository planRepository;
   private final TenantSubscriptionRepository tenantSubscriptionRepository;
   private final PlanProjectionService planProjectionService;
+  private final PlanFeatureRepository planFeatureRepository;
+  private final PlanLimitRepository planLimitRepository;
+  private final PlanModuleRepository planModuleRepository;
   private final SubscriptionLifecycleService lifecycleService;
   private final SubscriptionCacheSupport cache;
+  private final SubscriptionEntitlementsProperties entitlementsProperties;
 
   public SubscriptionService(
       SubscriptionPlanRepository planRepository,
       TenantSubscriptionRepository tenantSubscriptionRepository,
       PlanProjectionService planProjectionService,
+      PlanFeatureRepository planFeatureRepository,
+      PlanLimitRepository planLimitRepository,
+      PlanModuleRepository planModuleRepository,
       SubscriptionLifecycleService lifecycleService,
-      SubscriptionCacheSupport cache) {
+      SubscriptionCacheSupport cache,
+      SubscriptionEntitlementsProperties entitlementsProperties) {
     this.planRepository = planRepository;
     this.tenantSubscriptionRepository = tenantSubscriptionRepository;
     this.planProjectionService = planProjectionService;
+    this.planFeatureRepository = planFeatureRepository;
+    this.planLimitRepository = planLimitRepository;
+    this.planModuleRepository = planModuleRepository;
     this.lifecycleService = lifecycleService;
     this.cache = cache;
+    this.entitlementsProperties = entitlementsProperties;
   }
 
   @Transactional(readOnly = true)
@@ -110,11 +131,77 @@ public class SubscriptionService {
       plan = getPlan("starter");
       planId = "starter";
     }
+
+    Map<String, Boolean> jsonFlags =
+        plan.getFeatureFlags() != null
+            ? new LinkedHashMap<>(plan.getFeatureFlags())
+            : new LinkedHashMap<>();
+    Map<String, Long> jsonLimits =
+        plan.getLimits() != null ? new LinkedHashMap<>(plan.getLimits()) : new LinkedHashMap<>();
+
+    List<PlanFeatureEntity> projectedFeatures =
+        planFeatureRepository.findByPlanIdOrderByFeatureCodeAsc(planId);
+    List<PlanLimitEntity> projectedLimits =
+        planLimitRepository.findByPlanIdOrderByLimitCodeAsc(planId);
+
+    Map<String, Boolean> projectionFlags = new LinkedHashMap<>();
+    for (PlanFeatureEntity row : projectedFeatures) {
+      projectionFlags.put(row.getFeatureCode(), row.isEnabled());
+    }
+    Map<String, Long> projectionLimits = new LinkedHashMap<>();
+    for (PlanLimitEntity row : projectedLimits) {
+      projectionLimits.put(row.getLimitCode(), row.getLimitValue());
+    }
+
+    ReadMode mode = entitlementsProperties.resolvedMode();
+    Map<String, Boolean> featureFlags;
+    Map<String, Long> limits;
+    String source;
+    switch (mode) {
+      case DUAL -> {
+        featureFlags = new LinkedHashMap<>(jsonFlags);
+        for (Map.Entry<String, Boolean> e : projectionFlags.entrySet()) {
+          featureFlags.putIfAbsent(e.getKey(), e.getValue());
+        }
+        limits = new LinkedHashMap<>(jsonLimits);
+        for (Map.Entry<String, Long> e : projectionLimits.entrySet()) {
+          limits.putIfAbsent(e.getKey(), e.getValue());
+        }
+        source = "dual";
+      }
+      case PROJECTION -> {
+        if (!projectionFlags.isEmpty() || !projectionLimits.isEmpty()) {
+          featureFlags =
+              projectionFlags.isEmpty() ? new LinkedHashMap<>(jsonFlags) : projectionFlags;
+          limits = projectionLimits.isEmpty() ? new LinkedHashMap<>(jsonLimits) : projectionLimits;
+          source = "projection";
+        } else {
+          featureFlags = jsonFlags;
+          limits = jsonLimits;
+          source = "json";
+        }
+      }
+      default -> {
+        featureFlags = jsonFlags;
+        limits = jsonLimits;
+        source = "json";
+      }
+    }
+
+    List<String> modules = new ArrayList<>();
+    for (PlanModuleEntity row : planModuleRepository.findByPlanIdOrderByModuleCodeAsc(planId)) {
+      if (row.isEnabled() && row.getModuleCode() != null && !row.getModuleCode().isBlank()) {
+        modules.add(row.getModuleCode());
+      }
+    }
+
     Map<String, Object> result = new LinkedHashMap<>();
     result.put("organizationId", organizationId);
     result.put("planId", planId);
-    result.put("limits", plan.getLimits());
-    result.put("featureFlags", plan.getFeatureFlags());
+    result.put("limits", limits);
+    result.put("featureFlags", featureFlags);
+    result.put("entitlementSource", source);
+    result.put("modules", modules);
     return result;
   }
 

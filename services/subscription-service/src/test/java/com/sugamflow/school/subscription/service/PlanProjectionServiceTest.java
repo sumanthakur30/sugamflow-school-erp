@@ -12,6 +12,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.sugamflow.school.subscription.cache.SubscriptionCacheSupport;
+import com.sugamflow.school.subscription.config.SubscriptionEntitlementsProperties;
 import com.sugamflow.school.subscription.model.SubscriptionPlan;
 import com.sugamflow.school.subscription.persistence.entity.FeatureDefinitionEntity;
 import com.sugamflow.school.subscription.persistence.entity.PlanFeatureEntity;
@@ -59,13 +60,20 @@ class PlanProjectionServiceTest {
             planModuleRepository,
             featureDefinitionRepository,
             planRepository);
+    SubscriptionEntitlementsProperties entitlementsProperties =
+        new SubscriptionEntitlementsProperties();
+    entitlementsProperties.setReadMode("json");
     subscriptionService =
         new SubscriptionService(
             planRepository,
             tenantSubscriptionRepository,
             projectionService,
+            planFeatureRepository,
+            planLimitRepository,
+            planModuleRepository,
             lifecycleService,
-            cache);
+            cache,
+            entitlementsProperties);
     lenient()
         .when(cache.getEntitlements(any(), any()))
         .thenAnswer(inv -> ((java.util.function.Supplier<?>) inv.getArgument(1)).get());

@@ -24,8 +24,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * Dual-write projection of plan JSON into normalized plan_* tables. JSON remains the source of
- * truth for entitlements; this layer is for catalog/query readiness only.
+ * Dual-write projection of plan JSON into normalized plan_* tables.
+ * Phase 2: entitlements may dual-read these tables when
+ * {@code subscription.entitlements.read-mode} is {@code dual} or {@code projection}.
  */
 @Service
 public class PlanProjectionService {

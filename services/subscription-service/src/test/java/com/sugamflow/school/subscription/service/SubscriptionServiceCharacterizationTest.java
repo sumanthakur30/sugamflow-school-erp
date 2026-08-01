@@ -8,11 +8,16 @@ import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.when;
 
 import com.sugamflow.school.subscription.cache.SubscriptionCacheSupport;
+import com.sugamflow.school.subscription.config.SubscriptionEntitlementsProperties;
 import com.sugamflow.school.subscription.persistence.entity.SubscriptionPlanEntity;
 import com.sugamflow.school.subscription.persistence.entity.TenantSubscriptionEntity;
+import com.sugamflow.school.subscription.persistence.repo.PlanFeatureRepository;
+import com.sugamflow.school.subscription.persistence.repo.PlanLimitRepository;
+import com.sugamflow.school.subscription.persistence.repo.PlanModuleRepository;
 import com.sugamflow.school.subscription.persistence.repo.SubscriptionPlanRepository;
 import com.sugamflow.school.subscription.persistence.repo.TenantSubscriptionRepository;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
@@ -33,6 +38,9 @@ class SubscriptionServiceCharacterizationTest {
   @Mock private SubscriptionPlanRepository planRepository;
   @Mock private TenantSubscriptionRepository tenantSubscriptionRepository;
   @Mock private PlanProjectionService planProjectionService;
+  @Mock private PlanFeatureRepository planFeatureRepository;
+  @Mock private PlanLimitRepository planLimitRepository;
+  @Mock private PlanModuleRepository planModuleRepository;
   @Mock private SubscriptionLifecycleService lifecycleService;
   @Mock private SubscriptionCacheSupport cache;
 
@@ -40,13 +48,20 @@ class SubscriptionServiceCharacterizationTest {
 
   @BeforeEach
   void setUp() {
+    SubscriptionEntitlementsProperties entitlementsProperties =
+        new SubscriptionEntitlementsProperties();
+    entitlementsProperties.setReadMode("json");
     service =
         new SubscriptionService(
             planRepository,
             tenantSubscriptionRepository,
             planProjectionService,
+            planFeatureRepository,
+            planLimitRepository,
+            planModuleRepository,
             lifecycleService,
-            cache);
+            cache,
+            entitlementsProperties);
     lenient()
         .when(cache.getEntitlements(any(), any()))
         .thenAnswer(inv -> ((java.util.function.Supplier<?>) inv.getArgument(1)).get());
@@ -56,6 +71,15 @@ class SubscriptionServiceCharacterizationTest {
     lenient()
         .when(cache.getPlans(any()))
         .thenAnswer(inv -> ((java.util.function.Supplier<?>) inv.getArgument(0)).get());
+    lenient()
+        .when(planFeatureRepository.findByPlanIdOrderByFeatureCodeAsc(any()))
+        .thenReturn(List.of());
+    lenient()
+        .when(planLimitRepository.findByPlanIdOrderByLimitCodeAsc(any()))
+        .thenReturn(List.of());
+    lenient()
+        .when(planModuleRepository.findByPlanIdOrderByModuleCodeAsc(any()))
+        .thenReturn(List.of());
   }
 
   @Test
