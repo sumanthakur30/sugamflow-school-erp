@@ -183,6 +183,94 @@ public class SubscriptionPlan {
             Map.entry("FEATURE_CRM_CASES", true)));
   }
 
+  /** Phase 2.3 — hospital / poly / pharmacy / pathlab / retail standalone plans (no School FEATURE_*). */
+  public static SubscriptionPlan hospitalStarter() {
+    return verticalPlan(
+        "hospital-starter",
+        "Hospital Starter",
+        "HOSPITAL_STARTER",
+        Map.of("maxUsers", 25L, "maxBranches", 1L, "maxStorageGb", 10L, "maxApiCalls", 50000L),
+        Map.of(
+            "HOSPITAL_OPD", true,
+            "HOSPITAL_BILLING", true,
+            "HOSPITAL_LAB", false,
+            "HOSPITAL_PHARMACY", false,
+            "HOSPITAL_IPD", false));
+  }
+
+  public static SubscriptionPlan hospitalPro() {
+    return verticalPlan(
+        "hospital-pro",
+        "Hospital Professional",
+        "HOSPITAL_PRO",
+        Map.of("maxUsers", 100L, "maxBranches", 5L, "maxStorageGb", 50L, "maxApiCalls", 200000L),
+        Map.of(
+            "HOSPITAL_OPD", true,
+            "HOSPITAL_IPD", true,
+            "HOSPITAL_BILLING", true,
+            "HOSPITAL_LAB", true,
+            "HOSPITAL_PHARMACY", true));
+  }
+
+  public static SubscriptionPlan polyStarter() {
+    return verticalPlan(
+        "poly-starter",
+        "Polyclinic Starter",
+        "POLY_STARTER",
+        Map.of("maxUsers", 30L, "maxBranches", 2L, "maxStorageGb", 15L, "maxApiCalls", 80000L),
+        Map.of("POLY_OPD", true, "POLY_PHARMACY", true, "POLY_LAB", true));
+  }
+
+  public static SubscriptionPlan pharmacyStarter() {
+    return verticalPlan(
+        "pharmacy-starter",
+        "Pharmacy Starter",
+        "PHARMACY_STARTER",
+        Map.of("maxUsers", 15L, "maxBranches", 2L, "maxStorageGb", 10L, "maxApiCalls", 50000L),
+        Map.of(
+            "PHARMACY_SALES", true,
+            "PHARMACY_PURCHASE", true,
+            "PHARMACY_STOCK", true,
+            "PHARMACY_PO", true));
+  }
+
+  public static SubscriptionPlan pathlabStarter() {
+    return verticalPlan(
+        "pathlab-starter",
+        "PathLab Starter",
+        "PATHLAB_STARTER",
+        Map.of("maxUsers", 20L, "maxBranches", 2L, "maxStorageGb", 20L, "maxApiCalls", 80000L),
+        Map.of(
+            "PATHLAB_REGISTRATION", true,
+            "PATHLAB_SAMPLE", true,
+            "PATHLAB_RESULTS", true,
+            "PATHLAB_BILLING", true,
+            "PATHLAB_BARCODE", true));
+  }
+
+  public static SubscriptionPlan retailStarter() {
+    return verticalPlan(
+        "retail-starter",
+        "Retail Starter",
+        "RETAIL_STARTER",
+        Map.of("maxUsers", 20L, "maxBranches", 3L, "maxStorageGb", 10L, "maxApiCalls", 50000L),
+        Map.of(
+            "RETAIL_POS", true,
+            "RETAIL_INVENTORY", true,
+            "RETAIL_PURCHASE", true,
+            "RETAIL_CUSTOMERS", true,
+            "RETAIL_REPORTS", true));
+  }
+
+  private static SubscriptionPlan verticalPlan(
+      String id,
+      String name,
+      String type,
+      Map<String, Long> limits,
+      Map<String, Boolean> flags) {
+    return crmPlan(id, name, type, limits, flags);
+  }
+
   private static SubscriptionPlan crmPlan(
       String id,
       String name,

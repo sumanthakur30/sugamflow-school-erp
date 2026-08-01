@@ -82,6 +82,8 @@ public class SubscriptionPlanSeeder implements ApplicationRunner {
     ensureLimitAtLeast("maxBranches", 3L);
     // Phase 0 CRM: standalone sellable plans only — never merge School flags onto them.
     ensureCrmStandalonePlans();
+    // Phase 2.3: shop vertical plans (hospital/poly/pharmacy/pathlab/retail).
+    ensureShopVerticalPlans();
     // Phase 2: project current plan JSON into plan_feature / plan_limit / plan_module.
     planProjectionService.syncAllPlans();
     // Phase 7: seed/flag merges may bypass savePlan — clear Redis snapshots.
@@ -95,9 +97,25 @@ public class SubscriptionPlanSeeder implements ApplicationRunner {
     seedCrmIfAbsent(SubscriptionPlan.crmEnterprise());
   }
 
+  private void ensureShopVerticalPlans() {
+    seedVerticalIfAbsent(SubscriptionPlan.hospitalStarter());
+    seedVerticalIfAbsent(SubscriptionPlan.hospitalPro());
+    seedVerticalIfAbsent(SubscriptionPlan.polyStarter());
+    seedVerticalIfAbsent(SubscriptionPlan.pharmacyStarter());
+    seedVerticalIfAbsent(SubscriptionPlan.pathlabStarter());
+    seedVerticalIfAbsent(SubscriptionPlan.retailStarter());
+  }
+
   private void seedCrmIfAbsent(SubscriptionPlan plan) {
     if (planRepository.findById(plan.getId()).isEmpty()) {
       log.info("Seeding CRM plan {}", plan.getId());
+      seed(plan);
+    }
+  }
+
+  private void seedVerticalIfAbsent(SubscriptionPlan plan) {
+    if (planRepository.findById(plan.getId()).isEmpty()) {
+      log.info("Seeding shop vertical plan {}", plan.getId());
       seed(plan);
     }
   }
@@ -111,10 +129,33 @@ public class SubscriptionPlanSeeder implements ApplicationRunner {
     return id.startsWith("crm-") || type.regionMatches(true, 0, "CRM_", 0, 4);
   }
 
+  /** Shop/CRM vertical SKUs must not receive School FEATURE_* merges. */
+  private static boolean isNonSchoolPlan(SubscriptionPlanEntity entity) {
+    if (entity == null) {
+      return true;
+    }
+    if (isCrmPlan(entity)) {
+      return true;
+    }
+    String id = entity.getId() == null ? "" : entity.getId();
+    String type = entity.getPlanType() == null ? "" : entity.getPlanType().toUpperCase();
+    return id.startsWith("hospital-")
+        || id.startsWith("poly-")
+        || id.startsWith("pharmacy-")
+        || id.startsWith("pathlab-")
+        || id.startsWith("retail-")
+        || id.startsWith("medshop-")
+        || type.startsWith("HOSPITAL_")
+        || type.startsWith("POLY_")
+        || type.startsWith("PHARMACY_")
+        || type.startsWith("PATHLAB_")
+        || type.startsWith("RETAIL_");
+  }
+
   private void ensureLimitAtLeast(String limitKey, long minValue) {
     int updated = 0;
     for (SubscriptionPlanEntity entity : planRepository.findAll()) {
-      if (isCrmPlan(entity)) {
+      if (isNonSchoolPlan(entity)) {
         continue;
       }
       Map<String, Object> limits = entity.getLimitsJson();
@@ -157,7 +198,7 @@ public class SubscriptionPlanSeeder implements ApplicationRunner {
   private void ensureFlagOnAllPlans(String flag) {
     int updated = 0;
     for (SubscriptionPlanEntity entity : planRepository.findAll()) {
-      if (isCrmPlan(entity)) {
+      if (isNonSchoolPlan(entity)) {
         continue;
       }
       Map<String, Object> flags = entity.getFeatureFlagsJson();

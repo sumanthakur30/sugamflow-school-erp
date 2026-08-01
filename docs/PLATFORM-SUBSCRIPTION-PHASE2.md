@@ -99,12 +99,25 @@ Unmapped platform codes are still unioned as-is (harmless if unused by `@Require
 
 ```properties
 shop.platform.subscription.enabled=true
-shop.platform.subscription.base-url=http://gateway:9090
+shop.platform.subscription.base-url=http://localhost:9090
+# or from Docker shop-service: http://host.docker.internal:8182
 shop.platform.subscription.organization-id-source=SHOP_ID
 shop.platform.subscription.prefer-platform-access=false
 ```
 
-Assign a platform plan to that shop/org in Super Admin before expecting overlay. Smoke `GET …/effective-config` for modules/features.
+Compose passes `SHOP_PLATFORM_SUBSCRIPTION_*` into `shop-service` (default still off).
+
+Assign a vertical plan to org id = **shopId** in Super Admin, then smoke:
+
+```powershell
+.\scripts\platform-subscription-bridge-smoke.ps1 -ShopId POLY-DEMO-01 -PlanId poly-starter
+```
+
+## 2.3 — Catalog completeness
+
+Flyway **V19** + seeder: `hospital-starter`, `hospital-pro`, `poly-starter`, `pharmacy-starter`, `pathlab-starter`, `retail-starter` with feature→module catalog links. School `starter` untouched; School FEATURE_* merges skip these vertical SKUs.
+
+Mapper also covers `RETAIL_*` → shop `ModuleCode`.
 
 ---
 
@@ -130,8 +143,8 @@ Assign a platform plan to that shop/org in Super Admin before expecting overlay.
 ## Engineering checklist
 
 1. Persist Phase 2 doc (this file).  
-2. School dual-read (`read-mode`).  
-3. Shop `PlatformModuleCodeMapper` + adapter merge.  
-4. Seed/parity for retail+hospital plans (2.3).  
-5. Env opt-in dual-read shop (2.2).  
+2. School dual-read (`read-mode`) — done.  
+3. Shop `PlatformModuleCodeMapper` + adapter merge — done.  
+4. Seed/parity for retail+hospital plans (V19 + seeder) — done.  
+5. Env opt-in dual-read shop + `platform-subscription-bridge-smoke.ps1` — done (enable flag to run).  
 6. Prefer-projection / cutover only after smoke.
