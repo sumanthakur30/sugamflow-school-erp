@@ -37,7 +37,8 @@ $modules = @(
   @{ Name = 'payroll-service'; Port = 8197 },
   @{ Name = 'staff-service'; Port = 8198 },
   @{ Name = 'academic-structure-service'; Port = 8199 },
-  @{ Name = 'website-service'; Port = 8200 }
+  @{ Name = 'website-service'; Port = 8200 },
+  @{ Name = 'cms-service'; Port = 8201 }
 )
 
 function Get-JavaExe {
@@ -83,7 +84,7 @@ function Get-ServiceNameFromCommandLine([string]$CommandLine) {
 function Stop-SchoolServices {
   Write-Host 'Stopping school service JVMs...'
   $killed = @{}
-  foreach ($port in 8181..8200) {
+  foreach ($port in 8181..8201) {
     Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyContinue | ForEach-Object {
       if (-not $killed.ContainsKey($_.OwningProcess)) {
         Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue

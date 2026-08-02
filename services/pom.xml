@@ -36,6 +36,7 @@
     <module>staff-service</module>
     <module>academic-structure-service</module>
     <module>website-service</module>
+    <module>cms-service</module>
   </modules>
 
   <properties>

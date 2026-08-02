@@ -266,6 +266,12 @@ export class ShellComponent implements OnInit {
           feature: 'FEATURE_WHITE_LABEL',
           roles: ['SHOP_OWNER', 'SUPER_ADMIN', 'ADMIN'],
         },
+        {
+          path: '/admin/website-cms',
+          label: 'Website CMS',
+          feature: 'FEATURE_WEBSITE_CMS',
+          roles: ['SHOP_OWNER', 'SUPER_ADMIN', 'ADMIN'],
+        },
       ],
     },
   ];

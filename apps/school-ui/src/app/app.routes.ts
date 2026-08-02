@@ -368,6 +368,13 @@ export const routes: Routes = [
           ),
       },
       {
+        path: 'admin/website-cms',
+        canActivate: [featureGuard],
+        data: { feature: 'FEATURE_WEBSITE_CMS', roles: PLATFORM_ADMIN_ROLES },
+        loadComponent: () =>
+          import('./features/website-cms/website-cms.component').then((m) => m.WebsiteCmsComponent),
+      },
+      {
         path: 'admin/subscription',
         canActivate: [featureGuard],
         data: { roles: PLATFORM_ADMIN_ROLES },

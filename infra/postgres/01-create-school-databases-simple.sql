@@ -18,6 +18,7 @@ CREATE USER school_payroll WITH PASSWORD 'school_payroll';
 CREATE USER school_staff WITH PASSWORD 'school_staff';
 CREATE USER school_academic WITH PASSWORD 'school_academic';
 CREATE USER school_website WITH PASSWORD 'school_website';
+CREATE USER school_cms WITH PASSWORD 'school_cms';
 
 CREATE DATABASE school_settings_db OWNER school_settings;
 CREATE DATABASE school_subscription_db OWNER school_subscription;
@@ -39,3 +40,4 @@ CREATE DATABASE school_payroll_db OWNER school_payroll;
 CREATE DATABASE school_staff_db OWNER school_staff;
 CREATE DATABASE school_academic_db OWNER school_academic;
 CREATE DATABASE school_website_db OWNER school_website;
+CREATE DATABASE school_cms_db OWNER school_cms;

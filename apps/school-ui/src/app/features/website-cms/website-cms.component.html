@@ -1,0 +1,44 @@
+<section class="page">
+  <header class="head">
+    <div>
+      <h1>Website CMS</h1>
+      <p>Manage public website pages for this school.</p>
+    </div>
+    <button type="button" class="primary" (click)="startCreate()">New page</button>
+  </header>
+
+  <p class="error" *ngIf="error">{{ error }}</p>
+  <p *ngIf="loading">Loading…</p>
+
+  <div class="layout" *ngIf="!loading">
+    <div class="list">
+      <article *ngFor="let p of pages">
+        <div>
+          <strong>{{ p.title }}</strong>
+          <div class="meta">/{{ p.slug }} · {{ p.status }}</div>
+        </div>
+        <div class="actions">
+          <button type="button" (click)="startEdit(p)">Edit</button>
+          <button type="button" *ngIf="p.status !== 'PUBLISHED'" (click)="publish(p)">Publish</button>
+          <button type="button" *ngIf="p.status === 'PUBLISHED'" (click)="unpublish(p)">Unpublish</button>
+        </div>
+      </article>
+    </div>
+
+    <form class="editor" (ngSubmit)="save()">
+      <h2>{{ editing ? 'Edit page' : 'New page' }}</h2>
+      <label>Slug <input name="slug" [(ngModel)]="draft.slug" required /></label>
+      <label>Title <input name="title" [(ngModel)]="draft.title" required /></label>
+      <label>Summary <input name="summary" [(ngModel)]="draft.summary" /></label>
+      <label>SEO title <input name="seoTitle" [(ngModel)]="draft.seoTitle" /></label>
+      <label>SEO description <input name="seoDescription" [(ngModel)]="draft.seoDescription" /></label>
+      <label
+        >Body HTML
+        <textarea name="bodyHtml" rows="12" [(ngModel)]="draft.bodyHtml"></textarea>
+      </label>
+      <button type="submit" class="primary" [disabled]="saving">
+        {{ saving ? 'Saving…' : 'Save' }}
+      </button>
+    </form>
+  </div>
+</section>
