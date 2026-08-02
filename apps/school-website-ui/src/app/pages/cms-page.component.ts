@@ -2,6 +2,7 @@ import { Component, OnInit, inject } from '@angular/core';
 import { ActivatedRoute } from '@angular/router';
 import { NgIf } from '@angular/common';
 import { WebsiteApiService } from '../core/website-api.service';
+import { SeoService } from '../core/seo.service';
 
 @Component({
   selector: 'app-cms-page',
@@ -35,6 +36,7 @@ import { WebsiteApiService } from '../core/website-api.service';
 export class CmsPageComponent implements OnInit {
   private readonly route = inject(ActivatedRoute);
   private readonly api = inject(WebsiteApiService);
+  private readonly seo = inject(SeoService);
   page: Record<string, unknown> | null = null;
 
   ngOnInit(): void {
@@ -44,7 +46,10 @@ export class CmsPageComponent implements OnInit {
         this.api.getPage(slug).subscribe({
           next: (p) => {
             this.page = p;
-            document.title = String(p['seoTitle'] || p['title'] || 'Page');
+            this.seo.apply({
+              title: String(p['seoTitle'] || p['title'] || 'Page'),
+              description: String(p['seoDescription'] || p['summary'] || ''),
+            });
           },
           error: () => (this.page = { title: 'Not found', bodyHtml: '<p>Page not found.</p>' }),
         });

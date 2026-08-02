@@ -44,6 +44,14 @@ public class CmsContentService {
     this.galleryRepository = galleryRepository;
   }
 
+  public List<PageResponse> listPublishedPages(String organizationId) {
+    return pageRepository
+        .findByOrganizationIdAndStatusOrderBySlugAsc(requireOrg(organizationId), PUBLISHED)
+        .stream()
+        .map(this::toPage)
+        .toList();
+  }
+
   public PageResponse getPublishedPage(String organizationId, String slug) {
     return pageRepository
         .findByOrganizationIdAndSlugAndStatus(requireOrg(organizationId), normalizeSlug(slug), PUBLISHED)

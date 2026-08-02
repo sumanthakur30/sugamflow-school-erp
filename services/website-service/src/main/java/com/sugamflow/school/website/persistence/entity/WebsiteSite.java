@@ -43,6 +43,10 @@ public class WebsiteSite {
   @Column(name = "navigation_json", nullable = false, columnDefinition = "jsonb")
   private String navigationJson;
 
+  @JdbcTypeCode(SqlTypes.JSON)
+  @Column(name = "seo_json", nullable = false, columnDefinition = "jsonb")
+  private String seoJson;
+
   @Column(name = "created_at", nullable = false)
   private Instant createdAt;
 
@@ -119,6 +123,14 @@ public class WebsiteSite {
 
   public void setNavigationJson(String navigationJson) {
     this.navigationJson = navigationJson;
+  }
+
+  public String getSeoJson() {
+    return seoJson;
+  }
+
+  public void setSeoJson(String seoJson) {
+    this.seoJson = seoJson;
   }
 
   public Instant getCreatedAt() {

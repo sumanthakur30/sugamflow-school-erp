@@ -2,15 +2,23 @@
   <header class="head">
     <div>
       <h1>Website CMS</h1>
-      <p>Manage public website pages for this school.</p>
+      <p>Manage public website pages, homepage sections, and SEO defaults.</p>
     </div>
     <button type="button" class="primary" (click)="startCreate()">New page</button>
   </header>
 
-  <p class="error" *ngIf="error">{{ error }}</p>
-  <p *ngIf="loading">Loading…</p>
+  <div class="tabs">
+    <button type="button" [class.active]="tab === 'pages'" (click)="tab = 'pages'">Pages</button>
+    <button type="button" [class.active]="tab === 'homepage'" (click)="tab = 'homepage'">
+      Homepage
+    </button>
+    <button type="button" [class.active]="tab === 'seo'" (click)="tab = 'seo'">SEO</button>
+  </div>
 
-  <div class="layout" *ngIf="!loading">
+  <p class="error" *ngIf="error">{{ error }}</p>
+  <p *ngIf="loading && tab === 'pages'">Loading…</p>
+
+  <div class="layout" *ngIf="tab === 'pages' && !loading">
     <div class="list">
       <article *ngFor="let p of pages">
         <div>
@@ -38,6 +46,39 @@
       </label>
       <button type="submit" class="primary" [disabled]="saving">
         {{ saving ? 'Saving…' : 'Save' }}
+      </button>
+    </form>
+  </div>
+
+  <div class="panel" *ngIf="tab === 'homepage'">
+    <h2>Homepage sections</h2>
+    <p class="hint">Enable/disable and reorder sections shown on the public home page.</p>
+    <article class="section-row" *ngFor="let s of sections; let i = index">
+      <label class="check">
+        <input type="checkbox" [(ngModel)]="s.enabled" [name]="'en' + i" />
+        {{ s.type }}
+      </label>
+      <div class="actions">
+        <button type="button" (click)="moveSection(i, -1)">Up</button>
+        <button type="button" (click)="moveSection(i, 1)">Down</button>
+      </div>
+    </article>
+    <button type="button" class="primary" (click)="saveHomepage()" [disabled]="saving">
+      {{ saving ? 'Saving…' : 'Save homepage' }}
+    </button>
+  </div>
+
+  <div class="panel" *ngIf="tab === 'seo'">
+    <h2>Site SEO defaults</h2>
+    <form class="editor" (ngSubmit)="saveSeo()">
+      <label>Default title <input name="defaultTitle" [(ngModel)]="seo.defaultTitle" /></label>
+      <label
+        >Default description
+        <textarea name="defaultDescription" rows="3" [(ngModel)]="seo.defaultDescription"></textarea>
+      </label>
+      <label>OG image URL <input name="ogImageUrl" [(ngModel)]="seo.ogImageUrl" /></label>
+      <button type="submit" class="primary" [disabled]="saving">
+        {{ saving ? 'Saving…' : 'Save SEO' }}
       </button>
     </form>
   </div>

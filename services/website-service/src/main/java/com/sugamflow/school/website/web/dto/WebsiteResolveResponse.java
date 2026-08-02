@@ -13,4 +13,5 @@ public record WebsiteResolveResponse(
     String erpLoginUrl,
     Map<String, Object> theme,
     List<Map<String, Object>> homepage,
-    List<Map<String, Object>> navigation) {}
+    List<Map<String, Object>> navigation,
+    Map<String, Object> seo) {}

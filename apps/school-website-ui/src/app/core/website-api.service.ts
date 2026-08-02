@@ -13,6 +13,7 @@ export interface WebsiteResolve {
   theme: Record<string, string | null>;
   homepage: Array<Record<string, unknown>>;
   navigation: Array<{ label: string; path: string; order?: number; external?: boolean }>;
+  seo?: Record<string, string | null>;
 }
 
 interface ApiResponse<T> {

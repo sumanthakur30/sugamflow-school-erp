@@ -23,6 +23,12 @@ public class CmsPublicController {
     this.contentService = contentService;
   }
 
+  @GetMapping("/pages")
+  public ApiResponse<List<PageResponse>> pages(
+      @RequestParam("organizationId") String organizationId) {
+    return ApiResponse.ok(contentService.listPublishedPages(organizationId));
+  }
+
   @GetMapping("/pages/{slug}")
   public ApiResponse<PageResponse> page(
       @RequestParam("organizationId") String organizationId, @PathVariable("slug") String slug) {

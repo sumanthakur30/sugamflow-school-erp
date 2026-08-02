@@ -9,6 +9,8 @@ import org.springframework.data.jpa.repository.JpaRepository;
 public interface CmsPageRepository extends JpaRepository<CmsPage, UUID> {
   Optional<CmsPage> findByOrganizationIdAndSlug(String organizationId, String slug);
 
+  List<CmsPage> findByOrganizationIdAndStatusOrderBySlugAsc(String organizationId, String status);
+
   Optional<CmsPage> findByOrganizationIdAndSlugAndStatus(
       String organizationId, String slug, String status);
 

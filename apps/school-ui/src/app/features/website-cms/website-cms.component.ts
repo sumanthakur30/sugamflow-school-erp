@@ -16,6 +16,13 @@ interface PageRow {
   updatedAt?: string;
 }
 
+interface HomepageSection {
+  type: string;
+  enabled: boolean;
+  order: number;
+  content?: Record<string, unknown>;
+}
+
 interface ApiResponse<T> {
   success: boolean;
   data: T;
@@ -31,7 +38,10 @@ interface ApiResponse<T> {
 })
 export class WebsiteCmsComponent implements OnInit {
   private readonly http = inject(HttpClient);
+  tab: 'pages' | 'homepage' | 'seo' = 'pages';
   pages: PageRow[] = [];
+  sections: HomepageSection[] = [];
+  seo = { defaultTitle: '', defaultDescription: '', ogImageUrl: '' };
   loading = false;
   saving = false;
   error = '';
@@ -47,6 +57,7 @@ export class WebsiteCmsComponent implements OnInit {
 
   ngOnInit(): void {
     this.reload();
+    this.loadWebsiteBootstrap();
   }
 
   reload(): void {
@@ -66,9 +77,37 @@ export class WebsiteCmsComponent implements OnInit {
       });
   }
 
+  loadWebsiteBootstrap(): void {
+    this.http
+      .get<ApiResponse<Record<string, unknown>>>(
+        `${environment.apiBaseUrl}/api/website/admin/bootstrap`
+      )
+      .subscribe({
+        next: (res) => {
+          const data = res.data || {};
+          this.sections = ((data['homepage'] as HomepageSection[]) || []).map((s) => ({
+            type: String(s.type),
+            enabled: s.enabled !== false,
+            order: Number(s.order || 0),
+            content: s.content || {},
+          }));
+          const seo = (data['seo'] as Record<string, string>) || {};
+          this.seo = {
+            defaultTitle: seo['defaultTitle'] || '',
+            defaultDescription: seo['defaultDescription'] || '',
+            ogImageUrl: seo['ogImageUrl'] || '',
+          };
+        },
+        error: () => {
+          /* website bootstrap optional if FEATURE_WEBSITE off */
+        },
+      });
+  }
+
   startCreate(): void {
     this.editing = null;
     this.draft = this.emptyDraft();
+    this.tab = 'pages';
   }
 
   startEdit(page: PageRow): void {
@@ -81,6 +120,7 @@ export class WebsiteCmsComponent implements OnInit {
       seoTitle: page.seoTitle || '',
       seoDescription: page.seoDescription || '',
     };
+    this.tab = 'pages';
   }
 
   save(): void {
@@ -131,6 +171,57 @@ export class WebsiteCmsComponent implements OnInit {
       .subscribe({
         next: () => this.reload(),
         error: (err) => (this.error = err?.error?.message || 'Unpublish failed'),
+      });
+  }
+
+  moveSection(index: number, delta: number): void {
+    const target = index + delta;
+    if (target < 0 || target >= this.sections.length) return;
+    const copy = [...this.sections];
+    const [row] = copy.splice(index, 1);
+    copy.splice(target, 0, row);
+    this.sections = copy.map((s, i) => ({ ...s, order: (i + 1) * 10 }));
+  }
+
+  saveHomepage(): void {
+    this.saving = true;
+    this.error = '';
+    this.http
+      .put<ApiResponse<HomepageSection[]>>(
+        `${environment.apiBaseUrl}/api/website/admin/homepage`,
+        this.sections
+      )
+      .subscribe({
+        next: (res) => {
+          this.saving = false;
+          this.sections = (res.data || []).map((s) => ({
+            type: String(s.type),
+            enabled: s.enabled !== false,
+            order: Number(s.order || 0),
+            content: s.content || {},
+          }));
+        },
+        error: (err) => {
+          this.saving = false;
+          this.error = err?.error?.message || 'Failed to save homepage sections';
+        },
+      });
+  }
+
+  saveSeo(): void {
+    this.saving = true;
+    this.error = '';
+    this.http
+      .put<ApiResponse<Record<string, string>>>(
+        `${environment.apiBaseUrl}/api/website/admin/seo`,
+        this.seo
+      )
+      .subscribe({
+        next: () => (this.saving = false),
+        error: (err) => {
+          this.saving = false;
+          this.error = err?.error?.message || 'Failed to save SEO defaults';
+        },
       });
   }
 

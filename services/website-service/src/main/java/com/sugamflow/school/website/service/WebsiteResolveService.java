@@ -80,7 +80,8 @@ public class WebsiteResolveService {
         erpLogin,
         readMap(site.getThemeJson()),
         readList(site.getHomepageJson()),
-        readList(site.getNavigationJson()));
+        readList(site.getNavigationJson()),
+        readMap(site.getSeoJson()));
   }
 
   public List<WebsiteDomain> listDomains(String organizationId) {
@@ -89,6 +90,98 @@ public class WebsiteResolveService {
 
   public Optional<WebsiteSite> findSite(String organizationId) {
     return siteRepository.findByOrganizationId(organizationId);
+  }
+
+  @org.springframework.transaction.annotation.Transactional
+  public List<Map<String, Object>> updateHomepage(
+      String organizationId, List<Map<String, Object>> sections) {
+    WebsiteSite site = requireSite(organizationId);
+    List<Map<String, Object>> normalized = normalizeSections(sections);
+    try {
+      site.setHomepageJson(objectMapper.writeValueAsString(normalized));
+    } catch (Exception ex) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid homepage JSON");
+    }
+    site.setUpdatedAt(java.time.Instant.now());
+    siteRepository.save(site);
+    return normalized;
+  }
+
+  @org.springframework.transaction.annotation.Transactional
+  public Map<String, Object> updateTheme(String organizationId, Map<String, Object> theme) {
+    WebsiteSite site = requireSite(organizationId);
+    Map<String, Object> safe = theme == null ? Collections.emptyMap() : theme;
+    try {
+      site.setThemeJson(objectMapper.writeValueAsString(safe));
+    } catch (Exception ex) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid theme JSON");
+    }
+    site.setUpdatedAt(java.time.Instant.now());
+    siteRepository.save(site);
+    return safe;
+  }
+
+  @org.springframework.transaction.annotation.Transactional
+  public Map<String, Object> updateSeo(String organizationId, Map<String, Object> seo) {
+    WebsiteSite site = requireSite(organizationId);
+    Map<String, Object> safe = seo == null ? Collections.emptyMap() : seo;
+    try {
+      site.setSeoJson(objectMapper.writeValueAsString(safe));
+    } catch (Exception ex) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid SEO JSON");
+    }
+    site.setUpdatedAt(java.time.Instant.now());
+    siteRepository.save(site);
+    return safe;
+  }
+
+  private WebsiteSite requireSite(String organizationId) {
+    return siteRepository
+        .findByOrganizationId(organizationId)
+        .orElseThrow(
+            () ->
+                new ResponseStatusException(
+                    HttpStatus.NOT_FOUND, "No website configured for this organization"));
+  }
+
+  private List<Map<String, Object>> normalizeSections(List<Map<String, Object>> sections) {
+    if (sections == null) {
+      return Collections.emptyList();
+    }
+    java.util.ArrayList<Map<String, Object>> copy = new java.util.ArrayList<>();
+    int i = 0;
+    for (Map<String, Object> section : sections) {
+      if (section == null || section.get("type") == null) {
+        continue;
+      }
+      java.util.LinkedHashMap<String, Object> row = new java.util.LinkedHashMap<>(section);
+      Object enabled = row.get("enabled");
+      if (enabled == null) {
+        row.put("enabled", true);
+      }
+      if (row.get("order") == null) {
+        row.put("order", (i + 1) * 10);
+      }
+      copy.add(row);
+      i++;
+    }
+    copy.sort(
+        (a, b) ->
+            Integer.compare(
+                toInt(a.get("order"), 0),
+                toInt(b.get("order"), 0)));
+    return copy;
+  }
+
+  private static int toInt(Object value, int fallback) {
+    if (value instanceof Number n) {
+      return n.intValue();
+    }
+    try {
+      return Integer.parseInt(String.valueOf(value));
+    } catch (Exception ex) {
+      return fallback;
+    }
   }
 
   /** Strip scheme, path, port; lowercase; trim trailing dot. */

@@ -15,8 +15,32 @@
   color: #64748b;
 }
 
+.tabs {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.tabs button {
+  border: 1px solid #cbd5e1;
+  background: #fff;
+  border-radius: 999px;
+  padding: 0.35rem 0.85rem;
+  cursor: pointer;
+}
+
+.tabs button.active {
+  background: #0b3d91;
+  color: #fff;
+  border-color: #0b3d91;
+}
+
 .error {
   color: #b91c1c;
+}
+
+.hint {
+  color: #64748b;
 }
 
 .layout {
@@ -25,7 +49,8 @@
   gap: 1rem;
 }
 
-.list article {
+.list article,
+.section-row {
   display: flex;
   justify-content: space-between;
   gap: 0.75rem;
@@ -46,6 +71,24 @@
   display: flex;
   flex-direction: column;
   gap: 0.35rem;
+}
+
+.section-row .actions {
+  flex-direction: row;
+}
+
+.panel {
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 1rem;
+}
+
+.check {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-weight: 600;
 }
 
 .editor {
@@ -84,6 +127,7 @@ button.primary {
   background: #0b3d91;
   color: #fff;
   border-color: #0b3d91;
+  margin-top: 0.5rem;
 }
 
 @media (max-width: 900px) {
