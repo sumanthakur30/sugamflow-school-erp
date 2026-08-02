@@ -6,14 +6,22 @@ import com.sugamflow.school.cms.persistence.repo.CmsMediaAssetRepository;
 import com.sugamflow.school.cms.persistence.repo.CmsPageRepository;
 import com.sugamflow.school.cms.web.dto.MediaAssetResponse;
 import com.sugamflow.school.cms.web.dto.MediaRegisterRequest;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.io.FileSystemResource;
+import org.springframework.core.io.Resource;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.server.ResponseStatusException;
 
 @Service
@@ -26,14 +34,20 @@ public class CmsMediaService {
   private final CmsMediaAssetRepository mediaRepository;
   private final CmsPageRepository pageRepository;
   private final SubscriptionEntitlementsClient entitlementsClient;
+  private final Path storageRoot;
+  private final String publicBaseUrl;
 
   public CmsMediaService(
       CmsMediaAssetRepository mediaRepository,
       CmsPageRepository pageRepository,
-      SubscriptionEntitlementsClient entitlementsClient) {
+      SubscriptionEntitlementsClient entitlementsClient,
+      @Value("${cms.media.storage-dir:${java.io.tmpdir}/school-cms-media}") String storageDir,
+      @Value("${cms.media.public-base-url:}") String publicBaseUrl) {
     this.mediaRepository = mediaRepository;
     this.pageRepository = pageRepository;
     this.entitlementsClient = entitlementsClient;
+    this.storageRoot = Path.of(storageDir).toAbsolutePath().normalize();
+    this.publicBaseUrl = publicBaseUrl == null ? "" : publicBaseUrl.trim().replaceAll("/$", "");
   }
 
   public List<MediaAssetResponse> list(String organizationId) {
@@ -73,7 +87,87 @@ public class CmsMediaService {
     asset.setUrl(request.url().trim());
     asset.setByteSize(byteSize);
     asset.setCreatedAt(Instant.now());
-    return toResponse(mediaRepository.save(asset));
+    MediaAssetResponse saved = toResponse(mediaRepository.save(asset));
+    if (byteSize > 0) {
+      entitlementsClient.incrementUsage(organizationId, LIMIT_STORAGE, 1, "cms-media-register");
+    }
+    return saved;
+  }
+
+  @Transactional
+  public MediaAssetResponse upload(String organizationId, MultipartFile file) {
+    if (file == null || file.isEmpty()) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "file is required");
+    }
+    long byteSize = file.getSize();
+    assertStorageAllowed(organizationId, byteSize);
+
+    UUID id = UUID.randomUUID();
+    String original =
+        file.getOriginalFilename() == null ? "upload.bin" : file.getOriginalFilename();
+    String safeName = original.replaceAll("[^a-zA-Z0-9._\\-]+", "_");
+    Path orgDir = storageRoot.resolve(organizationId);
+    try {
+      Files.createDirectories(orgDir);
+      Path target = orgDir.resolve(id + "-" + safeName);
+      file.transferTo(target);
+    } catch (IOException ex) {
+      throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Failed to store file");
+    }
+
+    String url =
+        (publicBaseUrl.isBlank() ? "" : publicBaseUrl)
+            + "/api/cms/public/media/"
+            + id
+            + "?organizationId="
+            + organizationId;
+
+    CmsMediaAsset asset = new CmsMediaAsset();
+    asset.setId(id);
+    asset.setOrganizationId(organizationId);
+    asset.setFileName(safeName);
+    asset.setContentType(file.getContentType());
+    asset.setUrl(url);
+    asset.setByteSize(byteSize);
+    asset.setCreatedAt(Instant.now());
+    MediaAssetResponse saved = toResponse(mediaRepository.save(asset));
+    entitlementsClient.incrementUsage(organizationId, LIMIT_STORAGE, 1, "cms-media-upload");
+    return saved;
+  }
+
+  public Resource loadFile(String organizationId, UUID id) {
+    CmsMediaAsset asset =
+        mediaRepository
+            .findByIdAndOrganizationId(id, organizationId)
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Media not found"));
+    Path orgDir = storageRoot.resolve(organizationId);
+    try {
+      if (!Files.isDirectory(orgDir)) {
+        throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Media file missing");
+      }
+      try (var stream = Files.list(orgDir)) {
+        Path match =
+            stream
+                .filter(p -> p.getFileName().toString().startsWith(id + "-"))
+                .findFirst()
+                .orElseThrow(
+                    () -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Media file missing"));
+        return new FileSystemResource(match);
+      }
+    } catch (ResponseStatusException ex) {
+      throw ex;
+    } catch (IOException ex) {
+      throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Media file missing");
+    }
+  }
+
+  public MediaType mediaTypeFor(String organizationId, UUID id) {
+    return mediaRepository
+        .findByIdAndOrganizationId(id, organizationId)
+        .map(CmsMediaAsset::getContentType)
+        .filter(t -> t != null && !t.isBlank())
+        .map(MediaType::parseMediaType)
+        .orElse(MediaType.APPLICATION_OCTET_STREAM);
   }
 
   @Transactional
@@ -83,6 +177,23 @@ public class CmsMediaService {
             .findByIdAndOrganizationId(id, organizationId)
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Media not found"));
     mediaRepository.delete(asset);
+    try {
+      Path orgDir = storageRoot.resolve(organizationId);
+      if (Files.isDirectory(orgDir)) {
+        try (var stream = Files.list(orgDir)) {
+          stream
+              .filter(p -> p.getFileName().toString().startsWith(id + "-"))
+              .forEach(
+                  p -> {
+                    try {
+                      Files.deleteIfExists(p);
+                    } catch (IOException ignored) {
+                    }
+                  });
+        }
+      }
+    } catch (IOException ignored) {
+    }
   }
 
   public void assertPageCreateAllowed(String organizationId) {
@@ -97,6 +208,10 @@ public class CmsMediaService {
           HttpStatus.PAYMENT_REQUIRED,
           "Website page limit reached (" + pageLimit + "). Upgrade plan or archive pages.");
     }
+  }
+
+  public void recordPageCreated(String organizationId) {
+    entitlementsClient.incrementUsage(organizationId, LIMIT_PAGES, 1, "cms-page-create");
   }
 
   private void assertStorageAllowed(String organizationId, long additionalBytes) {

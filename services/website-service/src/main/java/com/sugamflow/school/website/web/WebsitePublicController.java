@@ -125,10 +125,80 @@ public class WebsitePublicController {
         + "\n";
   }
 
+  /**
+   * Crawler-friendly HTML shell with SEO meta (Phase 5 hardening). Edge can serve this for bots
+   * while the SPA hydrates for users.
+   */
+  @GetMapping(value = "/prerender", produces = MediaType.TEXT_HTML_VALUE)
+  public String prerender(
+      @RequestParam("host") String host,
+      @RequestParam(value = "path", defaultValue = "/") String path) {
+    WebsiteResolveResponse site = resolveService.resolveByHost(host);
+    String title =
+        site.seo() != null && site.seo().get("defaultTitle") != null
+            ? String.valueOf(site.seo().get("defaultTitle"))
+            : site.displayName();
+    String description =
+        site.seo() != null && site.seo().get("defaultDescription") != null
+            ? String.valueOf(site.seo().get("defaultDescription"))
+            : site.displayName() + " — official website";
+    String safePath = path == null || path.isBlank() ? "/" : path;
+    if (!safePath.startsWith("/")) {
+      safePath = "/" + safePath;
+    }
+    String og =
+        site.seo() != null && site.seo().get("ogImageUrl") != null
+            ? String.valueOf(site.seo().get("ogImageUrl"))
+            : "";
+    StringBuilder html = new StringBuilder();
+    html.append("<!doctype html><html lang=\"en\"><head>");
+    html.append("<meta charset=\"utf-8\"/>");
+    html.append("<title>").append(escape(title)).append("</title>");
+    html.append("<meta name=\"description\" content=\"")
+        .append(escape(description))
+        .append("\"/>");
+    html.append("<meta property=\"og:title\" content=\"").append(escape(title)).append("\"/>");
+    html.append("<meta property=\"og:description\" content=\"")
+        .append(escape(description))
+        .append("\"/>");
+    if (!og.isBlank()) {
+      html.append("<meta property=\"og:image\" content=\"").append(escape(og)).append("\"/>");
+    }
+    html.append("<link rel=\"canonical\" href=\"https://")
+        .append(escape(site.host()))
+        .append(escape(safePath))
+        .append("\"/>");
+    html.append("<meta name=\"robots\" content=\"index,follow\"/>");
+    html.append("</head><body>");
+    html.append("<h1>").append(escape(site.displayName())).append("</h1>");
+    html.append("<p>").append(escape(description)).append("</p>");
+    html.append("<p><a href=\"")
+        .append(escape(safePath))
+        .append("\">Continue to site</a></p>");
+    html.append("<!-- org=")
+        .append(escape(site.organizationId()))
+        .append(" path=")
+        .append(escape(safePath))
+        .append(" -->");
+    html.append("</body></html>");
+    return html.toString();
+  }
+
   private static Map<String, Object> entry(String path, String priority) {
     Map<String, Object> row = new LinkedHashMap<>();
     row.put("path", path);
     row.put("priority", priority);
     return row;
+  }
+
+  private static String escape(String value) {
+    if (value == null) {
+      return "";
+    }
+    return value
+        .replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+        .replace("\"", "&quot;");
   }
 }

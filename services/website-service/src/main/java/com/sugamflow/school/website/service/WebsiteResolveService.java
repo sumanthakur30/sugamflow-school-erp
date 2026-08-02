@@ -97,6 +97,103 @@ public class WebsiteResolveService {
   }
 
   @org.springframework.transaction.annotation.Transactional
+  public Map<String, Object> upsertDomain(
+      String organizationId, String rawHost, boolean primary, String status, String sslStatus) {
+    String host = normalizeHost(rawHost);
+    if (host.isBlank()) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "host is required");
+    }
+    requireSite(organizationId);
+
+    Optional<WebsiteDomain> existingHost = domainRepository.findByHostIgnoreCase(host);
+    if (existingHost.isPresent()
+        && !existingHost.get().getOrganizationId().equals(organizationId)) {
+      throw new ResponseStatusException(
+          HttpStatus.CONFLICT, "Host already mapped to another organization");
+    }
+
+    WebsiteDomain domain =
+        existingHost.orElseGet(
+            () -> {
+              WebsiteDomain d = new WebsiteDomain();
+              d.setId(java.util.UUID.randomUUID());
+              d.setOrganizationId(organizationId);
+              d.setHost(host);
+              d.setCreatedAt(java.time.Instant.now());
+              return d;
+            });
+
+    if (primary) {
+      for (WebsiteDomain other :
+          domainRepository.findByOrganizationIdOrderByPrimaryDescHostAsc(organizationId)) {
+        if (other.isPrimary() && !other.getHost().equalsIgnoreCase(host)) {
+          other.setPrimary(false);
+          other.setUpdatedAt(java.time.Instant.now());
+          domainRepository.save(other);
+        }
+      }
+    }
+
+    domain.setOrganizationId(organizationId);
+    domain.setHost(host);
+    domain.setPrimary(primary);
+    domain.setStatus(
+        status == null || status.isBlank() ? "ACTIVE" : status.trim().toUpperCase(Locale.ROOT));
+    domain.setSslStatus(
+        sslStatus == null || sslStatus.isBlank()
+            ? "MANUAL"
+            : sslStatus.trim().toUpperCase(Locale.ROOT));
+    domain.setUpdatedAt(java.time.Instant.now());
+    domainRepository.save(domain);
+
+    Map<String, Object> row = new java.util.LinkedHashMap<>();
+    row.put("id", domain.getId().toString());
+    row.put("organizationId", domain.getOrganizationId());
+    row.put("host", domain.getHost());
+    row.put("primary", domain.isPrimary());
+    row.put("status", domain.getStatus());
+    row.put("sslStatus", domain.getSslStatus());
+    return row;
+  }
+
+  @org.springframework.transaction.annotation.Transactional
+  public Map<String, Object> updateSslStatus(String organizationId, String rawHost, String sslStatus) {
+    String host = normalizeHost(rawHost);
+    WebsiteDomain domain =
+        domainRepository
+            .findByOrganizationIdOrderByPrimaryDescHostAsc(organizationId)
+            .stream()
+            .filter(d -> d.getHost().equalsIgnoreCase(host))
+            .findFirst()
+            .orElseThrow(
+                () -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Domain not found: " + host));
+    domain.setSslStatus(sslStatus == null ? "MANUAL" : sslStatus.trim().toUpperCase(Locale.ROOT));
+    domain.setUpdatedAt(java.time.Instant.now());
+    domainRepository.save(domain);
+    Map<String, Object> row = new java.util.LinkedHashMap<>();
+    row.put("host", domain.getHost());
+    row.put("sslStatus", domain.getSslStatus());
+    row.put("organizationId", domain.getOrganizationId());
+    return row;
+  }
+
+  public List<Map<String, Object>> listAllDomains() {
+    return domainRepository.findAllByOrderByOrganizationIdAscHostAsc().stream()
+        .map(
+            d -> {
+              Map<String, Object> row = new java.util.LinkedHashMap<>();
+              row.put("id", d.getId().toString());
+              row.put("organizationId", d.getOrganizationId());
+              row.put("host", d.getHost());
+              row.put("primary", d.isPrimary());
+              row.put("status", d.getStatus());
+              row.put("sslStatus", d.getSslStatus());
+              return row;
+            })
+        .toList();
+  }
+
+  @org.springframework.transaction.annotation.Transactional
   public List<Map<String, Object>> updateHomepage(
       String organizationId, List<Map<String, Object>> sections) {
     WebsiteSite site = requireSite(organizationId);

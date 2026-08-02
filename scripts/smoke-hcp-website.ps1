@@ -59,6 +59,19 @@ Assert-Ok "cms news list" {
   $r.data
 }
 
+Assert-Ok "cms blog list" {
+  $r = Invoke-RestMethod -Uri "$BaseUrl/api/cms/public/blog?organizationId=$OrganizationId" -Method GET
+  if ($null -eq $r.data) { throw "missing data" }
+  $r.data
+}
+
+Assert-Ok "prerender html" {
+  $r = Invoke-WebRequest -Uri "$BaseUrl/api/website/public/prerender?host=$HostName&path=/" -Method GET -UseBasicParsing
+  if ($r.StatusCode -ne 200) { throw "status $($r.StatusCode)" }
+  if ($r.Content -notmatch "<title>") { throw "missing title" }
+  $r.StatusCode
+}
+
 Assert-Ok "analytics track" {
   $body = @{
     host = $HostName

@@ -1,7 +1,10 @@
 package com.sugamflow.school.cms.web;
 
+import com.sugamflow.school.cms.service.CmsBlogService;
 import com.sugamflow.school.cms.service.CmsContentService;
 import com.sugamflow.school.cms.service.CmsMediaService;
+import com.sugamflow.school.cms.web.dto.BlogPostResponse;
+import com.sugamflow.school.cms.web.dto.BlogUpsertRequest;
 import com.sugamflow.school.cms.web.dto.MediaAssetResponse;
 import com.sugamflow.school.cms.web.dto.MediaRegisterRequest;
 import com.sugamflow.school.cms.web.dto.PageResponse;
@@ -12,6 +15,7 @@ import jakarta.validation.Valid;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -19,7 +23,9 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
 
 @RestController
 @RequestMapping("/api/cms/admin")
@@ -27,10 +33,13 @@ public class CmsAdminController {
 
   private final CmsContentService contentService;
   private final CmsMediaService mediaService;
+  private final CmsBlogService blogService;
 
-  public CmsAdminController(CmsContentService contentService, CmsMediaService mediaService) {
+  public CmsAdminController(
+      CmsContentService contentService, CmsMediaService mediaService, CmsBlogService blogService) {
     this.contentService = contentService;
     this.mediaService = mediaService;
+    this.blogService = blogService;
   }
 
   @GetMapping("/pages")
@@ -75,10 +84,41 @@ public class CmsAdminController {
     return ApiResponse.ok(mediaService.register(orgId(), request));
   }
 
+  @PostMapping(value = "/media/upload", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+  public ApiResponse<MediaAssetResponse> uploadMedia(@RequestPart("file") MultipartFile file) {
+    return ApiResponse.ok(mediaService.upload(orgId(), file));
+  }
+
   @DeleteMapping("/media/{id}")
   public ApiResponse<Map<String, Object>> deleteMedia(@PathVariable("id") UUID id) {
     mediaService.delete(orgId(), id);
     return ApiResponse.ok(Map.of("deleted", true, "id", id.toString()));
+  }
+
+  @GetMapping("/blog")
+  public ApiResponse<List<BlogPostResponse>> listBlog() {
+    return ApiResponse.ok(blogService.listAdmin(orgId()));
+  }
+
+  @PostMapping("/blog")
+  public ApiResponse<BlogPostResponse> createBlog(@Valid @RequestBody BlogUpsertRequest request) {
+    return ApiResponse.ok(blogService.create(orgId(), request));
+  }
+
+  @PutMapping("/blog/{id}")
+  public ApiResponse<BlogPostResponse> updateBlog(
+      @PathVariable("id") UUID id, @Valid @RequestBody BlogUpsertRequest request) {
+    return ApiResponse.ok(blogService.update(orgId(), id, request));
+  }
+
+  @PostMapping("/blog/{id}/publish")
+  public ApiResponse<BlogPostResponse> publishBlog(@PathVariable("id") UUID id) {
+    return ApiResponse.ok(blogService.publish(orgId(), id));
+  }
+
+  @PostMapping("/blog/{id}/unpublish")
+  public ApiResponse<BlogPostResponse> unpublishBlog(@PathVariable("id") UUID id) {
+    return ApiResponse.ok(blogService.unpublish(orgId(), id));
   }
 
   private static String orgId() {

@@ -10,5 +10,9 @@ public interface WebsiteDomainRepository extends JpaRepository<WebsiteDomain, UU
 
   Optional<WebsiteDomain> findByHostIgnoreCaseAndStatus(String host, String status);
 
+  Optional<WebsiteDomain> findByHostIgnoreCase(String host);
+
   List<WebsiteDomain> findByOrganizationIdOrderByPrimaryDescHostAsc(String organizationId);
+
+  List<WebsiteDomain> findAllByOrderByOrganizationIdAscHostAsc();
 }

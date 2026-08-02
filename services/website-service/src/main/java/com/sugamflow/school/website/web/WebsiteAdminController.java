@@ -14,6 +14,7 @@ import java.util.List;
 import java.util.Map;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -94,6 +95,15 @@ public class WebsiteAdminController {
   @PutMapping("/seo")
   public ApiResponse<Map<String, Object>> updateSeo(@RequestBody Map<String, Object> seo) {
     return ApiResponse.ok(resolveService.updateSeo(orgId(), seo));
+  }
+
+  @PostMapping("/domains")
+  public ApiResponse<Map<String, Object>> upsertDomain(@RequestBody Map<String, Object> body) {
+    boolean primary = Boolean.TRUE.equals(body.get("primary"));
+    String host = body.get("host") == null ? "" : String.valueOf(body.get("host"));
+    String status = body.get("status") == null ? "" : String.valueOf(body.get("status"));
+    String ssl = body.get("sslStatus") == null ? "" : String.valueOf(body.get("sslStatus"));
+    return ApiResponse.ok(resolveService.upsertDomain(orgId(), host, primary, status, ssl));
   }
 
   @GetMapping("/analytics")

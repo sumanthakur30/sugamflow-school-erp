@@ -97,6 +97,26 @@ export class WebsiteApiService {
       .pipe(map((r) => r.data));
   }
 
+  listBlog() {
+    const org = this.site()?.organizationId;
+    return this.http
+      .get<ApiResponse<Array<Record<string, unknown>>>>(
+        `${environment.apiBaseUrl}/api/cms/public/blog`,
+        { params: { organizationId: org || '' } }
+      )
+      .pipe(map((r) => r.data));
+  }
+
+  getBlog(slug: string) {
+    const org = this.site()?.organizationId;
+    return this.http
+      .get<ApiResponse<Record<string, unknown>>>(
+        `${environment.apiBaseUrl}/api/cms/public/blog/${slug}`,
+        { params: { organizationId: org || '' } }
+      )
+      .pipe(map((r) => r.data));
+  }
+
   applyAdmission(payload: {
     fullName: string;
     mobile: string;

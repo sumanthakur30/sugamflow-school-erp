@@ -123,7 +123,9 @@ public class CmsContentService {
     page.setSeoDescription(blankToNull(request.seoDescription()));
     page.setCreatedAt(now);
     page.setUpdatedAt(now);
-    return toPage(pageRepository.save(page));
+    PageResponse saved = toPage(pageRepository.save(page));
+    mediaService.recordPageCreated(org);
+    return saved;
   }
 
   @Transactional

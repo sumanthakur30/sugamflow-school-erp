@@ -3,6 +3,7 @@ package com.sugamflow.school.admission.service;
 import com.sugamflow.school.admission.config.AdmissionProperties;
 import com.sugamflow.school.admission.integration.ConfigEngineClient;
 import com.sugamflow.school.admission.integration.NotificationDeliveryClient;
+import com.sugamflow.school.admission.integration.PublicCaptchaVerifier;
 import com.sugamflow.school.admission.integration.StudentEnrollmentClient;
 import com.sugamflow.school.admission.persistence.entity.AdmissionApplicationEntity;
 import com.sugamflow.school.admission.persistence.repo.AdmissionApplicationRepository;
@@ -44,18 +45,21 @@ public class AdmissionApplicationService {
   private final NotificationDeliveryClient notificationDelivery;
   private final StudentEnrollmentClient studentEnrollment;
   private final AdmissionProperties properties;
+  private final PublicCaptchaVerifier captchaVerifier;
 
   public AdmissionApplicationService(
       AdmissionApplicationRepository repository,
       ConfigEngineClient engines,
       NotificationDeliveryClient notificationDelivery,
       StudentEnrollmentClient studentEnrollment,
-      AdmissionProperties properties) {
+      AdmissionProperties properties,
+      PublicCaptchaVerifier captchaVerifier) {
     this.repository = repository;
     this.engines = engines;
     this.notificationDelivery = notificationDelivery;
     this.studentEnrollment = studentEnrollment;
     this.properties = properties;
+    this.captchaVerifier = captchaVerifier;
   }
 
   @Transactional(readOnly = true)
@@ -340,6 +344,7 @@ public class AdmissionApplicationService {
    */
   @Transactional
   public Map<String, Object> submitFromWebsite(Map<String, Object> body) {
+    captchaVerifier.verifyIfRequired(stringOr(body.get("captchaToken"), ""));
     String organizationId = stringOr(body.get("organizationId"), "").trim();
     if (organizationId.isBlank()) {
       throw new AdmissionException("VALIDATION", "organizationId is required");

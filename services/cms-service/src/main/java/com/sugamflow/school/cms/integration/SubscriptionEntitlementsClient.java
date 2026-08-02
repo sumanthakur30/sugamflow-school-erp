@@ -8,6 +8,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.ParameterizedTypeReference;
+import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientResponseException;
@@ -56,6 +57,33 @@ public class SubscriptionEntitlementsClient {
     return out;
   }
 
+  public boolean isFeatureEnabled(String organizationId, String flag) {
+    Map<String, Object> body =
+        get(subscriptionBaseUrl + "/api/subscription/feature-flags/" + flag, organizationId);
+    return body != null && Boolean.TRUE.equals(body.get("enabled"));
+  }
+
+  /** Best-effort usage metering; never blocks the primary write path on meter failure. */
+  public void incrementUsage(String organizationId, String limitCode, long delta, String reason) {
+    try {
+      Map<String, Object> payload = new LinkedHashMap<>();
+      payload.put("limitCode", limitCode);
+      payload.put("delta", delta);
+      payload.put("reason", reason);
+      restClientBuilder
+          .build()
+          .post()
+          .uri(subscriptionBaseUrl + "/api/subscription/tenants/current/increment-usage")
+          .contentType(MediaType.APPLICATION_JSON)
+          .headers(h -> TenantHeaders.apply(h, scope(organizationId)))
+          .body(payload)
+          .retrieve()
+          .toBodilessEntity();
+    } catch (Exception ex) {
+      log.warn("increment-usage {} failed for {}: {}", limitCode, organizationId, ex.getMessage());
+    }
+  }
+
   private Map<String, Object> get(String url, String organizationId) {
     try {
       Map<String, Object> envelope =
@@ -63,7 +91,7 @@ public class SubscriptionEntitlementsClient {
               .build()
               .get()
               .uri(url)
-              .headers(h -> TenantHeaders.apply(h, new TenantScope(organizationId, null, null, null, null)))
+              .headers(h -> TenantHeaders.apply(h, scope(organizationId)))
               .retrieve()
               .body(MAP_TYPE);
       if (envelope == null) {
@@ -71,15 +99,21 @@ public class SubscriptionEntitlementsClient {
       }
       Object data = envelope.get("data");
       if (data instanceof Map<?, ?> map) {
-        return (Map<String, Object>) map;
+        @SuppressWarnings("unchecked")
+        Map<String, Object> cast = (Map<String, Object>) map;
+        return cast;
       }
       return envelope;
     } catch (RestClientResponseException ex) {
-      log.warn("GET entitlements failed: {}", ex.getStatusCode());
+      log.warn("GET {} failed: {}", url, ex.getStatusCode());
       return null;
     } catch (Exception ex) {
-      log.warn("GET entitlements failed: {}", ex.getMessage());
+      log.warn("GET {} failed: {}", url, ex.getMessage());
       return null;
     }
+  }
+
+  private static TenantScope scope(String organizationId) {
+    return new TenantScope(organizationId, null, null, null, null);
   }
 }

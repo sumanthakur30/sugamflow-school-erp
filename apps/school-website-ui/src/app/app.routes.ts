@@ -8,6 +8,8 @@ import { GalleryPageComponent } from './pages/gallery-page.component';
 import { EventsPageComponent } from './pages/events-page.component';
 import { AdmissionHubPageComponent } from './pages/admission-hub-page.component';
 import { AdmissionApplyPageComponent } from './pages/admission-apply-page.component';
+import { BlogListPageComponent } from './pages/blog-list-page.component';
+import { BlogDetailPageComponent } from './pages/blog-detail-page.component';
 
 export const routes: Routes = [
   {
@@ -17,6 +19,8 @@ export const routes: Routes = [
       { path: '', component: HomePageComponent },
       { path: 'admission', component: AdmissionHubPageComponent },
       { path: 'admission/apply', component: AdmissionApplyPageComponent },
+      { path: 'blog', component: BlogListPageComponent },
+      { path: 'blog/:slug', component: BlogDetailPageComponent },
       { path: 'news', component: NewsListPageComponent },
       { path: 'news/:slug', component: NewsDetailPageComponent },
       { path: 'gallery', component: GalleryPageComponent },
