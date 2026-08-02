@@ -15,13 +15,13 @@ import { WebsiteApiService } from '../core/website-api.service';
           <a
             *ngFor="let item of site.navigation"
             [routerLink]="item.external ? null : item.path"
-            [href]="item.external ? site.erpLoginUrl : null"
+            [href]="item.external ? erpLogin : null"
             [attr.target]="item.external ? '_blank' : null"
             routerLinkActive="active"
             [routerLinkActiveOptions]="{ exact: item.path === '/' }"
             >{{ item.label }}</a
           >
-          <a class="cta" [href]="site.erpLoginUrl" target="_blank" rel="noopener">ERP Login</a>
+          <a class="cta" [href]="erpLogin" target="_blank" rel="noopener">ERP Login</a>
         </nav>
       </header>
       <main>
@@ -29,6 +29,13 @@ import { WebsiteApiService } from '../core/website-api.service';
       </main>
       <footer>
         <p>&copy; {{ year }} {{ site.displayName }}. Powered by SugamFlow.</p>
+        <p class="portals">
+          <a [href]="parentLogin" target="_blank" rel="noopener">Parent</a>
+          ·
+          <a [href]="teacherLogin" target="_blank" rel="noopener">Teacher</a>
+          ·
+          <a [href]="erpLogin" target="_blank" rel="noopener">Staff</a>
+        </p>
       </footer>
     </div>
     <ng-template #loading>
@@ -96,6 +103,10 @@ import { WebsiteApiService } from '../core/website-api.service';
         color: #cbd5e1;
         text-align: center;
       }
+      footer .portals a {
+        color: #e2e8f0;
+        text-decoration: none;
+      }
       .loading {
         padding: 4rem;
         text-align: center;
@@ -112,8 +123,15 @@ import { WebsiteApiService } from '../core/website-api.service';
 export class SiteShellComponent implements OnInit {
   readonly api = inject(WebsiteApiService);
   readonly year = new Date().getFullYear();
+  erpLogin = '#';
+  parentLogin = '#';
+  teacherLogin = '#';
 
   ngOnInit(): void {
-    this.api.resolve().subscribe();
+    this.api.resolve().subscribe(() => {
+      this.erpLogin = this.api.erpLoginUrl('admin');
+      this.parentLogin = this.api.erpLoginUrl('parent', '/parent');
+      this.teacherLogin = this.api.erpLoginUrl('teacher', '/teacher');
+    });
   }
 }

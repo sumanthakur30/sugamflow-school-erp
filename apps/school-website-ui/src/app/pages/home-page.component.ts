@@ -13,7 +13,7 @@ import { WebsiteApiService } from '../core/website-api.service';
       <h1>{{ heroTitle }}</h1>
       <p class="lead">{{ heroSubtitle }}</p>
       <div class="actions">
-        <a routerLink="/admission" class="primary">Admissions</a>
+        <a routerLink="/admission/apply" class="primary">Admissions</a>
         <a routerLink="/contact" class="ghost">Contact</a>
       </div>
     </section>

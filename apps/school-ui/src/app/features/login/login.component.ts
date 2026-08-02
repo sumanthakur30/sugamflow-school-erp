@@ -59,6 +59,8 @@ export class LoginComponent implements OnInit {
   error = '';
   success = '';
   submitting = false;
+  /** Optional deep-link after login (from school website SSO bridge). */
+  private returnUrl = '';
 
   schoolName = 'SugamFlow School';
   tagline = 'Configuration over customization';
@@ -86,7 +88,14 @@ export class LoginComponent implements OnInit {
       this.username =
         this.organizationId && user.endsWith(suffix) ? user.slice(0, -suffix.length) : user;
     }
-    this.destination = this.guessDestination(this.username);
+    const destParam = (qp.get('destination') || '').trim().toLowerCase();
+    if (destParam && this.destinations.some((d) => d.value === destParam)) {
+      this.destination = destParam as LoginDestination;
+    } else {
+      this.destination = this.guessDestination(this.username);
+    }
+    const rawReturn = (qp.get('returnUrl') || qp.get('redirect') || '').trim();
+    this.returnUrl = this.sanitizeReturnUrl(rawReturn);
     this.refreshTheme();
   }
 
@@ -119,7 +128,8 @@ export class LoginComponent implements OnInit {
             this.auth.setActiveRole(dest.activeRole);
           }
           const navigate = () => {
-            void this.router.navigateByUrl(dest.path);
+            const target = this.returnUrl || dest.path;
+            void this.router.navigateByUrl(target);
           };
           // Bootstrap campus + branding from shop name, then refresh theme.
           this.provision
@@ -146,6 +156,14 @@ export class LoginComponent implements OnInit {
     if (/(principal|headmaster|headmistress)/.test(u)) return 'principal';
     if (/(owner|admin)/.test(u)) return 'admin';
     return 'admin';
+  }
+
+  /** Only allow same-app relative paths (block open redirects). */
+  private sanitizeReturnUrl(raw: string): string {
+    if (!raw) return '';
+    if (!raw.startsWith('/') || raw.startsWith('//')) return '';
+    if (raw.includes('://')) return '';
+    return raw;
   }
 
   private refreshTheme(): void {

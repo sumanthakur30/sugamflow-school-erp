@@ -95,6 +95,44 @@ export class WebsiteApiService {
       .pipe(map((r) => r.data));
   }
 
+  applyAdmission(payload: {
+    fullName: string;
+    mobile: string;
+    email?: string;
+    classApplied: string;
+    message?: string;
+    age?: string;
+  }) {
+    const org = this.site()?.organizationId;
+    return this.http
+      .post<ApiResponse<Record<string, unknown>>>(
+        `${environment.apiBaseUrl}/api/admission/public/apply`,
+        {
+          organizationId: org,
+          ...payload,
+        }
+      )
+      .pipe(map((r) => r.data));
+  }
+
+  /** Deep-link into School ERP login with org + destination prefilled. */
+  erpLoginUrl(destination?: string, returnUrl?: string): string {
+    const site = this.site();
+    const base = (site?.erpLoginUrl || `${environment.erpBaseUrl}/login`).replace(/\/$/, '');
+    const loginBase = base.includes('/login') ? base : `${base}/login`;
+    const url = new URL(loginBase, window.location.origin);
+    if (site?.organizationId) {
+      url.searchParams.set('org', site.organizationId);
+    }
+    if (destination) {
+      url.searchParams.set('destination', destination);
+    }
+    if (returnUrl) {
+      url.searchParams.set('returnUrl', returnUrl);
+    }
+    return url.toString();
+  }
+
   private detectHost(): string {
     const host = window.location.hostname;
     if (!host || host === 'localhost' || host === '127.0.0.1') {

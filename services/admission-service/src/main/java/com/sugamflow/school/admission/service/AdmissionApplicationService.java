@@ -32,6 +32,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class AdmissionApplicationService {
 
   public static final String FEATURE_ADMISSION = "FEATURE_ADMISSION";
+  public static final String FEATURE_WEBSITE_ADMISSION = "FEATURE_WEBSITE_ADMISSION";
   public static final String MODULE_ADMISSION = "admission";
   public static final String ACTION_BLOCK = "BLOCK_ADMISSION";
   public static final String ACTION_NOTIFY = "NOTIFY_ADMISSION";
@@ -331,6 +332,132 @@ public class AdmissionApplicationService {
     entity.setNotificationIntents(intents);
 
     return toDto(repository.save(entity));
+  }
+
+  /**
+   * Public website admission inquiry. Tenant comes from organizationId (already resolved by website
+   * host mapping); does not trust client for anything beyond the applicant fields.
+   */
+  @Transactional
+  public Map<String, Object> submitFromWebsite(Map<String, Object> body) {
+    String organizationId = stringOr(body.get("organizationId"), "").trim();
+    if (organizationId.isBlank()) {
+      throw new AdmissionException("VALIDATION", "organizationId is required");
+    }
+    String fullName = stringOr(body.get("fullName"), "").trim();
+    String mobile = stringOr(body.get("mobile"), "").trim();
+    String email = stringOr(body.get("email"), "").trim();
+    String classApplied = stringOr(body.get("classApplied"), "").trim();
+    String message = stringOr(firstNonBlank(body.get("message"), body.get("notes")), "").trim();
+    String age = stringOr(body.get("age"), "").trim();
+
+    if (fullName.isBlank()) {
+      throw new AdmissionException("VALIDATION", "fullName is required");
+    }
+    if (mobile.isBlank()) {
+      throw new AdmissionException("VALIDATION", "mobile is required");
+    }
+    if (classApplied.isBlank()) {
+      throw new AdmissionException("VALIDATION", "classApplied is required");
+    }
+
+    TenantScope scope =
+        new TenantScope(
+            organizationId,
+            stringOr(body.get("branchId"), "main"),
+            stringOr(body.get("academicSessionId"), "2025-26"),
+            "website-public",
+            "PUBLIC");
+    TenantContext.set(scope);
+    try {
+      if (!engines.isFeatureEnabled(scope, FEATURE_WEBSITE_ADMISSION)
+          && !engines.isFeatureEnabled(scope, FEATURE_ADMISSION)) {
+        throw new AdmissionException(
+            "FEATURE_DISABLED",
+            "Online admission is not enabled for this school (FEATURE_WEBSITE_ADMISSION).");
+      }
+      requireModuleEnabled(scope);
+
+      Map<String, Object> answers = new LinkedHashMap<>();
+      answers.put("fullName", fullName);
+      answers.put("mobile", mobile);
+      answers.put("email", email);
+      answers.put("classApplied", classApplied);
+      answers.put("notes", message);
+      answers.put("message", message);
+      answers.put("source", "WEBSITE");
+      answers.put("documentsComplete", false);
+      if (!age.isBlank()) {
+        answers.put("age", age);
+      } else {
+        answers.put("age", "0");
+      }
+
+      Map<String, Object> module = engines.getModuleSettings(scope, MODULE_ADMISSION);
+      String formKey = resolveFormKey(module);
+      String workflowKey = resolveWorkflowKey(module);
+
+      Map<String, Object> form = engines.getForm(scope, formKey);
+      Map<String, Object> workflow = engines.getWorkflow(scope, workflowKey);
+      if (workflow == null) {
+        throw new AdmissionException(
+            "WORKFLOW_MISSING", "Workflow definition not found: " + workflowKey);
+      }
+
+      // Public apply: enforce our MVP fields; fill remaining mandatory form keys with placeholders
+      // so staff can complete the dossier in ERP.
+      if (form != null) {
+        fillMissingMandatoryPlaceholders(form, answers);
+      }
+
+      Map<String, Object> ruleContext = new LinkedHashMap<>();
+      ruleContext.put("application", answers);
+      ruleContext.put("admission", Map.of("formKey", formKey, "workflowKey", workflowKey, "source", "WEBSITE"));
+      List<String> matched = engines.evaluateRules(scope, ruleContext);
+      if (matched.contains(ACTION_BLOCK)) {
+        throw new AdmissionException(
+            ACTION_BLOCK, "Admission blocked by rule engine (BLOCK_ADMISSION).");
+      }
+
+      WorkflowStep first = firstStep(workflow);
+      AdmissionApplicationEntity entity = new AdmissionApplicationEntity();
+      entity.setId(UUID.randomUUID());
+      entity.setOrganizationId(organizationId);
+      entity.setBranchId(scope.branchId());
+      entity.setAcademicSessionId(scope.academicSessionId());
+      entity.setFormKey(formKey);
+      entity.setWorkflowKey(workflowKey);
+      entity.setStatus("IN_PROGRESS");
+      entity.setCurrentStepSequence(first.sequence());
+      entity.setCurrentStepName(first.name());
+      entity.setAssigneeRole(first.assignRole());
+      entity.setAnswers(answers);
+      entity.setMatchedActions(matched);
+      entity.setCreatedBy("website-public");
+      entity.setCreatedAt(Instant.now());
+      entity.setUpdatedAt(Instant.now());
+
+      List<Map<String, Object>> history = new ArrayList<>();
+      history.add(
+          event(
+              "WEBSITE_SUBMITTED",
+              "website-public",
+              "PUBLIC",
+              "Application submitted from school website",
+              first.sequence(),
+              first.name()));
+      entity.setHistory(history);
+
+      List<Map<String, Object>> intents = new ArrayList<>();
+      intents.add(recordNotification(scope, entity, "ADMISSION_SUBMITTED"));
+      entity.setNotificationIntents(intents);
+
+      Map<String, Object> dto = toDto(repository.save(entity));
+      dto.put("source", "WEBSITE");
+      return dto;
+    } finally {
+      TenantContext.clear();
+    }
   }
 
   @Transactional
@@ -811,6 +938,52 @@ public class AdmissionApplicationService {
     return repository
         .findByIdAndOrganizationId(id, org)
         .orElseThrow(() -> new AdmissionException("NOT_FOUND", "Application not found"));
+  }
+
+  @SuppressWarnings("unchecked")
+  private void fillMissingMandatoryPlaceholders(
+      Map<String, Object> form, Map<String, Object> answers) {
+    Object sectionsObj = form.get("sections");
+    if (!(sectionsObj instanceof List<?> sections)) {
+      return;
+    }
+    for (Object sectionObj : sections) {
+      if (!(sectionObj instanceof Map<?, ?> section)) {
+        continue;
+      }
+      Object fieldsObj = section.get("fields");
+      if (!(fieldsObj instanceof List<?> fields)) {
+        continue;
+      }
+      for (Object fieldObj : fields) {
+        if (!(fieldObj instanceof Map<?, ?> field)) {
+          continue;
+        }
+        if (!Boolean.TRUE.equals(field.get("mandatory"))) {
+          continue;
+        }
+        String key = String.valueOf(field.get("key"));
+        if (answers.containsKey(key) && answers.get(key) != null
+            && !String.valueOf(answers.get(key)).isBlank()) {
+          continue;
+        }
+        String type =
+            String.valueOf(field.get("type") == null ? "TEXTBOX" : field.get("type"))
+                .toUpperCase(Locale.ROOT);
+        if ("CHECKBOX".equals(type)) {
+          answers.put(key, false);
+        } else {
+          answers.put(key, "PENDING");
+        }
+      }
+    }
+  }
+
+  private static Object firstNonBlank(Object primary, Object fallback) {
+    if (primary != null && !String.valueOf(primary).isBlank()) {
+      return primary;
+    }
+    return fallback;
   }
 
   @SuppressWarnings("unchecked")
