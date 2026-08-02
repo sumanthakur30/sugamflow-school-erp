@@ -79,6 +79,11 @@ public class SubscriptionPlanSeeder implements ApplicationRunner {
     ensureFlagOnAllPlans("FEATURE_MULTI_PAYMENT_GATEWAY");
     ensureFlagOnAllPlans("FEATURE_ACADEMIC_LIFECYCLE");
     ensureFlagOnAllPlans("FEATURE_OPS_DEPTH");
+    ensureFlagOnAllPlans("FEATURE_WEBSITE");
+    ensureFlagOnAllPlans("FEATURE_WEBSITE_CMS");
+    ensureFlagOnAllPlans("FEATURE_WEBSITE_ADMISSION");
+    ensureFlagOnAllPlans("FEATURE_WEBSITE_SEO");
+    ensureFlagOnAllPlans("FEATURE_WEBSITE_BLOG");
     ensureLimitAtLeast("maxBranches", 3L);
     // Phase 0 CRM: standalone sellable plans only — never merge School flags onto them.
     ensureCrmStandalonePlans();

@@ -26,6 +26,7 @@ services/                      School-domain Spring Boot services (Eureka client
   hostel-service                       Hostel allocation runtime (config-driven)
   transport-service                    Transport route runtime (config-driven)
   payroll-service                      Payroll run runtime (config-driven)
+  website-service                      School Website Platform (domain → tenant resolve)
   audit-service
 shared/contracts
 docs/
