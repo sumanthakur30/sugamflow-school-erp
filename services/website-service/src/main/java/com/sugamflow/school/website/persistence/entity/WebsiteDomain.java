@@ -17,6 +17,9 @@ public class WebsiteDomain {
   @Column(name = "organization_id", nullable = false, length = 64)
   private String organizationId;
 
+  @Column(name = "site_id")
+  private UUID siteId;
+
   @Column(nullable = false, length = 255, unique = true)
   private String host;
 
@@ -49,6 +52,14 @@ public class WebsiteDomain {
 
   public void setOrganizationId(String organizationId) {
     this.organizationId = organizationId;
+  }
+
+  public UUID getSiteId() {
+    return siteId;
+  }
+
+  public void setSiteId(UUID siteId) {
+    this.siteId = siteId;
   }
 
   public String getHost() {

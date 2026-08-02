@@ -56,14 +56,27 @@ public class WebsiteResolveService {
                     new ResponseStatusException(
                         HttpStatus.NOT_FOUND, "No active website for host: " + host));
 
-    WebsiteSite site =
-        siteRepository
-            .findByOrganizationId(domain.getOrganizationId())
-            .orElseThrow(
-                () ->
-                    new ResponseStatusException(
-                        HttpStatus.NOT_FOUND,
-                        "Website site missing for organization: " + domain.getOrganizationId()));
+    WebsiteSite site;
+    if (domain.getSiteId() != null) {
+      site =
+          siteRepository
+              .findById(domain.getSiteId())
+              .orElseThrow(
+                  () ->
+                      new ResponseStatusException(
+                          HttpStatus.NOT_FOUND,
+                          "Website site missing for domain: " + domain.getHost()));
+    } else {
+      site =
+          siteRepository
+              .findByOrganizationId(domain.getOrganizationId())
+              .orElseThrow(
+                  () ->
+                      new ResponseStatusException(
+                          HttpStatus.NOT_FOUND,
+                          "Website site missing for organization: "
+                              + domain.getOrganizationId()));
+    }
 
     if ("SUSPENDED".equalsIgnoreCase(site.getStatus())) {
       throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Website is suspended");
@@ -76,6 +89,8 @@ public class WebsiteResolveService {
 
     return new WebsiteResolveResponse(
         site.getOrganizationId(),
+        site.getBranchId() == null ? "main" : site.getBranchId(),
+        site.getId().toString(),
         domain.getHost(),
         site.getStatus(),
         site.getTemplateCode(),
@@ -96,14 +111,79 @@ public class WebsiteResolveService {
     return siteRepository.findByOrganizationId(organizationId);
   }
 
+  public List<WebsiteSite> listSites(String organizationId) {
+    return siteRepository.findByOrganizationIdOrderByDefaultSiteDescBranchIdAsc(organizationId);
+  }
+
+  @org.springframework.transaction.annotation.Transactional
+  public Map<String, Object> createCampusSite(
+      String organizationId, String branchId, String displayName) {
+    String branch = branchId == null || branchId.isBlank() ? "main" : branchId.trim();
+    if (siteRepository.findByOrganizationIdAndBranchId(organizationId, branch).isPresent()) {
+      throw new ResponseStatusException(HttpStatus.CONFLICT, "Campus site already exists: " + branch);
+    }
+    WebsiteSite source =
+        siteRepository
+            .findByOrganizationId(organizationId)
+            .orElseThrow(
+                () ->
+                    new ResponseStatusException(
+                        HttpStatus.NOT_FOUND, "No default website for organization"));
+    WebsiteSite site = new WebsiteSite();
+    site.setId(java.util.UUID.randomUUID());
+    site.setOrganizationId(organizationId);
+    site.setBranchId(branch);
+    site.setDefaultSite(false);
+    site.setStatus("DRAFT");
+    site.setTemplateCode(source.getTemplateCode());
+    site.setDisplayName(
+        displayName == null || displayName.isBlank()
+            ? source.getDisplayName() + " (" + branch + ")"
+            : displayName.trim());
+    site.setErpLoginUrl(source.getErpLoginUrl());
+    site.setThemeJson(source.getThemeJson());
+    site.setHomepageJson(source.getHomepageJson());
+    site.setNavigationJson(source.getNavigationJson());
+    site.setSeoJson(source.getSeoJson());
+    site.setCreatedAt(java.time.Instant.now());
+    site.setUpdatedAt(java.time.Instant.now());
+    siteRepository.save(site);
+    return siteSummary(site);
+  }
+
+  public static Map<String, Object> siteSummary(WebsiteSite site) {
+    Map<String, Object> row = new java.util.LinkedHashMap<>();
+    row.put("id", site.getId().toString());
+    row.put("organizationId", site.getOrganizationId());
+    row.put("branchId", site.getBranchId());
+    row.put("defaultSite", site.isDefaultSite());
+    row.put("status", site.getStatus());
+    row.put("displayName", site.getDisplayName());
+    row.put("templateCode", site.getTemplateCode());
+    return row;
+  }
+
   @org.springframework.transaction.annotation.Transactional
   public Map<String, Object> upsertDomain(
-      String organizationId, String rawHost, boolean primary, String status, String sslStatus) {
+      String organizationId,
+      String rawHost,
+      boolean primary,
+      String status,
+      String sslStatus,
+      String siteIdOrNull) {
     String host = normalizeHost(rawHost);
     if (host.isBlank()) {
       throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "host is required");
     }
-    requireSite(organizationId);
+    WebsiteSite site = requireSite(organizationId);
+    if (siteIdOrNull != null && !siteIdOrNull.isBlank()) {
+      site =
+          siteRepository
+              .findById(java.util.UUID.fromString(siteIdOrNull.trim()))
+              .filter(s -> s.getOrganizationId().equals(organizationId))
+              .orElseThrow(
+                  () -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Campus site not found"));
+    }
 
     Optional<WebsiteDomain> existingHost = domainRepository.findByHostIgnoreCase(host);
     if (existingHost.isPresent()
@@ -135,6 +215,7 @@ public class WebsiteResolveService {
     }
 
     domain.setOrganizationId(organizationId);
+    domain.setSiteId(site.getId());
     domain.setHost(host);
     domain.setPrimary(primary);
     domain.setStatus(
@@ -149,11 +230,19 @@ public class WebsiteResolveService {
     Map<String, Object> row = new java.util.LinkedHashMap<>();
     row.put("id", domain.getId().toString());
     row.put("organizationId", domain.getOrganizationId());
+    row.put("siteId", domain.getSiteId() == null ? null : domain.getSiteId().toString());
     row.put("host", domain.getHost());
     row.put("primary", domain.isPrimary());
     row.put("status", domain.getStatus());
     row.put("sslStatus", domain.getSslStatus());
     return row;
+  }
+
+  /** @deprecated use 6-arg upsertDomain */
+  @org.springframework.transaction.annotation.Transactional
+  public Map<String, Object> upsertDomain(
+      String organizationId, String rawHost, boolean primary, String status, String sslStatus) {
+    return upsertDomain(organizationId, rawHost, primary, status, sslStatus, null);
   }
 
   @org.springframework.transaction.annotation.Transactional
@@ -184,6 +273,7 @@ public class WebsiteResolveService {
               Map<String, Object> row = new java.util.LinkedHashMap<>();
               row.put("id", d.getId().toString());
               row.put("organizationId", d.getOrganizationId());
+              row.put("siteId", d.getSiteId() == null ? null : d.getSiteId().toString());
               row.put("host", d.getHost());
               row.put("primary", d.isPrimary());
               row.put("status", d.getStatus());

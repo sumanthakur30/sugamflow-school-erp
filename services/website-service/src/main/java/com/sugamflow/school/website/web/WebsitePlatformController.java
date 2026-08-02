@@ -46,7 +46,8 @@ public class WebsitePlatformController {
             string(body.get("host")),
             primary,
             string(body.get("status")),
-            string(body.get("sslStatus"))));
+            string(body.get("sslStatus")),
+            string(body.get("siteId"))));
   }
 
   @PutMapping("/domains/ssl")

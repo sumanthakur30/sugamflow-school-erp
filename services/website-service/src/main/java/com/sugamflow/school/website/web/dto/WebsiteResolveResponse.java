@@ -6,6 +6,8 @@ import java.util.Map;
 /** Public shell payload returned after Host → tenant resolution. */
 public record WebsiteResolveResponse(
     String organizationId,
+    String branchId,
+    String siteId,
     String host,
     String status,
     String templateCode,

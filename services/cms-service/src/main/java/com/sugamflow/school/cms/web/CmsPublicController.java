@@ -1,8 +1,10 @@
 package com.sugamflow.school.cms.web;
 
+import com.sugamflow.school.cms.service.CmsAlumniService;
 import com.sugamflow.school.cms.service.CmsBlogService;
 import com.sugamflow.school.cms.service.CmsContentService;
 import com.sugamflow.school.cms.service.CmsMediaService;
+import com.sugamflow.school.cms.web.dto.AlumniResponse;
 import com.sugamflow.school.cms.web.dto.BlogPostResponse;
 import com.sugamflow.school.cms.web.dto.EventResponse;
 import com.sugamflow.school.cms.web.dto.GalleryItemResponse;
@@ -27,12 +29,17 @@ public class CmsPublicController {
 
   private final CmsContentService contentService;
   private final CmsBlogService blogService;
+  private final CmsAlumniService alumniService;
   private final CmsMediaService mediaService;
 
   public CmsPublicController(
-      CmsContentService contentService, CmsBlogService blogService, CmsMediaService mediaService) {
+      CmsContentService contentService,
+      CmsBlogService blogService,
+      CmsAlumniService alumniService,
+      CmsMediaService mediaService) {
     this.contentService = contentService;
     this.blogService = blogService;
+    this.alumniService = alumniService;
     this.mediaService = mediaService;
   }
 
@@ -82,6 +89,18 @@ public class CmsPublicController {
   public ApiResponse<BlogPostResponse> blogPost(
       @RequestParam("organizationId") String organizationId, @PathVariable("slug") String slug) {
     return ApiResponse.ok(blogService.getPublished(organizationId, slug));
+  }
+
+  @GetMapping("/alumni")
+  public ApiResponse<List<AlumniResponse>> alumni(
+      @RequestParam("organizationId") String organizationId) {
+    return ApiResponse.ok(alumniService.listPublished(organizationId));
+  }
+
+  @GetMapping("/alumni/{slug}")
+  public ApiResponse<AlumniResponse> alumniProfile(
+      @RequestParam("organizationId") String organizationId, @PathVariable("slug") String slug) {
+    return ApiResponse.ok(alumniService.getPublished(organizationId, slug));
   }
 
   @GetMapping("/media/{id}")

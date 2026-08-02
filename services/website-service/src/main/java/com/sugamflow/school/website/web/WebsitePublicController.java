@@ -2,6 +2,7 @@ package com.sugamflow.school.website.web;
 
 import com.sugamflow.school.common.api.ApiResponse;
 import com.sugamflow.school.website.service.WebsiteAnalyticsService;
+import com.sugamflow.school.website.service.WebsiteMarketplaceService;
 import com.sugamflow.school.website.service.WebsiteResolveService;
 import com.sugamflow.school.website.web.dto.WebsiteResolveResponse;
 import java.util.ArrayList;
@@ -29,16 +30,19 @@ public class WebsitePublicController {
 
   private final WebsiteResolveService resolveService;
   private final WebsiteAnalyticsService analyticsService;
+  private final WebsiteMarketplaceService marketplaceService;
   private final RestClient.Builder restClientBuilder;
   private final String cmsBaseUrl;
 
   public WebsitePublicController(
       WebsiteResolveService resolveService,
       WebsiteAnalyticsService analyticsService,
+      WebsiteMarketplaceService marketplaceService,
       RestClient.Builder restClientBuilder,
       @Value("${website.integrations.cms-base-url:http://localhost:8201}") String cmsBaseUrl) {
     this.resolveService = resolveService;
     this.analyticsService = analyticsService;
+    this.marketplaceService = marketplaceService;
     this.restClientBuilder = restClientBuilder;
     this.cmsBaseUrl = cmsBaseUrl;
   }
@@ -54,6 +58,11 @@ public class WebsitePublicController {
       @RequestBody Map<String, Object> body,
       @RequestHeader(value = "User-Agent", required = false) String userAgent) {
     return ApiResponse.ok(analyticsService.track(body, userAgent));
+  }
+
+  @GetMapping("/marketplace/templates")
+  public ApiResponse<List<Map<String, Object>>> marketplaceTemplates() {
+    return ApiResponse.ok(marketplaceService.listTemplates());
   }
 
   /** Machine-readable sitemap entries for the public Angular app / CDN. */

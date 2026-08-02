@@ -7,6 +7,7 @@ import com.sugamflow.school.common.tenant.TenantContext;
 import com.sugamflow.school.website.persistence.entity.WebsiteDomain;
 import com.sugamflow.school.website.persistence.entity.WebsiteSite;
 import com.sugamflow.school.website.service.WebsiteAnalyticsService;
+import com.sugamflow.school.website.service.WebsiteMarketplaceService;
 import com.sugamflow.school.website.service.WebsiteResolveService;
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -32,14 +33,17 @@ public class WebsiteAdminController {
 
   private final WebsiteResolveService resolveService;
   private final WebsiteAnalyticsService analyticsService;
+  private final WebsiteMarketplaceService marketplaceService;
   private final ObjectMapper objectMapper;
 
   public WebsiteAdminController(
       WebsiteResolveService resolveService,
       WebsiteAnalyticsService analyticsService,
+      WebsiteMarketplaceService marketplaceService,
       ObjectMapper objectMapper) {
     this.resolveService = resolveService;
     this.analyticsService = analyticsService;
+    this.marketplaceService = marketplaceService;
     this.objectMapper = objectMapper;
   }
 
@@ -66,6 +70,11 @@ public class WebsiteAdminController {
     payload.put("theme", readJsonMap(site.getThemeJson()));
     payload.put("seo", readJsonMap(site.getSeoJson()));
     payload.put(
+        "campuses",
+        resolveService.listSites(organizationId).stream()
+            .map(WebsiteResolveService::siteSummary)
+            .toList());
+    payload.put(
         "domains",
         domains.stream()
             .map(
@@ -75,10 +84,25 @@ public class WebsiteAdminController {
                   row.put("primary", d.isPrimary());
                   row.put("status", d.getStatus());
                   row.put("sslStatus", d.getSslStatus());
+                  row.put("siteId", d.getSiteId() == null ? null : d.getSiteId().toString());
                   return row;
                 })
             .toList());
     return ApiResponse.ok(payload);
+  }
+
+  @GetMapping("/campuses")
+  public ApiResponse<List<Map<String, Object>>> campuses() {
+    return ApiResponse.ok(
+        resolveService.listSites(orgId()).stream().map(WebsiteResolveService::siteSummary).toList());
+  }
+
+  @PostMapping("/campuses")
+  public ApiResponse<Map<String, Object>> createCampus(@RequestBody Map<String, Object> body) {
+    String branchId = body.get("branchId") == null ? "" : String.valueOf(body.get("branchId"));
+    String displayName =
+        body.get("displayName") == null ? "" : String.valueOf(body.get("displayName"));
+    return ApiResponse.ok(resolveService.createCampusSite(orgId(), branchId, displayName));
   }
 
   @PutMapping("/homepage")
@@ -103,13 +127,27 @@ public class WebsiteAdminController {
     String host = body.get("host") == null ? "" : String.valueOf(body.get("host"));
     String status = body.get("status") == null ? "" : String.valueOf(body.get("status"));
     String ssl = body.get("sslStatus") == null ? "" : String.valueOf(body.get("sslStatus"));
-    return ApiResponse.ok(resolveService.upsertDomain(orgId(), host, primary, status, ssl));
+    String siteId = body.get("siteId") == null ? "" : String.valueOf(body.get("siteId"));
+    return ApiResponse.ok(
+        resolveService.upsertDomain(orgId(), host, primary, status, ssl, siteId));
   }
 
   @GetMapping("/analytics")
   public ApiResponse<Map<String, Object>> analytics(
       @RequestParam(value = "days", defaultValue = "30") int days) {
     return ApiResponse.ok(analyticsService.summary(orgId(), days));
+  }
+
+  @GetMapping("/marketplace/templates")
+  public ApiResponse<List<Map<String, Object>>> marketplaceTemplates() {
+    return ApiResponse.ok(marketplaceService.listTemplates());
+  }
+
+  @PostMapping("/marketplace/apply")
+  public ApiResponse<Map<String, Object>> applyTemplate(@RequestBody Map<String, Object> body) {
+    String code = body.get("templateCode") == null ? "" : String.valueOf(body.get("templateCode"));
+    String siteId = body.get("siteId") == null ? "" : String.valueOf(body.get("siteId"));
+    return ApiResponse.ok(marketplaceService.applyTemplate(orgId(), code, siteId));
   }
 
   private static String orgId() {

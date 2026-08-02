@@ -1,8 +1,12 @@
 package com.sugamflow.school.cms.web;
 
+import com.sugamflow.school.cms.service.CmsAiAssistService;
+import com.sugamflow.school.cms.service.CmsAlumniService;
 import com.sugamflow.school.cms.service.CmsBlogService;
 import com.sugamflow.school.cms.service.CmsContentService;
 import com.sugamflow.school.cms.service.CmsMediaService;
+import com.sugamflow.school.cms.web.dto.AlumniResponse;
+import com.sugamflow.school.cms.web.dto.AlumniUpsertRequest;
 import com.sugamflow.school.cms.web.dto.BlogPostResponse;
 import com.sugamflow.school.cms.web.dto.BlogUpsertRequest;
 import com.sugamflow.school.cms.web.dto.MediaAssetResponse;
@@ -34,12 +38,20 @@ public class CmsAdminController {
   private final CmsContentService contentService;
   private final CmsMediaService mediaService;
   private final CmsBlogService blogService;
+  private final CmsAlumniService alumniService;
+  private final CmsAiAssistService aiAssistService;
 
   public CmsAdminController(
-      CmsContentService contentService, CmsMediaService mediaService, CmsBlogService blogService) {
+      CmsContentService contentService,
+      CmsMediaService mediaService,
+      CmsBlogService blogService,
+      CmsAlumniService alumniService,
+      CmsAiAssistService aiAssistService) {
     this.contentService = contentService;
     this.mediaService = mediaService;
     this.blogService = blogService;
+    this.alumniService = alumniService;
+    this.aiAssistService = aiAssistService;
   }
 
   @GetMapping("/pages")
@@ -119,6 +131,32 @@ public class CmsAdminController {
   @PostMapping("/blog/{id}/unpublish")
   public ApiResponse<BlogPostResponse> unpublishBlog(@PathVariable("id") UUID id) {
     return ApiResponse.ok(blogService.unpublish(orgId(), id));
+  }
+
+  @GetMapping("/alumni")
+  public ApiResponse<List<AlumniResponse>> listAlumni() {
+    return ApiResponse.ok(alumniService.listAdmin(orgId()));
+  }
+
+  @PostMapping("/alumni")
+  public ApiResponse<AlumniResponse> createAlumni(@Valid @RequestBody AlumniUpsertRequest request) {
+    return ApiResponse.ok(alumniService.create(orgId(), request));
+  }
+
+  @PutMapping("/alumni/{id}")
+  public ApiResponse<AlumniResponse> updateAlumni(
+      @PathVariable("id") UUID id, @Valid @RequestBody AlumniUpsertRequest request) {
+    return ApiResponse.ok(alumniService.update(orgId(), id, request));
+  }
+
+  @PostMapping("/alumni/{id}/publish")
+  public ApiResponse<AlumniResponse> publishAlumni(@PathVariable("id") UUID id) {
+    return ApiResponse.ok(alumniService.publish(orgId(), id));
+  }
+
+  @PostMapping("/ai/draft")
+  public ApiResponse<Map<String, Object>> aiDraft(@RequestBody Map<String, Object> body) {
+    return ApiResponse.ok(aiAssistService.draft(orgId(), body));
   }
 
   private static String orgId() {

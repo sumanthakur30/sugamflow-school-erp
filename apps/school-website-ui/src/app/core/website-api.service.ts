@@ -5,6 +5,8 @@ import { environment } from '../../environments/environment';
 
 export interface WebsiteResolve {
   organizationId: string;
+  branchId?: string | null;
+  siteId?: string | null;
   host: string;
   status: string;
   templateCode: string | null;
@@ -112,6 +114,26 @@ export class WebsiteApiService {
     return this.http
       .get<ApiResponse<Record<string, unknown>>>(
         `${environment.apiBaseUrl}/api/cms/public/blog/${slug}`,
+        { params: { organizationId: org || '' } }
+      )
+      .pipe(map((r) => r.data));
+  }
+
+  listAlumni() {
+    const org = this.site()?.organizationId;
+    return this.http
+      .get<ApiResponse<Array<Record<string, unknown>>>>(
+        `${environment.apiBaseUrl}/api/cms/public/alumni`,
+        { params: { organizationId: org || '' } }
+      )
+      .pipe(map((r) => r.data));
+  }
+
+  getAlumni(slug: string) {
+    const org = this.site()?.organizationId;
+    return this.http
+      .get<ApiResponse<Record<string, unknown>>>(
+        `${environment.apiBaseUrl}/api/cms/public/alumni/${slug}`,
         { params: { organizationId: org || '' } }
       )
       .pipe(map((r) => r.data));

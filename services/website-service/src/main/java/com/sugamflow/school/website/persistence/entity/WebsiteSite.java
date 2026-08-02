@@ -16,8 +16,15 @@ public class WebsiteSite {
   @Id
   private UUID id;
 
-  @Column(name = "organization_id", nullable = false, length = 64, unique = true)
+  @Column(name = "organization_id", nullable = false, length = 64)
   private String organizationId;
+
+  /** ERP campus key (org_branch.branch_key); default {@code main}. */
+  @Column(name = "branch_id", nullable = false, length = 64)
+  private String branchId = "main";
+
+  @Column(name = "is_default", nullable = false)
+  private boolean defaultSite = true;
 
   @Column(nullable = false, length = 32)
   private String status;
@@ -67,6 +74,22 @@ public class WebsiteSite {
 
   public void setOrganizationId(String organizationId) {
     this.organizationId = organizationId;
+  }
+
+  public String getBranchId() {
+    return branchId;
+  }
+
+  public void setBranchId(String branchId) {
+    this.branchId = branchId;
+  }
+
+  public boolean isDefaultSite() {
+    return defaultSite;
+  }
+
+  public void setDefaultSite(boolean defaultSite) {
+    this.defaultSite = defaultSite;
   }
 
   public String getStatus() {
