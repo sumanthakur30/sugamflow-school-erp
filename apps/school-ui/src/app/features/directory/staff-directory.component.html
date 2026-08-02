@@ -6,12 +6,17 @@
       <p>{{ pageSubtitle }}</p>
     </div>
     <div class="staff-head-actions">
-      @if (showForm) {
+      @if (showForm || showInvite) {
         <button type="button" class="staff-btn staff-btn--secondary" (click)="cancelCreate()">
           Staff list
         </button>
       } @else {
         <a class="staff-btn staff-btn--secondary" routerLink="/admin/payroll">Payroll</a>
+        @if (canInviteLogin) {
+          <a class="staff-btn staff-btn--secondary" routerLink="/admin/staff-directory/invite"
+            >Invite login</a
+          >
+        }
         <a class="staff-btn staff-btn--primary" routerLink="/admin/staff-directory/add">+ Add staff</a>
       }
     </div>
@@ -26,8 +31,111 @@
 
   @if (loading) {
     <p class="panel">Loading staff directory…</p>
-  } @else if (!featureEnabled) {
+  } @else if (!featureEnabled && !showInvite) {
     <p class="panel">Staff Directory requires FEATURE_STAFF_MASTER.</p>
+  } @else if (showInvite) {
+    <section class="panel staff-form-card">
+      <div class="staff-form-intro">
+        <div>
+          <h3>Login invite</h3>
+          <p class="muted">
+            Creates a platform login for this school. Staff open the set-password link, then sign in
+            on school login with organization id + username.
+          </p>
+        </div>
+      </div>
+      <div class="grid three">
+        <label>
+          <span class="field-title">Role <span class="required">*</span></span>
+          <select
+            [(ngModel)]="selectedTemplateCode"
+            name="inviteTemplate"
+            [disabled]="roleTemplatesLoading || inviting"
+          >
+            @for (t of roleTemplates; track t.code) {
+              <option [value]="t.code">{{ t.name }}</option>
+            }
+          </select>
+          @if (selectedTemplate?.description) {
+            <span class="field-hint">{{ selectedTemplate?.description }}</span>
+          }
+        </label>
+        <label>
+          <span class="field-title">Full name <span class="required">*</span></span>
+          <input
+            [(ngModel)]="inviteDraft.name"
+            name="inviteName"
+            autocomplete="name"
+            placeholder="e.g. Priya Sharma"
+            [disabled]="inviting"
+          />
+        </label>
+        <label>
+          <span class="field-title">Username <span class="required">*</span></span>
+          <input
+            [(ngModel)]="inviteDraft.username"
+            name="inviteUsername"
+            autocomplete="username"
+            placeholder="e.g. priya.teacher"
+            [disabled]="inviting"
+          />
+          <span class="field-hint">Saved as username_organizationId automatically</span>
+        </label>
+        <label>
+          <span class="field-title">Email <span class="required">*</span></span>
+          <input
+            [(ngModel)]="inviteDraft.email"
+            name="inviteEmail"
+            type="email"
+            placeholder="name@school.com"
+            [disabled]="inviting"
+          />
+        </label>
+        <label>
+          Mobile
+          <input
+            [(ngModel)]="inviteDraft.phone"
+            name="invitePhone"
+            type="tel"
+            inputmode="numeric"
+            maxlength="10"
+            placeholder="10-digit mobile"
+            [disabled]="inviting"
+          />
+        </label>
+      </div>
+      <div class="actions staff-form-actions">
+        <button type="button" (click)="sendLoginInvite()" [disabled]="inviting || roleTemplatesLoading">
+          {{ inviting ? 'Sending invite…' : 'Create & send invite' }}
+        </button>
+        <button type="button" class="secondary" (click)="cancelCreate()" [disabled]="inviting">
+          Cancel
+        </button>
+      </div>
+
+      @if (inviteResult) {
+        <div class="invite-result" role="status">
+          <p>
+            Invite for <strong>{{ inviteResult.username }}</strong> ({{ inviteResult.email }}) —
+            expires {{ inviteResult.expiresAt | date: 'medium' }}.
+          </p>
+          <label>
+            Set-password link
+            <input [value]="inviteResult.setPasswordUrl" readonly name="inviteLink" />
+          </label>
+          <div class="actions">
+            <button type="button" class="secondary" (click)="copyInviteLink()">Copy link</button>
+            @if (copyHint) {
+              <span class="muted">{{ copyHint }}</span>
+            }
+          </div>
+          <p class="field-hint">
+            Share this link privately (email / WhatsApp). After they set a password, they log in here
+            with your organization id.
+          </p>
+        </div>
+      }
+    </section>
   } @else {
     @if (!showForm) {
       <section class="panel summary-strip" aria-label="Staff directory summary">
@@ -366,6 +474,17 @@
                   >
                     Edit
                   </button>
+                  @if (canInviteLogin) {
+                    <button
+                      type="button"
+                      class="row-action"
+                      (click)="startInviteFromRow(row)"
+                      [disabled]="saving || deletingId === row.id"
+                      title="Create a login invite for this person"
+                    >
+                      Invite login
+                    </button>
+                  }
                   <button
                     type="button"
                     class="row-action row-action--danger"

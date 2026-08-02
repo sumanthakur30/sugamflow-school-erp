@@ -24,6 +24,9 @@
     @if (error) {
       <p class="error" role="alert">{{ error }}</p>
     }
+    @if (success) {
+      <p class="success" role="status">{{ success }}</p>
+    }
 
     <form (ngSubmit)="onSubmit()">
       <label>
@@ -54,13 +57,14 @@
       <label>
         Open after sign-in
         <select [(ngModel)]="destination" name="destination">
-          <option value="admin">School Admin</option>
-          <option value="parent">Parent App</option>
-          <option value="teacher">Teacher App</option>
+          @for (opt of destinations; track opt.value) {
+            <option [value]="opt.value">{{ opt.label }}</option>
+          }
         </select>
-        <span class="hint"
-          >Data access follows the account JWT role (PARENT / TEACHER), not this menu.</span
-        >
+        <span class="hint">
+          Chooses the home screen after login. Module access still follows your account permissions;
+          for Parent / Teacher portals the matching app role is applied for this session.
+        </span>
       </label>
       <button type="submit" [disabled]="submitting">
         {{ submitting ? 'Signing in…' : 'Sign in' }}

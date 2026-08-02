@@ -21,7 +21,16 @@ export const featureGuard: CanActivateFn = (route) => {
   if (roles?.length) {
     const ok = roles.map((r) => r.toUpperCase()).includes(role);
     if (!ok) {
-      return router.createUrlTree([roleHome(role)]);
+      const home = roleHome(role);
+      // Prevent infinite redirects when home is this same guarded route.
+      const here = '/' + route.pathFromRoot
+        .map((r) => r.url.map((s) => s.path).join('/'))
+        .filter(Boolean)
+        .join('/');
+      if (home === here || home === router.url.split('?')[0]) {
+        return router.createUrlTree(['/login']);
+      }
+      return router.createUrlTree([home]);
     }
   }
 

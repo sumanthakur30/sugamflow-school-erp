@@ -150,6 +150,14 @@ button {
   margin: 0 0 1rem;
 }
 
+.success {
+  padding: 0.75rem;
+  border-radius: var(--sf-radius);
+  background: color-mix(in srgb, var(--sf-primary, #0f766e) 12%, #fff);
+  color: var(--sf-primary, #0f766e);
+  margin: 0 0 1rem;
+}
+
 .demo-hint {
   margin: 1.25rem 0 0;
   font-size: 0.8125rem;

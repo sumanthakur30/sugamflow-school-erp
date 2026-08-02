@@ -2,7 +2,11 @@ import { Injectable, inject } from '@angular/core';
 import { Observable } from 'rxjs';
 import { ApiService } from '../../core/api.service';
 
-/** Thin client for platform subscription APIs (catalog / plans / license / usage). */
+/**
+ * Thin client for platform subscription APIs.
+ * School UI should only call read paths (entitlements / license / usage).
+ * Configure/assign APIs are for SugamFlow Super Admin → Platform Subscription.
+ */
 @Injectable({ providedIn: 'root' })
 export class SubscriptionApiService {
   private readonly api = inject(ApiService);

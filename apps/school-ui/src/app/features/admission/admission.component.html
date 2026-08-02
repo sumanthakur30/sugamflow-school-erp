@@ -445,6 +445,11 @@
       <p class="panel">Loading admission configuration…</p>
     } @else if (!featureEnabled) {
       <p class="panel">Admission is not enabled for this plan (FEATURE_ADMISSION).</p>
+      <p class="muted panel">
+        Enable it from SugamFlow Super Admin → Platform Subscription (plan feature flag), then refresh.
+      </p>
+    } @else if (bootstrapBlocked) {
+      <p class="muted panel">Admission is on your plan, but setup is incomplete. Fix the error above and refresh.</p>
     } @else {
       <section class="panel inbox-panel">
         <sf-list-toolbar

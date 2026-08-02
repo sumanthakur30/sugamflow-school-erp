@@ -26,6 +26,7 @@ html,
 body {
   margin: 0;
   min-height: 100%;
+  overflow-x: clip;
   font-family: var(--sf-font);
   font-size: var(--sf-font-size);
   color: var(--sf-text);

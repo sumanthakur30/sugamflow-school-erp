@@ -55,6 +55,18 @@ export class AuthSessionService {
     );
   }
 
+  validateInvitation(token: string): Observable<{ valid: boolean; shopId?: string; username?: string }> {
+    return this.http.get<{ valid: boolean; shopId?: string; username?: string }>(
+      `${this.authBase}/invitations/validate`,
+      { params: { token } },
+    );
+  }
+
+  acceptInvitation(token: string, password: string): Observable<AuthResponse> {
+    // Do not auto-store session — staff should sign in on /login after activating.
+    return this.http.post<AuthResponse>(`${this.authBase}/invitations/accept`, { token, password });
+  }
+
   logout(): void {
     localStorage.removeItem(SESSION_TOKEN_KEY);
     localStorage.removeItem(SESSION_DATA_KEY);

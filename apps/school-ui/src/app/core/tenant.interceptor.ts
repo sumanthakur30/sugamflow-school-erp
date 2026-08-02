@@ -29,14 +29,16 @@ function readSession(): SessionSnapshot | null {
 /** Injects multi-tenant headers — scoped to signed-in organization/branch/session. */
 export const tenantInterceptor: HttpInterceptorFn = (req, next) => {
   const session = readSession();
-  const cloned = req.clone({
-    setHeaders: {
-      'X-Tenant-Id': localStorage.getItem(SESSION_TENANT_KEY) ?? session?.shopId ?? 'demo-school',
-      'X-Branch-Id': localStorage.getItem(SESSION_BRANCH_KEY) ?? 'main',
-      'X-Academic-Session-Id': localStorage.getItem(SESSION_ACADEMIC_KEY) ?? '2025-26',
-      'X-User-Id': localStorage.getItem(SESSION_USER_KEY) ?? session?.username ?? '',
-      'X-Role-Code': localStorage.getItem(SESSION_ROLE_KEY) ?? session?.role ?? '',
-    },
-  });
-  return next(cloned);
+  const isPlatformAccounts = req.url.includes('/api/v1/accounts');
+  const headers: Record<string, string> = {
+    'X-Branch-Id': localStorage.getItem(SESSION_BRANCH_KEY) ?? 'main',
+    'X-Academic-Session-Id': localStorage.getItem(SESSION_ACADEMIC_KEY) ?? '2025-26',
+    'X-User-Id': localStorage.getItem(SESSION_USER_KEY) ?? session?.username ?? '',
+    'X-Role-Code': localStorage.getItem(SESSION_ROLE_KEY) ?? session?.role ?? '',
+  };
+  // Do not overwrite numeric X-Tenant-Id set by authTokenInterceptor for account-service.
+  if (!isPlatformAccounts) {
+    headers['X-Tenant-Id'] = localStorage.getItem(SESSION_TENANT_KEY) ?? session?.shopId ?? 'demo-school';
+  }
+  return next(req.clone({ setHeaders: headers }));
 };

@@ -73,3 +73,34 @@
     min-width: calc(50% - 0.4rem);
   }
 }
+
+@media (max-width: 640px) {
+  .toolbar-row {
+    align-items: stretch;
+  }
+
+  .search-field {
+    flex: 1 1 100%;
+  }
+
+  .compact {
+    min-width: 0;
+    flex: 1 1 calc(50% - 0.4rem);
+  }
+
+  .dir-btn {
+    flex: 1 1 calc(50% - 0.4rem);
+    min-width: 0;
+  }
+
+  .search-field input,
+  .compact select,
+  .compact input {
+    font-size: 16px;
+    min-height: 2.5rem;
+  }
+
+  .list-meta {
+    flex-direction: column;
+  }
+}

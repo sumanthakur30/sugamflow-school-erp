@@ -48,6 +48,8 @@ export class AdmissionComponent implements OnInit, OnDestroy {
   error = '';
   statusMsg = '';
   featureEnabled = false;
+  /** True when bootstrap failed for a non-feature reason (form/workflow missing, etc.). */
+  bootstrapBlocked = false;
   formKey = 'admission_form';
   workflowKey = 'admission';
   fields: FormField[] = [];
@@ -273,9 +275,11 @@ export class AdmissionComponent implements OnInit, OnDestroy {
   reload(): void {
     this.loading = true;
     this.error = '';
+    this.bootstrapBlocked = false;
     this.api.get<any>('/api/admission/bootstrap').subscribe({
       next: (boot) => {
         this.featureEnabled = !!boot.featureEnabled;
+        this.bootstrapBlocked = false;
         this.formKey = boot.formKey;
         this.workflowKey = boot.workflowKey;
         this.fields = this.extractFields(boot.form);
@@ -292,8 +296,26 @@ export class AdmissionComponent implements OnInit, OnDestroy {
       },
       error: (err) => {
         this.loading = false;
-        this.error = err?.error?.message ?? err?.message ?? 'Admission bootstrap failed';
-        this.featureEnabled = false;
+        const body = err?.error;
+        const code = String(body?.data?.code ?? body?.code ?? '').toUpperCase();
+        this.error = body?.message ?? err?.message ?? 'Admission bootstrap failed';
+        // Do not claim FEATURE_ADMISSION is off when the real issue is missing form/workflow.
+        if (code === 'FEATURE_DISABLED') {
+          this.featureEnabled = false;
+          this.bootstrapBlocked = false;
+        } else {
+          this.featureEnabled = code !== 'FEATURE_DISABLED';
+          this.bootstrapBlocked = true;
+          if (code === 'FORM_MISSING') {
+            this.error =
+              (body?.message || 'Admission form is missing.') +
+              ' Start form-builder-service (:8183) or seed admission_form in Form Builder, then refresh.';
+          } else if (code === 'WORKFLOW_MISSING') {
+            this.error =
+              (body?.message || 'Admission workflow is missing.') +
+              ' Ensure workflow-service has the admission workflow, then refresh.';
+          }
+        }
       },
     });
   }

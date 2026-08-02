@@ -9,6 +9,7 @@ const PLATFORM_ADMIN_ROLES = ['SHOP_OWNER', 'SUPER_ADMIN', 'ADMIN'];
 const CAMPUS_ADMIN_ROLES = [...PLATFORM_ADMIN_ROLES, 'PRINCIPAL'];
 const STAFF_DASHBOARD_ROLES = [
   ...CAMPUS_ADMIN_ROLES,
+  'SHOP_EMPLOYEE',
   'ACCOUNTANT',
   'ACCOUNTS',
   'FINANCE',
@@ -24,6 +25,11 @@ export const routes: Routes = [
     path: 'login',
     loadComponent: () =>
       import('./features/login/login.component').then((m) => m.LoginComponent),
+  },
+  {
+    path: 'onboarding/set-password',
+    loadComponent: () =>
+      import('./features/onboarding/set-password.component').then((m) => m.SetPasswordComponent),
   },
   {
     path: 'verify/document/:token',
@@ -293,6 +299,15 @@ export const routes: Routes = [
       },
       {
         path: 'admin/staff-directory/add',
+        canActivate: [featureGuard],
+        data: { feature: 'FEATURE_STAFF_MASTER', roles: CAMPUS_ADMIN_ROLES },
+        loadComponent: () =>
+          import('./features/directory/staff-directory.component').then(
+            (m) => m.StaffDirectoryComponent,
+          ),
+      },
+      {
+        path: 'admin/staff-directory/invite',
         canActivate: [featureGuard],
         data: { feature: 'FEATURE_STAFF_MASTER', roles: CAMPUS_ADMIN_ROLES },
         loadComponent: () =>

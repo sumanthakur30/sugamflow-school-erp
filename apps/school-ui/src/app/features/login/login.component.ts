@@ -1,10 +1,28 @@
 import { Component, OnInit, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { Router } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 import { AuthSessionService } from '../../core/auth-session.service';
 import { ProvisionService } from '../../core/provision.service';
 import { ThemeService } from '../../core/theme.service';
 import { switchMap } from 'rxjs';
+
+export type LoginDestination =
+  | 'admin'
+  | 'principal'
+  | 'teacher'
+  | 'accountant'
+  | 'reception'
+  | 'librarian'
+  | 'parent';
+
+interface DestinationOption {
+  value: LoginDestination;
+  label: string;
+  /** Route after successful login. */
+  path: string;
+  /** Optional role overlay for dashboards / guards (does not change JWT). */
+  activeRole?: string;
+}
 
 @Component({
   selector: 'sf-login',
@@ -16,15 +34,30 @@ import { switchMap } from 'rxjs';
 export class LoginComponent implements OnInit {
   private readonly auth = inject(AuthSessionService);
   private readonly router = inject(Router);
+  private readonly route = inject(ActivatedRoute);
   private readonly theme = inject(ThemeService);
   private readonly provision = inject(ProvisionService);
 
   organizationId = localStorage.getItem('sf.tenantId') ?? '';
   username = 'admin';
   password = 'password';
-  /** Where to land after login: admin | parent | teacher */
-  destination: 'admin' | 'parent' | 'teacher' = 'admin';
+  destination: LoginDestination = 'admin';
+  readonly destinations: DestinationOption[] = [
+    { value: 'admin', label: 'School Admin', path: '/admin/dashboard' },
+    { value: 'principal', label: 'Principal', path: '/admin/dashboard', activeRole: 'PRINCIPAL' },
+    { value: 'teacher', label: 'Teacher App', path: '/teacher', activeRole: 'TEACHER' },
+    {
+      value: 'accountant',
+      label: 'Accountant / Finance',
+      path: '/admin/dashboard',
+      activeRole: 'ACCOUNTANT',
+    },
+    { value: 'reception', label: 'Reception', path: '/admin/dashboard', activeRole: 'RECEPTION' },
+    { value: 'librarian', label: 'Librarian', path: '/admin/library', activeRole: 'LIBRARIAN' },
+    { value: 'parent', label: 'Parent App', path: '/parent', activeRole: 'PARENT' },
+  ];
   error = '';
+  success = '';
   submitting = false;
 
   schoolName = 'SugamFlow School';
@@ -37,6 +70,23 @@ export class LoginComponent implements OnInit {
   private themeLoadTimer: ReturnType<typeof setTimeout> | null = null;
 
   ngOnInit(): void {
+    const qp = this.route.snapshot.queryParamMap;
+    if (qp.get('activated') === '1') {
+      this.success = 'Password set. Sign in with your organization id and username.';
+      this.password = '';
+    }
+    const org = (qp.get('org') || '').trim();
+    if (org) {
+      this.organizationId = org;
+    }
+    const user = (qp.get('user') || '').trim();
+    if (user) {
+      // Show base username when already scoped as user_org
+      const suffix = `_${this.organizationId}`;
+      this.username =
+        this.organizationId && user.endsWith(suffix) ? user.slice(0, -suffix.length) : user;
+    }
+    this.destination = this.guessDestination(this.username);
     this.refreshTheme();
   }
 
@@ -52,6 +102,8 @@ export class LoginComponent implements OnInit {
     this.submitting = true;
     const shopId = this.organizationId.trim();
     const scopedUsername = this.auth.toScopedUsername(this.username, shopId);
+    const dest =
+      this.destinations.find((d) => d.value === this.destination) ?? this.destinations[0];
 
     this.auth
       .login({ shopId, username: scopedUsername, password: this.password })
@@ -63,14 +115,11 @@ export class LoginComponent implements OnInit {
               'MFA is enabled for this account; complete login in SugamFlow shop UI for now.';
             return;
           }
+          if (dest.activeRole) {
+            this.auth.setActiveRole(dest.activeRole);
+          }
           const navigate = () => {
-            if (this.destination === 'parent') {
-              this.router.navigateByUrl('/parent');
-            } else if (this.destination === 'teacher') {
-              this.router.navigateByUrl('/teacher');
-            } else {
-              this.router.navigateByUrl('/admin/dashboard');
-            }
+            void this.router.navigateByUrl(dest.path);
           };
           // Bootstrap campus + branding from shop name, then refresh theme.
           this.provision
@@ -84,6 +133,19 @@ export class LoginComponent implements OnInit {
           this.error = String(msg);
         },
       });
+  }
+
+  private guessDestination(username: string): LoginDestination {
+    const u = (username || '').trim().toLowerCase();
+    if (!u) return 'admin';
+    if (/(parent|guardian|mother|father)/.test(u)) return 'parent';
+    if (/(teacher|class.?teacher|faculty)/.test(u)) return 'teacher';
+    if (/(account|finance|cashier|accounts)/.test(u)) return 'accountant';
+    if (/(reception|frontoffice|front.?office)/.test(u)) return 'reception';
+    if (/(librar)/.test(u)) return 'librarian';
+    if (/(principal|headmaster|headmistress)/.test(u)) return 'principal';
+    if (/(owner|admin)/.test(u)) return 'admin';
+    return 'admin';
   }
 
   private refreshTheme(): void {

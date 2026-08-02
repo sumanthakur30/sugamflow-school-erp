@@ -25,6 +25,14 @@
   font-size: 0.92rem;
 }
 
+.subscription-admin .callout {
+  margin-top: 0.75rem;
+  padding: 0.65rem 0.8rem;
+  border-radius: var(--sf-radius);
+  border: 1px solid color-mix(in srgb, var(--sf-menu) 28%, transparent);
+  background: color-mix(in srgb, var(--sf-panel) 92%, #e2e8f0);
+}
+
 .subscription-admin .error {
   color: var(--sf-error, #b91c1c);
   font-weight: 600;

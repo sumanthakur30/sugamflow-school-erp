@@ -90,6 +90,12 @@ export class ShellComponent implements OnInit {
           feature: 'FEATURE_STAFF_MASTER',
           roles: ['SHOP_OWNER', 'SUPER_ADMIN', 'ADMIN', 'PRINCIPAL'],
         },
+        {
+          path: '/admin/staff-directory/invite',
+          label: 'Invite login',
+          feature: 'FEATURE_STAFF_MASTER',
+          roles: ['SHOP_OWNER', 'SUPER_ADMIN', 'ADMIN', 'PRINCIPAL'],
+        },
         { path: '/admin/payroll', label: 'Payroll', feature: 'FEATURE_PAYROLL' },
       ],
     },
