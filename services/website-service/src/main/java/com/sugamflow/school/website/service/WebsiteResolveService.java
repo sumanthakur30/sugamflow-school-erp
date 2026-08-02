@@ -2,6 +2,7 @@ package com.sugamflow.school.website.service;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.sugamflow.school.website.integration.SubscriptionEntitlementsClient;
 import com.sugamflow.school.website.persistence.entity.WebsiteDomain;
 import com.sugamflow.school.website.persistence.entity.WebsiteSite;
 import com.sugamflow.school.website.persistence.repo.WebsiteDomainRepository;
@@ -26,6 +27,7 @@ public class WebsiteResolveService {
   private final WebsiteDomainRepository domainRepository;
   private final WebsiteSiteRepository siteRepository;
   private final ObjectMapper objectMapper;
+  private final SubscriptionEntitlementsClient entitlementsClient;
   private final String defaultErpLoginUrl;
   private final String cdnBaseUrl;
 
@@ -33,11 +35,13 @@ public class WebsiteResolveService {
       WebsiteDomainRepository domainRepository,
       WebsiteSiteRepository siteRepository,
       ObjectMapper objectMapper,
+      SubscriptionEntitlementsClient entitlementsClient,
       @Value("${website.defaults.erp-login-url}") String defaultErpLoginUrl,
       @Value("${website.cdn.base-url:}") String cdnBaseUrl) {
     this.domainRepository = domainRepository;
     this.siteRepository = siteRepository;
     this.objectMapper = objectMapper;
+    this.entitlementsClient = entitlementsClient;
     this.defaultErpLoginUrl = defaultErpLoginUrl;
     this.cdnBaseUrl = cdnBaseUrl == null ? "" : cdnBaseUrl.trim().replaceAll("/$", "");
   }
@@ -118,7 +122,25 @@ public class WebsiteResolveService {
   @org.springframework.transaction.annotation.Transactional
   public Map<String, Object> createCampusSite(
       String organizationId, String branchId, String displayName) {
+    if (!entitlementsClient.isFeatureEnabled(organizationId, "FEATURE_MULTI_BRANCH")) {
+      throw new ResponseStatusException(
+          HttpStatus.PAYMENT_REQUIRED,
+          "FEATURE_MULTI_BRANCH is required to create campus websites");
+    }
+    Long campusLimit = entitlementsClient.limits(organizationId).get("website_campuses");
+    if (campusLimit != null && campusLimit >= 0) {
+      long current = siteRepository.countByOrganizationId(organizationId);
+      if (current >= campusLimit) {
+        throw new ResponseStatusException(
+            HttpStatus.PAYMENT_REQUIRED,
+            "Website campus limit reached (" + campusLimit + ")");
+      }
+    }
     String branch = branchId == null || branchId.isBlank() ? "main" : branchId.trim();
+    if ("main".equalsIgnoreCase(branch)) {
+      throw new ResponseStatusException(
+          HttpStatus.BAD_REQUEST, "Use a non-main branch key for additional campuses");
+    }
     if (siteRepository.findByOrganizationIdAndBranchId(organizationId, branch).isPresent()) {
       throw new ResponseStatusException(HttpStatus.CONFLICT, "Campus site already exists: " + branch);
     }

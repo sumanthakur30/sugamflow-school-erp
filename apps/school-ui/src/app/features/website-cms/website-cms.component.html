@@ -2,17 +2,25 @@
   <header class="head">
     <div>
       <h1>Website CMS</h1>
-      <p>Manage public website pages, homepage sections, and SEO defaults.</p>
+      <p>Pages, campuses, alumni, AI drafts, marketplace templates, and SEO.</p>
     </div>
     <button type="button" class="primary" (click)="startCreate()">New page</button>
   </header>
 
   <div class="tabs">
-    <button type="button" [class.active]="tab === 'pages'" (click)="tab = 'pages'">Pages</button>
-    <button type="button" [class.active]="tab === 'homepage'" (click)="tab = 'homepage'">
+    <button type="button" [class.active]="tab === 'pages'" (click)="setTab('pages')">Pages</button>
+    <button type="button" [class.active]="tab === 'homepage'" (click)="setTab('homepage')">
       Homepage
     </button>
-    <button type="button" [class.active]="tab === 'seo'" (click)="tab = 'seo'">SEO</button>
+    <button type="button" [class.active]="tab === 'seo'" (click)="setTab('seo')">SEO</button>
+    <button type="button" [class.active]="tab === 'campuses'" (click)="setTab('campuses')">
+      Campuses
+    </button>
+    <button type="button" [class.active]="tab === 'alumni'" (click)="setTab('alumni')">Alumni</button>
+    <button type="button" [class.active]="tab === 'ai'" (click)="setTab('ai')">AI</button>
+    <button type="button" [class.active]="tab === 'marketplace'" (click)="setTab('marketplace')">
+      Marketplace
+    </button>
     <button type="button" [class.active]="tab === 'analytics'" (click)="openAnalytics()">
       Analytics
     </button>
@@ -86,9 +94,88 @@
     </form>
   </div>
 
+  <div class="panel" *ngIf="tab === 'campuses'">
+    <h2>Campus websites</h2>
+    <p class="hint">Requires FEATURE_MULTI_BRANCH. Each campus is a site shell (branch_id).</p>
+    <article *ngFor="let c of campuses">
+      <strong>{{ c.displayName }}</strong>
+      <div class="meta">
+        {{ c.branchId }} · {{ c.status }} · {{ c.defaultSite ? 'default' : 'campus' }} ·
+        {{ c.templateCode || '—' }}
+      </div>
+    </article>
+    <form class="editor" (ngSubmit)="createCampus()">
+      <label>Branch key <input name="branchId" [(ngModel)]="campusDraft.branchId" required placeholder="north" /></label>
+      <label>Display name <input name="displayName" [(ngModel)]="campusDraft.displayName" /></label>
+      <button type="submit" class="primary" [disabled]="saving">Create campus</button>
+    </form>
+  </div>
+
+  <div class="panel" *ngIf="tab === 'alumni'">
+    <h2>Alumni directory</h2>
+    <article *ngFor="let a of alumni">
+      <strong>{{ a.fullName }}</strong>
+      <div class="meta">/{{ a.slug }} · {{ a.batchYear || '—' }} · {{ a.status }}</div>
+      <button type="button" *ngIf="a.status !== 'PUBLISHED'" (click)="publishAlumni(a)">Publish</button>
+    </article>
+    <form class="editor" (ngSubmit)="saveAlumni()">
+      <label>Slug <input name="aSlug" [(ngModel)]="alumniDraft.slug" required /></label>
+      <label>Full name <input name="aName" [(ngModel)]="alumniDraft.fullName" required /></label>
+      <label>Batch year <input name="aYear" type="number" [(ngModel)]="alumniDraft.batchYear" /></label>
+      <label>Headline <input name="aHead" [(ngModel)]="alumniDraft.headline" /></label>
+      <label>Bio HTML <textarea name="aBio" rows="5" [(ngModel)]="alumniDraft.bioHtml"></textarea></label>
+      <button type="submit" class="primary" [disabled]="saving">Add alumni</button>
+    </form>
+  </div>
+
+  <div class="panel" *ngIf="tab === 'ai'">
+    <h2>AI draft assist</h2>
+    <p class="hint">Uses local drafts unless CMS_AI_API_URL is configured. Requires FEATURE_WEBSITE_AI.</p>
+    <form class="editor" (ngSubmit)="runAiDraft()">
+      <label
+        >Kind
+        <select name="aiKind" [(ngModel)]="aiDraft.kind">
+          <option value="page">Page</option>
+          <option value="blog">Blog</option>
+          <option value="seo">SEO</option>
+          <option value="alumni">Alumni bio</option>
+        </select>
+      </label>
+      <label>Topic <input name="aiTopic" [(ngModel)]="aiDraft.topic" required /></label>
+      <label>Tone <input name="aiTone" [(ngModel)]="aiDraft.tone" /></label>
+      <button type="submit" class="primary" [disabled]="saving">Generate draft</button>
+    </form>
+    <pre *ngIf="aiResult">{{ aiResult | json }}</pre>
+  </div>
+
+  <div class="panel" *ngIf="tab === 'marketplace'">
+    <h2>Template marketplace</h2>
+    <p class="hint">Apply a catalog template to a campus site (theme/homepage/nav/SEO).</p>
+    <label
+      >Template
+      <select name="tpl" [(ngModel)]="selectedTemplate">
+        <option *ngFor="let t of templates" [value]="t.code">{{ t.name }}</option>
+      </select>
+    </label>
+    <label
+      >Campus site
+      <select name="site" [(ngModel)]="applySiteId">
+        <option *ngFor="let c of campuses" [value]="c.id">
+          {{ c.displayName }} ({{ c.branchId }})
+        </option>
+      </select>
+    </label>
+    <p class="hint" *ngFor="let t of templates">
+      <strong *ngIf="t.code === selectedTemplate">{{ t.name }}:</strong>
+      <span *ngIf="t.code === selectedTemplate">{{ t.description }}</span>
+    </p>
+    <button type="button" class="primary" (click)="applyTemplate()" [disabled]="saving || !selectedTemplate">
+      Apply template
+    </button>
+  </div>
+
   <div class="panel" *ngIf="tab === 'analytics'">
     <h2>Website analytics (30 days)</h2>
-    <p class="hint">Public page views and funnel events from the school website.</p>
     <div *ngIf="analyticsSummary as a">
       <p><strong>{{ a.totalEvents }}</strong> events in last {{ a.days }} days</p>
       <ul>

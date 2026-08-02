@@ -23,11 +23,46 @@ interface HomepageSection {
   content?: Record<string, unknown>;
 }
 
+interface CampusRow {
+  id: string;
+  branchId: string;
+  displayName: string;
+  defaultSite?: boolean;
+  status?: string;
+  templateCode?: string;
+}
+
+interface AlumniRow {
+  id: string;
+  slug: string;
+  fullName: string;
+  batchYear?: number;
+  headline?: string;
+  bioHtml?: string;
+  status: string;
+}
+
+interface TemplateRow {
+  code: string;
+  name: string;
+  description?: string;
+}
+
 interface ApiResponse<T> {
   success: boolean;
   data: T;
   message?: string;
 }
+
+type Tab =
+  | 'pages'
+  | 'homepage'
+  | 'seo'
+  | 'analytics'
+  | 'campuses'
+  | 'alumni'
+  | 'ai'
+  | 'marketplace';
 
 @Component({
   selector: 'sf-website-cms',
@@ -38,10 +73,13 @@ interface ApiResponse<T> {
 })
 export class WebsiteCmsComponent implements OnInit {
   private readonly http = inject(HttpClient);
-  tab: 'pages' | 'homepage' | 'seo' | 'analytics' = 'pages';
+  tab: Tab = 'pages';
   pages: PageRow[] = [];
   sections: HomepageSection[] = [];
   seo = { defaultTitle: '', defaultDescription: '', ogImageUrl: '' };
+  campuses: CampusRow[] = [];
+  alumni: AlumniRow[] = [];
+  templates: TemplateRow[] = [];
   analyticsSummary: {
     totalEvents: number;
     days: number;
@@ -68,15 +106,37 @@ export class WebsiteCmsComponent implements OnInit {
     seoDescription: string;
   } = this.emptyDraft();
 
+  campusDraft = { branchId: '', displayName: '' };
+  alumniDraft = {
+    slug: '',
+    fullName: '',
+    batchYear: new Date().getFullYear() - 5,
+    headline: '',
+    bioHtml: '',
+  };
+  aiDraft = { kind: 'page', topic: '', tone: 'warm and professional' };
+  aiResult: Record<string, unknown> | null = null;
+  selectedTemplate = '';
+  applySiteId = '';
+
   ngOnInit(): void {
     this.reload();
     this.loadWebsiteBootstrap();
   }
 
+  setTab(tab: Tab): void {
+    this.tab = tab;
+    if (tab === 'analytics') {
+      this.loadAnalytics();
+      this.loadMediaUsage();
+    }
+    if (tab === 'campuses') this.loadCampuses();
+    if (tab === 'alumni') this.loadAlumni();
+    if (tab === 'marketplace') this.loadTemplates();
+  }
+
   openAnalytics(): void {
-    this.tab = 'analytics';
-    this.loadAnalytics();
-    this.loadMediaUsage();
+    this.setTab('analytics');
   }
 
   loadAnalytics(): void {
@@ -92,7 +152,9 @@ export class WebsiteCmsComponent implements OnInit {
             totalEvents: Number(data['totalEvents'] || 0),
             days: Number(data['days'] || 30),
             byType: (data['byType'] as Record<string, number>) || {},
-            recent: (data['recent'] as Array<{ eventType: string; path: string; createdAt?: string }>) || [],
+            recent:
+              (data['recent'] as Array<{ eventType: string; path: string; createdAt?: string }>) ||
+              [],
           };
         },
         error: (err) => (this.error = err?.error?.message || 'Failed to load analytics'),
@@ -157,9 +219,171 @@ export class WebsiteCmsComponent implements OnInit {
             defaultDescription: seo['defaultDescription'] || '',
             ogImageUrl: seo['ogImageUrl'] || '',
           };
+          this.campuses = ((data['campuses'] as CampusRow[]) || []).map((c) => ({
+            id: String(c.id),
+            branchId: String(c.branchId || 'main'),
+            displayName: String(c.displayName || ''),
+            defaultSite: !!c.defaultSite,
+            status: c.status,
+            templateCode: c.templateCode,
+          }));
+          if (!this.applySiteId && this.campuses.length) {
+            this.applySiteId = this.campuses[0].id;
+          }
         },
-        error: () => {
-          /* website bootstrap optional if FEATURE_WEBSITE off */
+        error: () => undefined,
+      });
+  }
+
+  loadCampuses(): void {
+    this.http
+      .get<ApiResponse<CampusRow[]>>(`${environment.apiBaseUrl}/api/website/admin/campuses`)
+      .subscribe({
+        next: (res) => {
+          this.campuses = res.data || [];
+          if (!this.applySiteId && this.campuses.length) {
+            this.applySiteId = this.campuses[0].id;
+          }
+        },
+        error: (err) => (this.error = err?.error?.message || 'Failed to load campuses'),
+      });
+  }
+
+  createCampus(): void {
+    this.saving = true;
+    this.error = '';
+    this.http
+      .post<ApiResponse<CampusRow>>(`${environment.apiBaseUrl}/api/website/admin/campuses`, {
+        branchId: this.campusDraft.branchId.trim(),
+        displayName: this.campusDraft.displayName.trim(),
+      })
+      .subscribe({
+        next: () => {
+          this.saving = false;
+          this.campusDraft = { branchId: '', displayName: '' };
+          this.loadCampuses();
+        },
+        error: (err) => {
+          this.saving = false;
+          this.error = err?.error?.message || 'Failed to create campus';
+        },
+      });
+  }
+
+  loadAlumni(): void {
+    this.http
+      .get<ApiResponse<AlumniRow[]>>(`${environment.apiBaseUrl}/api/cms/admin/alumni`)
+      .subscribe({
+        next: (res) => (this.alumni = res.data || []),
+        error: (err) => (this.error = err?.error?.message || 'Failed to load alumni'),
+      });
+  }
+
+  saveAlumni(): void {
+    this.saving = true;
+    this.error = '';
+    this.http
+      .post<ApiResponse<AlumniRow>>(`${environment.apiBaseUrl}/api/cms/admin/alumni`, this.alumniDraft)
+      .subscribe({
+        next: () => {
+          this.saving = false;
+          this.alumniDraft = {
+            slug: '',
+            fullName: '',
+            batchYear: new Date().getFullYear() - 5,
+            headline: '',
+            bioHtml: '',
+          };
+          this.loadAlumni();
+        },
+        error: (err) => {
+          this.saving = false;
+          this.error = err?.error?.message || 'Failed to save alumni';
+        },
+      });
+  }
+
+  publishAlumni(row: AlumniRow): void {
+    this.http
+      .post(`${environment.apiBaseUrl}/api/cms/admin/alumni/${row.id}/publish`, {})
+      .subscribe({
+        next: () => this.loadAlumni(),
+        error: (err) => (this.error = err?.error?.message || 'Publish failed'),
+      });
+  }
+
+  runAiDraft(): void {
+    this.saving = true;
+    this.error = '';
+    this.aiResult = null;
+    this.http
+      .post<ApiResponse<Record<string, unknown>>>(
+        `${environment.apiBaseUrl}/api/cms/admin/ai/draft`,
+        this.aiDraft
+      )
+      .subscribe({
+        next: (res) => {
+          this.saving = false;
+          this.aiResult = res.data || {};
+          if (this.aiDraft.kind === 'page' || this.aiDraft.kind === 'blog') {
+            this.draft = {
+              slug: String(this.aiResult['title'] || this.aiDraft.topic)
+                .toLowerCase()
+                .replace(/[^a-z0-9]+/g, '-')
+                .replace(/^-|-$/g, ''),
+              title: String(this.aiResult['title'] || this.aiDraft.topic),
+              summary: String(this.aiResult['summary'] || ''),
+              bodyHtml: String(this.aiResult['bodyHtml'] || ''),
+              seoTitle: String(this.aiResult['seoTitle'] || ''),
+              seoDescription: String(this.aiResult['seoDescription'] || ''),
+            };
+          }
+          if (this.aiDraft.kind === 'seo') {
+            this.seo.defaultTitle = String(this.aiResult['seoTitle'] || this.seo.defaultTitle);
+            this.seo.defaultDescription = String(
+              this.aiResult['seoDescription'] || this.seo.defaultDescription
+            );
+          }
+        },
+        error: (err) => {
+          this.saving = false;
+          this.error = err?.error?.message || 'AI draft failed';
+        },
+      });
+  }
+
+  loadTemplates(): void {
+    this.http
+      .get<ApiResponse<TemplateRow[]>>(
+        `${environment.apiBaseUrl}/api/website/admin/marketplace/templates`
+      )
+      .subscribe({
+        next: (res) => {
+          this.templates = res.data || [];
+          if (!this.selectedTemplate && this.templates.length) {
+            this.selectedTemplate = this.templates[0].code;
+          }
+        },
+        error: (err) => (this.error = err?.error?.message || 'Failed to load templates'),
+      });
+  }
+
+  applyTemplate(): void {
+    this.saving = true;
+    this.error = '';
+    this.http
+      .post(`${environment.apiBaseUrl}/api/website/admin/marketplace/apply`, {
+        templateCode: this.selectedTemplate,
+        siteId: this.applySiteId || undefined,
+      })
+      .subscribe({
+        next: () => {
+          this.saving = false;
+          this.loadWebsiteBootstrap();
+        },
+        error: (err) => {
+          this.saving = false;
+          this.error = err?.error?.message || 'Failed to apply template';
         },
       });
   }

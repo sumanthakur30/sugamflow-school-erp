@@ -24,12 +24,12 @@ function Assert-Ok([string]$name, [scriptblock]$block) {
     return $result
   } catch {
     $script:failed++
-    Write-Host "FAIL  $name — $($_.Exception.Message)" -ForegroundColor Red
+    Write-Host "FAIL  $name - $($_.Exception.Message)" -ForegroundColor Red
     return $null
   }
 }
 
-Write-Host "HCP website smoke → $BaseUrl (host=$HostName, org=$OrganizationId)" -ForegroundColor Cyan
+Write-Host "HCP website smoke -> $BaseUrl (host=$HostName, org=$OrganizationId)" -ForegroundColor Cyan
 
 $resolve = Assert-Ok "resolve host" {
   $r = Invoke-RestMethod -Uri "$BaseUrl/api/website/public/resolve?host=$HostName" -Method GET
@@ -65,6 +65,18 @@ Assert-Ok "cms blog list" {
   $r.data
 }
 
+Assert-Ok "cms alumni list" {
+  $r = Invoke-RestMethod -Uri "$BaseUrl/api/cms/public/alumni?organizationId=$OrganizationId" -Method GET
+  if ($null -eq $r.data) { throw "missing data" }
+  $r.data
+}
+
+Assert-Ok "marketplace templates" {
+  $r = Invoke-RestMethod -Uri "$BaseUrl/api/website/public/marketplace/templates" -Method GET
+  if (-not $r.data -or $r.data.Count -lt 1) { throw "no templates" }
+  $r.data
+}
+
 Assert-Ok "prerender html" {
   $r = Invoke-WebRequest -Uri "$BaseUrl/api/website/public/prerender?host=$HostName&path=/" -Method GET -UseBasicParsing
   if ($r.StatusCode -ne 200) { throw "status $($r.StatusCode)" }
@@ -90,7 +102,7 @@ Assert-Ok "admission apply (may 402/403 if feature off)" {
     mobile = "9000000001"
     email = "smoke@hcpschool.test"
     classApplied = "1"
-    message = "Automated smoke — safe to ignore"
+    message = "Automated smoke - safe to ignore"
   } | ConvertTo-Json
   try {
     $r = Invoke-RestMethod -Uri "$BaseUrl/api/admission/public/apply" -Method POST -Body $body -ContentType "application/json"
@@ -98,7 +110,7 @@ Assert-Ok "admission apply (may 402/403 if feature off)" {
   } catch {
     $code = $_.Exception.Response.StatusCode.value__
     if ($code -in 402, 403) {
-      Write-Host "WARN  admission feature gated ($code) — enable FEATURE_WEBSITE_ADMISSION" -ForegroundColor Yellow
+      Write-Host "WARN  admission feature gated ($code) - enable FEATURE_WEBSITE_ADMISSION" -ForegroundColor Yellow
       return $null
     }
     throw
