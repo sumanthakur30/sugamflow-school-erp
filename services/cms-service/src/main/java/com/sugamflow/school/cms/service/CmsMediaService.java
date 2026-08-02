@@ -4,18 +4,15 @@ import com.sugamflow.school.cms.integration.SubscriptionEntitlementsClient;
 import com.sugamflow.school.cms.persistence.entity.CmsMediaAsset;
 import com.sugamflow.school.cms.persistence.repo.CmsMediaAssetRepository;
 import com.sugamflow.school.cms.persistence.repo.CmsPageRepository;
+import com.sugamflow.school.cms.storage.MediaObjectStore;
 import com.sugamflow.school.cms.web.dto.MediaAssetResponse;
 import com.sugamflow.school.cms.web.dto.MediaRegisterRequest;
 import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.core.io.FileSystemResource;
 import org.springframework.core.io.Resource;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -34,20 +31,17 @@ public class CmsMediaService {
   private final CmsMediaAssetRepository mediaRepository;
   private final CmsPageRepository pageRepository;
   private final SubscriptionEntitlementsClient entitlementsClient;
-  private final Path storageRoot;
-  private final String publicBaseUrl;
+  private final MediaObjectStore objectStore;
 
   public CmsMediaService(
       CmsMediaAssetRepository mediaRepository,
       CmsPageRepository pageRepository,
       SubscriptionEntitlementsClient entitlementsClient,
-      @Value("${cms.media.storage-dir:${java.io.tmpdir}/school-cms-media}") String storageDir,
-      @Value("${cms.media.public-base-url:}") String publicBaseUrl) {
+      MediaObjectStore objectStore) {
     this.mediaRepository = mediaRepository;
     this.pageRepository = pageRepository;
     this.entitlementsClient = entitlementsClient;
-    this.storageRoot = Path.of(storageDir).toAbsolutePath().normalize();
-    this.publicBaseUrl = publicBaseUrl == null ? "" : publicBaseUrl.trim().replaceAll("/$", "");
+    this.objectStore = objectStore;
   }
 
   public List<MediaAssetResponse> list(String organizationId) {
@@ -71,6 +65,7 @@ public class CmsMediaService {
     payload.put("pageCount", pageCount);
     payload.put("pageLimit", pagesLimit);
     payload.put("assetCount", mediaRepository.countByOrganizationId(organizationId));
+    payload.put("storageBackend", objectStore.remoteEnabled() ? "s3" : "local");
     return payload;
   }
 
@@ -106,28 +101,26 @@ public class CmsMediaService {
     String original =
         file.getOriginalFilename() == null ? "upload.bin" : file.getOriginalFilename();
     String safeName = original.replaceAll("[^a-zA-Z0-9._\\-]+", "_");
-    Path orgDir = storageRoot.resolve(organizationId);
+    MediaObjectStore.StoredObject stored;
     try {
-      Files.createDirectories(orgDir);
-      Path target = orgDir.resolve(id + "-" + safeName);
-      file.transferTo(target);
+      stored =
+          objectStore.store(
+              organizationId,
+              id,
+              safeName,
+              file.getContentType(),
+              file.getInputStream(),
+              byteSize);
     } catch (IOException ex) {
-      throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Failed to store file");
+      throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Failed to read upload");
     }
-
-    String url =
-        (publicBaseUrl.isBlank() ? "" : publicBaseUrl)
-            + "/api/cms/public/media/"
-            + id
-            + "?organizationId="
-            + organizationId;
 
     CmsMediaAsset asset = new CmsMediaAsset();
     asset.setId(id);
     asset.setOrganizationId(organizationId);
     asset.setFileName(safeName);
     asset.setContentType(file.getContentType());
-    asset.setUrl(url);
+    asset.setUrl(stored.publicUrl());
     asset.setByteSize(byteSize);
     asset.setCreatedAt(Instant.now());
     MediaAssetResponse saved = toResponse(mediaRepository.save(asset));
@@ -136,29 +129,26 @@ public class CmsMediaService {
   }
 
   public Resource loadFile(String organizationId, UUID id) {
-    CmsMediaAsset asset =
-        mediaRepository
-            .findByIdAndOrganizationId(id, organizationId)
-            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Media not found"));
-    Path orgDir = storageRoot.resolve(organizationId);
-    try {
-      if (!Files.isDirectory(orgDir)) {
-        throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Media file missing");
-      }
-      try (var stream = Files.list(orgDir)) {
-        Path match =
-            stream
-                .filter(p -> p.getFileName().toString().startsWith(id + "-"))
-                .findFirst()
-                .orElseThrow(
-                    () -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Media file missing"));
-        return new FileSystemResource(match);
-      }
-    } catch (ResponseStatusException ex) {
-      throw ex;
-    } catch (IOException ex) {
-      throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Media file missing");
+    return objectStore
+        .loadLocal(organizationId, id)
+        .orElseThrow(
+            () ->
+                new ResponseStatusException(
+                    HttpStatus.NOT_FOUND,
+                    objectStore.remoteEnabled()
+                        ? "Media is on CDN; use asset url"
+                        : "Media file missing"));
+  }
+
+  /** When S3/CDN is enabled, return the stored public URL for redirect. */
+  public String remoteUrlOrNull(String organizationId, UUID id) {
+    if (!objectStore.remoteEnabled()) {
+      return null;
     }
+    return mediaRepository
+        .findByIdAndOrganizationId(id, organizationId)
+        .map(CmsMediaAsset::getUrl)
+        .orElse(null);
   }
 
   public MediaType mediaTypeFor(String organizationId, UUID id) {
@@ -177,23 +167,7 @@ public class CmsMediaService {
             .findByIdAndOrganizationId(id, organizationId)
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Media not found"));
     mediaRepository.delete(asset);
-    try {
-      Path orgDir = storageRoot.resolve(organizationId);
-      if (Files.isDirectory(orgDir)) {
-        try (var stream = Files.list(orgDir)) {
-          stream
-              .filter(p -> p.getFileName().toString().startsWith(id + "-"))
-              .forEach(
-                  p -> {
-                    try {
-                      Files.deleteIfExists(p);
-                    } catch (IOException ignored) {
-                    }
-                  });
-        }
-      }
-    } catch (IOException ignored) {
-    }
+    objectStore.delete(organizationId, id);
   }
 
   public void assertPageCreateAllowed(String organizationId) {

@@ -124,6 +124,7 @@ export class WebsiteApiService {
     classApplied: string;
     message?: string;
     age?: string;
+    captchaToken?: string;
   }) {
     const org = this.site()?.organizationId;
     return this.http

@@ -8,11 +8,11 @@ Continues School Website Platform after Phase 4 scale ops.
 |---|---|
 | Blog | `cms_blog_post`; public `/api/cms/public/blog`; admin CRUD gated by `FEATURE_WEBSITE_BLOG` |
 | Public UI | `/blog`, `/blog/:slug` + HCP nav seed |
-| Media upload | `POST /api/cms/admin/media/upload` (multipart) + public file GET |
-| Domain ops | School `POST /api/website/admin/domains`; platform `GET/POST /api/website/platform/domains`, SSL update |
-| Captcha | Optional `admission.public-captcha.*` on public apply (`captchaToken`) |
+| Media upload | `POST /api/cms/admin/media/upload` — local disk **or** S3/MinIO (`cms.media.s3.enabled`) + CDN URL |
+| Domain ops | School `POST /api/website/admin/domains`; platform APIs + **Super Admin UI** `/admin/school-website-domains` |
+| Captcha | Optional reCAPTCHA: UI `environment.captchaSiteKey` + `admission.public-captcha.*` |
 | Quota metering | Best-effort `increment-usage` on page create / media upload |
-| Prerender | `GET /api/website/public/prerender?host=&path=` HTML SEO shell |
+| Prerender | `GET /api/website/public/prerender?host=&path=` + Nginx bot map in ops runbook |
 | HCP go-live | Checklist + `scripts/smoke-hcp-website.ps1` (step 1) |
 
 ## Config

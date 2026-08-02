@@ -85,8 +85,12 @@ public class CmsPublicController {
   }
 
   @GetMapping("/media/{id}")
-  public ResponseEntity<Resource> mediaFile(
+  public ResponseEntity<?> mediaFile(
       @RequestParam("organizationId") String organizationId, @PathVariable("id") UUID id) {
+    String remote = mediaService.remoteUrlOrNull(organizationId, id);
+    if (remote != null && !remote.isBlank()) {
+      return ResponseEntity.status(302).header(HttpHeaders.LOCATION, remote).build();
+    }
     Resource resource = mediaService.loadFile(organizationId, id);
     MediaType type = mediaService.mediaTypeFor(organizationId, id);
     return ResponseEntity.ok()
