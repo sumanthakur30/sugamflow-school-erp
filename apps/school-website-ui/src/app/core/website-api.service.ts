@@ -10,6 +10,7 @@ export interface WebsiteResolve {
   templateCode: string | null;
   displayName: string;
   erpLoginUrl: string;
+  cdnBaseUrl?: string | null;
   theme: Record<string, string | null>;
   homepage: Array<Record<string, unknown>>;
   navigation: Array<{ label: string; path: string; order?: number; external?: boolean }>;

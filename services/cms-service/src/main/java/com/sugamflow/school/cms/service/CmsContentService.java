@@ -32,16 +32,19 @@ public class CmsContentService {
   private final CmsNewsRepository newsRepository;
   private final CmsEventRepository eventRepository;
   private final CmsGalleryItemRepository galleryRepository;
+  private final CmsMediaService mediaService;
 
   public CmsContentService(
       CmsPageRepository pageRepository,
       CmsNewsRepository newsRepository,
       CmsEventRepository eventRepository,
-      CmsGalleryItemRepository galleryRepository) {
+      CmsGalleryItemRepository galleryRepository,
+      CmsMediaService mediaService) {
     this.pageRepository = pageRepository;
     this.newsRepository = newsRepository;
     this.eventRepository = eventRepository;
     this.galleryRepository = galleryRepository;
+    this.mediaService = mediaService;
   }
 
   public List<PageResponse> listPublishedPages(String organizationId) {
@@ -99,6 +102,7 @@ public class CmsContentService {
   @Transactional
   public PageResponse createPage(String organizationId, PageUpsertRequest request) {
     String org = requireOrg(organizationId);
+    mediaService.assertPageCreateAllowed(org);
     String slug = normalizeSlug(request.slug());
     pageRepository
         .findByOrganizationIdAndSlug(org, slug)

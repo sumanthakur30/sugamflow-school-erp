@@ -2,6 +2,7 @@ import { Component, OnInit, inject } from '@angular/core';
 import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { AsyncPipe, NgFor, NgIf } from '@angular/common';
 import { WebsiteApiService } from '../core/website-api.service';
+import { AnalyticsService } from '../core/analytics.service';
 
 @Component({
   selector: 'app-site-shell',
@@ -122,12 +123,14 @@ import { WebsiteApiService } from '../core/website-api.service';
 })
 export class SiteShellComponent implements OnInit {
   readonly api = inject(WebsiteApiService);
+  private readonly analytics = inject(AnalyticsService);
   readonly year = new Date().getFullYear();
   erpLogin = '#';
   parentLogin = '#';
   teacherLogin = '#';
 
   ngOnInit(): void {
+    this.analytics.start();
     this.api.resolve().subscribe(() => {
       this.erpLogin = this.api.erpLoginUrl('admin');
       this.parentLogin = this.api.erpLoginUrl('parent', '/parent');

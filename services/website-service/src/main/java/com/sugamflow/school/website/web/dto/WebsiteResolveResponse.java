@@ -11,6 +11,8 @@ public record WebsiteResolveResponse(
     String templateCode,
     String displayName,
     String erpLoginUrl,
+    /** Optional CDN base for media/static assets; empty means same-origin. */
+    String cdnBaseUrl,
     Map<String, Object> theme,
     List<Map<String, Object>> homepage,
     List<Map<String, Object>> navigation,

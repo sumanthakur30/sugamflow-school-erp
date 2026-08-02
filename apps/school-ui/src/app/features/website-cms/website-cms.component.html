@@ -13,6 +13,9 @@
       Homepage
     </button>
     <button type="button" [class.active]="tab === 'seo'" (click)="tab = 'seo'">SEO</button>
+    <button type="button" [class.active]="tab === 'analytics'" (click)="openAnalytics()">
+      Analytics
+    </button>
   </div>
 
   <p class="error" *ngIf="error">{{ error }}</p>
@@ -81,5 +84,31 @@
         {{ saving ? 'Saving…' : 'Save SEO' }}
       </button>
     </form>
+  </div>
+
+  <div class="panel" *ngIf="tab === 'analytics'">
+    <h2>Website analytics (30 days)</h2>
+    <p class="hint">Public page views and funnel events from the school website.</p>
+    <div *ngIf="analyticsSummary as a">
+      <p><strong>{{ a.totalEvents }}</strong> events in last {{ a.days }} days</p>
+      <ul>
+        <li *ngFor="let row of a.byType | keyvalue">{{ row.key }}: {{ row.value }}</li>
+      </ul>
+      <h3>Recent</h3>
+      <article *ngFor="let ev of a.recent | slice: 0:20">
+        <div class="meta">{{ ev.eventType }} · {{ ev.path }} · {{ ev.createdAt }}</div>
+      </article>
+    </div>
+    <div *ngIf="mediaUsage as m" class="usage">
+      <h3>Storage &amp; page quotas</h3>
+      <p>
+        Storage: {{ m.usedGb }} GB used
+        <span *ngIf="m.storageLimitGb != null"> / {{ m.storageLimitGb }} GB</span>
+      </p>
+      <p>
+        Pages: {{ m.pageCount }}
+        <span *ngIf="m.pageLimit != null"> / {{ m.pageLimit }}</span>
+      </p>
+    </div>
   </div>
 </section>

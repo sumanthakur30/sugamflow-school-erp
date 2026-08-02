@@ -27,16 +27,19 @@ public class WebsiteResolveService {
   private final WebsiteSiteRepository siteRepository;
   private final ObjectMapper objectMapper;
   private final String defaultErpLoginUrl;
+  private final String cdnBaseUrl;
 
   public WebsiteResolveService(
       WebsiteDomainRepository domainRepository,
       WebsiteSiteRepository siteRepository,
       ObjectMapper objectMapper,
-      @Value("${website.defaults.erp-login-url}") String defaultErpLoginUrl) {
+      @Value("${website.defaults.erp-login-url}") String defaultErpLoginUrl,
+      @Value("${website.cdn.base-url:}") String cdnBaseUrl) {
     this.domainRepository = domainRepository;
     this.siteRepository = siteRepository;
     this.objectMapper = objectMapper;
     this.defaultErpLoginUrl = defaultErpLoginUrl;
+    this.cdnBaseUrl = cdnBaseUrl == null ? "" : cdnBaseUrl.trim().replaceAll("/$", "");
   }
 
   public WebsiteResolveResponse resolveByHost(String rawHost) {
@@ -78,6 +81,7 @@ public class WebsiteResolveService {
         site.getTemplateCode(),
         site.getDisplayName(),
         erpLogin,
+        cdnBaseUrl,
         readMap(site.getThemeJson()),
         readList(site.getHomepageJson()),
         readList(site.getNavigationJson()),

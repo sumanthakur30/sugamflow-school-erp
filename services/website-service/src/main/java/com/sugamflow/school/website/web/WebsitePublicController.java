@@ -1,6 +1,7 @@
 package com.sugamflow.school.website.web;
 
 import com.sugamflow.school.common.api.ApiResponse;
+import com.sugamflow.school.website.service.WebsiteAnalyticsService;
 import com.sugamflow.school.website.service.WebsiteResolveService;
 import com.sugamflow.school.website.web.dto.WebsiteResolveResponse;
 import java.util.ArrayList;
@@ -10,6 +11,9 @@ import java.util.Map;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -24,14 +28,17 @@ import org.springframework.web.client.RestClient;
 public class WebsitePublicController {
 
   private final WebsiteResolveService resolveService;
+  private final WebsiteAnalyticsService analyticsService;
   private final RestClient.Builder restClientBuilder;
   private final String cmsBaseUrl;
 
   public WebsitePublicController(
       WebsiteResolveService resolveService,
+      WebsiteAnalyticsService analyticsService,
       RestClient.Builder restClientBuilder,
       @Value("${website.integrations.cms-base-url:http://localhost:8201}") String cmsBaseUrl) {
     this.resolveService = resolveService;
+    this.analyticsService = analyticsService;
     this.restClientBuilder = restClientBuilder;
     this.cmsBaseUrl = cmsBaseUrl;
   }
@@ -39,6 +46,14 @@ public class WebsitePublicController {
   @GetMapping("/resolve")
   public ApiResponse<WebsiteResolveResponse> resolve(@RequestParam("host") String host) {
     return ApiResponse.ok(resolveService.resolveByHost(host));
+  }
+
+  /** Lightweight page-view / funnel tracking (rate-limited at gateway). */
+  @PostMapping({"/track", "/events"})
+  public ApiResponse<Map<String, Object>> track(
+      @RequestBody Map<String, Object> body,
+      @RequestHeader(value = "User-Agent", required = false) String userAgent) {
+    return ApiResponse.ok(analyticsService.track(body, userAgent));
   }
 
   /** Machine-readable sitemap entries for the public Angular app / CDN. */

@@ -38,10 +38,23 @@ interface ApiResponse<T> {
 })
 export class WebsiteCmsComponent implements OnInit {
   private readonly http = inject(HttpClient);
-  tab: 'pages' | 'homepage' | 'seo' = 'pages';
+  tab: 'pages' | 'homepage' | 'seo' | 'analytics' = 'pages';
   pages: PageRow[] = [];
   sections: HomepageSection[] = [];
   seo = { defaultTitle: '', defaultDescription: '', ogImageUrl: '' };
+  analyticsSummary: {
+    totalEvents: number;
+    days: number;
+    byType: Record<string, number>;
+    recent: Array<{ eventType: string; path: string; createdAt?: string }>;
+  } | null = null;
+  mediaUsage: {
+    usedBytes: number;
+    usedGb: number;
+    storageLimitGb: number | null;
+    pageCount: number;
+    pageLimit: number | null;
+  } | null = null;
   loading = false;
   saving = false;
   error = '';
@@ -58,6 +71,53 @@ export class WebsiteCmsComponent implements OnInit {
   ngOnInit(): void {
     this.reload();
     this.loadWebsiteBootstrap();
+  }
+
+  openAnalytics(): void {
+    this.tab = 'analytics';
+    this.loadAnalytics();
+    this.loadMediaUsage();
+  }
+
+  loadAnalytics(): void {
+    this.http
+      .get<ApiResponse<Record<string, unknown>>>(
+        `${environment.apiBaseUrl}/api/website/admin/analytics`,
+        { params: { days: '30' } }
+      )
+      .subscribe({
+        next: (res) => {
+          const data = res.data || {};
+          this.analyticsSummary = {
+            totalEvents: Number(data['totalEvents'] || 0),
+            days: Number(data['days'] || 30),
+            byType: (data['byType'] as Record<string, number>) || {},
+            recent: (data['recent'] as Array<{ eventType: string; path: string; createdAt?: string }>) || [],
+          };
+        },
+        error: (err) => (this.error = err?.error?.message || 'Failed to load analytics'),
+      });
+  }
+
+  loadMediaUsage(): void {
+    this.http
+      .get<ApiResponse<Record<string, unknown>>>(`${environment.apiBaseUrl}/api/cms/admin/media/usage`)
+      .subscribe({
+        next: (res) => {
+          const data = res.data || {};
+          this.mediaUsage = {
+            usedBytes: Number(data['usedBytes'] || 0),
+            usedGb: Number(data['usedGb'] || 0),
+            storageLimitGb:
+              data['storageLimitGb'] == null ? null : Number(data['storageLimitGb']),
+            pageCount: Number(data['pageCount'] || 0),
+            pageLimit: data['pageLimit'] == null ? null : Number(data['pageLimit']),
+          };
+        },
+        error: () => {
+          this.mediaUsage = null;
+        },
+      });
   }
 
   reload(): void {

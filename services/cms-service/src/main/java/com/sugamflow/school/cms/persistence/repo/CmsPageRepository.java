@@ -17,4 +17,6 @@ public interface CmsPageRepository extends JpaRepository<CmsPage, UUID> {
   List<CmsPage> findByOrganizationIdOrderByUpdatedAtDesc(String organizationId);
 
   Optional<CmsPage> findByIdAndOrganizationId(UUID id, String organizationId);
+
+  long countByOrganizationId(String organizationId);
 }
