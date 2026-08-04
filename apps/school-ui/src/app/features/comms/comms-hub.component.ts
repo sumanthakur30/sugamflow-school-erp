@@ -129,10 +129,13 @@ export class CommsHubComponent implements OnInit {
   }
 
   get totalRecipients(): number {
-    return this.announcements.reduce(
-      (total, announcement) => total + Number(this.deliverySummary(announcement)['targets'] || 0),
-      0,
-    );
+    return this.announcements.reduce((total, announcement) => {
+      const summary = this.deliverySummary(announcement);
+      const sent = Number(summary['sent'] ?? 0);
+      const failed = Number(summary['failed'] ?? 0);
+      const created = Number(summary['outboxCreated'] ?? summary['targets'] ?? summary['guardians'] ?? 0);
+      return total + (sent + failed > 0 ? sent + failed : created);
+    }, 0);
   }
 
   private matchingAnnouncements(): any[] {

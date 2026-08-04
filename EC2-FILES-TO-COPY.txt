@@ -2,10 +2,13 @@ School ERP — EC2 files to copy (names distinct from SugamFlow)
 ==============================================================
 
 SugamFlow (already on EC2):
-  docker-compose.ec2-rds.yml
+  docker-compose.ec2-rds.yml   ← must pass SPRING_MAIL_FROM + TWILIO_*/MSG91_* into notification-service
   .env.production              ← must include SECURITY_JWT_ENFORCE=true,
                                  SECURITY_INTERNAL_API_KEY (= INVITE key),
-                                 real SPRING_MAIL_* (NOT localhost)
+                                 Zoho SPRING_MAIL_* + SPRING_MAIL_FROM (NOT localhost),
+                                 NOTIFICATION_SMS_PROVIDER / WHATSAPP + TWILIO_* (or MSG91)
+  Rebuild/push notification-service image that includes Twilio/Msg91 + email From fix
+  before recreate on EC2 (IMAGE_TAG bump).
 
 School ERP (copy these — different names on purpose):
   docker-compose.school.ec2-rds.yml
@@ -38,7 +41,12 @@ Edit School .env.school.production:
 Edit SugamFlow .env.production:
   - SECURITY_JWT_ENFORCE=true
   - SECURITY_INTERNAL_API_KEY set
-  - SPRING_MAIL_HOST = real SMTP (SES/SendGrid/…) — never localhost on EC2
+  - SPRING_MAIL_HOST=smtp.zoho.in (or SES) — never localhost on EC2
+  - SPRING_MAIL_FROM = same as SPRING_MAIL_USERNAME (Zoho requires it)
+  - NOTIFICATION_SMS_PROVIDER=twilio + TWILIO_ACCOUNT_SID / AUTH_TOKEN / SMS_FROM
+  - NOTIFICATION_WHATSAPP_PROVIDER=twilio + TWILIO_WHATSAPP_FROM
+    (sandbox whatsapp:+14155238886 for trial; production needs approved WA sender)
+  See docs/NOTIFICATION_CHANNELS.md
 
 Run:
   powershell -File .\scripts\check-prod-env.ps1

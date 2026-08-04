@@ -143,6 +143,7 @@ public class StudentRecordService {
    * Prefer {@code authUsername}/{@code username}/{@code userId} for IN_APP, plus email/mobile.
    */
   @Transactional(readOnly = true)
+  @SuppressWarnings("unchecked")
   public List<Map<String, Object>> guardianDeliveryTargets() {
     TenantScope scope = TenantContext.require();
     requireFeature(scope);
@@ -150,15 +151,22 @@ public class StudentRecordService {
 
     Map<String, Map<String, Object>> byIdentity = new LinkedHashMap<>();
     Map<String, Map<String, Object>> byContactOnly = new LinkedHashMap<>();
+    Map<String, Object> module = engines.getModuleSettings(scope, MODULE_STUDENT);
+    Map<String, Object> settings = moduleSettingsMap(module);
     for (StudentRecordEntity student : loadCandidates(scope)) {
+      List<Map<String, Object>> guardianRows = new ArrayList<>();
       Object raw = student.getAnswers() == null ? null : student.getAnswers().get("guardians");
-      if (!(raw instanceof List<?> list)) {
-        continue;
-      }
-      for (Object item : list) {
-        if (!(item instanceof Map<?, ?> g)) {
-          continue;
+      if (raw instanceof List<?> list) {
+        for (Object item : list) {
+          if (item instanceof Map<?, ?> g) {
+            guardianRows.add(new LinkedHashMap<>((Map<String, Object>) g));
+          }
         }
+      }
+      if (guardianRows.isEmpty() && student.getAnswers() != null) {
+        guardianRows.addAll(buildGuardiansFromFlatMap(student.getAnswers(), settings));
+      }
+      for (Map<String, Object> g : guardianRows) {
         String identityRaw =
             firstNonBlank(
                 stringOr(g.get("authUsername"), null),

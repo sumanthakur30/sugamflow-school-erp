@@ -1,6 +1,6 @@
 # Starts school DOMAIN microservices and registers them with SugamFlow Eureka.
-# Prefer: .\scripts\start-platform.ps1 first (discovery + gateway), OR Docker common platform
-# (Eureka may be on :8761 or :18761 depending on -ExposeSchoolPorts).
+# Prefer: .\scripts\start-platform.ps1 first (discovery + gateway), OR Docker common platform.
+# Canonical Eureka host port is always :8761 (Docker compose default and jar default).
 #
 # When the API gateway runs in Docker (start-common-platform / compose-local), jars must
 # advertise host.docker.internal - not 127.0.0.1 - or the gateway gets Connection refused / 503.
@@ -165,12 +165,12 @@ if ($dupGroups.Count -gt 0) {
 $eurekaZone = if ($env:EUREKA_CLIENT_SERVICEURL_DEFAULTZONE) {
   $env:EUREKA_CLIENT_SERVICEURL_DEFAULTZONE
 } else {
-  # Prefer a healthy Eureka HTTP endpoint (TCP alone is unreliable with Docker port maps).
-  # Docker common platform without -ExposeSchoolPorts maps Eureka to host :18761.
+  # Canonical host Eureka is always :8761 (Docker + jar). Legacy :18761 only as fallback.
   if (Wait-Http 'http://localhost:8761/actuator/health' 2) {
     'http://localhost:8761/eureka'
   } elseif (Wait-Http 'http://localhost:18761/actuator/health' 2) {
-    Write-Host 'Eureka healthy on :18761 (Docker mapped port) - using that zone' -ForegroundColor Yellow
+    Write-Host 'Eureka healthy on legacy :18761 — recreate discovery to publish :8761' -ForegroundColor Yellow
+    Write-Host '  cd D:\sugamFlow; docker compose up -d --force-recreate discovery-service config-service' -ForegroundColor Yellow
     'http://localhost:18761/eureka'
   } else {
     'http://localhost:8761/eureka'
@@ -221,6 +221,19 @@ if ($AdvertiseIp -eq '127.0.0.1') {
   Write-Host '  (host-jar gateway mode - pass -AdvertiseIp host.docker.internal if gateway runs in Docker)' -ForegroundColor DarkGray
 } else {
   Write-Host '  (Docker gateway mode - school jars reachable as host.docker.internal:<port>)' -ForegroundColor DarkGray
+}
+
+# Prevent a leftover platform/notification shell env from pointing every school jar at the wrong DB.
+# Spring prefers SPRING_DATASOURCE_URL over per-service SCHOOL_*_DB_URL defaults.
+foreach ($bad in @(
+  'SPRING_DATASOURCE_URL',
+  'SPRING_DATASOURCE_USERNAME',
+  'SPRING_DATASOURCE_PASSWORD'
+)) {
+  if (Test-Path "Env:$bad") {
+    Write-Host "Clearing inherited $bad (was set — would override school service DB URLs)" -ForegroundColor Yellow
+    Remove-Item "Env:$bad"
+  }
 }
 
 if (-not (Wait-Http $eurekaHealthUrl 8)) {

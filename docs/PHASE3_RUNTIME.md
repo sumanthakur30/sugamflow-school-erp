@@ -43,6 +43,5 @@ Required headers for school APIs:
 - Gateway school routes are configured in `D:\sugamflow\gateway-service` (`lb://school-*-service`).
 - `start-platform.ps1` rebuilds the gateway jar when sources are newer and restarts `:9090`.
 - School paths (`/api/config`, `/api/subscription`, `/api/forms`, …) require a valid JWT (Phase 4). See [PHASE4_AUTH.md](PHASE4_AUTH.md).
-- If Docker maps Eureka to host port `18761`, set:
-  `$env:EUREKA_CLIENT_SERVICEURL_DEFAULTZONE='http://localhost:18761/eureka'`
-  before `start-services.ps1`. Prefer host jars via `start-platform.ps1` (uses `:8761`).
+- Eureka host port is always **`:8761`** (Docker compose default and jar default). See [EUREKA_ONE_PORT.md](EUREKA_ONE_PORT.md).
+- When gateway runs in Docker, school jars must advertise `host.docker.internal` (`start-services.ps1` auto-detects).

@@ -107,9 +107,17 @@ public class CommsFanOutService {
       announcement.setStatus("SENT");
     } else if (sent > 0) {
       announcement.setStatus("PARTIAL_FAILED");
-    } else if (created == 0 && targets.isEmpty()) {
+    } else if (targets.isEmpty()) {
       announcement.setStatus("FAILED");
       summary.put("error", "No guardian delivery targets found");
+      announcement.setDeliveryJson(List.of(summary));
+    } else if (created == 0) {
+      announcement.setStatus("FAILED");
+      summary.put(
+          "error",
+          "Guardians found but none have a usable recipient for "
+              + String.join("/", channels)
+              + " (need portal login for IN_APP, email for EMAIL, mobile for SMS/WHATSAPP)");
       announcement.setDeliveryJson(List.of(summary));
     } else {
       announcement.setStatus(failed > 0 ? "FAILED" : "SENT");
@@ -194,14 +202,15 @@ public class CommsFanOutService {
 
   private static List<String> channelsFor(String selected) {
     String upper = selected == null ? "IN_APP" : selected.toUpperCase(Locale.ROOT);
-    // Always include IN_APP for linked accounts; also send the selected contact channel when present.
+    // Always include IN_APP for linked portal accounts. Contact channels use email/mobile when present
+    // (many schools publish "In-app" while guardians only have phone/email on file).
     if ("IN_APP".equals(upper)) {
-      return List.of("IN_APP");
+      return List.of("IN_APP", "EMAIL", "SMS", "WHATSAPP");
     }
     if ("EMAIL".equals(upper) || "SMS".equals(upper) || "WHATSAPP".equals(upper)) {
       return List.of("IN_APP", upper);
     }
-    return List.of("IN_APP", "EMAIL");
+    return List.of("IN_APP", "EMAIL", "SMS", "WHATSAPP");
   }
 
   private static String recipientFor(Map<String, Object> target, String channel) {

@@ -43,6 +43,8 @@ If notification-service was already running **before** MailHog, restart it (or r
 
 Captured messages appear in MailHog UI.
 
+For SMS / WhatsApp (stub vs Twilio / Msg91) see [NOTIFICATION_CHANNELS.md](./NOTIFICATION_CHANNELS.md).
+
 ## Production / real Gmail
 
 Pass env or JVM args when starting notification-service:

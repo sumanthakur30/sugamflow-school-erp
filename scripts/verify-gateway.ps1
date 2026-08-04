@@ -2,7 +2,7 @@
 $ErrorActionPreference = 'Continue'
 
 Write-Host '=== Eureka apps ==='
-$eurekaUrls = @('http://localhost:18761/eureka/apps', 'http://localhost:8761/eureka/apps')
+$eurekaUrls = @('http://localhost:8761/eureka/apps', 'http://localhost:18761/eureka/apps')
 $apps = $null
 $eurekaUsed = $null
 foreach ($url in $eurekaUrls) {
@@ -15,8 +15,11 @@ foreach ($url in $eurekaUrls) {
   }
 }
 if (-not $apps) {
-  Write-Host 'Eureka not reachable on :18761 or :8761'
+  Write-Host 'Eureka not reachable on :8761 (or legacy :18761)'
   exit 1
+}
+if ($eurekaUsed -match ':18761') {
+  Write-Host 'WARN Eureka on legacy :18761 — recreate discovery to publish host :8761' -ForegroundColor Yellow
 }
 Write-Host "OK   Eureka $eurekaUsed"
 $names = @($apps.applications.application | ForEach-Object { $_.name })

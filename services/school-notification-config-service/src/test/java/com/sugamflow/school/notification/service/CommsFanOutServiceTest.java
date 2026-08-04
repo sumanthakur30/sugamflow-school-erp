@@ -92,6 +92,93 @@ class CommsFanOutServiceTest {
             startsWith("comms-ann-"));
   }
 
+  @Test
+  void inAppSelectionFansOutEmailAndSmsWhenNoPortalIdentity() {
+    TenantScope scope = new TenantScope("HCP-01", "main", "2025-26", "admin", "ADMIN");
+    CommsAnnouncementEntity announcement = new CommsAnnouncementEntity();
+    announcement.setId(UUID.randomUUID());
+    announcement.setOrganizationId("HCP-01");
+    announcement.setBranchId("main");
+    announcement.setTitle("test");
+    announcement.setBody("School closed");
+    announcement.setChannel("IN_APP");
+    announcement.setAudience("ALL_ACTIVE");
+    announcement.setStatus("QUEUED");
+    announcement.setCreatedAt(Instant.now());
+    announcement.setUpdatedAt(Instant.now());
+
+    when(announcements.save(any())).thenAnswer(inv -> inv.getArgument(0));
+    when(guardians.deliveryTargets(scope))
+        .thenReturn(
+            List.of(
+                Map.of(
+                    "fullName", "Suman",
+                    "email", "skthakurmca@gmail.com",
+                    "mobile", "8800706663"),
+                Map.of(
+                    "fullName", "Swarnlata",
+                    "email", "swarnlatasuman@gmail.com",
+                    "mobile", "8800706662")));
+    when(outbox.findByAnnouncementIdAndChannelAndRecipient(any(), anyString(), anyString()))
+        .thenReturn(Optional.empty());
+    when(outbox.save(any())).thenAnswer(inv -> inv.getArgument(0));
+    List<CommsAlertOutboxEntity> rows =
+        List.of(
+            savedRow(announcement, "EMAIL", "skthakurmca@gmail.com"),
+            savedRow(announcement, "SMS", "8800706663"),
+            savedRow(announcement, "WHATSAPP", "8800706663"),
+            savedRow(announcement, "EMAIL", "swarnlatasuman@gmail.com"),
+            savedRow(announcement, "SMS", "8800706662"),
+            savedRow(announcement, "WHATSAPP", "8800706662"));
+    when(outbox.findByAnnouncementIdOrderByCreatedAtAsc(announcement.getId())).thenReturn(rows);
+    when(delivery.queue(eq("HCP-01"), anyString(), anyString(), anyString(), anyString(), startsWith("comms-ann-")))
+        .thenReturn(Map.of("status", "SENT", "id", "n-1"));
+
+    Map<String, Object> summary = service.fanOut(scope, announcement);
+
+    assertEquals("SENT", announcement.getStatus());
+    assertEquals(6, summary.get("sent"));
+    verify(delivery)
+        .queue(eq("HCP-01"), eq("EMAIL"), eq("skthakurmca@gmail.com"), anyString(), anyString(), startsWith("comms-ann-"));
+    verify(delivery)
+        .queue(eq("HCP-01"), eq("SMS"), eq("8800706663"), anyString(), anyString(), startsWith("comms-ann-"));
+    verify(delivery)
+        .queue(eq("HCP-01"), eq("WHATSAPP"), eq("8800706663"), anyString(), anyString(), startsWith("comms-ann-"));
+    verify(delivery)
+        .queue(eq("HCP-01"), eq("EMAIL"), eq("swarnlatasuman@gmail.com"), anyString(), anyString(), startsWith("comms-ann-"));
+    verify(delivery)
+        .queue(eq("HCP-01"), eq("SMS"), eq("8800706662"), anyString(), anyString(), startsWith("comms-ann-"));
+    verify(delivery)
+        .queue(eq("HCP-01"), eq("WHATSAPP"), eq("8800706662"), anyString(), anyString(), startsWith("comms-ann-"));
+  }
+
+  @Test
+  void failsWhenGuardiansExistButNoUsableRecipients() {
+    TenantScope scope = new TenantScope("HCP-01", "main", "2025-26", "admin", "ADMIN");
+    CommsAnnouncementEntity announcement = new CommsAnnouncementEntity();
+    announcement.setId(UUID.randomUUID());
+    announcement.setOrganizationId("HCP-01");
+    announcement.setBranchId("main");
+    announcement.setTitle("empty contacts");
+    announcement.setBody("body");
+    announcement.setChannel("EMAIL");
+    announcement.setAudience("PARENTS");
+    announcement.setStatus("QUEUED");
+    announcement.setCreatedAt(Instant.now());
+    announcement.setUpdatedAt(Instant.now());
+
+    when(announcements.save(any())).thenAnswer(inv -> inv.getArgument(0));
+    when(guardians.deliveryTargets(scope))
+        .thenReturn(List.of(Map.of("fullName", "No Contact")));
+    when(outbox.findByAnnouncementIdOrderByCreatedAtAsc(announcement.getId())).thenReturn(List.of());
+
+    Map<String, Object> summary = service.fanOut(scope, announcement);
+
+    assertEquals("FAILED", announcement.getStatus());
+    assertEquals(0, summary.get("sent"));
+    assertEquals(0, summary.get("outboxCreated"));
+  }
+
   private CommsAlertOutboxEntity savedRow(
       CommsAnnouncementEntity announcement, String channel, String recipient) {
     CommsAlertOutboxEntity row = new CommsAlertOutboxEntity();

@@ -131,6 +131,12 @@ public class SubscriptionService {
       plan = getPlan("starter");
       planId = "starter";
     }
+    if (plan == null) {
+      throw new IllegalStateException(
+          "No subscription plan catalog available (missing plan '"
+              + planId
+              + "' and fallback 'starter'). Check school_subscription_db.subscription_plan.");
+    }
 
     Map<String, Boolean> jsonFlags =
         plan.getFeatureFlags() != null

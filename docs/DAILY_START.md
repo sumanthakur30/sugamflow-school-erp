@@ -33,11 +33,14 @@ mvn -q -DskipTests package -pl discovery-service,gateway-service,auth-service,sh
 
 ```powershell
 cd D:\sugamFlow
-.\scripts\sequences\00-common-platform.ps1 -ExposeSchoolPorts -SkipMailHog
+.\scripts\sequences\00-common-platform.ps1 -SkipMailHog
+# Eureka is on host :8761 by default (same as school jars). -ExposeSchoolPorts is optional/legacy.
 .\scripts\sequences\03-school-erp.ps1 -WithUi
 # or from school repo:
 # .\scripts\start-school-sequence.ps1 -StartCommon -WithUi
 ```
+
+**Rule:** one Eureka on host **`:8761`**. Do not run jar `discovery-service` and Docker discovery at the same time. Details: [EUREKA_ONE_PORT.md](EUREKA_ONE_PORT.md).
 
 ### Legacy (same order)
 
