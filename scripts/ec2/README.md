@@ -20,11 +20,14 @@ Docker network (external): `sumanthakur30_default`
 | `00-full-deploy-and-flyway-check.sh` | Pull + start batches 1→3→2, then verify Flyway max versions via `psql` |
 | `01-common-start.sh` | Start shared platform |
 | `01-common-stop.sh` | Stop shared platform (both UIs lose API) |
-| `02-school-start.sh` | Start School microservices (Phase A default; `PHASE=b` for A+B) |
+| `02-school-start.sh` | Start School microservices (Phase A default; `PHASE=b` for A+B; `PHASE=website` for website+cms; `PHASE=all` for A+B+website) |
 | `02-school-stop.sh` | Stop School only |
 | `03-sugamflow-start.sh` | Start SugamFlow shop apps only |
 | `03-sugamflow-stop.sh` | Stop SugamFlow shop apps only |
 | `04-pull-recreate-all-school.sh` | Pull Hub images + recreate all School services (Phase A+B) |
+
+**PC prod env preflight:** `D:\school\scripts\check-prod-env.ps1`  
+(JWT secret match, internal API key match, SMTP not localhost, Website CMS DB vars)
 
 **PC build/push all School images:** `D:\school\scripts\build-push-all-school-images.ps1`
 
@@ -73,6 +76,8 @@ Script defaults: `SUGAMFLOW_DIR=/home/ec2-user/opt/sugamflow`, `SCHOOL_DIR=/home
 | `/var/www/school-ui` | School Angular (`dist/school-ui/browser`) |
 | `/etc/nginx/conf.d/sugamflow-ui.conf` | Shop / default |
 | `/etc/nginx/conf.d/school-ui.conf` | `server_name school.sugamflow.com;` → `/api/` → `:9090` |
+| `/var/www/hcpschool.com` | HCP public site (`school-website-ui` prod build) |
+| `/etc/nginx/conf.d/hcpschool.com.conf` | `hcpschool.com` SPA + `/api/` → `:9090` — see `docs/HCP_EC2_WEBSITE_DEPLOY.md` |
 
 ### Optional helpers (not required to run batches)
 

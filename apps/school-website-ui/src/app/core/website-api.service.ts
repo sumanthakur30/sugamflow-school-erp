@@ -160,6 +160,16 @@ export class WebsiteApiService {
       .pipe(map((r) => r.data));
   }
 
+  /** Absolute URL for CMS/media paths (same-origin relative or full URL). */
+  mediaUrl(path?: string | null): string {
+    if (path == null) return '';
+    const raw = String(path).trim();
+    if (!raw || raw === 'undefined' || raw === 'null') return '';
+    if (/^https?:\/\//i.test(raw)) return raw;
+    const base = (environment.apiBaseUrl || '').replace(/\/$/, '');
+    return raw.startsWith('/') ? `${base}${raw}` : `${base}/${raw}`;
+  }
+
   /** Deep-link into School ERP login with org + destination prefilled. */
   erpLoginUrl(destination?: string, returnUrl?: string): string {
     const site = this.site();
@@ -190,14 +200,15 @@ export class WebsiteApiService {
     const root = document.documentElement;
     root.style.setProperty('--sf-primary', theme['primaryColor'] || '#0B3D91');
     root.style.setProperty('--sf-secondary', theme['secondaryColor'] || '#F5B700');
-    if (theme['faviconUrl']) {
+    const favicon = this.mediaUrl(theme['faviconUrl'] || theme['logoUrl'] || undefined);
+    if (favicon) {
       let link = document.querySelector("link[rel*='icon']") as HTMLLinkElement | null;
       if (!link) {
         link = document.createElement('link');
         link.rel = 'icon';
         document.head.appendChild(link);
       }
-      link.href = theme['faviconUrl'];
+      link.href = favicon;
     }
   }
 }

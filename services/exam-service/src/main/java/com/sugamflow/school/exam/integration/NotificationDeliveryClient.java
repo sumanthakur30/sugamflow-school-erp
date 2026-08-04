@@ -5,6 +5,7 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
@@ -17,11 +18,16 @@ public class NotificationDeliveryClient {
 
   private final RestClient.Builder restClientBuilder;
   private final ExamProperties properties;
+  private final String internalApiKey;
 
   public NotificationDeliveryClient(
-      RestClient.Builder restClientBuilder, ExamProperties properties) {
+      RestClient.Builder restClientBuilder,
+      ExamProperties properties,
+      @Value("${security.jwt.internal-api-key:${SECURITY_INTERNAL_API_KEY:${SECURITY_INVITE_INTERNAL_KEY:dev-invite-key-change-in-production}}}")
+          String internalApiKey) {
     this.restClientBuilder = restClientBuilder;
     this.properties = properties;
+    this.internalApiKey = internalApiKey == null ? "" : internalApiKey.trim();
   }
 
   public Map<String, Object> queue(
@@ -36,16 +42,17 @@ public class NotificationDeliveryClient {
     String url =
         properties.getIntegrations().getNotificationDeliveryBaseUrl() + "/api/v1/notifications";
     try {
-      @SuppressWarnings("unchecked")
-      Map<String, Object> response =
+      var spec =
           restClientBuilder
               .build()
               .post()
               .uri(url)
-              .contentType(MediaType.APPLICATION_JSON)
-              .body(payload)
-              .retrieve()
-              .body(Map.class);
+              .contentType(MediaType.APPLICATION_JSON);
+      if (!internalApiKey.isBlank()) {
+        spec = spec.header("X-Internal-Api-Key", internalApiKey);
+      }
+      @SuppressWarnings("unchecked")
+      Map<String, Object> response = spec.body(payload).retrieve().body(Map.class);
       return response != null ? response : Map.of("status", "UNKNOWN");
     } catch (RestClientResponseException ex) {
       log.warn("Notification delivery failed {}: {}", ex.getStatusCode(), ex.getResponseBodyAsString());

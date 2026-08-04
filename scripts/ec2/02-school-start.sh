@@ -3,9 +3,11 @@
 # Requires common platform UP (gateway :9090 + Eureka).
 #
 # Usage:
-#   bash 02-school-start.sh           # Phase A only (default)
-#   PHASE=b bash 02-school-start.sh   # Phase A + Phase B
-#   PHASE=all bash 02-school-start.sh # same as PHASE=b
+#   bash 02-school-start.sh              # Phase A only (default)
+#   PHASE=b bash 02-school-start.sh      # Phase A + Phase B
+#   PHASE=website bash 02-school-start.sh  # Phase A + website-service + cms-service
+#   PHASE=all bash 02-school-start.sh    # Phase A + B + website
+# HCP public site full steps: docs/HCP_EC2_WEBSITE_DEPLOY.md
 set -euo pipefail
 
 SCHOOL_DIR="${SCHOOL_DIR:-/home/ec2-user/opt/school}"
@@ -37,11 +39,22 @@ PHASE_B=(
   school-notification-config-service
 )
 
+WEBSITE=(
+  website-service
+  cms-service
+)
+
 SERVICES=("${PHASE_A[@]}")
 PROFILES_ARGS=()
-if [[ "$PHASE" == "b" || "$PHASE" == "all" || "$PHASE" == "phase-b" ]]; then
+if [[ "$PHASE" == "b" || "$PHASE" == "phase-b" ]]; then
   SERVICES+=("${PHASE_B[@]}")
   PROFILES_ARGS=(--profile phase-b)
+elif [[ "$PHASE" == "website" ]]; then
+  SERVICES+=("${WEBSITE[@]}")
+  PROFILES_ARGS=(--profile website)
+elif [[ "$PHASE" == "all" ]]; then
+  SERVICES+=("${PHASE_B[@]}" "${WEBSITE[@]}")
+  PROFILES_ARGS=(--profile phase-b --profile website)
 fi
 
 echo "== School stack START (PHASE=$PHASE) =="
@@ -55,4 +68,9 @@ for path in /api/student/health /api/config/design-studio/theme; do
   code=$(curl -sS -o /dev/null -w "%{http_code}" "http://127.0.0.1:9090$path" || echo "err")
   echo "  $path -> $code"
 done
+if [[ "$PHASE" == "website" || "$PHASE" == "all" ]]; then
+  code=$(curl -sS -o /dev/null -w "%{http_code}" \
+    "http://127.0.0.1:9090/api/website/public/resolve?host=hcpschool.com" || echo "err")
+  echo "  /api/website/public/resolve?host=hcpschool.com -> $code"
+fi
 echo "Done."

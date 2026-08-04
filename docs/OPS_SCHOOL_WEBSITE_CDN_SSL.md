@@ -23,6 +23,20 @@ Update `website_domain.ssl_status` (`PENDING` → `ACTIVE`) after cert is live (
 
 ## CDN / caching
 
+### Do not confuse domain vs CDN base URL
+
+| Item | Example | Where |
+|---|---|---|
+| Public school host | `hcpschool.com` | Super Admin → School Website Domains + DNS |
+| Media/CDN origin (`cdnBaseUrl`) | `https://cdn.sugamflow.com` | Env `WEBSITE_CDN_BASE_URL` on website-service |
+
+**Set `WEBSITE_CDN_BASE_URL` here:**
+
+- Template: `.env.school.production.example` (School Website Platform section)
+- EC2: `/home/ec2-user/opt/school/.env.school.production`
+- Local: `$env:WEBSITE_CDN_BASE_URL="https://…"` before starting website-service
+- Property bridge: `services/website-service/src/main/resources/application.properties` (`website.cdn.base-url`)
+
 1. Put CloudFront (or Nginx cache) in front of:
    - `school-website-ui` static assets (long TTL, fingerprint filenames)
    - Public API GETs (`/api/website/public/**`, `/api/cms/public/**`) — honor origin `Cache-Control` (60s + SWR)
@@ -30,7 +44,7 @@ Update `website_domain.ssl_status` (`PENDING` → `ACTIVE`) after cert is live (
    - `POST /api/website/public/track`
    - `POST /api/admission/public/apply`
    - Authenticated `/admin/**`
-3. Set `WEBSITE_CDN_BASE_URL=https://cdn.example.com` so resolve returns `cdnBaseUrl` for media URLs.
+3. Set `WEBSITE_CDN_BASE_URL=https://cdn.sugamflow.com` so resolve returns `cdnBaseUrl` for media URLs.
 4. Media files: enable S3 (`CMS_MEDIA_S3_ENABLED=true`) + `CMS_MEDIA_CDN_BASE_URL`; CMS upload stores objects and returns CDN URLs.
 
 ### Bot prerender (SEO edge hook)
@@ -121,7 +135,7 @@ ADMISSION_PUBLIC_CAPTCHA_SECRET=<recaptcha-secret>
 CMS_MEDIA_S3_ENABLED=true
 CMS_MEDIA_S3_BUCKET=sugamflow-school-cms
 CMS_MEDIA_S3_REGION=ap-south-1
-CMS_MEDIA_CDN_BASE_URL=https://cdn.example.com
+CMS_MEDIA_CDN_BASE_URL=https://cdn.sugamflow.com
 # optional MinIO: CMS_MEDIA_S3_ENDPOINT=http://minio:9000 + access/secret keys
 ```
 

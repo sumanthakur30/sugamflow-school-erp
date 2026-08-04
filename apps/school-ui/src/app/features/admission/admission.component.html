@@ -135,14 +135,14 @@
                           [(ngModel)]="answers[field.key]"
                           [name]="field.key"
                           [disabled]="submitting"
-                          (ngModelChange)="clearFieldError(field.key)"
+                          (ngModelChange)="onAnswerChange(field)"
                         />
                       } @else if (field.type === 'DROPDOWN' || isDropdownField(field.key)) {
                         <select
                           [(ngModel)]="answers[field.key]"
                           [attr.name]="field.key"
                           [disabled]="submitting"
-                          (ngModelChange)="clearFieldError(field.key)"
+                          (ngModelChange)="onAnswerChange(field)"
                         >
                           <option value="">Select {{ field.label | lowercase }}</option>
                           @for (opt of dropdownOptions(field); track opt) {
@@ -159,16 +159,20 @@
                           type="number"
                           [(ngModel)]="answers[field.key]"
                           [name]="field.key"
-                          [disabled]="submitting"
-                          (ngModelChange)="clearFieldError(field.key)"
+                          [disabled]="submitting || (isAgeKey(field.key) && hasDobField())"
+                          [readonly]="isAgeKey(field.key) && hasDobField()"
+                          (ngModelChange)="onAnswerChange(field)"
                         />
+                        @if (isAgeKey(field.key) && hasDobField()) {
+                          <span class="muted">Calculated from date of birth.</span>
+                        }
                       } @else if (field.type === 'EMAIL') {
                         <input
                           type="email"
                           [(ngModel)]="answers[field.key]"
                           [name]="field.key"
                           [disabled]="submitting"
-                          (ngModelChange)="clearFieldError(field.key)"
+                          (ngModelChange)="onAnswerChange(field)"
                         />
                       } @else if (field.type === 'DATE') {
                         <input
@@ -176,8 +180,12 @@
                           [(ngModel)]="answers[field.key]"
                           [name]="field.key"
                           [disabled]="submitting"
-                          (ngModelChange)="clearFieldError(field.key)"
+                          [attr.max]="isDobKey(field.key) ? (todayIsoDate()) : null"
+                          (ngModelChange)="onAnswerChange(field)"
                         />
+                        @if (isDobKey(field.key)) {
+                          <span class="muted">Age is filled automatically from this date.</span>
+                        }
                       } @else if (field.type === 'PHONE') {
                         <input
                           type="tel"
@@ -185,7 +193,7 @@
                           [(ngModel)]="answers[field.key]"
                           [name]="field.key"
                           [disabled]="submitting"
-                          (ngModelChange)="clearFieldError(field.key)"
+                          (ngModelChange)="onAnswerChange(field)"
                         />
                       } @else if (field.type === 'TEXTAREA') {
                         <textarea
@@ -193,14 +201,14 @@
                           [(ngModel)]="answers[field.key]"
                           [name]="field.key"
                           [disabled]="submitting"
-                          (ngModelChange)="clearFieldError(field.key)"
+                          (ngModelChange)="onAnswerChange(field)"
                         ></textarea>
                       } @else {
                         <input
                           [(ngModel)]="answers[field.key]"
                           [name]="field.key"
                           [disabled]="submitting"
-                          (ngModelChange)="clearFieldError(field.key)"
+                          (ngModelChange)="onAnswerChange(field)"
                         />
                       }
                       @if (fieldErrors[field.key]) {

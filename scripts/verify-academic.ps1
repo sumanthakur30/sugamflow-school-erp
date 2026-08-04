@@ -140,6 +140,8 @@ Write-Host "  periodId=$periodId (reused or created)"
 
 Write-Host 'Replace section timetable...'
 $tt = Invoke-Json -Method Put -Url "$Gateway/api/academic/timetable/sections/$sectionId" -Headers $h -Body @{
+  # Demo teacher may already have a Monday/P1 slot elsewhere; allowConflicts for smoke.
+  allowConflicts = $true
   slots = @(
     @{
       dayOfWeek = 1

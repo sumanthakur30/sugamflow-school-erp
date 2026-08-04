@@ -79,10 +79,16 @@ $Extra = @(
   "report-builder-service"
 )
 
+# HCP public site — compose profile website
+$Website = @(
+  "website-service",
+  "cms-service"
+)
+
 $Modules = switch ($Phase) {
   "a" { $PhaseA }
   "b" { $PhaseA + $PhaseB }
-  "all" { $PhaseA + $PhaseB + $Extra }
+  "all" { $PhaseA + $PhaseB + $Extra + $Website }
 }
 
 Write-Host "========================================" -ForegroundColor Cyan

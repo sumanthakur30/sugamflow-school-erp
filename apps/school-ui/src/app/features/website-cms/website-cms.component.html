@@ -1,201 +1,782 @@
-<section class="page">
-  <header class="head">
-    <div>
-      <h1>Website CMS</h1>
-      <p>Pages, campuses, alumni, AI drafts, marketplace templates, and SEO.</p>
+<div class="wb">
+  <aside class="wb-rail">
+    <div class="wb-rail-brand">
+      <span class="wb-rail-mark">SF</span>
+      <div>
+        <strong>Website</strong>
+        <small>Builder</small>
+      </div>
     </div>
-    <button type="button" class="primary" (click)="startCreate()">New page</button>
-  </header>
 
-  <div class="tabs">
-    <button type="button" [class.active]="tab === 'pages'" (click)="setTab('pages')">Pages</button>
-    <button type="button" [class.active]="tab === 'homepage'" (click)="setTab('homepage')">
-      Homepage
-    </button>
-    <button type="button" [class.active]="tab === 'seo'" (click)="setTab('seo')">SEO</button>
-    <button type="button" [class.active]="tab === 'campuses'" (click)="setTab('campuses')">
-      Campuses
-    </button>
-    <button type="button" [class.active]="tab === 'alumni'" (click)="setTab('alumni')">Alumni</button>
-    <button type="button" [class.active]="tab === 'ai'" (click)="setTab('ai')">AI</button>
-    <button type="button" [class.active]="tab === 'marketplace'" (click)="setTab('marketplace')">
-      Marketplace
-    </button>
-    <button type="button" [class.active]="tab === 'analytics'" (click)="openAnalytics()">
-      Analytics
-    </button>
-  </div>
+    <nav class="wb-rail-nav" aria-label="Website modules">
+      <div class="wb-rail-group" *ngFor="let g of moduleGroups()">
+        <div class="wb-rail-group-label">{{ g.group }}</div>
+        <button
+          type="button"
+          class="wb-rail-item"
+          *ngFor="let m of g.items"
+          [class.active]="tab === m.id || (m.id === 'builder' && tab === 'homepage')"
+          [class.soon]="!m.ready"
+          (click)="setTab(m.id)"
+        >
+          <span>{{ m.label }}</span>
+          <em *ngIf="!m.ready">Soon</em>
+        </button>
+      </div>
+    </nav>
+  </aside>
 
-  <p class="error" *ngIf="error">{{ error }}</p>
-  <p *ngIf="loading && tab === 'pages'">Loading…</p>
+  <div class="wb-main">
+    <header class="wb-header">
+      <div class="wb-header-text">
+        <h1>Website Builder</h1>
+        <p class="wb-header-meta">
+          <span *ngIf="siteMeta.displayName">{{ siteMeta.displayName }}</span>
+          <span *ngIf="siteMeta.displayName && siteMeta.status" class="dot">·</span>
+          <span *ngIf="siteMeta.status" class="status" [attr.data-status]="siteMeta.status">{{
+            siteMeta.status
+          }}</span>
+          <span *ngIf="!siteMeta.displayName && !siteMeta.status" class="hint"
+            >Manage pages, theme, media, and publish for your school site.</span
+          >
+        </p>
+      </div>
+      <div class="wb-header-actions">
+        <button type="button" (click)="openPreview()">Preview</button>
+        <button type="button" class="primary" (click)="startCreate()">New page</button>
+      </div>
+    </header>
 
-  <div class="layout" *ngIf="tab === 'pages' && !loading">
-    <div class="list">
-      <article *ngFor="let p of pages">
+    <p class="error" *ngIf="error">{{ error }}</p>
+    <p class="notice" *ngIf="mediaNotice">{{ mediaNotice }}</p>
+
+    <!-- Dashboard -->
+    <div class="wb-panel" *ngIf="tab === 'dashboard'">
+      <div class="dash-grid">
+        <article class="dash-card">
+          <h3>Site status</h3>
+          <p class="dash-value">{{ siteMeta.status || '—' }}</p>
+          <p class="hint">{{ siteMeta.displayName || 'Organization site' }}</p>
+          <p class="meta" *ngIf="siteMeta.templateCode">Template: {{ siteMeta.templateCode }}</p>
+        </article>
+
+        <article class="dash-card">
+          <h3>Pages</h3>
+          <p class="dash-value">{{ publishedPages }} published</p>
+          <p class="hint">{{ draftPages }} draft{{ draftPages === 1 ? '' : 's' }}</p>
+          <button type="button" class="linkish" (click)="setTab('pages')">Manage pages</button>
+        </article>
+
+        <article class="dash-card">
+          <h3>Visitors</h3>
+          <ng-container *ngIf="analyticsSummary as a; else noAnalytics">
+            <p class="dash-value">{{ a.totalEvents }}</p>
+            <p class="hint">Events in last {{ a.days }} days</p>
+            <button type="button" class="linkish" (click)="openAnalytics()">View analytics</button>
+          </ng-container>
+          <ng-template #noAnalytics>
+            <p class="hint">No analytics loaded yet.</p>
+            <button type="button" class="linkish" (click)="openAnalytics()">Refresh</button>
+          </ng-template>
+        </article>
+
+        <article class="dash-card">
+          <h3>Media storage</h3>
+          <ng-container *ngIf="mediaUsage as m; else noUsage">
+            <p class="dash-value">{{ m.usedGb }} GB</p>
+            <p class="hint">
+              used
+              <span *ngIf="m.storageLimitGb != null"> / {{ m.storageLimitGb }} GB</span>
+            </p>
+            <p class="meta">
+              Pages: {{ m.pageCount
+              }}<span *ngIf="m.pageLimit != null"> / {{ m.pageLimit }}</span>
+            </p>
+          </ng-container>
+          <ng-template #noUsage>
+            <p class="hint">Usage unavailable.</p>
+          </ng-template>
+        </article>
+
+        <article class="dash-card">
+          <h3>Theme</h3>
+          <div class="swatches">
+            <span class="swatch" [style.background]="theme.primaryColor" title="Primary"></span>
+            <span class="swatch" [style.background]="theme.secondaryColor" title="Secondary"></span>
+          </div>
+          <p class="meta">{{ theme.primaryColor }} · {{ theme.secondaryColor }}</p>
+          <button type="button" class="linkish" (click)="setTab('theme')">Edit theme</button>
+        </article>
+
+        <article class="dash-card">
+          <h3>Primary domain</h3>
+          <ng-container *ngIf="domains.length; else noDomain">
+            <ng-container *ngFor="let d of domains">
+              <div *ngIf="d.primary || domains.length === 1">
+                <p class="dash-value small">{{ d.host || '—' }}</p>
+                <p class="meta">
+                  {{ d.status || '—' }} · SSL {{ d.sslStatus || '—' }}
+                </p>
+              </div>
+            </ng-container>
+          </ng-container>
+          <ng-template #noDomain>
+            <p class="hint">No domain configured yet.</p>
+          </ng-template>
+          <button type="button" class="linkish" (click)="setTab('settings')">Settings</button>
+        </article>
+      </div>
+
+      <div class="dash-actions">
+        <h3>Quick actions</h3>
+        <div class="dash-action-row">
+          <button type="button" class="primary" (click)="setTab('builder')">Open builder</button>
+          <button type="button" (click)="startCreate()">New page</button>
+          <button type="button" (click)="setTab('media')">Upload media</button>
+          <button type="button" (click)="setTab('publish')">Publish drafts</button>
+          <button type="button" (click)="openPreview()">Preview site</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Website Builder -->
+    <div class="wb-panel builder" *ngIf="tab === 'builder' || tab === 'homepage'">
+      <div class="builder-toolbar">
         <div>
-          <strong>{{ p.title }}</strong>
-          <div class="meta">/{{ p.slug }} · {{ p.status }}</div>
+          <h2>Homepage builder</h2>
+          <p class="hint">
+            Add sections, reorder, edit properties, and preview the live public site.
+          </p>
+        </div>
+        <div class="builder-toolbar-actions">
+          <div class="device-toggles" role="group" aria-label="Preview device">
+            <button
+              type="button"
+              [class.active]="previewDevice === 'desktop'"
+              (click)="previewDevice = 'desktop'"
+            >
+              Desktop
+            </button>
+            <button
+              type="button"
+              [class.active]="previewDevice === 'tablet'"
+              (click)="previewDevice = 'tablet'"
+            >
+              Tablet
+            </button>
+            <button
+              type="button"
+              [class.active]="previewDevice === 'mobile'"
+              (click)="previewDevice = 'mobile'"
+            >
+              Mobile
+            </button>
+          </div>
+          <button type="button" (click)="refreshPreview()">Refresh preview</button>
+          <button type="button" (click)="openPreview()">Open</button>
+          <button type="button" class="primary" (click)="saveHomepage()" [disabled]="saving">
+            {{ saving ? 'Saving…' : 'Save homepage' }}
+          </button>
+        </div>
+      </div>
+
+      <div class="builder-cols">
+        <aside class="builder-catalog">
+          <h3>Sections</h3>
+          <p class="hint">Click to add to homepage.</p>
+          <button
+            type="button"
+            class="catalog-item"
+            *ngFor="let s of sectionCatalog"
+            [disabled]="!s.supported"
+            [title]="s.supported ? 'Add section' : 'Coming in a later phase'"
+            (click)="s.supported && addSection(s.type)"
+          >
+            <span>{{ s.label }}</span>
+            <em *ngIf="!s.supported">Soon</em>
+          </button>
+        </aside>
+
+        <div class="builder-canvas">
+          <div class="sections-list">
+            <article
+              class="section-row"
+              *ngFor="let s of sections; let i = index"
+              [class.selected]="selectedSectionIndex === i"
+              (click)="selectSection(i)"
+            >
+              <div class="section-main">
+                <label class="check" (click)="$event.stopPropagation()">
+                  <input type="checkbox" [(ngModel)]="s.enabled" [name]="'en' + i" />
+                  {{ s.type }}
+                </label>
+                <div class="meta">Order {{ s.order }}</div>
+              </div>
+              <div class="actions" (click)="$event.stopPropagation()">
+                <button type="button" (click)="moveSection(i, -1)">Up</button>
+                <button type="button" (click)="moveSection(i, 1)">Down</button>
+                <button type="button" class="danger" (click)="removeSection(i)">Remove</button>
+              </div>
+            </article>
+            <p class="hint" *ngIf="!sections.length">
+              No sections yet. Add one from the catalog on the left.
+            </p>
+          </div>
+
+          <div class="preview-frame-wrap">
+            <div class="preview-frame" [style.width]="previewWidth">
+              <iframe
+                [attr.src]="previewSrc"
+                title="Website preview"
+                sandbox="allow-same-origin allow-scripts allow-forms allow-popups"
+              ></iframe>
+            </div>
+          </div>
+        </div>
+
+        <aside class="builder-props">
+          <h3>Properties</h3>
+          <ng-container *ngIf="selectedSection as s; else noSection">
+            <p class="meta">{{ s.type }}</p>
+            <label class="check">
+              <input
+                type="checkbox"
+                [(ngModel)]="s.enabled"
+                [name]="'propEn' + selectedSectionIndex"
+              />
+              Enabled
+            </label>
+
+            <div class="hero-fields" *ngIf="s.type === 'HERO'">
+              <label
+                >Hero title
+                <input
+                  [name]="'ht' + selectedSectionIndex"
+                  [(ngModel)]="s.content!.title"
+                  (ngModelChange)="ensureContent(s)"
+                  placeholder="Welcome to HCP School"
+                />
+              </label>
+              <label
+                >Hero subtitle
+                <input
+                  [name]="'hs' + selectedSectionIndex"
+                  [(ngModel)]="s.content!.subtitle"
+                  (ngModelChange)="ensureContent(s)"
+                  placeholder="Excellence in education"
+                />
+              </label>
+              <label
+                >Hero image URL
+                <input
+                  [name]="'hi' + selectedSectionIndex"
+                  [(ngModel)]="s.content!.imageUrl"
+                  (ngModelChange)="ensureContent(s)"
+                  placeholder="From Media → Use as hero"
+                />
+              </label>
+            </div>
+
+            <div class="hero-fields" *ngIf="s.type === 'ADMISSION_CTA'">
+              <label
+                >CTA title
+                <input
+                  [name]="'ct' + selectedSectionIndex"
+                  [(ngModel)]="s.content!.title"
+                  (ngModelChange)="ensureContent(s)"
+                />
+              </label>
+              <label
+                >Button label
+                <input
+                  [name]="'cl' + selectedSectionIndex"
+                  [(ngModel)]="s.content!.ctaLabel"
+                  (ngModelChange)="ensureContent(s)"
+                />
+              </label>
+            </div>
+
+            <div
+              class="hero-fields"
+              *ngIf="s.type !== 'HERO' && s.type !== 'ADMISSION_CTA'"
+            >
+              <label
+                >Title
+                <input
+                  [name]="'gt' + selectedSectionIndex"
+                  [(ngModel)]="s.content!.title"
+                  (ngModelChange)="ensureContent(s)"
+                />
+              </label>
+              <label
+                >Subtitle
+                <input
+                  [name]="'gs' + selectedSectionIndex"
+                  [(ngModel)]="s.content!.subtitle"
+                  (ngModelChange)="ensureContent(s)"
+                />
+              </label>
+            </div>
+
+            <p class="hint">
+              Tip: upload images in
+              <button type="button" class="linkish" (click)="setTab('media')">Media</button>
+              then Use as hero.
+            </p>
+          </ng-container>
+          <ng-template #noSection>
+            <p class="hint">Select a section to edit its properties.</p>
+          </ng-template>
+        </aside>
+      </div>
+    </div>
+
+    <!-- Pages -->
+    <div class="wb-panel" *ngIf="tab === 'pages'">
+      <p *ngIf="loading">Loading…</p>
+      <div class="layout" *ngIf="!loading">
+        <div class="list">
+          <article *ngFor="let p of pages">
+            <div>
+              <strong>{{ p.title }}</strong>
+              <div class="meta">/{{ p.slug }} · {{ p.status }}</div>
+            </div>
+            <div class="actions">
+              <button type="button" (click)="startEdit(p)">Edit</button>
+              <button type="button" *ngIf="p.status !== 'PUBLISHED'" (click)="publish(p)">
+                Publish
+              </button>
+              <button type="button" *ngIf="p.status === 'PUBLISHED'" (click)="unpublish(p)">
+                Unpublish
+              </button>
+            </div>
+          </article>
+          <p class="hint" *ngIf="!pages.length">No pages yet. Create one with New page.</p>
+        </div>
+
+        <form class="editor" (ngSubmit)="save()">
+          <h2>{{ editing ? 'Edit page' : 'New page' }}</h2>
+          <label>Slug <input name="slug" [(ngModel)]="draft.slug" required /></label>
+          <label>Title <input name="title" [(ngModel)]="draft.title" required /></label>
+          <label>Summary <input name="summary" [(ngModel)]="draft.summary" /></label>
+          <label>SEO title <input name="seoTitle" [(ngModel)]="draft.seoTitle" /></label>
+          <label
+            >SEO description
+            <input name="seoDescription" [(ngModel)]="draft.seoDescription" />
+          </label>
+          <label
+            >Body HTML
+            <textarea name="bodyHtml" rows="12" [(ngModel)]="draft.bodyHtml"></textarea>
+          </label>
+          <p class="hint">
+            Tip: open the
+            <button type="button" class="linkish" (click)="setTab('media')">Media</button>
+            tab to upload school photos, then Insert into body.
+          </p>
+          <button type="submit" class="primary" [disabled]="saving">
+            {{ saving ? 'Saving…' : 'Save' }}
+          </button>
+        </form>
+      </div>
+    </div>
+
+    <!-- SEO -->
+    <div class="wb-panel panel" *ngIf="tab === 'seo'">
+      <h2>Site SEO defaults</h2>
+      <form class="editor" (ngSubmit)="saveSeo()">
+        <label>Default title <input name="defaultTitle" [(ngModel)]="seo.defaultTitle" /></label>
+        <label
+          >Default description
+          <textarea
+            name="defaultDescription"
+            rows="3"
+            [(ngModel)]="seo.defaultDescription"
+          ></textarea>
+        </label>
+        <label>OG image URL <input name="ogImageUrl" [(ngModel)]="seo.ogImageUrl" /></label>
+        <p class="hint">
+          OG image is also the homepage hero when no hero image is set. Prefer
+          <button type="button" class="linkish" (click)="setTab('media')">Media</button>
+          → Use as hero / Use as OG.
+        </p>
+        <button type="submit" class="primary" [disabled]="saving">
+          {{ saving ? 'Saving…' : 'Save SEO' }}
+        </button>
+      </form>
+    </div>
+
+    <!-- Media -->
+    <div class="wb-panel panel" *ngIf="tab === 'media'">
+      <h2>School media library</h2>
+      <p class="hint">
+        Upload campus photos, logos, and gallery images. Then insert into page Body HTML or set as
+        OG image. Counts toward plan storage quota.
+      </p>
+      <div *ngIf="mediaUsage as m" class="usage compact">
+        <p>
+          Storage: {{ m.usedGb }} GB used
+          <span *ngIf="m.storageLimitGb != null"> / {{ m.storageLimitGb }} GB</span>
+        </p>
+      </div>
+      <label class="upload">
+        <span>{{ mediaUploading ? 'Uploading…' : 'Choose image or file' }}</span>
+        <input
+          type="file"
+          accept="image/*,.pdf,.webp"
+          (change)="onMediaSelected($event)"
+          [disabled]="mediaUploading"
+        />
+      </label>
+      <div class="media-grid" *ngIf="mediaAssets.length; else noMedia">
+        <article class="media-card" *ngFor="let m of mediaAssets">
+          <div class="thumb" *ngIf="isImage(m)">
+            <img [src]="m.url" [alt]="m.fileName" />
+          </div>
+          <div class="thumb file" *ngIf="!isImage(m)">{{ m.fileName }}</div>
+          <strong>{{ m.fileName }}</strong>
+          <div class="meta">{{ formatBytes(m.byteSize) }}</div>
+          <div class="actions row">
+            <button type="button" (click)="insertMediaIntoBody(m)">Insert into page</button>
+            <button type="button" (click)="useMediaAsHero(m)">Use as hero</button>
+            <button type="button" (click)="useMediaAsOg(m)">Use as OG</button>
+            <button type="button" (click)="copyMediaUrl(m)">Copy URL</button>
+            <button type="button" class="danger" (click)="deleteMedia(m)">Delete</button>
+          </div>
+        </article>
+      </div>
+      <ng-template #noMedia>
+        <p class="hint">No uploads yet. Choose a file above to start the media library.</p>
+      </ng-template>
+    </div>
+
+    <!-- Theme -->
+    <div class="wb-panel panel" *ngIf="tab === 'theme'">
+      <h2>Theme</h2>
+      <p class="hint">Brand colors, logo, and favicon for the public school website.</p>
+      <form class="editor" (ngSubmit)="saveTheme()">
+        <label
+          >Primary color
+          <div class="color-row">
+            <input name="primaryColor" type="color" [(ngModel)]="theme.primaryColor" />
+            <input name="primaryColorText" [(ngModel)]="theme.primaryColor" />
+          </div>
+        </label>
+        <label
+          >Secondary color
+          <div class="color-row">
+            <input name="secondaryColor" type="color" [(ngModel)]="theme.secondaryColor" />
+            <input name="secondaryColorText" [(ngModel)]="theme.secondaryColor" />
+          </div>
+        </label>
+        <label>Logo URL <input name="logoUrl" [(ngModel)]="theme.logoUrl" /></label>
+        <label>Favicon URL <input name="faviconUrl" [(ngModel)]="theme.faviconUrl" /></label>
+        <p class="hint">
+          Upload assets in
+          <button type="button" class="linkish" (click)="setTab('media')">Media</button>
+          and paste the URL here.
+        </p>
+        <button type="submit" class="primary" [disabled]="saving">
+          {{ saving ? 'Saving…' : 'Save theme' }}
+        </button>
+      </form>
+    </div>
+
+    <!-- Campuses -->
+    <div class="wb-panel panel" *ngIf="tab === 'campuses'">
+      <h2>Campus websites</h2>
+      <p class="hint">Requires FEATURE_MULTI_BRANCH. Each campus is a site shell (branch_id).</p>
+      <article *ngFor="let c of campuses">
+        <strong>{{ c.displayName }}</strong>
+        <div class="meta">
+          {{ c.branchId }} · {{ c.status }} · {{ c.defaultSite ? 'default' : 'campus' }} ·
+          {{ c.templateCode || '—' }}
+        </div>
+      </article>
+      <form class="editor" (ngSubmit)="createCampus()">
+        <label
+          >Branch key
+          <input
+            name="branchId"
+            [(ngModel)]="campusDraft.branchId"
+            required
+            placeholder="north"
+          />
+        </label>
+        <label
+          >Display name
+          <input name="displayName" [(ngModel)]="campusDraft.displayName" />
+        </label>
+        <button type="submit" class="primary" [disabled]="saving">Create campus</button>
+      </form>
+    </div>
+
+    <!-- Alumni -->
+    <div class="wb-panel panel" *ngIf="tab === 'alumni'">
+      <h2>Alumni directory</h2>
+      <p class="hint">
+        This is not a normal Page. Profiles appear on the public site at <code>/alumni</code>. Click
+        Edit, change the text, Save — then Publish if status is DRAFT. Refresh the public Alumni
+        page to see updates.
+      </p>
+      <article *ngFor="let a of alumni">
+        <div>
+          <strong>{{ a.fullName }}</strong>
+          <div class="meta">/{{ a.slug }} · {{ a.batchYear || '—' }} · {{ a.status }}</div>
+          <div class="meta" *ngIf="a.headline">{{ a.headline }}</div>
         </div>
         <div class="actions">
-          <button type="button" (click)="startEdit(p)">Edit</button>
-          <button type="button" *ngIf="p.status !== 'PUBLISHED'" (click)="publish(p)">Publish</button>
-          <button type="button" *ngIf="p.status === 'PUBLISHED'" (click)="unpublish(p)">Unpublish</button>
+          <button type="button" (click)="startEditAlumni(a)">Edit</button>
+          <button type="button" *ngIf="a.status !== 'PUBLISHED'" (click)="publishAlumni(a)">
+            Publish
+          </button>
         </div>
       </article>
+      <form class="editor" (ngSubmit)="saveAlumni()">
+        <h3>{{ editingAlumniId ? 'Edit alumni' : 'Add alumni' }}</h3>
+        <label>Slug <input name="aSlug" [(ngModel)]="alumniDraft.slug" required /></label>
+        <label>Full name <input name="aName" [(ngModel)]="alumniDraft.fullName" required /></label>
+        <label
+          >Batch year
+          <input name="aYear" type="number" [(ngModel)]="alumniDraft.batchYear" />
+        </label>
+        <label>Headline <input name="aHead" [(ngModel)]="alumniDraft.headline" /></label>
+        <label
+          >Bio HTML
+          <textarea name="aBio" rows="5" [(ngModel)]="alumniDraft.bioHtml"></textarea>
+        </label>
+        <div class="actions row">
+          <button type="submit" class="primary" [disabled]="saving">
+            {{ saving ? 'Saving…' : editingAlumniId ? 'Save alumni' : 'Add alumni' }}
+          </button>
+          <button type="button" *ngIf="editingAlumniId" (click)="cancelEditAlumni()">Cancel</button>
+        </div>
+      </form>
     </div>
 
-    <form class="editor" (ngSubmit)="save()">
-      <h2>{{ editing ? 'Edit page' : 'New page' }}</h2>
-      <label>Slug <input name="slug" [(ngModel)]="draft.slug" required /></label>
-      <label>Title <input name="title" [(ngModel)]="draft.title" required /></label>
-      <label>Summary <input name="summary" [(ngModel)]="draft.summary" /></label>
-      <label>SEO title <input name="seoTitle" [(ngModel)]="draft.seoTitle" /></label>
-      <label>SEO description <input name="seoDescription" [(ngModel)]="draft.seoDescription" /></label>
+    <!-- AI -->
+    <div class="wb-panel panel" *ngIf="tab === 'ai'">
+      <h2>AI draft assist</h2>
+      <p class="hint">
+        Uses local drafts unless CMS_AI_API_URL is configured. Requires FEATURE_WEBSITE_AI.
+      </p>
+      <form class="editor" (ngSubmit)="runAiDraft()">
+        <label
+          >Kind
+          <select name="aiKind" [(ngModel)]="aiDraft.kind">
+            <option value="page">Page</option>
+            <option value="blog">Blog</option>
+            <option value="seo">SEO</option>
+            <option value="alumni">Alumni bio</option>
+          </select>
+        </label>
+        <label>Topic <input name="aiTopic" [(ngModel)]="aiDraft.topic" required /></label>
+        <label>Tone <input name="aiTone" [(ngModel)]="aiDraft.tone" /></label>
+        <button type="submit" class="primary" [disabled]="saving">Generate draft</button>
+      </form>
+      <pre *ngIf="aiResult">{{ aiResult | json }}</pre>
+    </div>
+
+    <!-- Marketplace -->
+    <div class="wb-panel panel" *ngIf="tab === 'marketplace'">
+      <h2>Template marketplace</h2>
+      <p class="hint">Apply a catalog template to a campus site (theme/homepage/nav/SEO).</p>
       <label
-        >Body HTML
-        <textarea name="bodyHtml" rows="12" [(ngModel)]="draft.bodyHtml"></textarea>
-      </label>
-      <button type="submit" class="primary" [disabled]="saving">
-        {{ saving ? 'Saving…' : 'Save' }}
-      </button>
-    </form>
-  </div>
-
-  <div class="panel" *ngIf="tab === 'homepage'">
-    <h2>Homepage sections</h2>
-    <p class="hint">Enable/disable and reorder sections shown on the public home page.</p>
-    <article class="section-row" *ngFor="let s of sections; let i = index">
-      <label class="check">
-        <input type="checkbox" [(ngModel)]="s.enabled" [name]="'en' + i" />
-        {{ s.type }}
-      </label>
-      <div class="actions">
-        <button type="button" (click)="moveSection(i, -1)">Up</button>
-        <button type="button" (click)="moveSection(i, 1)">Down</button>
-      </div>
-    </article>
-    <button type="button" class="primary" (click)="saveHomepage()" [disabled]="saving">
-      {{ saving ? 'Saving…' : 'Save homepage' }}
-    </button>
-  </div>
-
-  <div class="panel" *ngIf="tab === 'seo'">
-    <h2>Site SEO defaults</h2>
-    <form class="editor" (ngSubmit)="saveSeo()">
-      <label>Default title <input name="defaultTitle" [(ngModel)]="seo.defaultTitle" /></label>
-      <label
-        >Default description
-        <textarea name="defaultDescription" rows="3" [(ngModel)]="seo.defaultDescription"></textarea>
-      </label>
-      <label>OG image URL <input name="ogImageUrl" [(ngModel)]="seo.ogImageUrl" /></label>
-      <button type="submit" class="primary" [disabled]="saving">
-        {{ saving ? 'Saving…' : 'Save SEO' }}
-      </button>
-    </form>
-  </div>
-
-  <div class="panel" *ngIf="tab === 'campuses'">
-    <h2>Campus websites</h2>
-    <p class="hint">Requires FEATURE_MULTI_BRANCH. Each campus is a site shell (branch_id).</p>
-    <article *ngFor="let c of campuses">
-      <strong>{{ c.displayName }}</strong>
-      <div class="meta">
-        {{ c.branchId }} · {{ c.status }} · {{ c.defaultSite ? 'default' : 'campus' }} ·
-        {{ c.templateCode || '—' }}
-      </div>
-    </article>
-    <form class="editor" (ngSubmit)="createCampus()">
-      <label>Branch key <input name="branchId" [(ngModel)]="campusDraft.branchId" required placeholder="north" /></label>
-      <label>Display name <input name="displayName" [(ngModel)]="campusDraft.displayName" /></label>
-      <button type="submit" class="primary" [disabled]="saving">Create campus</button>
-    </form>
-  </div>
-
-  <div class="panel" *ngIf="tab === 'alumni'">
-    <h2>Alumni directory</h2>
-    <article *ngFor="let a of alumni">
-      <strong>{{ a.fullName }}</strong>
-      <div class="meta">/{{ a.slug }} · {{ a.batchYear || '—' }} · {{ a.status }}</div>
-      <button type="button" *ngIf="a.status !== 'PUBLISHED'" (click)="publishAlumni(a)">Publish</button>
-    </article>
-    <form class="editor" (ngSubmit)="saveAlumni()">
-      <label>Slug <input name="aSlug" [(ngModel)]="alumniDraft.slug" required /></label>
-      <label>Full name <input name="aName" [(ngModel)]="alumniDraft.fullName" required /></label>
-      <label>Batch year <input name="aYear" type="number" [(ngModel)]="alumniDraft.batchYear" /></label>
-      <label>Headline <input name="aHead" [(ngModel)]="alumniDraft.headline" /></label>
-      <label>Bio HTML <textarea name="aBio" rows="5" [(ngModel)]="alumniDraft.bioHtml"></textarea></label>
-      <button type="submit" class="primary" [disabled]="saving">Add alumni</button>
-    </form>
-  </div>
-
-  <div class="panel" *ngIf="tab === 'ai'">
-    <h2>AI draft assist</h2>
-    <p class="hint">Uses local drafts unless CMS_AI_API_URL is configured. Requires FEATURE_WEBSITE_AI.</p>
-    <form class="editor" (ngSubmit)="runAiDraft()">
-      <label
-        >Kind
-        <select name="aiKind" [(ngModel)]="aiDraft.kind">
-          <option value="page">Page</option>
-          <option value="blog">Blog</option>
-          <option value="seo">SEO</option>
-          <option value="alumni">Alumni bio</option>
+        >Template
+        <select name="tpl" [(ngModel)]="selectedTemplate">
+          <option *ngFor="let t of templates" [value]="t.code">{{ t.name }}</option>
         </select>
       </label>
-      <label>Topic <input name="aiTopic" [(ngModel)]="aiDraft.topic" required /></label>
-      <label>Tone <input name="aiTone" [(ngModel)]="aiDraft.tone" /></label>
-      <button type="submit" class="primary" [disabled]="saving">Generate draft</button>
-    </form>
-    <pre *ngIf="aiResult">{{ aiResult | json }}</pre>
-  </div>
-
-  <div class="panel" *ngIf="tab === 'marketplace'">
-    <h2>Template marketplace</h2>
-    <p class="hint">Apply a catalog template to a campus site (theme/homepage/nav/SEO).</p>
-    <label
-      >Template
-      <select name="tpl" [(ngModel)]="selectedTemplate">
-        <option *ngFor="let t of templates" [value]="t.code">{{ t.name }}</option>
-      </select>
-    </label>
-    <label
-      >Campus site
-      <select name="site" [(ngModel)]="applySiteId">
-        <option *ngFor="let c of campuses" [value]="c.id">
-          {{ c.displayName }} ({{ c.branchId }})
-        </option>
-      </select>
-    </label>
-    <p class="hint" *ngFor="let t of templates">
-      <strong *ngIf="t.code === selectedTemplate">{{ t.name }}:</strong>
-      <span *ngIf="t.code === selectedTemplate">{{ t.description }}</span>
-    </p>
-    <button type="button" class="primary" (click)="applyTemplate()" [disabled]="saving || !selectedTemplate">
-      Apply template
-    </button>
-  </div>
-
-  <div class="panel" *ngIf="tab === 'analytics'">
-    <h2>Website analytics (30 days)</h2>
-    <div *ngIf="analyticsSummary as a">
-      <p><strong>{{ a.totalEvents }}</strong> events in last {{ a.days }} days</p>
-      <ul>
-        <li *ngFor="let row of a.byType | keyvalue">{{ row.key }}: {{ row.value }}</li>
-      </ul>
-      <h3>Recent</h3>
-      <article *ngFor="let ev of a.recent | slice: 0:20">
-        <div class="meta">{{ ev.eventType }} · {{ ev.path }} · {{ ev.createdAt }}</div>
-      </article>
-    </div>
-    <div *ngIf="mediaUsage as m" class="usage">
-      <h3>Storage &amp; page quotas</h3>
-      <p>
-        Storage: {{ m.usedGb }} GB used
-        <span *ngIf="m.storageLimitGb != null"> / {{ m.storageLimitGb }} GB</span>
+      <label
+        >Campus site
+        <select name="site" [(ngModel)]="applySiteId">
+          <option *ngFor="let c of campuses" [value]="c.id">
+            {{ c.displayName }} ({{ c.branchId }})
+          </option>
+        </select>
+      </label>
+      <p class="hint" *ngFor="let t of templates">
+        <strong *ngIf="t.code === selectedTemplate">{{ t.name }}:</strong>
+        <span *ngIf="t.code === selectedTemplate">{{ t.description }}</span>
       </p>
-      <p>
-        Pages: {{ m.pageCount }}
-        <span *ngIf="m.pageLimit != null"> / {{ m.pageLimit }}</span>
+      <button
+        type="button"
+        class="primary"
+        (click)="applyTemplate()"
+        [disabled]="saving || !selectedTemplate"
+      >
+        Apply template
+      </button>
+    </div>
+
+    <!-- Analytics -->
+    <div class="wb-panel panel" *ngIf="tab === 'analytics'">
+      <h2>Website analytics (30 days)</h2>
+      <div *ngIf="analyticsSummary as a">
+        <p>
+          <strong>{{ a.totalEvents }}</strong> events in last {{ a.days }} days
+        </p>
+        <ul>
+          <li *ngFor="let row of a.byType | keyvalue">{{ row.key }}: {{ row.value }}</li>
+        </ul>
+        <h3>Recent</h3>
+        <article *ngFor="let ev of a.recent | slice: 0:20">
+          <div class="meta">{{ ev.eventType }} · {{ ev.path }} · {{ ev.createdAt }}</div>
+        </article>
+      </div>
+      <div *ngIf="mediaUsage as m" class="usage">
+        <h3>Storage &amp; page quotas</h3>
+        <p>
+          Storage: {{ m.usedGb }} GB used
+          <span *ngIf="m.storageLimitGb != null"> / {{ m.storageLimitGb }} GB</span>
+        </p>
+        <p>
+          Pages: {{ m.pageCount }}
+          <span *ngIf="m.pageLimit != null"> / {{ m.pageLimit }}</span>
+        </p>
+      </div>
+    </div>
+
+    <!-- Settings -->
+    <div class="wb-panel panel" *ngIf="tab === 'settings'">
+      <h2>Site settings</h2>
+      <div class="settings-grid">
+        <div class="editor">
+          <h3>Site meta</h3>
+          <p><strong>Display name</strong> {{ siteMeta.displayName || '—' }}</p>
+          <p><strong>Status</strong> {{ siteMeta.status || '—' }}</p>
+          <p><strong>Organization</strong> {{ siteMeta.organizationId || '—' }}</p>
+          <p><strong>Template</strong> {{ siteMeta.templateCode || '—' }}</p>
+          <p>
+            <strong>ERP login URL</strong>
+            <a *ngIf="siteMeta.erpLoginUrl" [href]="siteMeta.erpLoginUrl" target="_blank" rel="noopener">{{
+              siteMeta.erpLoginUrl
+            }}</a>
+            <span *ngIf="!siteMeta.erpLoginUrl">—</span>
+          </p>
+        </div>
+
+        <div class="editor">
+          <h3>Domains</h3>
+          <table class="domains-table" *ngIf="domains.length; else noDomains">
+            <thead>
+              <tr>
+                <th>Host</th>
+                <th>Primary</th>
+                <th>Status</th>
+                <th>SSL</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr *ngFor="let d of domains">
+                <td>{{ d.host }}</td>
+                <td>{{ d.primary ? 'Yes' : '—' }}</td>
+                <td>{{ d.status || '—' }}</td>
+                <td>{{ d.sslStatus || '—' }}</td>
+              </tr>
+            </tbody>
+          </table>
+          <ng-template #noDomains>
+            <p class="hint">No domains on this site yet. Super Admin manages custom domains.</p>
+          </ng-template>
+        </div>
+      </div>
+    </div>
+
+    <!-- Publish -->
+    <div class="wb-panel panel" *ngIf="tab === 'publish'">
+      <h2>Publish</h2>
+      <p class="hint">
+        Publish all draft CMS pages to the public site. Homepage sections are saved separately from
+        the Builder.
       </p>
+      <div class="publish-summary">
+        <p>
+          <strong>{{ draftPages }}</strong> draft page{{ draftPages === 1 ? '' : 's' }} ·
+          <strong>{{ publishedPages }}</strong> published
+        </p>
+        <button
+          type="button"
+          class="primary"
+          (click)="publishAllDrafts()"
+          [disabled]="saving || draftPages === 0"
+        >
+          {{ saving ? 'Publishing…' : 'Publish all drafts' }}
+        </button>
+      </div>
+      <div class="list">
+        <ng-container *ngFor="let p of pages">
+          <article *ngIf="p.status !== 'PUBLISHED'">
+            <div>
+              <strong>{{ p.title }}</strong>
+              <div class="meta">/{{ p.slug }} · {{ p.status }}</div>
+            </div>
+            <div class="actions">
+              <button type="button" (click)="publish(p)">Publish</button>
+              <button type="button" (click)="startEdit(p)">Edit</button>
+            </div>
+          </article>
+        </ng-container>
+        <p class="hint" *ngIf="draftPages === 0">All pages are already published.</p>
+      </div>
+    </div>
+
+    <!-- Phase 2+ placeholders for soon modules -->
+    <div class="wb-panel soon-panel" *ngIf="isSoonModule(tab)">
+      <div class="soon-badge">Phase 2+</div>
+      <h2>{{ tab | titlecase }} — coming soon</h2>
+      <p class="hint">
+        This module is planned in
+        <code>docs/ENTERPRISE_WEBSITE_BUILDER_ROADMAP.md</code>. Phase 1 keeps current CMS flows
+        working; visual nav, blogs/events/news/gallery, forms↔ERP, and advanced canvas land in later
+        phases.
+      </p>
+      <div class="soon-links">
+        <h3>Related modules ready now</h3>
+        <div class="dash-action-row">
+          <button type="button" *ngIf="tab === 'navigation'" (click)="setTab('pages')">Pages</button>
+          <button type="button" *ngIf="tab === 'navigation'" (click)="setTab('builder')">
+            Website Builder
+          </button>
+          <button
+            type="button"
+            *ngIf="tab === 'forms' || tab === 'admissions'"
+            (click)="setTab('pages')"
+          >
+            Pages
+          </button>
+          <button
+            type="button"
+            *ngIf="tab === 'forms' || tab === 'admissions'"
+            (click)="setTab('campuses')"
+          >
+            Campuses
+          </button>
+          <button
+            type="button"
+            *ngIf="tab === 'blogs' || tab === 'events' || tab === 'news' || tab === 'achievements'"
+            (click)="setTab('pages')"
+          >
+            Pages
+          </button>
+          <button
+            type="button"
+            *ngIf="tab === 'blogs' || tab === 'events' || tab === 'news'"
+            (click)="setTab('ai')"
+          >
+            AI Assistant
+          </button>
+          <button
+            type="button"
+            *ngIf="tab === 'gallery' || tab === 'downloads'"
+            (click)="setTab('media')"
+          >
+            Media
+          </button>
+          <button type="button" *ngIf="tab === 'staff'" (click)="setTab('alumni')">Alumni</button>
+          <button type="button" (click)="setTab('dashboard')">Dashboard</button>
+          <button type="button" (click)="setTab('builder')">Website Builder</button>
+        </div>
+      </div>
     </div>
   </div>
-</section>
+</div>

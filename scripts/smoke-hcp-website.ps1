@@ -96,12 +96,14 @@ Assert-Ok "analytics track" {
 }
 
 Assert-Ok "admission apply (may 402/403 if feature off)" {
+  # age must be >= 3 (seed rule admission_age_min blocks LT 3); omit age and API defaults to "0".
   $body = @{
     organizationId = $OrganizationId
     fullName = "HCP Smoke Tester"
     mobile = "9000000001"
     email = "smoke@hcpschool.test"
-    classApplied = "1"
+    classApplied = "Class 1"
+    age = "8"
     message = "Automated smoke - safe to ignore"
   } | ConvertTo-Json
   try {
@@ -120,7 +122,7 @@ Assert-Ok "admission apply (may 402/403 if feature off)" {
 if ($resolve -and $resolve.cdnBaseUrl) {
   Write-Host "INFO  cdnBaseUrl=$($resolve.cdnBaseUrl)" -ForegroundColor DarkGray
 } else {
-  Write-Host "INFO  cdnBaseUrl empty (set WEBSITE_CDN_BASE_URL in prod)" -ForegroundColor DarkGray
+  Write-Host "INFO  cdnBaseUrl empty (OK locally). Prod: set WEBSITE_CDN_BASE_URL in .env.school.production (not hcpschool.com; that host is Super Admin Domains). See docs/HCP_WEBSITE_GO_LIVE.md" -ForegroundColor DarkGray
 }
 
 Write-Host ""

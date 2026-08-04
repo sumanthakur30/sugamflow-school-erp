@@ -1,10 +1,12 @@
-# Starts school DOMAIN microservices and registers them with SugamFlow Eureka (:8761).
-# Prefer: .\scripts\start-platform.ps1 first (discovery + gateway).
+# Starts school DOMAIN microservices and registers them with SugamFlow Eureka.
+# Prefer: .\scripts\start-platform.ps1 first (discovery + gateway), OR Docker common platform
+# (Eureka may be on :8761 or :18761 depending on -ExposeSchoolPorts).
 #
 # When the API gateway runs in Docker (start-common-platform / compose-local), jars must
-# advertise host.docker.internal - not 127.0.0.1 - or the gateway gets Connection refused.
+# advertise host.docker.internal - not 127.0.0.1 - or the gateway gets Connection refused / 503.
 param(
   [switch]$Restart,  # stop school service JVMs on 8181-8199 before build/start
+  [switch]$SkipBuild, # reuse existing jars (faster / less RAM)
   # Eureka advertise address reachable FROM the gateway.
   # Host-jar gateway (start-platform.ps1): 127.0.0.1
   # Docker gateway (start-common-platform): host.docker.internal
@@ -163,11 +165,21 @@ if ($dupGroups.Count -gt 0) {
 $eurekaZone = if ($env:EUREKA_CLIENT_SERVICEURL_DEFAULTZONE) {
   $env:EUREKA_CLIENT_SERVICEURL_DEFAULTZONE
 } else {
-  'http://localhost:8761/eureka'
+  # Prefer a healthy Eureka HTTP endpoint (TCP alone is unreliable with Docker port maps).
+  # Docker common platform without -ExposeSchoolPorts maps Eureka to host :18761.
+  if (Wait-Http 'http://localhost:8761/actuator/health' 2) {
+    'http://localhost:8761/eureka'
+  } elseif (Wait-Http 'http://localhost:18761/actuator/health' 2) {
+    Write-Host 'Eureka healthy on :18761 (Docker mapped port) - using that zone' -ForegroundColor Yellow
+    'http://localhost:18761/eureka'
+  } else {
+    'http://localhost:8761/eureka'
+  }
 }
+$eurekaHealthUrl = ($eurekaZone -replace '/eureka/?$', '') + '/actuator/health'
 
 function Test-DockerGatewayRunning {
-  # Docker Desktop publishes :9090 via wslrelay/com.docker.backend — CommandLine often has no "docker".
+  # Docker Desktop publishes :9090 via wslrelay/com.docker.backend - CommandLine often has no "docker".
   try {
     $dockerCmd = Get-Command docker -ErrorAction SilentlyContinue
     if ($dockerCmd) {
@@ -203,17 +215,24 @@ if (-not $AdvertiseIp) {
 
 $javaExe = Get-JavaExe
 Write-Host "Java: $javaExe"
+Write-Host "Eureka zone: $eurekaZone"
 Write-Host "Eureka advertise IP: $AdvertiseIp" -ForegroundColor Yellow
 if ($AdvertiseIp -eq '127.0.0.1') {
   Write-Host '  (host-jar gateway mode - pass -AdvertiseIp host.docker.internal if gateway runs in Docker)' -ForegroundColor DarkGray
+} else {
+  Write-Host '  (Docker gateway mode - school jars reachable as host.docker.internal:<port>)' -ForegroundColor DarkGray
 }
 
-if (-not (Wait-Http 'http://localhost:8761/actuator/health' 5)) {
-  Write-Warning "Eureka not healthy at http://localhost:8761 - run .\scripts\start-platform.ps1 first."
+if (-not (Wait-Http $eurekaHealthUrl 8)) {
+  Write-Warning "Eureka not healthy at $eurekaHealthUrl - run platform/Docker discovery first."
 }
 
-Write-Host 'Building school jars...'
-mvn -q -DskipTests package
+if ($SkipBuild) {
+  Write-Host 'SkipBuild: reusing existing school jars'
+} else {
+  Write-Host 'Building school jars...'
+  mvn -q -DskipTests package
+}
 
 foreach ($m in $modules) {
   if (Test-ServiceAlreadyRunning $m.Name $m.Port) {
@@ -225,9 +244,13 @@ foreach ($m in $modules) {
     continue
   }
   $jar = Get-ChildItem "$root\services\$($m.Name)\target\$($m.Name)-*.jar" |
-    Where-Object { $_.Name -notlike '*original*' } |
+    Where-Object { $_.Name -notlike '*original*' -and $_.Name -notlike '*copy*' } |
+    Sort-Object Length -Descending |
     Select-Object -First 1
   if (-not $jar) { throw "Missing jar for $($m.Name)" }
+  if ($jar.Length -lt 5MB) {
+    throw "Jar for $($m.Name) looks incomplete ($([math]::Round($jar.Length/1KB)) KB). Re-run without -SkipBuild."
+  }
 
   $outLog = Join-Path $logDir "$($m.Name).out.log"
   $errLog = Join-Path $logDir "$($m.Name).err.log"
@@ -270,7 +293,7 @@ foreach ($m in $modules) {
 Write-Host "Listening: $up / $($modules.Count) school ports (8181-8199)"
 
 Write-Host ''
-Write-Host "Eureka:  http://localhost:8761"
+Write-Host "Eureka:  $eurekaZone"
 Write-Host "Gateway: http://localhost:9090"
 Write-Host "Logs:    $logDir"
 Write-Host 'School UI: cd apps\school-ui; npm start'

@@ -2,14 +2,25 @@
 $ErrorActionPreference = 'Continue'
 
 Write-Host '=== Eureka apps ==='
-try {
-  $apps = Invoke-RestMethod 'http://localhost:8761/eureka/apps' -Headers @{ Accept = 'application/json' }
-  $names = @($apps.applications.application | ForEach-Object { $_.name })
-  $names | Sort-Object | ForEach-Object { Write-Host " - $_" }
-} catch {
-  Write-Host "Eureka not reachable: $($_.Exception.Message)"
+$eurekaUrls = @('http://localhost:18761/eureka/apps', 'http://localhost:8761/eureka/apps')
+$apps = $null
+$eurekaUsed = $null
+foreach ($url in $eurekaUrls) {
+  try {
+    $apps = Invoke-RestMethod $url -Headers @{ Accept = 'application/json' } -TimeoutSec 5
+    $eurekaUsed = $url
+    break
+  } catch {
+    Write-Host "Eureka miss $url : $($_.Exception.Message)"
+  }
+}
+if (-not $apps) {
+  Write-Host 'Eureka not reachable on :18761 or :8761'
   exit 1
 }
+Write-Host "OK   Eureka $eurekaUsed"
+$names = @($apps.applications.application | ForEach-Object { $_.name })
+$names | Sort-Object | ForEach-Object { Write-Host " - $_" }
 
 Write-Host ''
 Write-Host '=== Login (demo-school) ==='

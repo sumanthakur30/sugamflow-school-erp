@@ -41,7 +41,13 @@
       </label>
       <label>
         Username
-        <input [(ngModel)]="username" name="username" required autocomplete="username" />
+        <input
+          [(ngModel)]="username"
+          (ngModelChange)="onUsernameChange()"
+          name="username"
+          required
+          autocomplete="username"
+        />
         <span class="hint">Scoped as <code>{{ username }}_{{ organizationId }}</code></span>
       </label>
       <label>
@@ -62,8 +68,8 @@
           }
         </select>
         <span class="hint">
-          Chooses the home screen after login. Module access still follows your account permissions;
-          for Parent / Teacher portals the matching app role is applied for this session.
+          Choose School Admin, Parent App, Teacher App, etc. After sign-in you open that area of
+          the school ERP. Your account permissions still apply.
         </span>
       </label>
       <button type="submit" [disabled]="submitting">

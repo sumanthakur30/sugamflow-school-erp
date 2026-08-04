@@ -50,7 +50,8 @@ if ($channels -notcontains 'IN_APP') {
 }
 
 $stamp = Get-Date -Format 'yyyyMMddHHmmss'
-$label = "Alert-$stamp"
+$classGrade = ("6" + $stamp.Substring($stamp.Length - 3)).Substring(0, 4)
+$label = "Grade $classGrade-A"
 
 Write-Host "Create class/section ($label)..."
 $class = Invoke-Json -Method Post -Url "$Gateway/api/academic/classes" -Headers $h -Body @{
@@ -65,9 +66,9 @@ if (-not $sectionId) { throw 'section create failed' }
 Write-Host 'Enroll student...'
 $adm = Invoke-Json -Method Post -Url "$Gateway/api/admission/applications" -Headers $h -Body @{
   answers = @{
-    fullName = "Alert Student $stamp"; age = 12
+    fullName = "Alert Student $stamp"; age = 12; dob = '2014-05-01'
     mobile = "95$stamp".Substring(0,10); email = "alert.$stamp@demo-school.local"
-    classApplied = $label; classSection = $label; documentsComplete = $true
+    classApplied = $label; classSection = $label; classGrade = $classGrade; sectionLetter = 'A'; documentsComplete = $true
     guardianFullName = 'Mrs Alert Parent'; guardianRelation = 'Mother'
     guardianMobile = '9811112222'
   }

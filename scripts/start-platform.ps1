@@ -168,23 +168,28 @@ if (-not $SkipMailHog) {
       Write-Warning 'Docker not found - EMAIL will FAIL until SMTP is available on localhost:1025'
       Write-Warning 'Install Docker or run: docker run -d --name school-mailhog -p 1025:1025 -p 8025:8025 mailhog/mailhog:v1.0.1'
     } else {
-      $existing = docker ps -a --filter 'name=^school-mailhog$' --format '{{.Names}}' 2>$null
-      if ($existing -eq 'school-mailhog') {
-        Write-Host 'Starting existing school-mailhog container...'
-        docker start school-mailhog | Out-Null
-      } else {
-        Write-Host 'Starting MailHog (SMTP :1025, UI :8025)...'
-        docker run -d --name school-mailhog -p 1025:1025 -p 8025:8025 mailhog/mailhog:v1.0.1 | Out-Null
-      }
-      $smtpUp = $false
-      for ($i = 1; $i -le 30; $i++) {
-        if (Test-PortOpen 1025) { $smtpUp = $true; break }
-        Start-Sleep -Seconds 1
-      }
-      if ($smtpUp) {
-        Write-Host 'MailHog UP: SMTP http://localhost:1025 | UI http://localhost:8025'
-      } else {
-        Write-Warning 'MailHog did not open :1025 - EMAIL delivery will FAIL'
+      try {
+        $existing = docker ps -a --filter 'name=^school-mailhog$' --format '{{.Names}}' 2>$null
+        if ($existing -eq 'school-mailhog') {
+          Write-Host 'Starting existing school-mailhog container...'
+          docker start school-mailhog | Out-Null
+        } else {
+          Write-Host 'Starting MailHog (SMTP :1025, UI :8025)...'
+          docker run -d --name school-mailhog -p 1025:1025 -p 8025:8025 mailhog/mailhog:v1.0.1 | Out-Null
+        }
+        $smtpUp = $false
+        for ($i = 1; $i -le 30; $i++) {
+          if (Test-PortOpen 1025) { $smtpUp = $true; break }
+          Start-Sleep -Seconds 1
+        }
+        if ($smtpUp) {
+          Write-Host 'MailHog UP: SMTP http://localhost:1025 | UI http://localhost:8025'
+        } else {
+          Write-Warning 'MailHog did not open :1025 - EMAIL delivery will FAIL'
+        }
+      } catch {
+        Write-Warning "Docker unavailable (MailHog skipped): $($_.Exception.Message)"
+        Write-Warning 'Start Docker Desktop later, or re-run with -SkipMailHog. Login does not need MailHog.'
       }
     }
   }

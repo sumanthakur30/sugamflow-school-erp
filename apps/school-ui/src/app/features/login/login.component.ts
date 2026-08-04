@@ -106,6 +106,17 @@ export class LoginComponent implements OnInit {
     this.themeLoadTimer = setTimeout(() => this.refreshTheme(), 400);
   }
 
+  onUsernameChange(): void {
+    // If user opened Parent portal deep-link but types a staff/admin username, switch destination.
+    const guessed = this.guessDestination(this.username);
+    if (
+      (this.destination === 'parent' || this.destination === 'teacher') &&
+      (guessed === 'admin' || guessed === 'principal')
+    ) {
+      this.destination = guessed;
+    }
+  }
+
   onSubmit(): void {
     this.error = '';
     this.submitting = true;
@@ -124,11 +135,15 @@ export class LoginComponent implements OnInit {
               'MFA is enabled for this account; complete login in SugamFlow shop UI for now.';
             return;
           }
-          if (dest.activeRole) {
-            this.auth.setActiveRole(dest.activeRole);
+          const resolved = this.resolveDestinationForRole(response.role, dest);
+          if (resolved.activeRole) {
+            this.auth.setActiveRole(resolved.activeRole);
+          } else if (dest.value !== resolved.value) {
+            // Clear portal overlay when we redirect staff/admin away from Parent App.
+            this.auth.setActiveRole('');
           }
           const navigate = () => {
-            const target = this.returnUrl || dest.path;
+            const target = this.safeTargetForDestination(resolved, this.returnUrl);
             void this.router.navigateByUrl(target);
           };
           // Bootstrap campus + branding from shop name, then refresh theme.
@@ -143,6 +158,46 @@ export class LoginComponent implements OnInit {
           this.error = String(msg);
         },
       });
+  }
+
+  /**
+   * Parent-portal deep links must not trap school owners / staff into /parent.
+   */
+  private resolveDestinationForRole(
+    role: string | undefined,
+    selected: DestinationOption
+  ): DestinationOption {
+    const r = (role || '').toUpperCase();
+    const isParentRole = r === 'PARENT' || r.includes('PARENT');
+    const isStaffAdmin =
+      r.includes('OWNER') ||
+      r.includes('ADMIN') ||
+      r === 'SHOP OWNER' ||
+      r === 'PRINCIPAL' ||
+      r === 'TEACHER' ||
+      r === 'ACCOUNTANT' ||
+      r === 'RECEPTION' ||
+      r === 'LIBRARIAN';
+
+    if (selected.value === 'parent' && !isParentRole && isStaffAdmin) {
+      if (r.includes('TEACHER')) {
+        return this.destinations.find((d) => d.value === 'teacher') ?? this.destinations[0];
+      }
+      return this.destinations.find((d) => d.value === 'admin') ?? this.destinations[0];
+    }
+    return selected;
+  }
+
+  private safeTargetForDestination(dest: DestinationOption, returnUrl: string): string {
+    if (!returnUrl) return dest.path;
+    // Ignore parent return URLs for non-parent destinations (website Parent portal deep-link).
+    if (dest.value !== 'parent' && (returnUrl === '/parent' || returnUrl.startsWith('/parent/'))) {
+      return dest.path;
+    }
+    if (dest.value !== 'teacher' && (returnUrl === '/teacher' || returnUrl.startsWith('/teacher/'))) {
+      return dest.path;
+    }
+    return returnUrl;
   }
 
   private guessDestination(username: string): LoginDestination {

@@ -39,7 +39,8 @@ $h = @{
 }
 
 $stamp = Get-Date -Format 'yyyyMMddHHmmss'
-$label = "Gradebook-$stamp"
+$classGrade = ("8" + $stamp.Substring($stamp.Length - 3)).Substring(0, 4)
+$label = "Grade $classGrade-A"
 
 Write-Host "Create class/section/subject ($label)..."
 $class = Invoke-Json -Method Post -Url "$Gateway/api/academic/classes" -Headers $h -Body @{
@@ -67,11 +68,13 @@ $adm = Invoke-Json -Method Post -Url "$Gateway/api/admission/applications" -Head
   answers = @{
     fullName = "Gradebook Student $stamp"
     age = 13
+    dob = '2013-03-01'
     mobile = "97$stamp".Substring(0, 10)
     email = "gradebook.$stamp@demo-school.local"
-    # Must match section.studentLabel for roster/gradebook scoping.
     classApplied = $label
     classSection = $label
+    classGrade = $classGrade
+    sectionLetter = 'A'
     documentsComplete = $true
   }
 }

@@ -3,44 +3,68 @@ School ERP — EC2 files to copy (names distinct from SugamFlow)
 
 SugamFlow (already on EC2):
   docker-compose.ec2-rds.yml
-  .env.production
+  .env.production              ← must include SECURITY_JWT_ENFORCE=true,
+                                 SECURITY_INTERNAL_API_KEY (= INVITE key),
+                                 real SPRING_MAIL_* (NOT localhost)
 
 School ERP (copy these — different names on purpose):
   docker-compose.school.ec2-rds.yml
   .env.school.production     ← from .env.school.production.example
+                               (SECURITY_INTERNAL_API_KEY + website/CMS DB vars)
   scripts/ec2/*.sh           ← start/stop batches (chmod +x on EC2)
+  scripts/check-prod-env.ps1 ← run before deploy (JWT/SMTP/CMS env check)
 
 Also for builds (on PC only):
   Dockerfile.school-service
 
 Start/stop batches + production fixes + deploy steps:
   scripts/ec2/README.md
+  docs/HCP_EC2_WEBSITE_DEPLOY.md   ← Website CMS + public site
 
 ----------------------------------------------------------
-A) On PC — prepare .env.school.production
+A) On PC — prepare env + check
 ----------------------------------------------------------
 
   copy .env.school.production.example .env.school.production
 
-Edit:
+Edit School .env.school.production:
   - SECURITY_JWT_SECRET = same as SugamFlow .env.production
+  - SECURITY_INTERNAL_API_KEY = same as SugamFlow SECURITY_INTERNAL_API_KEY
+    (or same as SECURITY_INVITE_INTERNAL_KEY on both sides)
   - YOUR_RDS_ENDPOINT = real RDS host
   - SCHOOL_*_DB_PASSWORD = DBeaver passwords
+  - SCHOOL_WEBSITE_* / SCHOOL_CMS_* for Website CMS
+
+Edit SugamFlow .env.production:
+  - SECURITY_JWT_ENFORCE=true
+  - SECURITY_INTERNAL_API_KEY set
+  - SPRING_MAIL_HOST = real SMTP (SES/SendGrid/…) — never localhost on EC2
+
+Run:
+  powershell -File .\scripts\check-prod-env.ps1
 
 WinSCP to EC2 folder e.g. /home/ec2-user/opt/school/ :
   docker-compose.school.ec2-rds.yml
   .env.school.production
+  scripts/ec2/
+  scripts/check-prod-env.ps1
+
+WinSCP SugamFlow .env.production to /home/ec2-user/opt/sugamflow/
 
 ----------------------------------------------------------
-B) On PC — build & push images
+B) On PC — build & push images (sale + Website CMS)
 ----------------------------------------------------------
 
 cd D:\school
-$Tag = "1.0.0"
+$Tag = "1.0.1"   # bump for this release
 $Prefix = "sumanthakur30"
+
+# Core sale (admission busy-state UI is separate Angular build below)
 $Modules = @(
-  "school-settings-service","subscription-service","admission-service",
-  "fee-service","student-service","staff-service","academic-structure-service"
+  "admission-service","fee-service","attendance-service","exam-service",
+  "library-service","hostel-service","transport-service","payroll-service",
+  "school-notification-config-service",
+  "website-service","cms-service"
 )
 foreach ($Module in $Modules) {
   docker build -f Dockerfile.school-service --build-arg "MODULE=$Module" `
@@ -48,18 +72,43 @@ foreach ($Module in $Modules) {
   docker push "${Prefix}/${Module}:${Tag}"
 }
 
+# ERP UI (Admission UX + Website CMS admin)
+cd D:\school\apps\school-ui
+npm ci
+npx ng build --configuration=production
+# rsync dist → /var/www/school-ui on EC2
+
+# Public HCP site
+cd D:\school\apps\school-website-ui
+npm ci
+npm run build
+# rsync dist → /var/www/hcpschool.com  (see docs/HCP_EC2_WEBSITE_DEPLOY.md)
+
 ----------------------------------------------------------
 C) On EC2 — start (shop stack already running)
 ----------------------------------------------------------
 
 cd /home/ec2-user/opt/school
+# optional: powershell -File ./scripts/check-prod-env.ps1 -SchoolEnv ./.env.school.production -SugamEnv ../sugamflow/.env.production
+
 docker network ls | grep sumanthakur30
 
-docker compose -f docker-compose.school.ec2-rds.yml --env-file .env.school.production pull
-docker compose -f docker-compose.school.ec2-rds.yml --env-file .env.school.production up -d
-docker compose -f docker-compose.school.ec2-rds.yml --env-file .env.school.production ps
+# Recreate notification after SMTP/internal-key change (SugamFlow dir):
+#   cd /home/ec2-user/opt/sugamflow
+#   docker compose -f docker-compose.ec2-rds.yml --env-file .env.production up -d --force-recreate notification-service
+
+cd /home/ec2-user/opt/school
+# Phase A + Website CMS:
+PHASE=website bash scripts/ec2/02-school-start.sh
+# Or all (Phase A+B+website):
+# PHASE=all bash scripts/ec2/02-school-start.sh
 
 curl -sS http://127.0.0.1:9090/actuator/health
 curl -sS -o /dev/null -w "%{http_code}\n" http://127.0.0.1:9090/api/student/health
+curl -sS "http://127.0.0.1:9090/api/website/public/resolve?host=hcpschool.com" | head -c 200
 
-Full steps: docs/EC2_SCHOOL_PHASE_A_FOLLOW_ALONG.md
+Also for HCP public website on EC2:
+  docs/HCP_EC2_WEBSITE_DEPLOY.md
+  COMPOSE_PROFILES=website  → website-service + cms-service
+  Nginx + school-website-ui static under /var/www/hcpschool.com
+  school-ui static (Website CMS screens) under /var/www/school-ui

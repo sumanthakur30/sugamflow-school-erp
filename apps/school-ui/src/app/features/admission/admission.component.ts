@@ -1,4 +1,11 @@
-import { Component, HostListener, OnDestroy, OnInit, inject } from '@angular/core';
+import {
+  ChangeDetectorRef,
+  Component,
+  HostListener,
+  OnDestroy,
+  OnInit,
+  inject,
+} from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
@@ -42,6 +49,7 @@ export class AdmissionComponent implements OnInit, OnDestroy {
   private readonly auth = inject(AuthSessionService);
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
+  private readonly cdr = inject(ChangeDetectorRef);
   private routeSub?: Subscription;
 
   loading = true;
@@ -253,6 +261,93 @@ export class AdmissionComponent implements OnInit, OnDestroy {
       this.classGrade = String(src['classGrade'] ?? '');
       this.classSectionLetter = String(src['sectionLetter'] ?? src['section'] ?? '');
     }
+    this.syncAgeFromDob();
+  }
+
+  /** True when the form includes a DOB field (age should be derived, not typed). */
+  hasDobField(): boolean {
+    return this.fields.some((f) => this.isDobKey(f.key));
+  }
+
+  isDobKey(key: string): boolean {
+    const k = key.toLowerCase().replace(/[_\s-]/g, '');
+    return k === 'dateofbirth' || k === 'dob' || k === 'birthdate';
+  }
+
+  isAgeKey(key: string): boolean {
+    const k = key.toLowerCase();
+    return k === 'age' || k === 'ageyears' || k.endsWith('ageyears');
+  }
+
+  onAnswerChange(field: FormField): void {
+    this.clearFieldError(field.key);
+    if (this.isDobKey(field.key)) {
+      this.syncAgeFromDob();
+    }
+  }
+
+  /**
+   * Completed years from DOB as of today. Clears age when DOB is empty/invalid.
+   * Keeps admission rules that still read `application.age` in sync with calendar DOB.
+   */
+  syncAgeFromDob(): void {
+    const dobKey = this.fields.find((f) => this.isDobKey(f.key))?.key;
+    const ageKey = this.fields.find((f) => this.isAgeKey(f.key))?.key;
+    if (!dobKey || !ageKey) return;
+
+    const raw = String(this.answers[dobKey] ?? '').trim();
+    if (!raw) {
+      this.answers[ageKey] = '';
+      this.clearFieldError(ageKey);
+      return;
+    }
+
+    const age = this.ageYearsFromDob(raw);
+    if (age == null) {
+      this.answers[ageKey] = '';
+      this.fieldErrors = {
+        ...this.fieldErrors,
+        [dobKey]: 'Enter a valid date of birth',
+      };
+      return;
+    }
+
+    this.answers[ageKey] = age;
+    this.clearFieldError(dobKey);
+    this.clearFieldError(ageKey);
+  }
+
+  /** Whole years between DOB and today; null if invalid or future date. */
+  private ageYearsFromDob(isoDate: string): number | null {
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(isoDate.trim());
+    if (!m) return null;
+    const y = Number(m[1]);
+    const mo = Number(m[2]);
+    const d = Number(m[3]);
+    const dob = new Date(y, mo - 1, d);
+    if (dob.getFullYear() !== y || dob.getMonth() !== mo - 1 || dob.getDate() !== d) {
+      return null;
+    }
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    dob.setHours(0, 0, 0, 0);
+    if (dob > today) return null;
+
+    let age = today.getFullYear() - dob.getFullYear();
+    const hadBirthday =
+      today.getMonth() > dob.getMonth() ||
+      (today.getMonth() === dob.getMonth() && today.getDate() >= dob.getDate());
+    if (!hadBirthday) age -= 1;
+    if (age < 0 || age > 120) return null;
+    return age;
+  }
+
+  /** YYYY-MM-DD for date input max= (blocks future DOB in the picker). */
+  todayIsoDate(): string {
+    const t = new Date();
+    const mm = String(t.getMonth() + 1).padStart(2, '0');
+    const dd = String(t.getDate()).padStart(2, '0');
+    return `${t.getFullYear()}-${mm}-${dd}`;
   }
 
   sectionFields(sectionId: string): FormField[] {
@@ -448,38 +543,54 @@ export class AdmissionComponent implements OnInit, OnDestroy {
       next: (app) => {
         this.lastSubmitFingerprint = fingerprint;
         this.lastSubmitAt = Date.now();
+        const wasEdit = !!this.editingId;
+        // Clear busy UI before any navigation so Processing banners do not stick.
         this.submitting = false;
         this.submitLocked = false;
-        const wasEdit = !!this.editingId;
+        this.editingId = null;
+        this.formOpen = false;
+        this.resetAnswers();
         this.statusMsg = wasEdit
           ? 'Application details updated successfully.'
           : `Application saved successfully${app?.id ? ` (${app.id})` : ''}.`;
-        window.alert(
-          wasEdit
-            ? 'Application details updated successfully.'
-            : 'Application saved successfully.',
-        );
-        this.editingId = null;
-        this.resetAnswers();
+        this.cdr.detectChanges();
         this.pageIndex = 0;
         this.loadApplications();
-        if (app?.id) {
-          void this.router.navigate([], {
-            relativeTo: this.route,
-            queryParams: { id: app.id },
-          });
-        } else {
-          void this.router.navigate([], { relativeTo: this.route, queryParams: {} });
-        }
+        const target = app?.id ? { id: app.id } : {};
+        void this.router.navigate([], {
+          relativeTo: this.route,
+          queryParams: target,
+          replaceUrl: true,
+        });
       },
       error: (err) => {
         this.submitting = false;
         this.submitLocked = false;
         this.statusMsg = '';
-        this.error = err?.error?.message ?? (this.editingId ? 'Update failed' : 'Submit failed');
-        window.alert(this.error);
+        const message =
+          err?.error?.message ?? (this.editingId ? 'Update failed' : 'Submit failed');
+        this.error = message;
+        this.applyServerValidationToFields(message);
+        this.cdr.detectChanges();
       },
     });
+  }
+
+  /** Map server "Mandatory field missing: Full Name" onto the matching form field. */
+  private applyServerValidationToFields(message: string): void {
+    const m = /Mandatory field missing:\s*(.+)$/i.exec(String(message || '').trim());
+    if (!m) return;
+    const label = m[1].trim().toLowerCase();
+    const field = this.fields.find(
+      (f) =>
+        f.label.trim().toLowerCase() === label ||
+        f.key.toLowerCase() === label.replace(/\s+/g, ''),
+    );
+    if (!field) return;
+    this.fieldErrors = {
+      ...this.fieldErrors,
+      [field.key]: `${field.label} is required`,
+    };
   }
 
   select(app: any): void {
@@ -844,6 +955,9 @@ export class AdmissionComponent implements OnInit, OnDestroy {
   }
 
   private validateForm(): boolean {
+    // Keep age in sync before mandatory/range checks (rules still use application.age).
+    this.syncAgeFromDob();
+
     const errors: Record<string, string> = {};
     for (const f of this.fields) {
       const raw = this.answers[f.key];
@@ -862,11 +976,19 @@ export class AdmissionComponent implements OnInit, OnDestroy {
       if (f.type === 'EMAIL' && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) {
         errors[f.key] = 'Enter a valid email address';
       }
+      if (this.isDobKey(f.key) || f.type === 'DATE') {
+        if (this.isDobKey(f.key)) {
+          const age = this.ageYearsFromDob(value);
+          if (age == null) {
+            errors[f.key] = 'Enter a valid date of birth (not in the future)';
+          }
+        }
+      }
       if (f.type === 'NUMBER') {
         const n = Number(value);
         if (Number.isNaN(n)) {
           errors[f.key] = `${f.label} must be a number`;
-        } else if (f.key.toLowerCase().includes('age') && (n < 3 || n > 25)) {
+        } else if (this.isAgeKey(f.key) && (n < 3 || n > 25)) {
           errors[f.key] = 'Age must be between 3 and 25';
         }
       }
@@ -894,7 +1016,7 @@ export class AdmissionComponent implements OnInit, OnDestroy {
   }
 
   private fingerprint(answers: Record<string, unknown>): string {
-    const keys = ['fullName', 'mobile', 'email', 'classApplied', 'age'];
+    const keys = ['fullName', 'mobile', 'email', 'classApplied', 'age', 'dateOfBirth'];
     return keys.map((k) => String(answers[k] ?? '').trim().toLowerCase()).join('|');
   }
 
@@ -910,6 +1032,7 @@ export class AdmissionComponent implements OnInit, OnDestroy {
   }
 
   private normalizeAnswers(): Record<string, unknown> {
+    this.syncAgeFromDob();
     const out: Record<string, unknown> = {};
     for (const f of this.fields) {
       let v = this.answers[f.key];

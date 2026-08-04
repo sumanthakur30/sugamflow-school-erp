@@ -39,7 +39,8 @@ $h = @{
 }
 
 $stamp = Get-Date -Format 'yyyyMMddHHmmss'
-$label = "ReportCard-$stamp"
+$classGrade = ("7" + $stamp.Substring($stamp.Length - 3)).Substring(0, 4)
+$label = "Grade $classGrade-A"
 $term = 'TERM1'
 
 Write-Host "Create class/section + two subjects ($label)..."
@@ -61,9 +62,9 @@ if (-not $sectionId -or -not $math.data.id -or -not $sci.data.id) { throw 'acade
 Write-Host 'Enroll student...'
 $adm = Invoke-Json -Method Post -Url "$Gateway/api/admission/applications" -Headers $h -Body @{
   answers = @{
-    fullName = "ReportCard Student $stamp"; age = 13
+    fullName = "ReportCard Student $stamp"; age = 13; dob = '2013-06-01'
     mobile = "96$stamp".Substring(0,10); email = "rc.$stamp@demo-school.local"
-    classApplied = $label; classSection = $label; documentsComplete = $true
+    classApplied = $label; classSection = $label; classGrade = $classGrade; sectionLetter = 'A'; documentsComplete = $true
   }
 }
 $app = $adm.data

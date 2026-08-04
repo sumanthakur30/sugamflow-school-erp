@@ -35,7 +35,7 @@ GET /api/cms/admin/media/usage
 
 | Property | Default | Purpose |
 |---|---|---|
-| `WEBSITE_CDN_BASE_URL` | empty | CDN origin for media/static |
+| `WEBSITE_CDN_BASE_URL` | empty | CDN origin for media/static (not the public host). Set in `.env.school.production` / process env; see `docs/HCP_WEBSITE_GO_LIVE.md` |
 | `WEBSITE_ANALYTICS_RETENTION_DAYS` | 90 | Event retention |
 | `CMS_SUBSCRIPTION_URL` | `http://localhost:8182` | Entitlements for quotas |
 

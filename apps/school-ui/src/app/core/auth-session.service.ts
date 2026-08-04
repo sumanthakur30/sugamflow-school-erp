@@ -106,6 +106,8 @@ export class AuthSessionService {
   setActiveRole(role: string): void {
     if (role && role.trim()) {
       localStorage.setItem(SESSION_ROLE_KEY, role.trim().toUpperCase());
+    } else {
+      localStorage.removeItem(SESSION_ROLE_KEY);
     }
   }
 

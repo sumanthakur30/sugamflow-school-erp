@@ -39,7 +39,10 @@ $h = @{
 }
 
 $stamp = Get-Date -Format 'yyyyMMddHHmmss'
-$label = "Roster-$stamp"
+# Student master normalizes classApplied from classGrade+sectionLetter to "Grade {n}-{S}".
+# Section studentLabel must match that normalized value for roster resolution.
+$classGrade = ("9" + $stamp.Substring($stamp.Length - 3)).Substring(0, 4)
+$label = "Grade $classGrade-A"
 
 Write-Host "Create academic class/section ($label)..."
 $class = Invoke-Json -Method Post -Url "$Gateway/api/academic/classes" -Headers $h -Body @{
@@ -62,11 +65,13 @@ $adm = Invoke-Json -Method Post -Url "$Gateway/api/admission/applications" -Head
   answers = @{
     fullName = "Roster Student $stamp"
     age = 12
+    dob = '2014-01-15'
     mobile = "98$stamp".Substring(0, 10)
     email = "roster.$stamp@demo-school.local"
-    # Must match section.studentLabel so roster + teacher RBAC resolve the student.
     classApplied = $label
     classSection = $label
+    classGrade = $classGrade
+    sectionLetter = 'A'
     documentsComplete = $true
   }
 }
