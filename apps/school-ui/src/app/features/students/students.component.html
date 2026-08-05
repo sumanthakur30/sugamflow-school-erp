@@ -720,9 +720,9 @@
 
     @if (loading) {
       <p class="panel">Loading student configuration…</p>
-    } @else if (!featureEnabled) {
+    } @else if (!featureEnabled && !error) {
       <p class="panel">Student master is not enabled for this plan (FEATURE_STUDENT_MASTER).</p>
-    } @else {
+    } @else if (featureEnabled) {
       <section class="panel inbox-panel">
         <sf-list-toolbar
           searchPlaceholder="Search name, admission no, class, status…"

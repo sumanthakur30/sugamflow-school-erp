@@ -55,7 +55,7 @@ public class CommsFanOutService {
     announcement.setUpdatedAt(Instant.now());
     announcements.save(announcement);
 
-    List<Map<String, Object>> targets = guardians.deliveryTargets(scope);
+    List<Map<String, Object>> targets = guardians.deliveryTargets(scope, announcement.getAudience());
     List<String> channels = channelsFor(announcement.getChannel());
     int created = 0;
     for (Map<String, Object> target : targets) {

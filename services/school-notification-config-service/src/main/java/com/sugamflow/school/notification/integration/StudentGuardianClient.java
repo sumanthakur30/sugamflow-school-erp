@@ -3,6 +3,8 @@ package com.sugamflow.school.notification.integration;
 import com.sugamflow.school.common.tenant.TenantHeaders;
 import com.sugamflow.school.common.tenant.TenantScope;
 import com.sugamflow.school.notification.config.NotificationConfigProperties;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -28,10 +30,20 @@ public class StudentGuardianClient {
     this.properties = properties;
   }
 
-  @SuppressWarnings("unchecked")
   public List<Map<String, Object>> deliveryTargets(TenantScope scope) {
+    return deliveryTargets(scope, null);
+  }
+
+  @SuppressWarnings("unchecked")
+  public List<Map<String, Object>> deliveryTargets(TenantScope scope, String audience) {
     String url =
         properties.getIntegrations().getStudentBaseUrl() + "/api/student/guardians/delivery-targets";
+    if (audience != null && !audience.isBlank()) {
+      url =
+          url
+              + "?audience="
+              + URLEncoder.encode(audience.trim(), StandardCharsets.UTF_8);
+    }
     try {
       Map<String, Object> envelope =
           restClientBuilder

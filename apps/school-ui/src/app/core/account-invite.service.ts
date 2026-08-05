@@ -1,6 +1,6 @@
 import { Injectable, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
-import { Observable } from 'rxjs';
+import { Observable, catchError, map, of } from 'rxjs';
 import { environment } from '../environments/environment';
 
 export interface RoleTemplate {
@@ -95,9 +95,17 @@ export class AccountInviteService {
   private readonly accountsBase = `${environment.apiBaseUrl}/api/v1/accounts`;
 
   listSchoolRoleTemplates(): Observable<RoleTemplate[]> {
-    return this.http.get<RoleTemplate[]>(`${this.accountsBase}/role-templates`, {
-      params: { businessType: 'SCHOOL' },
-    });
+    return this.http
+      .get<RoleTemplate[]>(`${this.accountsBase}/role-templates`, {
+        params: { businessType: 'SCHOOL' },
+      })
+      .pipe(
+        // Platform may return [] before SCHOOL seeds exist; keep invite usable.
+        map((templates) =>
+          templates?.length ? templates : this.localSchoolTemplates(),
+        ),
+        catchError(() => of(this.localSchoolTemplates())),
+      );
   }
 
   /** Fallback when role-templates API is unreachable. */

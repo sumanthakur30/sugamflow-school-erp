@@ -51,7 +51,7 @@ class CommsFanOutServiceTest {
     announcement.setUpdatedAt(Instant.now());
 
     when(announcements.save(any())).thenAnswer(inv -> inv.getArgument(0));
-    when(guardians.deliveryTargets(scope))
+    when(guardians.deliveryTargets(scope, "PARENTS"))
         .thenReturn(
             List.of(
                 Map.of(
@@ -108,7 +108,7 @@ class CommsFanOutServiceTest {
     announcement.setUpdatedAt(Instant.now());
 
     when(announcements.save(any())).thenAnswer(inv -> inv.getArgument(0));
-    when(guardians.deliveryTargets(scope))
+    when(guardians.deliveryTargets(scope, "ALL_ACTIVE"))
         .thenReturn(
             List.of(
                 Map.of(
@@ -168,7 +168,7 @@ class CommsFanOutServiceTest {
     announcement.setUpdatedAt(Instant.now());
 
     when(announcements.save(any())).thenAnswer(inv -> inv.getArgument(0));
-    when(guardians.deliveryTargets(scope))
+    when(guardians.deliveryTargets(scope, "PARENTS"))
         .thenReturn(List.of(Map.of("fullName", "No Contact")));
     when(outbox.findByAnnouncementIdOrderByCreatedAtAsc(announcement.getId())).thenReturn(List.of());
 

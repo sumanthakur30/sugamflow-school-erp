@@ -14,6 +14,8 @@ export interface NavItem {
   label: string;
   feature?: string;
   roles?: string[];
+  /** When set, user needs at least one of these JWT permissions (owners bypass). */
+  permissions?: string[];
 }
 
 export interface NavGroup {
@@ -89,14 +91,23 @@ export class ShellComponent implements OnInit {
           label: 'Add Staff',
           feature: 'FEATURE_STAFF_MASTER',
           roles: ['SHOP_OWNER', 'SUPER_ADMIN', 'ADMIN', 'PRINCIPAL'],
+          permissions: ['MANAGE_STAFF'],
         },
         {
           path: '/admin/staff-directory/invite',
           label: 'Invite login',
           feature: 'FEATURE_STAFF_MASTER',
           roles: ['SHOP_OWNER', 'SUPER_ADMIN', 'ADMIN', 'PRINCIPAL'],
+          permissions: ['MANAGE_STAFF'],
         },
-        { path: '/admin/payroll', label: 'Payroll', feature: 'FEATURE_PAYROLL' },
+        {
+          path: '/admin/staff-access',
+          label: 'Staff access',
+          feature: 'FEATURE_STAFF_MASTER',
+          roles: ['SHOP_OWNER', 'SUPER_ADMIN', 'ADMIN', 'PRINCIPAL'],
+          permissions: ['MANAGE_STAFF'],
+        },
+        { path: '/admin/payroll', label: 'Payroll', feature: 'FEATURE_PAYROLL', permissions: ['MANAGE_FINANCE'] },
       ],
     },
     {
@@ -136,8 +147,8 @@ export class ShellComponent implements OnInit {
       label: 'Finance',
       icon: 'wallet',
       items: [
-        { path: '/admin/fee', label: 'Fee Collection', feature: 'FEATURE_FEE' },
-        { path: '/admin/finance', label: 'Finance / Payments', feature: 'FEATURE_FEE' },
+        { path: '/admin/fee', label: 'Fee Collection', feature: 'FEATURE_FEE', permissions: ['MANAGE_FINANCE'] },
+        { path: '/admin/finance', label: 'Finance / Payments', feature: 'FEATURE_FEE', permissions: ['MANAGE_FINANCE'] },
         {
           path: '/admin/income-expense',
           label: 'Income & Expense',
@@ -338,6 +349,9 @@ export class ShellComponent implements OnInit {
           return false;
         }
       }
+      if (item.permissions?.length && !this.auth.hasAnyPermission(item.permissions)) {
+        return false;
+      }
       return true;
     };
 
@@ -491,8 +505,24 @@ export class ShellComponent implements OnInit {
   }
 
   roleLabel(): string {
-    const role = (this.auth.getRole() || '').replace(/_/g, ' ');
-    return role || 'Staff';
+    const raw = (this.auth.getRole() || '').toUpperCase();
+    const labels: Record<string, string> = {
+      SHOP_OWNER: 'School Owner',
+      SUPER_ADMIN: 'Super Admin',
+      ADMIN: 'Admin',
+      PRINCIPAL: 'Principal',
+      TEACHER: 'Teacher',
+      CLASS_TEACHER: 'Class Teacher',
+      ACCOUNTANT: 'Accountant',
+      RECEPTION: 'Reception',
+      PARENT: 'Parent',
+      STUDENT: 'Student',
+      STAFF: 'Staff',
+    };
+    if (labels[raw]) {
+      return labels[raw];
+    }
+    return raw ? raw.replace(/_/g, ' ') : 'Staff';
   }
 
   onBranchChanged(): void {

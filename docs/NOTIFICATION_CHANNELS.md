@@ -58,6 +58,16 @@ docker compose up -d --force-recreate notification-service
 
 Trial limits: verified numbers only; SMS may include a Twilio prefix.
 
+### Common Twilio WhatsApp errors
+
+| Code | Meaning | Fix |
+|------|---------|-----|
+| **63007** | `From` is not a WhatsApp channel | Set `TWILIO_WHATSAPP_FROM=whatsapp:+14155238886` (sandbox). **Never** reuse `TWILIO_SMS_FROM`. Recreate `notification-service`. |
+| **63015** / **63016** | Recipient not in sandbox | Open Twilio WhatsApp sandbox, send the join code from that phone, then retry. |
+| Provider still `stub` | Container started without `.env` | `docker compose up -d --force-recreate notification-service` from `D:\sugamFlow` so compose reloads `.env`. |
+
+Confirm in logs: `WhatsApp provider active=twilio fromConfigured=true`.
+
 ## Enable Msg91 (India SMS)
 
 ```text

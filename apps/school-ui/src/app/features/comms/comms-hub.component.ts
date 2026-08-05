@@ -32,7 +32,7 @@ export class CommsHubComponent implements OnInit {
   featureEnabled = false;
   announcements: any[] = [];
   channels = ['IN_APP', 'EMAIL', 'SMS', 'WHATSAPP'];
-  audiences = ['PARENTS', 'ALL_ACTIVE'];
+  audiences = ['PRIMARY_PARENTS', 'PARENTS', 'ALL_ACTIVE'];
   view: CommsView = 'history';
 
   listQ = '';
@@ -47,7 +47,7 @@ export class CommsHubComponent implements OnInit {
     title: '',
     body: '',
     channel: 'IN_APP',
-    audience: 'PARENTS',
+    audience: 'PRIMARY_PARENTS',
   };
 
   ngOnInit(): void {
@@ -257,9 +257,14 @@ export class CommsHubComponent implements OnInit {
   }
 
   audienceLabel(value: unknown): string {
-    return String(value || '').toUpperCase() === 'ALL_ACTIVE'
-      ? 'All active guardians'
-      : 'Linked parents / guardians';
+    const raw = String(value || '').toUpperCase();
+    if (raw === 'PRIMARY_PARENTS' || raw === 'FATHER_MOTHER' || raw === 'FATHER_AND_MOTHER') {
+      return 'Father & Mother only';
+    }
+    if (raw === 'ALL_ACTIVE' || raw === 'ALL') {
+      return 'All active guardians';
+    }
+    return 'All linked parents / guardians';
   }
 
   fmtDate(value: unknown): string {
@@ -280,7 +285,7 @@ export class CommsHubComponent implements OnInit {
       title: '',
       body: '',
       channel: 'IN_APP',
-      audience: 'PARENTS',
+      audience: 'PRIMARY_PARENTS',
     };
   }
 

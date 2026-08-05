@@ -7,6 +7,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -15,28 +16,11 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.server.ResponseStatusException;
 
 @RestController
 @RequestMapping("/api/school/notification-config")
 public class NotificationController {
-  public static final List<String> EVENTS =
-      List.of(
-          "ADMISSION",
-          "ATTENDANCE",
-          "FEES",
-          "EXAM",
-          "SALARY",
-          "LEAVE",
-          "TRANSPORT",
-          "BIRTHDAY",
-          "HOLIDAY",
-          "EMERGENCY",
-          "LIBRARY",
-          "HOSTEL",
-          "PAYROLL");
-  public static final List<String> CHANNELS =
-      List.of("SMS", "WHATSAPP", "EMAIL", "PUSH", "IN_APP", "VOICE", "TELEGRAM");
-
   private final NotificationTemplateService service;
 
   public NotificationController(NotificationTemplateService service) {
@@ -45,12 +29,28 @@ public class NotificationController {
 
   @GetMapping("/events")
   public ApiResponse<List<String>> events() {
-    return ApiResponse.ok(EVENTS);
+    return ApiResponse.ok(NotificationTemplateService.EVENTS);
   }
 
   @GetMapping("/channels")
   public ApiResponse<List<String>> channels() {
-    return ApiResponse.ok(CHANNELS);
+    return ApiResponse.ok(NotificationTemplateService.CHANNELS);
+  }
+
+  @GetMapping("/routing")
+  public ApiResponse<List<Map<String, Object>>> routing() {
+    return ApiResponse.ok(service.listRouting(TenantContext.require().organizationId()));
+  }
+
+  @PutMapping("/routing/{event}")
+  public ApiResponse<Map<String, Object>> saveRouting(
+      @PathVariable("event") String event, @RequestBody Map<String, Object> body) {
+    try {
+      return ApiResponse.ok(
+          service.saveRouting(TenantContext.require().organizationId(), event, body));
+    } catch (IllegalArgumentException ex) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, ex.getMessage(), ex);
+    }
   }
 
   @GetMapping("/templates")

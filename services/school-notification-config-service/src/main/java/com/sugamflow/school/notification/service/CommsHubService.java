@@ -20,7 +20,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class CommsHubService {
 
   private static final Set<String> GUARDIAN_AUDIENCES =
-      Set.of("ALL_ACTIVE", "PARENTS", "ALL", "GUARDIANS");
+      Set.of("ALL_ACTIVE", "PARENTS", "ALL", "GUARDIANS", "PRIMARY_PARENTS", "FATHER_MOTHER");
 
   private final CommsAnnouncementRepository repo;
   private final CommsFanOutService fanOut;
@@ -36,7 +36,7 @@ public class CommsHubService {
     Map<String, Object> out = new LinkedHashMap<>();
     out.put("featureEnabled", true);
     out.put("channels", List.of("IN_APP", "EMAIL", "SMS", "WHATSAPP"));
-    out.put("audiences", List.of("PARENTS", "ALL_ACTIVE"));
+    out.put("audiences", List.of("PRIMARY_PARENTS", "PARENTS", "ALL_ACTIVE"));
     out.put("announcements", list(scope.organizationId()));
     return out;
   }
@@ -55,9 +55,12 @@ public class CommsHubService {
     if (title == null || bodyText == null) {
       throw new IllegalArgumentException("title and body are required");
     }
-    String audience = strOr(body.get("audience"), "PARENTS").toUpperCase(Locale.ROOT);
+    String audience = strOr(body.get("audience"), "PRIMARY_PARENTS").toUpperCase(Locale.ROOT);
     if ("CLASS_SECTION".equals(audience)) {
       throw new IllegalArgumentException("CLASS_SECTION audience is not implemented yet");
+    }
+    if ("FATHER_MOTHER".equals(audience) || "FATHER_AND_MOTHER".equals(audience)) {
+      audience = "PRIMARY_PARENTS";
     }
     if (!GUARDIAN_AUDIENCES.contains(audience)) {
       throw new IllegalArgumentException("Unsupported audience: " + audience);

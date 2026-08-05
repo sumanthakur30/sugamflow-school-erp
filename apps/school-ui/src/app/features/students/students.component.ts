@@ -282,8 +282,13 @@ export class StudentsComponent implements OnInit, OnDestroy {
       },
       error: (err) => {
         this.loading = false;
-        this.error = err?.error?.message ?? err?.message ?? 'Student bootstrap failed';
-        this.featureEnabled = false;
+        // Keep featureEnabled unchanged on transport errors so we don't imply FEATURE_STUDENT_MASTER is off.
+        const status = err?.status;
+        const detail = err?.error?.message ?? err?.message ?? 'Student bootstrap failed';
+        this.error =
+          status === 503 || status === 0
+            ? `Student service unavailable (${status || 'network'}). ${detail}`
+            : detail;
       },
     });
   }

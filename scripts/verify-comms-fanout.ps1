@@ -19,7 +19,21 @@ function Invoke-Json {
   if ($null -ne $Body) {
     $params.Body = ($Body | ConvertTo-Json -Depth 8 -Compress)
   }
-  return Invoke-RestMethod @params
+  try {
+    return Invoke-RestMethod @params
+  } catch {
+    $detail = $_.ErrorDetails.Message
+    if (-not $detail -and $_.Exception.Response) {
+      try {
+        $reader = New-Object System.IO.StreamReader($_.Exception.Response.GetResponseStream())
+        $detail = $reader.ReadToEnd()
+      } catch { }
+    }
+    if ($detail) {
+      throw "$Method $Url failed: $detail"
+    }
+    throw
+  }
 }
 
 Write-Host "Logging in as $Username @ $ShopId..."
@@ -52,10 +66,20 @@ $section = Invoke-Json -Method Post -Url "$Gateway/api/academic/sections" -Heade
 Write-Host 'Enroll student + link guardian account...'
 $adm = Invoke-Json -Method Post -Url "$Gateway/api/admission/applications" -Headers $h -Body @{
   answers = @{
-    fullName = "Comms Student $stamp"; age = 12
-    mobile = "96$stamp".Substring(0,10); email = "comms.$stamp@demo-school.local"
-    classApplied = $label; classSection = $label; documentsComplete = $true
-    guardianFullName = 'Mrs Comms Parent'; guardianRelation = 'Mother'
+    fullName = "Comms Student $stamp"
+    age = 12
+    dob = '2014-01-15'
+    fatherName = 'Mr Comms Father'
+    motherName = 'Mrs Comms Parent'
+    mobile = "96$stamp".Substring(0,10)
+    email = "comms.$stamp@demo-school.local"
+    classApplied = $label
+    classSection = $label
+    classGrade = '6'
+    sectionLetter = 'A'
+    documentsComplete = $true
+    guardianFullName = 'Mrs Comms Parent'
+    guardianRelation = 'Mother'
     guardianMobile = '9822223333'
   }
 }

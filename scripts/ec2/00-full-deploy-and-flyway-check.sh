@@ -62,12 +62,28 @@ need_file() {
 }
 
 load_env_file() {
-  local f="$1"
+  local f="$1" line key val
   need_file "$f"
-  set -a
-  # shellcheck disable=SC1090
-  source "$f"
-  set +a
+  # Do NOT `source` the file: unquoted JAVA_TOOL_OPTIONS=-Xms… breaks bash
+  # ("-Xms256m: command not found"). Parse KEY=VALUE with value = rest of line.
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    line="${line%$'\r'}"
+    [[ -z "${line//[[:space:]]/}" ]] && continue
+    [[ "$line" =~ ^[[:space:]]*# ]] && continue
+    [[ "$line" != *=* ]] && continue
+    key="${line%%=*}"
+    val="${line#*=}"
+    key="${key%"${key##*[![:space:]]}"}"
+    key="${key#"${key%%[![:space:]]*}"}"
+    [[ "$key" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] || continue
+    if [[ "$val" == \"*\" && "$val" == *\" ]]; then
+      val="${val:1:${#val}-2}"
+    elif [[ "$val" == \'*\' && "$val" == *\' ]]; then
+      val="${val:1:${#val}-2}"
+    fi
+    printf -v "$key" '%s' "$val"
+    export "$key"
+  done < "$f"
 }
 
 # jdbc:postgresql://host:5432/dbname?sslmode=require  →  host port dbname

@@ -27,9 +27,9 @@
 
   @if (loading) {
     <p class="panel">Loading library configuration…</p>
-  } @else if (!featureEnabled) {
+  } @else if (!featureEnabled && !error) {
     <p class="panel">Library is not enabled for this plan (FEATURE_LIBRARY).</p>
-  } @else {
+  } @else if (featureEnabled) {
     <nav class="lib-tabs" aria-label="Library sections">
       <button type="button" [class.active]="view === 'catalog'" (click)="selectView('catalog')">
         Catalog

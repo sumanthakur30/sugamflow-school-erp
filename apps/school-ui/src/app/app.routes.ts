@@ -300,7 +300,11 @@ export const routes: Routes = [
       {
         path: 'admin/staff-directory/add',
         canActivate: [featureGuard],
-        data: { feature: 'FEATURE_STAFF_MASTER', roles: CAMPUS_ADMIN_ROLES },
+        data: {
+          feature: 'FEATURE_STAFF_MASTER',
+          roles: CAMPUS_ADMIN_ROLES,
+          permissions: ['MANAGE_STAFF'],
+        },
         loadComponent: () =>
           import('./features/directory/staff-directory.component').then(
             (m) => m.StaffDirectoryComponent,
@@ -309,10 +313,27 @@ export const routes: Routes = [
       {
         path: 'admin/staff-directory/invite',
         canActivate: [featureGuard],
-        data: { feature: 'FEATURE_STAFF_MASTER', roles: CAMPUS_ADMIN_ROLES },
+        data: {
+          feature: 'FEATURE_STAFF_MASTER',
+          roles: CAMPUS_ADMIN_ROLES,
+          permissions: ['MANAGE_STAFF'],
+        },
         loadComponent: () =>
           import('./features/directory/staff-directory.component').then(
             (m) => m.StaffDirectoryComponent,
+          ),
+      },
+      {
+        path: 'admin/staff-access',
+        canActivate: [featureGuard],
+        data: {
+          feature: 'FEATURE_STAFF_MASTER',
+          roles: CAMPUS_ADMIN_ROLES,
+          permissions: ['MANAGE_STAFF'],
+        },
+        loadComponent: () =>
+          import('./features/directory/staff-access.component').then(
+            (m) => m.StaffAccessComponent,
           ),
       },
       {

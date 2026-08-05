@@ -121,8 +121,13 @@ export class LibraryComponent implements OnInit {
       },
       error: (err) => {
         this.loading = false;
-        this.error = err?.error?.message ?? err?.message ?? 'Library bootstrap failed';
-        this.featureEnabled = false;
+        // Keep featureEnabled unchanged on transport errors so we don't imply FEATURE_LIBRARY is off.
+        const status = err?.status;
+        const detail = err?.error?.message ?? err?.message ?? 'Library bootstrap failed';
+        this.error =
+          status === 503 || status === 0
+            ? `Library service unavailable (${status || 'network'}). ${detail}`
+            : detail;
       },
     });
   }

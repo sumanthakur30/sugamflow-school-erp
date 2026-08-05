@@ -1,7 +1,7 @@
 import { CommonModule } from '@angular/common';
-import { Component, OnInit, inject } from '@angular/core';
+import { ChangeDetectorRef, Component, OnDestroy, OnInit, inject } from '@angular/core';
 import { RouterLink } from '@angular/router';
-import { Observable, catchError, forkJoin, of, timeout } from 'rxjs';
+import { Observable, Subscription, catchError, of, switchMap, timer, timeout } from 'rxjs';
 import { ApiService, PageResult } from '../../core/api.service';
 import { AuthSessionService } from '../../core/auth-session.service';
 
@@ -44,6 +44,8 @@ type DashboardBundle = {
   mySlots: any[] | null;
 };
 
+type BundleKey = keyof DashboardBundle;
+
 @Component({
   selector: 'sf-role-dashboard',
   standalone: true,
@@ -51,11 +53,17 @@ type DashboardBundle = {
   templateUrl: './role-dashboard.component.html',
   styleUrl: './role-dashboard.component.scss',
 })
-export class RoleDashboardComponent implements OnInit {
+export class RoleDashboardComponent implements OnInit, OnDestroy {
   private readonly api = inject(ApiService);
   private readonly auth = inject(AuthSessionService);
+  private readonly cdr = inject(ChangeDetectorRef);
+  private loadSub = new Subscription();
+  private loadGeneration = 0;
 
+  /** True only before the first metric shell is painted. */
   loading = true;
+  /** True while any dashboard API is still in flight. */
+  refreshing = false;
   error = '';
   role = 'STAFF';
   title = 'Staff dashboard';
@@ -65,57 +73,146 @@ export class RoleDashboardComponent implements OnInit {
   activity: ActivityItem[] = [];
   unavailable = 0;
 
+  private wantsFinance = false;
+  private wantsTeacher = false;
+  private pending = 0;
+  private bundle: DashboardBundle = this.emptyBundle();
+
   ngOnInit(): void {
     this.load();
   }
 
+  ngOnDestroy(): void {
+    this.loadSub.unsubscribe();
+  }
+
   load(): void {
-    this.loading = true;
+    this.loadSub.unsubscribe();
+    this.loadSub = new Subscription();
+
+    const generation = ++this.loadGeneration;
     this.error = '';
     this.role = (this.auth.getRole() || 'STAFF').toUpperCase();
+    this.wantsFinance = this.isFinanceRole() || this.isLeadershipRole();
+    this.wantsTeacher = this.role === 'TEACHER';
+    this.bundle = this.emptyBundle();
+    this.pending = 0;
+    this.refreshing = true;
+
+    // Paint shell immediately (actions + placeholder metrics) — do not wait on APIs.
+    this.configureRole(null);
+    this.buildMetrics(this.bundle);
+    this.buildActivity(this.bundle);
+    this.unavailable = 0;
+    this.loading = false;
+
     const safeRole = encodeURIComponent(this.role);
     const branch = encodeURIComponent(this.auth.getBranchId() || 'main');
-    const wantsFinance = this.isFinanceRole() || this.isLeadershipRole();
-    const wantsTeacher = this.role === 'TEACHER';
 
-    forkJoin({
-      config: this.safeGet(`/api/config/ui/roles/${safeRole}/dashboard`),
-      students: this.safeGet('/api/student/directory/summary'),
-      staff: this.safeGet('/api/staff/directory/summary'),
-      admissions: this.safePage('/api/admission/applications', {
+    // Critical path first (core KPIs), then heavier optional reports.
+    this.track(
+      generation,
+      'config',
+      this.safeGet(`/api/config/ui/roles/${safeRole}/dashboard`, 8000),
+    );
+    // Retry once — first paint often races branch bootstrap / cold Eureka and shows "—".
+    this.track(generation, 'students', this.safeGetRetry('/api/student/directory/summary', 10000));
+    this.track(generation, 'staff', this.safeGetRetry('/api/staff/directory/summary', 10000));
+    this.track(
+      generation,
+      'admissions',
+      this.safePageRetry('/api/admission/applications', {
         status: 'IN_PROGRESS',
         sortBy: 'updatedAt',
         sortDir: 'DESC',
       }),
-      attendance: this.safePage('/api/attendance/records'),
-      fees: this.safePage('/api/fee/collections'),
-      issues: wantsTeacher
-        ? of(null)
-        : this.safeGet<any[]>('/api/library/circulation/issues'),
-      finance: wantsFinance
-        ? this.safeGet(
-            `/api/fee/finance/income-expense?preset=THIS_MONTH&branchIds=${branch}`,
-          )
-        : of(null),
-      salary: wantsFinance
-        ? this.safeGet(`/api/payroll/reports/salary-summary?preset=THIS_MONTH&branchIds=${branch}`)
-        : of(null),
-      teacherScope: wantsTeacher ? this.safeGet('/api/academic/teacher-scope') : of(null),
-      accessScope: wantsTeacher ? this.safeGet('/api/student/access-scope') : of(null),
-      mySlots: wantsTeacher ? this.safeGet<any[]>('/api/academic/timetable/my-slots') : of(null),
-    }).subscribe({
-      next: (data: DashboardBundle) => {
-        this.configureRole(data.config);
-        this.buildMetrics(data);
-        this.buildActivity(data);
-        this.unavailable = this.countUnavailable(data, wantsFinance, wantsTeacher);
-        this.loading = false;
-      },
-      error: (err) => {
-        this.loading = false;
-        this.error = err?.error?.message ?? 'Dashboard could not be loaded.';
-      },
-    });
+    );
+    this.track(generation, 'attendance', this.safePage('/api/attendance/records'));
+    this.track(generation, 'fees', this.safePage('/api/fee/collections'));
+
+    if (this.wantsTeacher) {
+      this.track(generation, 'teacherScope', this.safeGet('/api/academic/teacher-scope'));
+      this.track(generation, 'accessScope', this.safeGet('/api/student/access-scope'));
+      this.track(generation, 'mySlots', this.safeGet<any[]>('/api/academic/timetable/my-slots'));
+    } else {
+      this.track(generation, 'issues', this.safeGet<any[]>('/api/library/circulation/issues'));
+    }
+
+    if (this.wantsFinance) {
+      this.track(
+        generation,
+        'finance',
+        this.safeGet(
+          `/api/fee/finance/income-expense?preset=THIS_MONTH&branchIds=${branch}`,
+          12000,
+        ),
+      );
+      this.track(
+        generation,
+        'salary',
+        this.safeGet(
+          `/api/payroll/reports/salary-summary?preset=THIS_MONTH&branchIds=${branch}`,
+          12000,
+        ),
+      );
+    }
+
+    if (this.pending === 0) {
+      this.refreshing = false;
+    }
+  }
+
+  private track<K extends BundleKey>(
+    generation: number,
+    key: K,
+    source: Observable<DashboardBundle[K]>,
+  ): void {
+    this.pending += 1;
+    this.loadSub.add(
+      source.subscribe({
+        next: (value) => this.applyPartial(generation, key, value),
+        error: () => this.applyPartial(generation, key, null as DashboardBundle[K]),
+      }),
+    );
+  }
+
+  private applyPartial<K extends BundleKey>(
+    generation: number,
+    key: K,
+    value: DashboardBundle[K],
+  ): void {
+    if (generation !== this.loadGeneration) {
+      return;
+    }
+    this.bundle[key] = value;
+    if (key === 'config') {
+      this.configureRole(value);
+    }
+    this.buildMetrics(this.bundle);
+    this.buildActivity(this.bundle);
+    this.unavailable = this.countUnavailable(this.bundle, this.wantsFinance, this.wantsTeacher);
+    this.pending = Math.max(0, this.pending - 1);
+    if (this.pending === 0) {
+      this.refreshing = false;
+    }
+    this.cdr.markForCheck();
+  }
+
+  private emptyBundle(): DashboardBundle {
+    return {
+      config: null,
+      students: null,
+      staff: null,
+      admissions: null,
+      attendance: null,
+      fees: null,
+      issues: null,
+      finance: null,
+      salary: null,
+      teacherScope: null,
+      accessScope: null,
+      mySlots: null,
+    };
   }
 
   /** Only count sources that were actually requested (skip intentional of(null) skips). */
@@ -124,7 +221,7 @@ export class RoleDashboardComponent implements OnInit {
     wantsFinance: boolean,
     wantsTeacher: boolean,
   ): number {
-    const skipped = new Set<keyof DashboardBundle>();
+    const skipped = new Set<BundleKey>();
     if (!wantsTeacher) {
       skipped.add('teacherScope');
       skipped.add('accessScope');
@@ -136,13 +233,25 @@ export class RoleDashboardComponent implements OnInit {
       skipped.add('finance');
       skipped.add('salary');
     }
-    return (Object.keys(data) as Array<keyof DashboardBundle>).filter(
+    return (Object.keys(data) as BundleKey[]).filter(
       (key) => !skipped.has(key) && data[key] == null,
     ).length;
   }
 
-  private safeGet<T = any>(path: string): Observable<T | null> {
-    return this.api.get<T>(path).pipe(timeout(15000), catchError(() => of(null)));
+  private safeGet<T = any>(path: string, ms = 15000): Observable<T | null> {
+    return this.api.get<T>(path).pipe(timeout(ms), catchError(() => of(null)));
+  }
+
+  /** One delayed retry — covers branch-header race and cold service timeouts. */
+  private safeGetRetry<T = any>(path: string, ms = 15000): Observable<T | null> {
+    return this.api.get<T>(path).pipe(
+      timeout(ms),
+      catchError(() =>
+        timer(900).pipe(
+          switchMap(() => this.api.get<T>(path).pipe(timeout(ms), catchError(() => of(null)))),
+        ),
+      ),
+    );
   }
 
   private safePage(
@@ -151,7 +260,18 @@ export class RoleDashboardComponent implements OnInit {
   ): Observable<PageResult<any> | null> {
     return this.api
       .getPage<any>(path, 0, 5, extra)
-      .pipe(timeout(15000), catchError(() => of(null)));
+      .pipe(timeout(10000), catchError(() => of(null)));
+  }
+
+  private safePageRetry(
+    path: string,
+    extra?: Record<string, string | number | boolean | null | undefined>,
+  ): Observable<PageResult<any> | null> {
+    const once = () =>
+      this.api.getPage<any>(path, 0, 5, extra).pipe(timeout(10000), catchError(() => of(null)));
+    return once().pipe(
+      switchMap((value) => (value != null ? of(value) : timer(900).pipe(switchMap(() => once())))),
+    );
   }
 
   private isLeadershipRole(): boolean {
@@ -193,12 +313,24 @@ export class RoleDashboardComponent implements OnInit {
     const scopedStudents = Number(data.accessScope?.studentCount ?? 0);
     const slotCount = Array.isArray(data.mySlots) ? data.mySlots.length : 0;
 
+    const studentActive = data.students?.active ?? data.students?.total;
+    const studentOrgWide = data.students?.activeOrgWide;
+    let studentHint = `${data.students?.newAdmissions ?? 0} new admissions`;
+    if (data.students == null) {
+      studentHint = 'Count unavailable — check student service / network';
+    } else if (
+      Number(studentActive ?? 0) === 0 &&
+      Number(studentOrgWide ?? 0) > 0
+    ) {
+      studentHint = `${studentOrgWide} active in school, but not in this campus/session`;
+    }
+
     const all: Record<string, Metric> = {
       students: {
         id: 'students',
         label: 'Active students',
-        value: data.students?.active ?? data.students?.total ?? '—',
-        hint: `${data.students?.newAdmissions ?? 0} new admissions`,
+        value: studentActive ?? '—',
+        hint: studentHint,
         route: '/admin/student-directory',
         tone: 'green',
       },

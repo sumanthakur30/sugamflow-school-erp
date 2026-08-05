@@ -5,8 +5,11 @@ import com.sugamflow.school.notification.persistence.repo.NotificationTemplateRe
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import org.springframework.stereotype.Service;
@@ -16,9 +19,28 @@ import org.springframework.transaction.annotation.Transactional;
 public class NotificationTemplateService {
 
   public static final String PLATFORM_ORG = "__platform__";
+  public static final List<String> EVENTS =
+      List.of(
+          "ADMISSION",
+          "ATTENDANCE",
+          "FEES",
+          "EXAM",
+          "SALARY",
+          "LEAVE",
+          "TRANSPORT",
+          "BIRTHDAY",
+          "HOLIDAY",
+          "EMERGENCY",
+          "LIBRARY",
+          "HOSTEL",
+          "PAYROLL");
+  public static final List<String> CHANNELS =
+      List.of("SMS", "WHATSAPP", "EMAIL", "PUSH", "IN_APP", "VOICE", "TELEGRAM");
   private static final Pattern PLACEHOLDER = Pattern.compile("\\{\\{([^}]+)\\}\\}");
 
   private final NotificationTemplateRepository repo;
+  private final java.util.concurrent.atomic.AtomicBoolean defaultsReady =
+      new java.util.concurrent.atomic.AtomicBoolean(false);
 
   public NotificationTemplateService(NotificationTemplateRepository repo) {
     this.repo = repo;
@@ -26,12 +48,157 @@ public class NotificationTemplateService {
 
   @Transactional
   public List<Map<String, Object>> list(String org) {
-    ensureDefaults();
+    ensureDefaultsOnce();
     List<Map<String, Object>> out = new ArrayList<>();
     repo.findByOrganizationIdOrderByUpdatedAtDesc(PLATFORM_ORG)
         .forEach(e -> out.add(e.getPayload()));
     repo.findByOrganizationIdOrderByUpdatedAtDesc(org).forEach(e -> out.add(e.getPayload()));
     return out;
+  }
+
+  /** Effective event → channel routing for the school (org overrides win over platform defaults). */
+  @Transactional
+  public List<Map<String, Object>> listRouting(String org) {
+    ensureDefaultsOnce();
+    List<Map<String, Object>> orgTemplates = payloadsForOrg(org);
+    List<Map<String, Object>> platformTemplates = payloadsForOrg(PLATFORM_ORG);
+    List<Map<String, Object>> out = new ArrayList<>();
+    for (String event : EVENTS) {
+      out.add(routingForEvent(event, orgTemplates, platformTemplates));
+    }
+    return out;
+  }
+
+  @Transactional
+  public Map<String, Object> saveRouting(String org, String event, Map<String, Object> body) {
+    String normalizedEvent = event == null ? "" : event.trim().toUpperCase(Locale.ROOT);
+    if (!EVENTS.contains(normalizedEvent)) {
+      throw new IllegalArgumentException("Unknown notification event: " + event);
+    }
+    ensureDefaultsOnce();
+
+    List<String> channels = normalizeChannels(body.get("channels"));
+    boolean enabled = !Boolean.FALSE.equals(body.get("enabled"));
+
+    List<Map<String, Object>> platformTemplates =
+        filterByEvent(payloadsForOrg(PLATFORM_ORG), normalizedEvent);
+    if (platformTemplates.isEmpty()) {
+      String id = normalizedEvent.toLowerCase(Locale.ROOT) + "_notify";
+      Map<String, Object> tpl = new LinkedHashMap<>();
+      tpl.put("id", id);
+      tpl.put("name", normalizedEvent + " notifications");
+      tpl.put("event", normalizedEvent);
+      tpl.put("intent", normalizedEvent + "_NOTIFY");
+      tpl.put("channels", channels);
+      tpl.put("enabled", enabled);
+      tpl.put("subject", normalizedEvent + " update");
+      tpl.put("body", "Notification for {{context.organizationId}} — " + normalizedEvent);
+      save(org, id, tpl);
+    } else {
+      for (Map<String, Object> platform : platformTemplates) {
+        String id = String.valueOf(platform.getOrDefault("id", normalizedEvent.toLowerCase(Locale.ROOT)));
+        Map<String, Object> copy = new LinkedHashMap<>(platform);
+        copy.put("id", id);
+        copy.put("event", normalizedEvent);
+        copy.put("channels", channels);
+        copy.put("enabled", enabled);
+        copy.put("organizationId", org);
+        save(org, id, copy);
+      }
+    }
+    return routingForEvent(
+        normalizedEvent, payloadsForOrg(org), payloadsForOrg(PLATFORM_ORG));
+  }
+
+  private Map<String, Object> routingForEvent(
+      String event,
+      List<Map<String, Object>> orgTemplates,
+      List<Map<String, Object>> platformTemplates) {
+    List<Map<String, Object>> orgForEvent = filterByEvent(orgTemplates, event);
+    List<Map<String, Object>> platformForEvent = filterByEvent(platformTemplates, event);
+    List<Map<String, Object>> source = !orgForEvent.isEmpty() ? orgForEvent : platformForEvent;
+
+    Set<String> channels = new LinkedHashSet<>();
+    boolean enabled = true;
+    int templateCount = source.size();
+    String sourceLabel =
+        !orgForEvent.isEmpty() ? "SCHOOL" : (!platformForEvent.isEmpty() ? "PLATFORM" : "DEFAULT");
+
+    if (source.isEmpty()) {
+      channels.add("IN_APP");
+      enabled = true;
+    } else {
+      enabled = source.stream().anyMatch(t -> !Boolean.FALSE.equals(t.get("enabled")));
+      for (Map<String, Object> tpl : source) {
+        Object raw = tpl.get("channels");
+        if (raw instanceof List<?> list) {
+          for (Object item : list) {
+            if (item != null) {
+              String channel = String.valueOf(item).trim().toUpperCase(Locale.ROOT);
+              if (CHANNELS.contains(channel)) {
+                channels.add(channel);
+              }
+            }
+          }
+        }
+      }
+      if (channels.isEmpty()) {
+        channels.add("IN_APP");
+      }
+    }
+
+    Map<String, Object> row = new LinkedHashMap<>();
+    row.put("event", event);
+    row.put("enabled", enabled);
+    row.put("channels", new ArrayList<>(channels));
+    row.put("templateCount", templateCount);
+    row.put("source", sourceLabel);
+    return row;
+  }
+
+  private List<Map<String, Object>> payloadsForOrg(String org) {
+    List<Map<String, Object>> out = new ArrayList<>();
+    for (NotificationTemplateEntity e : repo.findByOrganizationIdOrderByUpdatedAtDesc(org)) {
+      Map<String, Object> payload = e.getPayload();
+      if (payload != null) {
+        out.add(payload);
+      }
+    }
+    return out;
+  }
+
+  private static List<Map<String, Object>> filterByEvent(
+      List<Map<String, Object>> templates, String event) {
+    List<Map<String, Object>> out = new ArrayList<>();
+    for (Map<String, Object> payload : templates) {
+      if (event.equalsIgnoreCase(String.valueOf(payload.get("event")))) {
+        out.add(payload);
+      }
+    }
+    return out;
+  }
+
+  private static List<String> normalizeChannels(Object raw) {
+    Set<String> channels = new LinkedHashSet<>();
+    if (raw instanceof List<?> list) {
+      for (Object item : list) {
+        if (item == null) {
+          continue;
+        }
+        String channel = String.valueOf(item).trim().toUpperCase(Locale.ROOT);
+        if (CHANNELS.contains(channel)) {
+          channels.add(channel);
+        }
+      }
+    }
+    if (channels.isEmpty()) {
+      channels.add("IN_APP");
+    }
+    // Portal alerts always keep an in-app path when any channel is enabled.
+    if (!channels.contains("IN_APP")) {
+      channels.add("IN_APP");
+    }
+    return new ArrayList<>(channels);
   }
 
   @Transactional
@@ -103,6 +270,23 @@ public class NotificationTemplateService {
 
   @Transactional
   public void ensureDefaults() {
+    ensureDefaultsOnce();
+  }
+
+  private void ensureDefaultsOnce() {
+    if (defaultsReady.get()) {
+      return;
+    }
+    synchronized (defaultsReady) {
+      if (defaultsReady.get()) {
+        return;
+      }
+      seedPlatformDefaults();
+      defaultsReady.set(true);
+    }
+  }
+
+  private void seedPlatformDefaults() {
     ensurePlatformTemplate(
         "admission_approved",
         "Admission approved",

@@ -48,8 +48,9 @@ public class StudentController {
   }
 
   @GetMapping("/guardians/delivery-targets")
-  public ApiResponse<List<Map<String, Object>>> guardianDeliveryTargets() {
-    return ApiResponse.ok(service.guardianDeliveryTargets());
+  public ApiResponse<List<Map<String, Object>>> guardianDeliveryTargets(
+      @RequestParam(required = false) String audience) {
+    return ApiResponse.ok(service.guardianDeliveryTargets(audience));
   }
 
   @GetMapping("/students")

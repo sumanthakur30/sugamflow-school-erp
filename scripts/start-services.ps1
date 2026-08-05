@@ -169,7 +169,7 @@ $eurekaZone = if ($env:EUREKA_CLIENT_SERVICEURL_DEFAULTZONE) {
   if (Wait-Http 'http://localhost:8761/actuator/health' 2) {
     'http://localhost:8761/eureka'
   } elseif (Wait-Http 'http://localhost:18761/actuator/health' 2) {
-    Write-Host 'Eureka healthy on legacy :18761 — recreate discovery to publish :8761' -ForegroundColor Yellow
+    Write-Host 'Eureka healthy on legacy :18761 - recreate discovery to publish :8761' -ForegroundColor Yellow
     Write-Host '  cd D:\sugamFlow; docker compose up -d --force-recreate discovery-service config-service' -ForegroundColor Yellow
     'http://localhost:18761/eureka'
   } else {
@@ -231,7 +231,7 @@ foreach ($bad in @(
   'SPRING_DATASOURCE_PASSWORD'
 )) {
   if (Test-Path "Env:$bad") {
-    Write-Host "Clearing inherited $bad (was set — would override school service DB URLs)" -ForegroundColor Yellow
+    Write-Host "Clearing inherited $bad (was set - would override school service DB URLs)" -ForegroundColor Yellow
     Remove-Item "Env:$bad"
   }
 }

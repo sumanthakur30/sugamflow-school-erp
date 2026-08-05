@@ -145,9 +145,21 @@ public class StudentRecordService {
   @Transactional(readOnly = true)
   @SuppressWarnings("unchecked")
   public List<Map<String, Object>> guardianDeliveryTargets() {
+    return guardianDeliveryTargets(null);
+  }
+
+  /**
+   * Guardian contacts eligible for Comms Hub fan-out.
+   *
+   * @param audience {@code PRIMARY_PARENTS} = Father + Mother only; blank/PARENTS/ALL_ACTIVE = all
+   *     guardians with a usable contact
+   */
+  public List<Map<String, Object>> guardianDeliveryTargets(String audience) {
     TenantScope scope = TenantContext.require();
     requireFeature(scope);
     requireStaffWrite(scope);
+
+    final boolean primaryParentsOnly = isPrimaryParentsAudience(audience);
 
     Map<String, Map<String, Object>> byIdentity = new LinkedHashMap<>();
     Map<String, Map<String, Object>> byContactOnly = new LinkedHashMap<>();
@@ -167,6 +179,9 @@ public class StudentRecordService {
         guardianRows.addAll(buildGuardiansFromFlatMap(student.getAnswers(), settings));
       }
       for (Map<String, Object> g : guardianRows) {
+        if (primaryParentsOnly && !isFatherOrMotherPrimary(g)) {
+          continue;
+        }
         String identityRaw =
             firstNonBlank(
                 stringOr(g.get("authUsername"), null),
@@ -196,6 +211,7 @@ public class StudentRecordService {
           created.put("fullName", fullName);
           created.put("email", email);
           created.put("mobile", mobile);
+          created.put("relation", stringOr(g.get("relation"), null));
           created.put("studentIds", new ArrayList<String>());
           return created;
         });
@@ -204,6 +220,9 @@ public class StudentRecordService {
         }
         if (mobile != null && !hasText(row.get("mobile"))) {
           row.put("mobile", mobile);
+        }
+        if (!hasText(row.get("relation")) && hasText(g.get("relation"))) {
+          row.put("relation", stringOr(g.get("relation"), null));
         }
         @SuppressWarnings("unchecked")
         List<String> studentIds = (List<String>) row.get("studentIds");
@@ -216,6 +235,45 @@ public class StudentRecordService {
     out.addAll(byIdentity.values());
     out.addAll(byContactOnly.values());
     return out;
+  }
+
+  private static boolean isPrimaryParentsAudience(String audience) {
+    if (audience == null || audience.isBlank()) {
+      return false;
+    }
+    String a = audience.trim().toUpperCase(Locale.ROOT);
+    return "PRIMARY_PARENTS".equals(a)
+        || "FATHER_MOTHER".equals(a)
+        || "FATHER_AND_MOTHER".equals(a);
+  }
+
+  /**
+   * Father / Mother (or Dad / Mom aliases). Empty relation + isPrimary covers the single flat
+   * admission guardian fallback.
+   */
+  static boolean isFatherOrMotherPrimary(Map<String, Object> g) {
+    if (g == null || g.isEmpty()) {
+      return false;
+    }
+    String relation = mapStr(g, "relation").toLowerCase(Locale.ROOT).trim();
+    if (relation.contains("father")
+        || relation.equals("dad")
+        || relation.equals("papa")
+        || relation.equals("pa")) {
+      return true;
+    }
+    if (relation.contains("mother")
+        || relation.equals("mom")
+        || relation.equals("mummy")
+        || relation.equals("mama")
+        || relation.equals("ma")) {
+      return true;
+    }
+    boolean primary =
+        Boolean.TRUE.equals(g.get("isPrimary"))
+            || "true".equalsIgnoreCase(String.valueOf(g.get("isPrimary")));
+    // Single primary contact with no relation (flat guardian from admission) counts as parent.
+    return primary && relation.isEmpty();
   }
 
   private static boolean hasText(Object value) {

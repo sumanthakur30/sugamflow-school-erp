@@ -35,6 +35,7 @@ interface JwtPayload {
   role?: string;
   sub?: string;
   exp?: number;
+  permissions?: string[] | string;
 }
 
 @Injectable({ providedIn: 'root' })
@@ -100,6 +101,53 @@ export class AuthSessionService {
 
   getRole(): string | null {
     return localStorage.getItem(SESSION_ROLE_KEY) ?? this.getSession()?.role ?? this.decodeToken()?.role ?? null;
+  }
+
+  /** Permission codes from JWT (synced from account-service on invite / Staff access save). */
+  getPermissions(): string[] {
+    const payload = this.decodeToken();
+    const raw = payload?.permissions;
+    if (Array.isArray(raw)) {
+      return raw
+        .map((p) => String(p || '').trim().toUpperCase())
+        .filter(Boolean);
+    }
+    if (typeof raw === 'string' && raw.trim()) {
+      return raw
+        .split(/[,\s]+/)
+        .map((p) => p.trim().toUpperCase())
+        .filter(Boolean);
+    }
+    return [];
+  }
+
+  /**
+   * True if the user may use a capability.
+   * School Owner / Super Admin always pass. When the JWT has no permissions claim yet
+   * (legacy sessions), role-based nav continues to apply (fail open on permissions).
+   */
+  hasPermission(code: string): boolean {
+    const role = (this.getRole() || '').toUpperCase();
+    if (role === 'SHOP_OWNER' || role === 'SUPER_ADMIN' || role === 'OWNER') {
+      return true;
+    }
+    const need = (code || '').trim().toUpperCase();
+    if (!need) {
+      return true;
+    }
+    const held = this.getPermissions();
+    if (!held.length) {
+      return true;
+    }
+    return held.includes(need);
+  }
+
+  /** True if any of the codes is granted (or no codes required). */
+  hasAnyPermission(codes?: string[] | null): boolean {
+    if (!codes?.length) {
+      return true;
+    }
+    return codes.some((c) => this.hasPermission(c));
   }
 
   /** Override role header for portal experiences (PARENT / TEACHER) without re-login. */

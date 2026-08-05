@@ -4,7 +4,7 @@ import { map } from 'rxjs';
 import { AuthSessionService } from './auth-session.service';
 import { EntitlementsService } from './entitlements.service';
 
-/** Route data: { feature?: string, roles?: string[] } */
+/** Route data: { feature?: string, roles?: string[], permissions?: string[] } */
 export const featureGuard: CanActivateFn = (route) => {
   const auth = inject(AuthSessionService);
   const entitlements = inject(EntitlementsService);
@@ -16,6 +16,7 @@ export const featureGuard: CanActivateFn = (route) => {
 
   const feature = route.data?.['feature'] as string | undefined;
   const roles = route.data?.['roles'] as string[] | undefined;
+  const permissions = route.data?.['permissions'] as string[] | undefined;
   const role = (auth.getRole() || '').toUpperCase();
 
   if (roles?.length) {
@@ -32,6 +33,10 @@ export const featureGuard: CanActivateFn = (route) => {
       }
       return router.createUrlTree([home]);
     }
+  }
+
+  if (permissions?.length && !auth.hasAnyPermission(permissions)) {
+    return router.createUrlTree([roleHome(role)]);
   }
 
   if (!feature) {

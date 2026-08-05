@@ -35,6 +35,10 @@
   margin-bottom: 1rem;
 }
 
+.metric-grid.is-refreshing .metric-card strong {
+  opacity: 0.72;
+}
+
 .metric-card {
   position: relative;
   display: grid;

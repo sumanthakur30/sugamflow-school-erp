@@ -5,8 +5,8 @@
       <h2>{{ title }}</h2>
       <p>{{ subtitle }}</p>
     </div>
-    <button type="button" class="secondary" (click)="load()" [disabled]="loading">
-      {{ loading ? 'Refreshing…' : 'Refresh' }}
+    <button type="button" class="secondary" (click)="load()" [disabled]="refreshing">
+      {{ refreshing ? 'Updating…' : 'Refresh' }}
     </button>
   </header>
 
@@ -14,14 +14,14 @@
     <p class="panel error" role="alert">{{ error }}</p>
   }
 
-  @if (loading) {
+  @if (loading && !metrics.length) {
     <section class="metric-grid" aria-label="Loading dashboard">
       @for (item of [1, 2, 3, 4]; track item) {
         <div class="panel metric-card skeleton"></div>
       }
     </section>
   } @else {
-    <section class="metric-grid" aria-label="Role metrics">
+    <section class="metric-grid" aria-label="Role metrics" [class.is-refreshing]="refreshing">
       @for (metric of metrics; track metric.id) {
         <a
           class="panel metric-card"
@@ -63,7 +63,7 @@
           </div>
         </div>
         @if (!activity.length) {
-          <p class="muted">Nothing needs attention right now.</p>
+          <p class="muted">{{ refreshing ? 'Loading recent activity…' : 'Nothing needs attention right now.' }}</p>
         } @else {
           <ul class="activity-list">
             @for (item of activity; track item.route + item.label + (item.queryParams?.['id'] || '')) {
@@ -79,7 +79,7 @@
       </section>
     </div>
 
-    @if (unavailable) {
+    @if (unavailable && !refreshing) {
       <p class="availability-note">
         {{ unavailable }} optional data source{{ unavailable === 1 ? '' : 's' }} unavailable; available
         dashboard data is shown.

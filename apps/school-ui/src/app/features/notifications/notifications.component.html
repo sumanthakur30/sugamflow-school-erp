@@ -1,14 +1,103 @@
-<section class="page">
-  <div class="page-head">
-    <h2>Notification Engine</h2>
-    <p>Events × channels configured per school — SMS, WhatsApp, Email, Push, and more.</p>
-  </div>
-  <div class="panel">
-    <h3>Events</h3>
-    <div class="chip-list">@for (e of events; track e) { <span class="chip">{{ e }}</span> }</div>
-  </div>
-  <div class="panel">
-    <h3>Channels</h3>
-    <div class="chip-list">@for (c of channels; track c) { <span class="chip">{{ c }}</span> }</div>
-  </div>
+<section class="page notifications-page">
+  <header class="page-head notifications-head">
+    <div>
+      <h2>Notification Engine</h2>
+      <p>Choose which channels fire for each school event. Changes apply to this school only.</p>
+    </div>
+    <button type="button" class="secondary" (click)="reload()" [disabled]="loading || saving">
+      {{ loading ? 'Loading…' : 'Reload' }}
+    </button>
+  </header>
+
+  @if (error) {
+    <div class="notice error-notice" role="alert">
+      <span>{{ error }}</span>
+      <button type="button" class="secondary" (click)="reload()">Try again</button>
+    </div>
+  }
+  @if (status) {
+    <div class="notice success-notice" role="status">
+      <span>{{ status }}</span>
+      <button type="button" class="notice-close" aria-label="Dismiss" (click)="status = ''">×</button>
+    </div>
+  }
+
+  @if (loading) {
+    <div class="panel loading-state" role="status">
+      <span class="spinner" aria-hidden="true"></span>
+      Loading notification routing…
+    </div>
+  } @else {
+    <div class="mapper-layout">
+      <aside class="panel event-list" aria-label="Notification events">
+        <h3>Events</h3>
+        <p class="muted">Select an event to configure delivery channels.</p>
+        <ul>
+          @for (row of routing; track row.event) {
+            <li>
+              <button
+                type="button"
+                class="event-item"
+                [class.active]="selectedEvent === row.event"
+                [class.disabled-event]="!row.enabled"
+                (click)="selectEvent(row.event)"
+              >
+                <span class="event-name">{{ row.event }}</span>
+                <span class="event-meta">
+                  {{ row.enabled ? row.channels.length + ' channels' : 'Off' }}
+                  · {{ row.source === 'SCHOOL' ? 'Custom' : 'Default' }}
+                </span>
+              </button>
+            </li>
+          }
+        </ul>
+      </aside>
+
+      <section class="panel channel-editor" aria-label="Channel mapping">
+        @if (!selected) {
+          <p class="muted">Select an event to edit its channels.</p>
+        } @else {
+          <div class="editor-head">
+            <div>
+              <h3>{{ selected.event }}</h3>
+              <p>{{ eventHint(selected.event) }}</p>
+            </div>
+            <label class="enable-toggle">
+              <input type="checkbox" [(ngModel)]="draftEnabled" name="enabled" [disabled]="saving" />
+              <span>{{ draftEnabled ? 'Event notifications on' : 'Event notifications off' }}</span>
+            </label>
+          </div>
+
+          <div class="channel-grid" [class.is-disabled]="!draftEnabled">
+            @for (channel of allChannels; track channel) {
+              <button
+                type="button"
+                class="channel-toggle"
+                [class.on]="isChannelOn(channel)"
+                [disabled]="saving || !draftEnabled || channel.toUpperCase() === 'IN_APP'"
+                (click)="toggleChannel(channel)"
+                [attr.aria-pressed]="isChannelOn(channel)"
+              >
+                <strong>{{ channelLabel(channel) }}</strong>
+                <span>{{ channel.toUpperCase() === 'IN_APP' ? 'Always on' : isChannelOn(channel) ? 'Enabled' : 'Off' }}</span>
+              </button>
+            }
+          </div>
+
+          <p class="help-text">
+            In-app stays on whenever the event is enabled. SMS / WhatsApp / Email need provider credentials on the platform.
+          </p>
+
+          <div class="actions">
+            <button type="button" (click)="save()" [disabled]="saving || !dirty">
+              {{ saving ? 'Saving…' : 'Save mapping' }}
+            </button>
+            <button type="button" class="secondary" (click)="resetDraft()" [disabled]="saving || !dirty">
+              Reset
+            </button>
+          </div>
+        }
+      </section>
+    </div>
+  }
 </section>

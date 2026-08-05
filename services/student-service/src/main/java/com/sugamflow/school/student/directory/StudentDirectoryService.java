@@ -182,10 +182,20 @@ public class StudentDirectoryService {
     out.put("newAdmissions", newAdmissions);
     out.put("byClass", byClass);
     out.put("byBranch", byBranch);
-    out.put("scope", Map.of(
-        "organizationId", scope.organizationId(),
-        "branchId", scope.branchId(),
-        "academicSessionId", scope.academicSessionId()));
+    // Helps explain "dashboard 0 but students exist" when campus/session headers don't match rows.
+    long activeOrgWide =
+        repository.countByOrganizationIdAndStatusAndDeletedAtIsNull(scope.organizationId(), "ACTIVE");
+    long totalOrgWide = repository.countByOrganizationIdAndDeletedAtIsNull(scope.organizationId());
+    out.put("activeOrgWide", activeOrgWide);
+    out.put("totalOrgWide", totalOrgWide);
+    out.put(
+        "scope",
+        Map.of(
+            "organizationId", scope.organizationId(),
+            "branchId", scope.branchId() == null ? "" : scope.branchId(),
+            "academicSessionId",
+                scope.academicSessionId() == null ? "" : scope.academicSessionId(),
+            "scoped", scoped));
     return out;
   }
 

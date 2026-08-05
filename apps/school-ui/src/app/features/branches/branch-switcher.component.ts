@@ -36,8 +36,12 @@ export class BranchSwitcherComponent implements OnInit {
         this.branches = boot.branches ?? [];
         this.currentKey = boot.currentBranchKey || this.auth.getBranchId();
         this.loading = false;
+        // Sync campus from server BEFORE dashboard KPIs settle. If we only setBranchId
+        // without notifying the shell, the first dashboard load keeps stale headers and
+        // only a manual Refresh shows the right counts.
         if (this.currentKey && this.currentKey !== this.auth.getBranchId()) {
           this.auth.setBranchId(String(this.currentKey));
+          this.branchChanged.emit(String(this.currentKey));
         }
       },
       error: () => {

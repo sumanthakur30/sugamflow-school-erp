@@ -39,6 +39,13 @@ export class ListToolbarComponent {
   /** When true, advanced filter slot is expanded. */
   @Input() filtersOpen = false;
   @Input() showFiltersToggle = false;
+  /**
+   * On narrow screens, hide status/sort/page-size behind a Filters toggle
+   * so search results appear sooner (admission/staff lists on phone).
+   */
+  @Input() compactOnMobile = true;
+  /** Mobile drawer open state for status/sort/page-size. */
+  @Input() extrasOpen = false;
 
   @Output() qChange = new EventEmitter<string>();
   @Output() sortByChange = new EventEmitter<string>();
@@ -46,11 +53,32 @@ export class ListToolbarComponent {
   @Output() pageSizeChange = new EventEmitter<number>();
   @Output() statusChange = new EventEmitter<string>();
   @Output() filtersOpenChange = new EventEmitter<boolean>();
+  @Output() extrasOpenChange = new EventEmitter<boolean>();
   @Output() search = new EventEmitter<void>();
   @Output() clear = new EventEmitter<void>();
 
+  readonly extrasPanelId = `list-extras-${Math.random().toString(36).slice(2, 9)}`;
+
   get showStatus(): boolean {
     return Array.isArray(this.statusOptions) && this.statusOptions.length > 0;
+  }
+
+  get hasExtras(): boolean {
+    return this.showStatus || this.showSort || this.showPageSize;
+  }
+
+  get activeExtraCount(): number {
+    let n = 0;
+    if (this.status) {
+      n += 1;
+    }
+    if (this.sortBy && this.sortBy !== 'updatedAt') {
+      n += 1;
+    }
+    if (this.pageSize && this.pageSize !== 50) {
+      n += 1;
+    }
+    return n;
   }
 
   onQInput(value: string): void {
@@ -84,6 +112,11 @@ export class ListToolbarComponent {
   toggleFilters(): void {
     this.filtersOpen = !this.filtersOpen;
     this.filtersOpenChange.emit(this.filtersOpen);
+  }
+
+  toggleExtras(): void {
+    this.extrasOpen = !this.extrasOpen;
+    this.extrasOpenChange.emit(this.extrasOpen);
   }
 
   submitSearch(): void {

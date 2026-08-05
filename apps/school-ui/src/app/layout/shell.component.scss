@@ -658,6 +658,8 @@
 @media (max-width: 900px) {
   .context-menu-toggle {
     display: inline-flex;
+    min-width: 44px;
+    min-height: 44px;
   }
 
   .context-brand-text {
@@ -666,6 +668,10 @@
 
   .user-chip {
     display: none;
+  }
+
+  .logout-btn {
+    min-height: 40px;
   }
 
   .module-nav {
@@ -697,6 +703,8 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
+    min-width: 44px;
+    min-height: 44px;
   }
 
   .sidebar-card {
