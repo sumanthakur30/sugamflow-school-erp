@@ -1,9 +1,12 @@
-import { Component, OnInit, inject } from '@angular/core';
+import { Component, OnDestroy, OnInit, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
+import { Subscription } from 'rxjs';
 import { ApiService, PageResult } from '../../core/api.service';
 import { AuthSessionService } from '../../core/auth-session.service';
+import { TenantContextService } from '../../core/tenant-context.service';
+import { ModuleBootstrapService } from '../../core/module-bootstrap.service';
 import {
   AccountInviteService,
   RoleTemplate,
@@ -25,11 +28,14 @@ import { ListSortOption, pageMeta, sortRows } from '../../shared/list-toolbar/li
     './staff-directory.component.scss',
   ],
 })
-export class StaffDirectoryComponent implements OnInit {
+export class StaffDirectoryComponent implements OnInit, OnDestroy {
   private readonly api = inject(ApiService);
   private readonly router = inject(Router);
   private readonly auth = inject(AuthSessionService);
   private readonly accountInvite = inject(AccountInviteService);
+  private readonly tenantContext = inject(TenantContextService);
+  private readonly modules = inject(ModuleBootstrapService);
+  private campusReadySub?: Subscription;
 
   loading = true;
   searching = false;
@@ -200,25 +206,42 @@ export class StaffDirectoryComponent implements OnInit {
       }
       this.loadRoleTemplates();
     }
-    this.reload();
+    this.campusReadySub = this.tenantContext.whenCampusReady().subscribe(() => this.reload());
+  }
+
+  ngOnDestroy(): void {
+    this.campusReadySub?.unsubscribe();
   }
 
   reload(): void {
     this.loading = true;
     this.error = '';
-    this.api.get<any>('/api/staff/directory/bootstrap').subscribe({
-      next: (boot) => {
-        this.featureEnabled = !!boot.featureEnabled;
-        this.columns = (boot.columns || []).filter((c: any) => c.visible !== false);
-        this.loading = false;
-        if (this.featureEnabled && !this.showInvite) {
-          this.loadSummary();
-          this.search(0);
-        }
-      },
+    const path = '/api/staff/directory/bootstrap';
+    const apply = (boot: any) => {
+      this.featureEnabled = !!boot.featureEnabled;
+      this.columns = (boot.columns || []).filter((c: any) => c.visible !== false);
+      this.loading = false;
+      if (this.featureEnabled && !this.showInvite) {
+        this.loadSummary();
+        this.search(0);
+      }
+    };
+    const peeked = this.modules.peek(path);
+    if (peeked) {
+      apply(peeked);
+      return;
+    }
+    this.modules.load(path).subscribe({
+      next: apply,
       error: (err) => {
         this.loading = false;
-        this.error = err?.error?.message ?? err?.message ?? 'Staff directory bootstrap failed';
+        this.error = ModuleBootstrapService.errorMessage(err, 'Staff directory bootstrap failed');
+        if (ModuleBootstrapService.isFeatureDisabled(err)) {
+          this.featureEnabled = false;
+        } else {
+          // Do NOT imply plan feature is off on workflow/form/network errors
+          this.featureEnabled = true;
+        }
       },
     });
   }

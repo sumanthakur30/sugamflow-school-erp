@@ -1,7 +1,10 @@
-import { Component, OnInit, inject } from '@angular/core';
+import { Component, OnDestroy, OnInit, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { Subscription } from 'rxjs';
 import { ApiService, PageResult } from '../../core/api.service';
+import { TenantContextService } from '../../core/tenant-context.service';
+import { ModuleBootstrapService } from '../../core/module-bootstrap.service';
 import {
   headerSortIndicator,
   nextHeaderSort,
@@ -24,8 +27,11 @@ type LibraryView = 'catalog' | 'issue' | 'issued' | 'workflow';
     './library.component.scss',
   ],
 })
-export class LibraryComponent implements OnInit {
+export class LibraryComponent implements OnInit, OnDestroy {
   private readonly api = inject(ApiService);
+  private readonly tenantContext = inject(TenantContextService);
+  private readonly modules = inject(ModuleBootstrapService);
+  private campusReadySub?: Subscription;
 
   loading = true;
   error = '';
@@ -98,36 +104,48 @@ export class LibraryComponent implements OnInit {
   };
 
   ngOnInit(): void {
-    this.reload();
+    this.campusReadySub = this.tenantContext.whenCampusReady().subscribe(() => this.reload());
+  }
+
+  ngOnDestroy(): void {
+    this.campusReadySub?.unsubscribe();
   }
 
   reload(): void {
     this.loading = true;
     this.error = '';
-    this.api.get<any>('/api/library/bootstrap').subscribe({
-      next: (boot) => {
-        this.featureEnabled = !!boot.featureEnabled;
-        this.formKey = boot.formKey;
-        this.workflowKey = boot.workflowKey;
-        this.fields = this.extractFields(boot.form);
-        for (const f of this.fields) {
-          if (this.answers[f.key] === undefined) {
-            this.answers[f.key] = f.type === 'CHECKBOX' ? false : f.type === 'NUMBER' ? 0 : '';
-          }
+    const path = '/api/library/bootstrap';
+    const apply = (boot: any) => {
+      this.featureEnabled = !!boot.featureEnabled;
+      this.formKey = boot.formKey;
+      this.workflowKey = boot.workflowKey;
+      this.fields = this.extractFields(boot.form);
+      for (const f of this.fields) {
+        if (this.answers[f.key] === undefined) {
+          this.answers[f.key] = f.type === 'CHECKBOX' ? false : f.type === 'NUMBER' ? 0 : '';
         }
-        this.loading = false;
-        this.loadRecords();
-        this.loadCirculation();
-      },
+      }
+      this.loading = false;
+      this.loadRecords();
+      this.loadCirculation();
+    };
+    const peeked = this.modules.peek(path);
+    if (peeked) {
+      apply(peeked);
+      return;
+    }
+    this.modules.load(path).subscribe({
+      next: apply,
       error: (err) => {
         this.loading = false;
         // Keep featureEnabled unchanged on transport errors so we don't imply FEATURE_LIBRARY is off.
-        const status = err?.status;
-        const detail = err?.error?.message ?? err?.message ?? 'Library bootstrap failed';
-        this.error =
-          status === 503 || status === 0
-            ? `Library service unavailable (${status || 'network'}). ${detail}`
-            : detail;
+        this.error = ModuleBootstrapService.errorMessage(err, 'Library bootstrap failed');
+        if (ModuleBootstrapService.isFeatureDisabled(err)) {
+          this.featureEnabled = false;
+        } else {
+          // Do NOT imply plan feature is off on workflow/form/network errors
+          this.featureEnabled = true;
+        }
       },
     });
   }

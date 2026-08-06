@@ -11,6 +11,10 @@ import {
   SESSION_TOKEN_KEY,
   SESSION_USER_KEY,
 } from './session-keys';
+import { TenantContextService } from './tenant-context.service';
+import { AdmissionBootstrapService } from './admission-bootstrap.service';
+import { ModuleBootstrapService } from './module-bootstrap.service';
+import { resolveOrganizationId } from './tenant-context.util';
 
 export interface AuthResponse {
   accountId?: number | null;
@@ -41,6 +45,9 @@ interface JwtPayload {
 @Injectable({ providedIn: 'root' })
 export class AuthSessionService {
   private readonly http = inject(HttpClient);
+  private readonly tenantContext = inject(TenantContextService);
+  private readonly admissionBootstrap = inject(AdmissionBootstrapService);
+  private readonly moduleBootstrap = inject(ModuleBootstrapService);
   private readonly authBase = `${environment.apiBaseUrl}/api/v1/auth`;
   private readonly loggedIn = new BehaviorSubject<boolean>(this.hasValidSession());
 
@@ -76,6 +83,11 @@ export class AuthSessionService {
     localStorage.removeItem(SESSION_ACADEMIC_KEY);
     localStorage.removeItem(SESSION_USER_KEY);
     localStorage.removeItem(SESSION_ROLE_KEY);
+    // Belt-and-suspenders: never leave a stale org slug for the next login paint.
+    localStorage.removeItem(SESSION_TENANT_KEY);
+    this.tenantContext.markCampusPending();
+    this.admissionBootstrap.invalidate();
+    this.moduleBootstrap.invalidate();
     this.loggedIn.next(false);
   }
 
@@ -159,9 +171,10 @@ export class AuthSessionService {
     }
   }
 
-  /** Organization slug for school APIs (maps from auth shopId). */
+  /** Organization slug for school APIs (maps from auth shopId / JWT). */
   getOrganizationId(): string {
-    return localStorage.getItem(SESSION_TENANT_KEY) ?? this.getSession()?.shopId ?? 'demo-school';
+    // Prefer JWT shopId over stale sf.tenantId (same rules as API interceptors).
+    return resolveOrganizationId();
   }
 
   getBranchId(): string {
@@ -182,17 +195,11 @@ export class AuthSessionService {
   }
 
   applySessionContext(response: AuthResponse): void {
-    const previousOrg = localStorage.getItem(SESSION_TENANT_KEY);
     const nextOrg = response.shopId;
     localStorage.setItem(SESSION_TENANT_KEY, nextOrg);
-    // Never carry campus/session from another school into a newly registered org.
-    if (!previousOrg || previousOrg !== nextOrg) {
-      localStorage.setItem(SESSION_BRANCH_KEY, 'main');
-      localStorage.setItem(SESSION_ACADEMIC_KEY, '2025-26');
-    } else {
-      localStorage.setItem(SESSION_BRANCH_KEY, localStorage.getItem(SESSION_BRANCH_KEY) ?? 'main');
-      localStorage.setItem(SESSION_ACADEMIC_KEY, localStorage.getItem(SESSION_ACADEMIC_KEY) ?? '2025-26');
-    }
+    // Always reset campus on login so demo's rbac-*/rbsc-* keys never ride into HCP KPIs.
+    localStorage.setItem(SESSION_BRANCH_KEY, 'main');
+    localStorage.setItem(SESSION_ACADEMIC_KEY, '2025-26');
     localStorage.setItem(SESSION_USER_KEY, response.username);
     localStorage.setItem(SESSION_ROLE_KEY, response.role);
   }
@@ -215,6 +222,10 @@ export class AuthSessionService {
     localStorage.setItem(SESSION_TOKEN_KEY, token);
     localStorage.setItem(SESSION_DATA_KEY, JSON.stringify(response));
     this.applySessionContext(response);
+    // Drop previous school's bootstraps so demo → HCP cannot reuse cached module data.
+    this.tenantContext.markCampusPending();
+    this.admissionBootstrap.invalidate();
+    this.moduleBootstrap.invalidate();
     this.loggedIn.next(true);
   }
 

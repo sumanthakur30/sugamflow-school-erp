@@ -4,6 +4,8 @@ import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 import { Subscription } from 'rxjs';
 import { ApiService, PageResult } from '../../core/api.service';
+import { TenantContextService } from '../../core/tenant-context.service';
+import { ModuleBootstrapService } from '../../core/module-bootstrap.service';
 import { ListToolbarComponent } from '../../shared/list-toolbar/list-toolbar.component';
 import { ListPagerComponent } from '../../shared/list-toolbar/list-pager.component';
 import {
@@ -46,7 +48,10 @@ export class ExamComponent implements OnInit, OnDestroy {
   private readonly api = inject(ApiService);
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
+  private readonly tenantContext = inject(TenantContextService);
+  private readonly modules = inject(ModuleBootstrapService);
   private routeSub?: Subscription;
+  private campusReadySub?: Subscription;
 
   loading = true;
   error = '';
@@ -95,11 +100,12 @@ export class ExamComponent implements OnInit, OnDestroy {
 
   ngOnInit(): void {
     this.routeSub = this.route.queryParamMap.subscribe((params) => this.syncFromRoute(params));
-    this.reload();
+    this.campusReadySub = this.tenantContext.whenCampusReady().subscribe(() => this.reload());
   }
 
   ngOnDestroy(): void {
     this.routeSub?.unsubscribe();
+    this.campusReadySub?.unsubscribe();
   }
 
   @HostListener('document:keydown.escape')
@@ -169,21 +175,33 @@ export class ExamComponent implements OnInit, OnDestroy {
   reload(): void {
     this.loading = true;
     this.error = '';
-    this.api.get<any>('/api/exam/bootstrap').subscribe({
-      next: (boot) => {
-        this.featureEnabled = !!boot.featureEnabled;
-        this.formKey = boot.formKey;
-        this.workflowKey = boot.workflowKey;
-        this.fields = this.extractFields(boot.form);
-        this.resetAnswers();
-        this.loading = false;
-        this.loadRecords();
-        this.syncFromRoute(this.route.snapshot.queryParamMap);
-      },
+    const path = '/api/exam/bootstrap';
+    const apply = (boot: any) => {
+      this.featureEnabled = !!boot.featureEnabled;
+      this.formKey = boot.formKey;
+      this.workflowKey = boot.workflowKey;
+      this.fields = this.extractFields(boot.form);
+      this.resetAnswers();
+      this.loading = false;
+      this.loadRecords();
+      this.syncFromRoute(this.route.snapshot.queryParamMap);
+    };
+    const peeked = this.modules.peek(path);
+    if (peeked) {
+      apply(peeked);
+      return;
+    }
+    this.modules.load(path).subscribe({
+      next: apply,
       error: (err) => {
         this.loading = false;
-        this.error = err?.error?.message ?? err?.message ?? 'Exam bootstrap failed';
-        this.featureEnabled = false;
+        this.error = ModuleBootstrapService.errorMessage(err, 'Exam bootstrap failed');
+        if (ModuleBootstrapService.isFeatureDisabled(err)) {
+          this.featureEnabled = false;
+        } else {
+          // Do NOT imply plan feature is off on workflow/form/network errors
+          this.featureEnabled = true;
+        }
       },
     });
   }

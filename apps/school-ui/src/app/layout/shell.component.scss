@@ -19,7 +19,7 @@
 /* ── Context bar ── */
 .context-bar {
   position: relative;
-  z-index: 60;
+  z-index: 300;
   background: var(--ctx-bg);
   border-bottom: 1px solid var(--ctx-border);
   box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06);
@@ -160,6 +160,8 @@
   gap: 0.5rem;
   margin-left: auto;
   flex-shrink: 0;
+  position: relative;
+  z-index: 2;
 }
 
 .user-chip {
@@ -195,6 +197,9 @@
   cursor: pointer;
   font-weight: 600;
   font-size: 0.85rem;
+  position: relative;
+  z-index: 3;
+  pointer-events: auto;
 }
 
 .logout-btn:hover {

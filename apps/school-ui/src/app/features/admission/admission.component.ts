@@ -12,6 +12,8 @@ import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { Subscription, timer } from 'rxjs';
 import { ApiService, PageResult } from '../../core/api.service';
 import { AuthSessionService } from '../../core/auth-session.service';
+import { TenantContextService } from '../../core/tenant-context.service';
+import { AdmissionBootstrapService } from '../../core/admission-bootstrap.service';
 import { ListToolbarComponent } from '../../shared/list-toolbar/list-toolbar.component';
 import { ListPagerComponent } from '../../shared/list-toolbar/list-pager.component';
 import {
@@ -47,10 +49,13 @@ type FormField = {
 export class AdmissionComponent implements OnInit, OnDestroy {
   private readonly api = inject(ApiService);
   private readonly auth = inject(AuthSessionService);
+  private readonly tenantContext = inject(TenantContextService);
+  private readonly admissionBootstrap = inject(AdmissionBootstrapService);
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
   private readonly cdr = inject(ChangeDetectorRef);
   private routeSub?: Subscription;
+  private bootstrapSub?: Subscription;
 
   loading = true;
   error = '';
@@ -119,12 +124,15 @@ export class AdmissionComponent implements OnInit, OnDestroy {
 
   ngOnInit(): void {
     this.routeSub = this.route.queryParamMap.subscribe((params) => this.syncFromRoute(params));
-    this.reload();
-    this.loadClassOptions();
+    this.bootstrapSub = this.tenantContext.whenCampusReady().subscribe(() => {
+      this.reload();
+      this.loadClassOptions();
+    });
   }
 
   ngOnDestroy(): void {
     this.routeSub?.unsubscribe();
+    this.bootstrapSub?.unsubscribe();
     this.listLoadSub?.unsubscribe();
   }
 
@@ -376,51 +384,76 @@ export class AdmissionComponent implements OnInit, OnDestroy {
     this.error = '';
     this.bootstrapBlocked = false;
     this.clearApplicationsList();
-    this.api.get<any>('/api/admission/bootstrap').subscribe({
-      next: (boot) => {
-        this.featureEnabled = !!boot.featureEnabled;
-        this.bootstrapBlocked = false;
-        this.formKey = boot.formKey;
-        this.workflowKey = boot.workflowKey;
-        this.fields = this.extractFields(boot.form);
-        this.formSections = this.extractSections(boot.form);
-        const visible = this.visibleFormSections();
-        this.activeFormSectionId = visible[0]?.id || '';
-        for (const f of this.fields) {
-          if (this.answers[f.key] === undefined) {
-            this.answers[f.key] = f.type === 'CHECKBOX' ? false : '';
+
+    // Instant paint if shell already warmed bootstrap while user was on dashboard.
+    const peeked = this.admissionBootstrap.peek();
+    if (peeked) {
+      this.applyBootstrap(peeked);
+      this.loading = false;
+      // Campus already synced — no forced second list fetch (that was adding ~1s delay).
+      this.loadApplications({ settleRetry: false });
+      return;
+    }
+
+    const runBootstrap = (settleRetry: boolean) => {
+      this.admissionBootstrap.load(settleRetry === false).subscribe({
+        next: (boot) => {
+          this.applyBootstrap(boot);
+          this.loading = false;
+          // Campus gate already synced headers — don't add a forced ~1s second list fetch.
+          this.loadApplications({ settleRetry: false });
+        },
+        error: (err) => {
+          if (settleRetry) {
+            this.admissionBootstrap.invalidate();
+            timer(900).subscribe(() => runBootstrap(false));
+            return;
           }
-        }
-        this.loading = false;
-        // Settle retry covers tenant/branch header race after login or campus switch.
-        this.loadApplications({ settleRetry: true });
-      },
-      error: (err) => {
-        this.loading = false;
-        // Avoid showing another org's leftover list if bootstrap fails mid-switch.
-        this.clearApplicationsList();
-        const body = err?.error;
-        const code = String(body?.data?.code ?? body?.code ?? '').toUpperCase();
-        this.error = body?.message ?? err?.message ?? 'Admission bootstrap failed';
-        // Do not claim FEATURE_ADMISSION is off when the real issue is missing form/workflow.
-        if (code === 'FEATURE_DISABLED') {
-          this.featureEnabled = false;
-          this.bootstrapBlocked = false;
-        } else {
-          this.featureEnabled = code !== 'FEATURE_DISABLED';
-          this.bootstrapBlocked = true;
-          if (code === 'FORM_MISSING') {
-            this.error =
-              (body?.message || 'Admission form is missing.') +
-              ' Start form-builder-service (:8183) or seed admission_form in Form Builder, then refresh.';
-          } else if (code === 'WORKFLOW_MISSING') {
-            this.error =
-              (body?.message || 'Admission workflow is missing.') +
-              ' Ensure workflow-service has the admission workflow, then refresh.';
+          this.loading = false;
+          this.clearApplicationsList();
+          const body = err?.error;
+          const code = String(body?.data?.code ?? body?.code ?? '').toUpperCase();
+          this.error = body?.message ?? err?.message ?? 'Admission bootstrap failed';
+          if (code === 'FEATURE_DISABLED') {
+            this.featureEnabled = false;
+            this.bootstrapBlocked = false;
+          } else {
+            // Do NOT imply FEATURE_ADMISSION is off on workflow/form/network errors
+            this.featureEnabled = true;
+            this.bootstrapBlocked = true;
+            if (code === 'FORM_MISSING') {
+              this.error =
+                (body?.message || 'Admission form is missing.') +
+                ' Ensure form-builder-service is running and forms are seeded, then refresh.';
+            } else if (code === 'WORKFLOW_MISSING') {
+              this.error =
+                (body?.message || 'Admission workflow is missing.') +
+                ' Ensure workflow-service is running and system workflows are seeded, then refresh.';
+            }
           }
-        }
-      },
-    });
+          // Bootstrap failed twice — still try list once with a settle retry.
+          this.loadApplications({ settleRetry: true });
+        },
+      });
+    };
+    // First attempt uses cache/in-flight warm; retry path forces a fresh fetch.
+    runBootstrap(true);
+  }
+
+  private applyBootstrap(boot: any): void {
+    this.featureEnabled = !!boot.featureEnabled;
+    this.bootstrapBlocked = false;
+    this.formKey = boot.formKey;
+    this.workflowKey = boot.workflowKey;
+    this.fields = this.extractFields(boot.form);
+    this.formSections = this.extractSections(boot.form);
+    const visible = this.visibleFormSections();
+    this.activeFormSectionId = visible[0]?.id || '';
+    for (const f of this.fields) {
+      if (this.answers[f.key] === undefined) {
+        this.answers[f.key] = f.type === 'CHECKBOX' ? false : '';
+      }
+    }
   }
 
   loadApplications(options?: { settleRetry?: boolean }): void {

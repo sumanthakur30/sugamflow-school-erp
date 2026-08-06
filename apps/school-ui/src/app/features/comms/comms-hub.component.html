@@ -34,7 +34,7 @@
       <span class="spinner" aria-hidden="true"></span>
       Loading communications…
     </div>
-  } @else if (!featureEnabled) {
+  } @else if (!featureEnabled && !error) {
     <div class="panel empty-state">
       <strong>Communications are not enabled</strong>
       <span>Ask your administrator to enable the Comms Hub for this subscription.</span>

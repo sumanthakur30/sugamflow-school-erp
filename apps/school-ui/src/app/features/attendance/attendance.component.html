@@ -231,7 +231,7 @@
 
     @if (loading) {
       <p class="panel">Loading attendance configuration…</p>
-    } @else if (!featureEnabled) {
+    } @else if (!featureEnabled && !error) {
       <p class="panel">Attendance is not enabled for this plan (FEATURE_ATTENDANCE).</p>
     } @else {
       <div class="panel mode-tabs" role="tablist" aria-label="Attendance modes">

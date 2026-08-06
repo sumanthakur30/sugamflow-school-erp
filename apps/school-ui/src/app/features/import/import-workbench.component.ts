@@ -1,7 +1,10 @@
-import { Component, OnInit, inject } from '@angular/core';
+import { Component, OnDestroy, OnInit, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { Subscription } from 'rxjs';
 import { ApiService, PageResult } from '../../core/api.service';
+import { TenantContextService } from '../../core/tenant-context.service';
+import { ModuleBootstrapService } from '../../core/module-bootstrap.service';
 import { ListToolbarComponent } from '../../shared/list-toolbar/list-toolbar.component';
 import { ListSortOption, pageMeta, sortRows } from '../../shared/list-toolbar/list-controls';
 
@@ -16,8 +19,11 @@ import { ListSortOption, pageMeta, sortRows } from '../../shared/list-toolbar/li
     './import-workbench.component.scss',
   ],
 })
-export class ImportWorkbenchComponent implements OnInit {
+export class ImportWorkbenchComponent implements OnInit, OnDestroy {
   private readonly api = inject(ApiService);
+  private readonly tenantContext = inject(TenantContextService);
+  private readonly modules = inject(ModuleBootstrapService);
+  private campusReadySub?: Subscription;
 
   loading = true;
   busy = false;
@@ -54,22 +60,39 @@ export class ImportWorkbenchComponent implements OnInit {
   csvText = '';
 
   ngOnInit(): void {
-    this.reload();
+    this.campusReadySub = this.tenantContext.whenCampusReady().subscribe(() => this.reload());
+  }
+
+  ngOnDestroy(): void {
+    this.campusReadySub?.unsubscribe();
   }
 
   reload(): void {
     this.loading = true;
     this.error = '';
-    this.api.get<any>('/api/student/import/bootstrap').subscribe({
-      next: (b) => {
-        this.featureEnabled = !!b.featureEnabled;
-        this.targetFields = b.targetFields || [];
-        this.loading = false;
-        this.loadJobs();
-      },
+    const path = '/api/student/import/bootstrap';
+    const apply = (b: any) => {
+      this.featureEnabled = !!b.featureEnabled;
+      this.targetFields = b.targetFields || [];
+      this.loading = false;
+      this.loadJobs();
+    };
+    const peeked = this.modules.peek(path);
+    if (peeked) {
+      apply(peeked);
+      return;
+    }
+    this.modules.load(path).subscribe({
+      next: apply,
       error: (err) => {
         this.loading = false;
-        this.error = err?.error?.message ?? 'Import bootstrap failed';
+        this.error = ModuleBootstrapService.errorMessage(err, 'Import bootstrap failed');
+        if (ModuleBootstrapService.isFeatureDisabled(err)) {
+          this.featureEnabled = false;
+        } else {
+          // Do NOT imply plan feature is off on workflow/form/network errors
+          this.featureEnabled = true;
+        }
       },
     });
   }

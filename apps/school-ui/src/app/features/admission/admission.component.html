@@ -451,7 +451,7 @@
 
     @if (loading) {
       <p class="panel">Loading admission configuration…</p>
-    } @else if (!featureEnabled) {
+    } @else if (!featureEnabled && !error) {
       <p class="panel">Admission is not enabled for this plan (FEATURE_ADMISSION).</p>
       <p class="muted panel">
         Enable it from SugamFlow Super Admin → Platform Subscription (plan feature flag), then refresh.

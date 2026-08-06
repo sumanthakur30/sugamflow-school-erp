@@ -1,5 +1,5 @@
 import { Injectable, inject } from '@angular/core';
-import { Observable, catchError, map, of, shareReplay, switchMap } from 'rxjs';
+import { Observable, catchError, map, of, shareReplay, switchMap, timeout } from 'rxjs';
 import { ApiService } from './api.service';
 import { AuthSessionService } from './auth-session.service';
 import { HttpClient } from '@angular/common/http';
@@ -51,6 +51,7 @@ export class ProvisionService {
           schoolName ? { schoolName } : {},
         ),
       ),
+      timeout(8000),
       catchError(() => of(null)),
       shareReplay(1),
     );

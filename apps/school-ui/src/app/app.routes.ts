@@ -4,6 +4,7 @@ import { authGuard } from './core/auth.guard';
 import { featureGuard } from './core/feature.guard';
 import { UnknownRouteComponent } from './core/unknown-route.component';
 import { unknownRouteGuard } from './core/unknown-route.guard';
+import { LoginComponent } from './features/login/login.component';
 
 const PLATFORM_ADMIN_ROLES = ['SHOP_OWNER', 'SUPER_ADMIN', 'ADMIN'];
 const CAMPUS_ADMIN_ROLES = [...PLATFORM_ADMIN_ROLES, 'PRINCIPAL'];
@@ -23,8 +24,8 @@ const STAFF_DASHBOARD_ROLES = [
 export const routes: Routes = [
   {
     path: 'login',
-    loadComponent: () =>
-      import('./features/login/login.component').then((m) => m.LoginComponent),
+    // Eager: logout → /login must never hang on a lazy chunk after deploy.
+    component: LoginComponent,
   },
   {
     path: 'onboarding/set-password',

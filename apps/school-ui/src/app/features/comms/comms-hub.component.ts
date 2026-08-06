@@ -1,7 +1,10 @@
-import { Component, OnInit, inject } from '@angular/core';
+import { Component, OnDestroy, OnInit, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { Subscription } from 'rxjs';
 import { ApiService } from '../../core/api.service';
+import { TenantContextService } from '../../core/tenant-context.service';
+import { ModuleBootstrapService } from '../../core/module-bootstrap.service';
 import {
   headerSortIndicator,
   nextHeaderSort,
@@ -22,8 +25,11 @@ type StatusFilter = '' | 'SENT' | 'ATTENTION' | 'PARTIAL_FAILED' | 'FAILED' | 'Q
     './comms-hub.component.scss',
   ],
 })
-export class CommsHubComponent implements OnInit {
+export class CommsHubComponent implements OnInit, OnDestroy {
   private readonly api = inject(ApiService);
+  private readonly tenantContext = inject(TenantContextService);
+  private readonly modules = inject(ModuleBootstrapService);
+  private campusReadySub?: Subscription;
 
   loading = true;
   busy = false;
@@ -51,23 +57,42 @@ export class CommsHubComponent implements OnInit {
   };
 
   ngOnInit(): void {
-    this.reload();
+    this.campusReadySub = this.tenantContext.whenCampusReady().subscribe(() => this.reload());
+  }
+
+  ngOnDestroy(): void {
+    this.campusReadySub?.unsubscribe();
   }
 
   reload(): void {
     this.loading = true;
-    this.api.get<any>('/api/school/notification-config/comms/bootstrap').subscribe({
-      next: (b) => {
-        this.featureEnabled = !!b.featureEnabled;
-        this.announcements = b.announcements || [];
-        this.channels = Array.isArray(b.channels) && b.channels.length ? b.channels : this.channels;
-        this.audiences = Array.isArray(b.audiences) && b.audiences.length ? b.audiences : this.audiences;
-        this.loading = false;
-      },
+    const path = '/api/school/notification-config/comms/bootstrap';
+    const apply = (b: any) => {
+      this.featureEnabled = !!b.featureEnabled;
+      this.announcements = b.announcements || [];
+      this.channels = Array.isArray(b.channels) && b.channels.length ? b.channels : this.channels;
+      this.audiences = Array.isArray(b.audiences) && b.audiences.length ? b.audiences : this.audiences;
+      this.loading = false;
+    };
+    const peeked = this.modules.peek(path);
+    if (peeked) {
+      apply(peeked);
+      return;
+    }
+    this.modules.load(path).subscribe({
+      next: apply,
       error: (err) => {
         this.loading = false;
-        this.error = err?.error?.message ?? 'Comms hub unavailable — enable FEATURE_COMMS_HUB and restart settings/comms.';
-        this.featureEnabled = false;
+        this.error = ModuleBootstrapService.errorMessage(
+          err,
+          'Comms hub unavailable — enable FEATURE_COMMS_HUB and restart settings/comms.',
+        );
+        if (ModuleBootstrapService.isFeatureDisabled(err)) {
+          this.featureEnabled = false;
+        } else {
+          // Do NOT imply plan feature is off on workflow/form/network errors
+          this.featureEnabled = true;
+        }
       },
     });
   }

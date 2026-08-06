@@ -1,7 +1,10 @@
 import { CommonModule } from '@angular/common';
-import { Component, OnInit, inject } from '@angular/core';
+import { Component, OnDestroy, OnInit, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { Subscription } from 'rxjs';
 import { ApiService, PageResult } from '../../core/api.service';
+import { TenantContextService } from '../../core/tenant-context.service';
+import { ModuleBootstrapService } from '../../core/module-bootstrap.service';
 import {
   headerSortIndicator,
   nextHeaderSort,
@@ -24,8 +27,11 @@ type TransportView = 'routes' | 'assign' | 'assignments' | 'workflow';
     './transport.component.scss',
   ],
 })
-export class TransportComponent implements OnInit {
+export class TransportComponent implements OnInit, OnDestroy {
   private readonly api = inject(ApiService);
+  private readonly tenantContext = inject(TenantContextService);
+  private readonly modules = inject(ModuleBootstrapService);
+  private campusReadySub?: Subscription;
 
   loading = true;
   error = '';
@@ -90,27 +96,43 @@ export class TransportComponent implements OnInit {
   };
 
   ngOnInit(): void {
-    this.reload();
+    this.campusReadySub = this.tenantContext.whenCampusReady().subscribe(() => this.reload());
+  }
+
+  ngOnDestroy(): void {
+    this.campusReadySub?.unsubscribe();
   }
 
   reload(): void {
     this.loading = true;
     this.error = '';
-    this.api.get<any>('/api/transport/bootstrap').subscribe({
-      next: (boot) => {
-        this.featureEnabled = !!boot.featureEnabled;
-        this.formKey = boot.formKey;
-        this.workflowKey = boot.workflowKey;
-        this.fields = this.extractFields(boot.form);
-        this.resetWorkflowAnswers();
-        this.loading = false;
-        this.loadRecords();
-        this.loadRoutes();
-      },
+    const path = '/api/transport/bootstrap';
+    const apply = (boot: any) => {
+      this.featureEnabled = !!boot.featureEnabled;
+      this.formKey = boot.formKey;
+      this.workflowKey = boot.workflowKey;
+      this.fields = this.extractFields(boot.form);
+      this.resetWorkflowAnswers();
+      this.loading = false;
+      this.loadRecords();
+      this.loadRoutes();
+    };
+    const peeked = this.modules.peek(path);
+    if (peeked) {
+      apply(peeked);
+      return;
+    }
+    this.modules.load(path).subscribe({
+      next: apply,
       error: (err) => {
         this.loading = false;
-        this.error = err?.error?.message ?? err?.message ?? 'Transport bootstrap failed';
-        this.featureEnabled = false;
+        this.error = ModuleBootstrapService.errorMessage(err, 'Transport bootstrap failed');
+        if (ModuleBootstrapService.isFeatureDisabled(err)) {
+          this.featureEnabled = false;
+        } else {
+          // Do NOT imply plan feature is off on workflow/form/network errors
+          this.featureEnabled = true;
+        }
       },
     });
   }

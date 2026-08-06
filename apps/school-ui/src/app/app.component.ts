@@ -15,13 +15,13 @@ export class AppComponent implements OnInit {
 
   ngOnInit(): void {
     if (this.auth.isLoggedIn()) {
-      this.theme.loadAuthenticated().subscribe();
+      this.theme.loadAuthenticated().subscribe({ error: () => this.theme.clearToFallback() });
     } else {
+      // Always reset painted theme first so logout → login is never a blank mint shell.
+      this.theme.clearToFallback();
       const org = (localStorage.getItem('sf.tenantId') ?? '').trim();
       if (org.length >= 3) {
-        this.theme.loadPublished(org).subscribe();
-      } else {
-        this.theme.clearToFallback();
+        this.theme.loadPublished(org).subscribe({ error: () => this.theme.clearToFallback() });
       }
     }
   }

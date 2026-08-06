@@ -36,6 +36,8 @@ public class ConfigEngineClient {
 
   private final TtlCache<String, Boolean> featureFlagCache = TtlCache.forConfig();
   private final TtlCache<String, Map<String, Object>> moduleSettingsCache = TtlCache.forConfig();
+  private final TtlCache<String, Map<String, Object>> formCache = TtlCache.forConfig();
+  private final TtlCache<String, Map<String, Object>> workflowCache = TtlCache.forConfig();
 
   public boolean isFeatureEnabled(TenantScope scope, String flag) {
     String cacheKey = scope.organizationId() + "|" + flag;
@@ -76,14 +78,24 @@ public class ConfigEngineClient {
   }
 
   public Map<String, Object> getForm(TenantScope scope, String formKey) {
-    return get(
-        properties.getIntegrations().getFormsBaseUrl() + "/api/forms/" + formKey, scope);
+    String cacheKey = scope.organizationId() + "|form|" + formKey;
+    return formCache.get(
+        cacheKey,
+        key ->
+            get(
+                properties.getIntegrations().getFormsBaseUrl() + "/api/forms/" + formKey, scope));
   }
 
   public Map<String, Object> getWorkflow(TenantScope scope, String workflowKey) {
-    return get(
-        properties.getIntegrations().getWorkflowsBaseUrl() + "/api/workflows/" + workflowKey,
-        scope);
+    String cacheKey = scope.organizationId() + "|workflow|" + workflowKey;
+    return workflowCache.get(
+        cacheKey,
+        key ->
+            get(
+                properties.getIntegrations().getWorkflowsBaseUrl()
+                    + "/api/workflows/"
+                    + workflowKey,
+                scope));
   }
 
   @SuppressWarnings("unchecked")

@@ -225,7 +225,7 @@
 
     @if (loading) {
       <p class="panel">Loading exam configuration…</p>
-    } @else if (!featureEnabled) {
+    } @else if (!featureEnabled && !error) {
       <p class="panel">Exam is not enabled for this plan (FEATURE_EXAM).</p>
     } @else {
       <section class="panel inbox-panel">

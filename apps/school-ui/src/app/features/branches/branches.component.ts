@@ -1,9 +1,12 @@
-import { Component, OnInit, inject } from '@angular/core';
+import { Component, OnDestroy, OnInit, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { Subscription } from 'rxjs';
 import { ApiService } from '../../core/api.service';
 import { AuthSessionService } from '../../core/auth-session.service';
 import { ThemeService } from '../../core/theme.service';
+import { TenantContextService } from '../../core/tenant-context.service';
+import { ModuleBootstrapService } from '../../core/module-bootstrap.service';
 
 @Component({
   selector: 'sf-branches',
@@ -12,10 +15,13 @@ import { ThemeService } from '../../core/theme.service';
   templateUrl: './branches.component.html',
   styleUrls: ['../../shared/admin-page.scss', './branches.component.scss'],
 })
-export class BranchesComponent implements OnInit {
+export class BranchesComponent implements OnInit, OnDestroy {
   private readonly api = inject(ApiService);
   private readonly auth = inject(AuthSessionService);
   private readonly theme = inject(ThemeService);
+  private readonly tenantContext = inject(TenantContextService);
+  private readonly modules = inject(ModuleBootstrapService);
+  private campusReadySub?: Subscription;
 
   loading = true;
   featureEnabled = false;
@@ -39,26 +45,43 @@ export class BranchesComponent implements OnInit {
   };
 
   ngOnInit(): void {
-    this.reload();
+    this.campusReadySub = this.tenantContext.whenCampusReady().subscribe(() => this.reload());
   }
 
-  reload(): void {
+  ngOnDestroy(): void {
+    this.campusReadySub?.unsubscribe();
+  }
+
+  reload(force = false): void {
     this.loading = true;
     this.error = '';
-    this.api.get<any>('/api/config/branches/bootstrap').subscribe({
-      next: (boot) => {
-        this.featureEnabled = !!boot.featureEnabled;
-        this.canAdd = !!boot.canAdd;
-        this.canManage = !!boot.canManage;
-        this.maxBranches = boot.maxBranches;
-        this.branchCount = boot.branchCount ?? 0;
-        this.currentKey = boot.currentBranchKey || this.auth.getBranchId();
-        this.branches = boot.branches ?? [];
-        this.loading = false;
-      },
+    const path = '/api/config/branches/bootstrap';
+    const apply = (boot: any) => {
+      this.featureEnabled = !!boot.featureEnabled;
+      this.canAdd = !!boot.canAdd;
+      this.canManage = !!boot.canManage;
+      this.maxBranches = boot.maxBranches;
+      this.branchCount = boot.branchCount ?? 0;
+      this.currentKey = boot.currentBranchKey || this.auth.getBranchId();
+      this.branches = boot.branches ?? [];
+      this.loading = false;
+    };
+    const peeked = force ? null : this.modules.peek(path);
+    if (peeked) {
+      apply(peeked);
+      return;
+    }
+    this.modules.load(path, force).subscribe({
+      next: apply,
       error: (err) => {
         this.loading = false;
-        this.error = err?.error?.message ?? 'Failed to load branches';
+        this.error = ModuleBootstrapService.errorMessage(err, 'Failed to load branches');
+        if (ModuleBootstrapService.isFeatureDisabled(err)) {
+          this.featureEnabled = false;
+        } else {
+          // Do NOT imply plan feature is off on workflow/form/network errors
+          this.featureEnabled = true;
+        }
       },
     });
   }
@@ -98,7 +121,7 @@ export class BranchesComponent implements OnInit {
             address: '',
             isDefault: false,
           };
-          this.reload();
+          this.reload(true);
         },
         error: (err) => {
           this.busy = false;
@@ -113,7 +136,7 @@ export class BranchesComponent implements OnInit {
       next: () => {
         this.busy = false;
         this.status = `${branchKey} is now the default campus`;
-        this.reload();
+        this.reload(true);
       },
       error: (err) => {
         this.busy = false;
@@ -136,7 +159,7 @@ export class BranchesComponent implements OnInit {
         next: () => {
           this.busy = false;
           this.status = `Updated ${b.branchKey}`;
-          this.reload();
+          this.reload(true);
         },
         error: (err) => {
           this.busy = false;

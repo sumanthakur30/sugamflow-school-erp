@@ -2,9 +2,7 @@ import { Component, OnInit, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 import { AuthSessionService } from '../../core/auth-session.service';
-import { ProvisionService } from '../../core/provision.service';
 import { ThemeService } from '../../core/theme.service';
-import { switchMap } from 'rxjs';
 
 export type LoginDestination =
   | 'admin'
@@ -36,7 +34,6 @@ export class LoginComponent implements OnInit {
   private readonly router = inject(Router);
   private readonly route = inject(ActivatedRoute);
   private readonly theme = inject(ThemeService);
-  private readonly provision = inject(ProvisionService);
 
   organizationId = localStorage.getItem('sf.tenantId') ?? '';
   username = 'admin';
@@ -120,6 +117,8 @@ export class LoginComponent implements OnInit {
   onSubmit(): void {
     this.error = '';
     this.submitting = true;
+    // Cancel any in-flight login-page theme for a different org (demo → HCP typing).
+    this.theme.beginSession();
     const shopId = this.organizationId.trim();
     const scopedUsername = this.auth.toScopedUsername(this.username, shopId);
     const dest =
@@ -142,15 +141,9 @@ export class LoginComponent implements OnInit {
             // Clear portal overlay when we redirect staff/admin away from Parent App.
             this.auth.setActiveRole('');
           }
-          const navigate = () => {
-            const target = this.safeTargetForDestination(resolved, this.returnUrl);
-            void this.router.navigateByUrl(target);
-          };
-          // Bootstrap campus + branding from shop name, then refresh theme.
-          this.provision
-            .ensureProvisioned()
-            .pipe(switchMap(() => this.theme.loadAuthenticated()))
-            .subscribe({ next: () => navigate(), error: () => navigate() });
+          const target = this.safeTargetForDestination(resolved, this.returnUrl);
+          // Hard navigation clears in-memory theme/bootstrap from the previous school.
+          window.location.replace(target);
         },
         error: (err) => {
           this.submitting = false;
@@ -232,6 +225,8 @@ export class LoginComponent implements OnInit {
       this.footer = 'Powered by SugamFlow';
       return;
     }
+    // New generation so a slower response for a previously typed org cannot win.
+    this.theme.beginSession();
     this.theme.loadPublished(org).subscribe((t) => {
       const b = t.branding ?? {};
       const login = t.loginScreen ?? {};

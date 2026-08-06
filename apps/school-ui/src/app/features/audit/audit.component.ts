@@ -1,7 +1,10 @@
-import { Component, OnInit, inject } from '@angular/core';
+import { Component, OnDestroy, OnInit, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { Subscription } from 'rxjs';
 import { ApiService } from '../../core/api.service';
+import { TenantContextService } from '../../core/tenant-context.service';
+import { ModuleBootstrapService } from '../../core/module-bootstrap.service';
 import { ListToolbarComponent } from '../../shared/list-toolbar/list-toolbar.component';
 import { ListSortOption, sortRows } from '../../shared/list-toolbar/list-controls';
 
@@ -16,8 +19,11 @@ import { ListSortOption, sortRows } from '../../shared/list-toolbar/list-control
     './audit.component.scss',
   ],
 })
-export class AuditComponent implements OnInit {
+export class AuditComponent implements OnInit, OnDestroy {
   private readonly api = inject(ApiService);
+  private readonly tenantContext = inject(TenantContextService);
+  private readonly modules = inject(ModuleBootstrapService);
+  private campusReadySub?: Subscription;
 
   loading = true;
   featureEnabled = false;
@@ -52,26 +58,42 @@ export class AuditComponent implements OnInit {
   ];
 
   ngOnInit(): void {
-    this.bootstrap();
+    this.campusReadySub = this.tenantContext.whenCampusReady().subscribe(() => this.bootstrap());
+  }
+
+  ngOnDestroy(): void {
+    this.campusReadySub?.unsubscribe();
   }
 
   bootstrap(): void {
     this.loading = true;
     this.error = '';
-    this.api.get<any>('/api/audit/bootstrap').subscribe({
-      next: (boot) => {
-        this.featureEnabled = !!boot.featureEnabled;
-        this.entityTypes = boot.entityTypes ?? [];
-        this.statuses = boot.statuses ?? [];
-        this.loading = false;
-        if (this.featureEnabled) {
-          this.reload();
-        }
-      },
+    const path = '/api/audit/bootstrap';
+    const apply = (boot: any) => {
+      this.featureEnabled = !!boot.featureEnabled;
+      this.entityTypes = boot.entityTypes ?? [];
+      this.statuses = boot.statuses ?? [];
+      this.loading = false;
+      if (this.featureEnabled) {
+        this.reload();
+      }
+    };
+    const peeked = this.modules.peek(path);
+    if (peeked) {
+      apply(peeked);
+      return;
+    }
+    this.modules.load(path).subscribe({
+      next: apply,
       error: (err) => {
         this.loading = false;
-        this.featureEnabled = false;
-        this.error = err?.error?.message ?? err?.message ?? 'Audit bootstrap failed';
+        this.error = ModuleBootstrapService.errorMessage(err, 'Audit bootstrap failed');
+        if (ModuleBootstrapService.isFeatureDisabled(err)) {
+          this.featureEnabled = false;
+        } else {
+          // Do NOT imply plan feature is off on workflow/form/network errors
+          this.featureEnabled = true;
+        }
       },
     });
   }

@@ -25,7 +25,7 @@
 
   @if (loading) {
     <p class="panel loading-state" role="status">Loading transport configuration…</p>
-  } @else if (!featureEnabled) {
+  } @else if (!featureEnabled && !error) {
     <p class="panel">Transport is not enabled for this plan (FEATURE_TRANSPORT).</p>
   } @else {
     <div class="stat-cards" aria-label="Transport summary">

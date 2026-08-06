@@ -1,9 +1,11 @@
-import { Component, OnInit, inject } from '@angular/core';
+import { Component, OnDestroy, OnInit, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
-import { catchError, finalize, map, timeout } from 'rxjs';
+import { Subscription, catchError, finalize, map, timeout } from 'rxjs';
 import { ApiService, PageResult } from '../../core/api.service';
+import { TenantContextService } from '../../core/tenant-context.service';
+import { ModuleBootstrapService } from '../../core/module-bootstrap.service';
 import { ListToolbarComponent } from '../../shared/list-toolbar/list-toolbar.component';
 import {
   ListSortOption,
@@ -25,8 +27,11 @@ import {
     './student-directory.component.scss',
   ],
 })
-export class StudentDirectoryComponent implements OnInit {
+export class StudentDirectoryComponent implements OnInit, OnDestroy {
   private readonly api = inject(ApiService);
+  private readonly tenantContext = inject(TenantContextService);
+  private readonly modules = inject(ModuleBootstrapService);
+  private campusReadySub?: Subscription;
 
   loading = true;
   searching = false;
@@ -81,7 +86,11 @@ export class StudentDirectoryComponent implements OnInit {
   ];
 
   ngOnInit(): void {
-    this.reload();
+    this.campusReadySub = this.tenantContext.whenCampusReady().subscribe(() => this.reload());
+  }
+
+  ngOnDestroy(): void {
+    this.campusReadySub?.unsubscribe();
   }
 
   get displayColumns(): Array<{ key: string; label: string; visible?: boolean }> {
@@ -172,24 +181,37 @@ export class StudentDirectoryComponent implements OnInit {
     this.loading = true;
     this.error = '';
     this.loadClassSectionOptions();
-    this.api.get<any>('/api/student/directory/bootstrap').subscribe({
-      next: (boot) => {
-        this.featureEnabled = !!boot.featureEnabled;
-        this.columns = (boot.columns || []).filter((c: any) => c.visible !== false);
-        this.quickActions = boot.quickActions || [];
-        const opts = boot.pageSizeOptions as number[] | undefined;
-        if (opts?.length && !opts.includes(this.page.size)) {
-          this.page = { ...this.page, size: boot.defaultPageSize || 50 };
-        }
-        this.loading = false;
-        if (this.featureEnabled) {
-          this.loadSummary();
-          this.search(0);
-        }
-      },
+    const path = '/api/student/directory/bootstrap';
+    const apply = (boot: any) => {
+      this.featureEnabled = !!boot.featureEnabled;
+      this.columns = (boot.columns || []).filter((c: any) => c.visible !== false);
+      this.quickActions = boot.quickActions || [];
+      const opts = boot.pageSizeOptions as number[] | undefined;
+      if (opts?.length && !opts.includes(this.page.size)) {
+        this.page = { ...this.page, size: boot.defaultPageSize || 50 };
+      }
+      this.loading = false;
+      if (this.featureEnabled) {
+        this.loadSummary();
+        this.search(0);
+      }
+    };
+    const peeked = this.modules.peek(path);
+    if (peeked) {
+      apply(peeked);
+      return;
+    }
+    this.modules.load(path).subscribe({
+      next: apply,
       error: (err) => {
         this.loading = false;
-        this.error = err?.error?.message ?? err?.message ?? 'Student directory bootstrap failed';
+        this.error = ModuleBootstrapService.errorMessage(err, 'Student directory bootstrap failed');
+        if (ModuleBootstrapService.isFeatureDisabled(err)) {
+          this.featureEnabled = false;
+        } else {
+          // Do NOT imply plan feature is off on workflow/form/network errors
+          this.featureEnabled = true;
+        }
       },
     });
   }

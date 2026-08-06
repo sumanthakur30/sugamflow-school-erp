@@ -405,7 +405,7 @@
 
     @if (loading) {
       <p class="panel">Loading fee configuration…</p>
-    } @else if (!featureEnabled) {
+    } @else if (!featureEnabled && !error) {
       <p class="panel">Fee is not enabled for this plan (FEATURE_FEE).</p>
     } @else {
       <section

@@ -59,8 +59,12 @@ export class PortalShellComponent implements OnInit {
       },
       error: (err) => {
         this.loading = false;
-        this.featureEnabled = false;
         this.error = err?.error?.message ?? 'Portal bootstrap failed';
+        const msg = String(this.error).toUpperCase();
+        // Do NOT imply plan feature is off on transport/server errors
+        this.featureEnabled = !(
+          msg.includes('FEATURE_DISABLED') || msg.includes('NOT ENABLED FOR THIS PLAN')
+        );
       },
     });
   }
@@ -86,10 +90,16 @@ export class PortalShellComponent implements OnInit {
     });
   }
 
-  logout(): void {
-    this.auth.logout();
-    this.portalCtx.clear();
-    this.themeService.clearToFallback();
-    this.router.navigateByUrl('/login');
+  logout(event?: Event): void {
+    event?.preventDefault();
+    event?.stopPropagation();
+    try {
+      this.auth.logout();
+      this.portalCtx.clear();
+      this.themeService.clearToFallback();
+    } catch {
+      // still navigate
+    }
+    window.location.assign('/login');
   }
 }

@@ -22,7 +22,7 @@
 
     @if (loading) {
       <p class="nav-status">Loading…</p>
-    } @else if (!featureEnabled) {
+    } @else if (!featureEnabled && !error) {
       <p class="nav-status">App not enabled for this plan.</p>
     } @else {
       <nav>
@@ -37,7 +37,7 @@
     <div class="session">
       <p class="session-label">{{ sessionLabel() }}</p>
       <button type="button" class="logout secondary-link" (click)="goAdmin()">School Admin</button>
-      <button type="button" class="logout" (click)="logout()">Sign out</button>
+      <button type="button" class="logout" data-sf-nav-keep (click)="logout($event)">Sign out</button>
     </div>
   </aside>
   <main>

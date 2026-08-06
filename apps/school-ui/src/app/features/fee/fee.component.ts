@@ -7,6 +7,8 @@ import { catchError } from 'rxjs/operators';
 import { ApiService, PageResult } from '../../core/api.service';
 import { AuthSessionService } from '../../core/auth-session.service';
 import { ThemeService } from '../../core/theme.service';
+import { TenantContextService } from '../../core/tenant-context.service';
+import { ModuleBootstrapService } from '../../core/module-bootstrap.service';
 import { ListPagerComponent } from '../../shared/list-toolbar/list-pager.component';
 import {
   ListSortOption,
@@ -51,7 +53,10 @@ export class FeeComponent implements OnInit, OnDestroy {
   private readonly router = inject(Router);
   private readonly auth = inject(AuthSessionService);
   private readonly theme = inject(ThemeService);
+  private readonly tenantContext = inject(TenantContextService);
+  private readonly modules = inject(ModuleBootstrapService);
   private routeSub?: Subscription;
+  private campusReadySub?: Subscription;
 
   loading = true;
   error = '';
@@ -168,11 +173,12 @@ export class FeeComponent implements OnInit, OnDestroy {
 
   ngOnInit(): void {
     this.routeSub = this.route.queryParamMap.subscribe((params) => this.syncFromRoute(params));
-    this.reload();
+    this.campusReadySub = this.tenantContext.whenCampusReady().subscribe(() => this.reload());
   }
 
   ngOnDestroy(): void {
     this.routeSub?.unsubscribe();
+    this.campusReadySub?.unsubscribe();
   }
 
   @HostListener('document:click', ['$event'])
@@ -280,23 +286,35 @@ export class FeeComponent implements OnInit, OnDestroy {
   reload(): void {
     this.loading = true;
     this.error = '';
-    this.api.get<any>('/api/fee/bootstrap').subscribe({
-      next: (boot) => {
-        this.featureEnabled = !!boot.featureEnabled;
-        this.formKey = boot.formKey;
-        this.workflowKey = boot.workflowKey;
-        this.fields = this.extractFields(boot.form);
-        this.resetAnswers();
-        this.loading = false;
-        this.loadCollections();
-        this.loadFeeHeads();
-        // Re-apply route view now that fields exist (e.g. ?new=1 + admissionNo).
-        this.syncFromRoute(this.route.snapshot.queryParamMap);
-      },
+    const path = '/api/fee/bootstrap';
+    const apply = (boot: any) => {
+      this.featureEnabled = !!boot.featureEnabled;
+      this.formKey = boot.formKey;
+      this.workflowKey = boot.workflowKey;
+      this.fields = this.extractFields(boot.form);
+      this.resetAnswers();
+      this.loading = false;
+      this.loadCollections();
+      this.loadFeeHeads();
+      // Re-apply route view now that fields exist (e.g. ?new=1 + admissionNo).
+      this.syncFromRoute(this.route.snapshot.queryParamMap);
+    };
+    const peeked = this.modules.peek(path);
+    if (peeked) {
+      apply(peeked);
+      return;
+    }
+    this.modules.load(path).subscribe({
+      next: apply,
       error: (err) => {
         this.loading = false;
-        this.error = err?.error?.message ?? err?.message ?? 'Fee bootstrap failed';
-        this.featureEnabled = false;
+        this.error = ModuleBootstrapService.errorMessage(err, 'Fee bootstrap failed');
+        if (ModuleBootstrapService.isFeatureDisabled(err)) {
+          this.featureEnabled = false;
+        } else {
+          // Do NOT imply plan feature is off on workflow/form/network errors
+          this.featureEnabled = true;
+        }
       },
     });
   }

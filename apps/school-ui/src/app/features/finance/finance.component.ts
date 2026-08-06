@@ -1,10 +1,12 @@
-import { Component, OnInit, inject } from '@angular/core';
+import { Component, OnDestroy, OnInit, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
-import { forkJoin, of } from 'rxjs';
+import { Subscription, forkJoin, of } from 'rxjs';
 import { catchError } from 'rxjs/operators';
 import { ApiService } from '../../core/api.service';
+import { TenantContextService } from '../../core/tenant-context.service';
+import { ModuleBootstrapService } from '../../core/module-bootstrap.service';
 import { ListToolbarComponent } from '../../shared/list-toolbar/list-toolbar.component';
 import { ListPagerComponent } from '../../shared/list-toolbar/list-pager.component';
 import { ListSortOption, sortRows } from '../../shared/list-toolbar/list-controls';
@@ -66,9 +68,12 @@ export type FinanceTab =
     './finance.component.scss',
   ],
 })
-export class FinanceComponent implements OnInit {
+export class FinanceComponent implements OnInit, OnDestroy {
   private readonly api = inject(ApiService);
   private readonly router = inject(Router);
+  private readonly tenantContext = inject(TenantContextService);
+  private readonly modules = inject(ModuleBootstrapService);
+  private campusReadySub?: Subscription;
 
   loading = true;
   error = '';
@@ -204,7 +209,11 @@ export class FinanceComponent implements OnInit {
   ];
 
   ngOnInit(): void {
-    this.reload();
+    this.campusReadySub = this.tenantContext.whenCampusReady().subscribe(() => this.reload());
+  }
+
+  ngOnDestroy(): void {
+    this.campusReadySub?.unsubscribe();
   }
 
   setTab(id: FinanceTab): void {
@@ -292,16 +301,21 @@ export class FinanceComponent implements OnInit {
     }
   }
 
-  reload(): void {
+  reload(force = false): void {
     this.loading = true;
     this.error = '';
+    const path = '/api/fee/finance/bootstrap';
+    const peeked = force ? null : this.modules.peek(path);
+    const boot$ = peeked
+      ? of(peeked)
+      : this.modules.load(path, force).pipe(
+          catchError((err) => {
+            this.error = ModuleBootstrapService.errorMessage(err, 'Finance bootstrap failed');
+            return of(null);
+          }),
+        );
     forkJoin({
-      boot: this.api.get<any>('/api/fee/finance/bootstrap').pipe(
-        catchError((err) => {
-          this.error = err?.error?.message ?? 'Finance bootstrap failed';
-          return of(null);
-        }),
-      ),
+      boot: boot$,
       transactions: this.api
         .get<any[]>('/api/fee/finance/transactions')
         .pipe(catchError(() => of([] as any[]))),
@@ -567,7 +581,7 @@ export class FinanceComponent implements OnInit {
         this.lastDemandTxn = txn;
         this.demand = txn.demand || this.demand;
         this.status = `Demand ${txn.referenceNo || ''} saved (${txn.status || 'OPEN'})`;
-        this.reload();
+        this.reload(true);
       },
       error: (err) => {
         this.busy = false;
@@ -593,7 +607,7 @@ export class FinanceComponent implements OnInit {
           this.busy = false;
           this.bulkResult = res;
           this.status = `Bulk demand: ${res.created || 0} created, ${res.failed || 0} failed`;
-          this.reload();
+          this.reload(true);
         },
         error: (err) => {
           this.busy = false;
@@ -680,7 +694,7 @@ export class FinanceComponent implements OnInit {
           this.busy = false;
           this.status = `Saved structure ${key}`;
           this.resetStructureDraft();
-          this.reload();
+          this.reload(true);
         },
         error: (err) => {
           this.busy = false;
@@ -711,7 +725,7 @@ export class FinanceComponent implements OnInit {
           this.busy = false;
           this.status = `${this.adjustDraft.type} posted ${txn.referenceNo || ''}`;
           this.adjustDraft = { ...this.adjustDraft, amount: 0, reason: '' };
-          this.reload();
+          this.reload(true);
         },
         error: (err) => {
           this.busy = false;
@@ -774,7 +788,7 @@ export class FinanceComponent implements OnInit {
           this.busy = false;
           this.status = `Saved head ${key}`;
           this.resetHeadDraft();
-          this.reload();
+          this.reload(true);
         },
         error: (err) => {
           this.busy = false;
@@ -804,7 +818,7 @@ export class FinanceComponent implements OnInit {
           this.busy = false;
           this.lastIntent = intent;
           this.status = `Intent ${intent.referenceNo} ${intent.status} (${intent.adapter || '—'})`;
-          this.reload();
+          this.reload(true);
           if (intent.checkoutMode === 'RAZORPAY_CHECKOUT' && intent.checkout) {
             this.openRazorpayCheckout(intent);
           }
@@ -845,7 +859,7 @@ export class FinanceComponent implements OnInit {
                 this.busy = false;
                 this.lastIntent = captured;
                 this.status = `Captured ${captured.referenceNo}`;
-                this.reload();
+                this.reload(true);
               },
               error: (err) => {
                 this.busy = false;
@@ -879,7 +893,7 @@ export class FinanceComponent implements OnInit {
           this.busy = false;
           this.lastIntent = intent;
           this.status = `Captured ${intent.referenceNo}`;
-          this.reload();
+          this.reload(true);
         },
         error: (err) => {
           this.busy = false;

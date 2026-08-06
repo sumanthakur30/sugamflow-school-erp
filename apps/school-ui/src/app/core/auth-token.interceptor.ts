@@ -1,30 +1,13 @@
 import { HttpInterceptorFn } from '@angular/common/http';
 import {
   SESSION_ROLE_KEY,
-  SESSION_TENANT_KEY,
   SESSION_TOKEN_KEY,
   SESSION_USER_KEY,
-  SESSION_DATA_KEY,
 } from './session-keys';
-
-interface SessionSnapshot {
-  username?: string;
-  role?: string;
-  shopId?: string;
-  tenantId?: number | string;
-}
-
-function readSession(): SessionSnapshot | null {
-  const raw = localStorage.getItem(SESSION_DATA_KEY);
-  if (!raw) {
-    return null;
-  }
-  try {
-    return JSON.parse(raw) as SessionSnapshot;
-  } catch {
-    return null;
-  }
-}
+import {
+  readSessionSnapshot,
+  resolveOrganizationId,
+} from './tenant-context.util';
 
 function isPlatformAccountsUrl(url: string): boolean {
   return url.includes('/api/v1/accounts');
@@ -37,7 +20,7 @@ export const authTokenInterceptor: HttpInterceptorFn = (req, next) => {
     return next(req);
   }
 
-  const session = readSession();
+  const session = readSessionSnapshot();
   const headers: Record<string, string> = {
     Authorization: `Bearer ${token}`,
   };
@@ -51,9 +34,8 @@ export const authTokenInterceptor: HttpInterceptorFn = (req, next) => {
     headers['X-Auth-User'] = username;
   }
 
-  const orgId = (localStorage.getItem(SESSION_TENANT_KEY) ?? session?.shopId ?? '').trim();
+  const orgId = resolveOrganizationId();
   if (isPlatformAccountsUrl(req.url)) {
-    // account-service expects numeric platform tenant + org slug shopId
     const tenantId = session?.tenantId;
     if (tenantId != null && String(tenantId).trim() !== '') {
       headers['X-Tenant-Id'] = String(tenantId).trim();

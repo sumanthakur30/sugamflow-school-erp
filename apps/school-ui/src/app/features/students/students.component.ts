@@ -4,6 +4,8 @@ import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { Subscription } from 'rxjs';
 import { ApiService, PageResult } from '../../core/api.service';
+import { TenantContextService } from '../../core/tenant-context.service';
+import { ModuleBootstrapService } from '../../core/module-bootstrap.service';
 import { ListToolbarComponent } from '../../shared/list-toolbar/list-toolbar.component';
 import { ListPagerComponent } from '../../shared/list-toolbar/list-pager.component';
 import {
@@ -32,7 +34,10 @@ export class StudentsComponent implements OnInit, OnDestroy {
   private readonly api = inject(ApiService);
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
+  private readonly tenantContext = inject(TenantContextService);
+  private readonly modules = inject(ModuleBootstrapService);
   private routeSub?: Subscription;
+  private campusReadySub?: Subscription;
 
   loading = true;
   error = '';
@@ -195,11 +200,12 @@ export class StudentsComponent implements OnInit, OnDestroy {
 
   ngOnInit(): void {
     this.routeSub = this.route.queryParamMap.subscribe((params) => this.syncFromRoute(params));
-    this.reload();
+    this.campusReadySub = this.tenantContext.whenCampusReady().subscribe(() => this.reload());
   }
 
   ngOnDestroy(): void {
     this.routeSub?.unsubscribe();
+    this.campusReadySub?.unsubscribe();
   }
 
   @HostListener('document:keydown.escape')
@@ -260,35 +266,43 @@ export class StudentsComponent implements OnInit, OnDestroy {
   reload(): void {
     this.loading = true;
     this.error = '';
-    this.api.get<any>('/api/student/bootstrap').subscribe({
-      next: (boot) => {
-        this.featureEnabled = !!boot.featureEnabled;
-        this.formKey = boot.formKey;
-        this.parentFormKey = boot.parentFormKey ?? 'parent_master';
-        this.guardiansAnswerKey = boot.guardiansAnswerKey ?? 'guardians';
-        this.parentFields = this.extractFields(boot.parentForm);
-        this.formSections = this.extractSections(boot.form);
-        this.masterFields = this.extractFields(boot.form).filter(
-          (f) => f.key !== this.guardiansAnswerKey && f.key !== 'guardians',
-        );
-        const visible = this.visibleEditSections();
-        this.activeEditSectionId = visible[0]?.id || '';
-        if (boot.identity && typeof boot.identity === 'object') {
-          this.identity = { ...this.identity, ...boot.identity };
-        }
-        this.resetGuardianDraft();
-        this.loading = false;
-        this.loadStudents();
-      },
+    const path = '/api/student/bootstrap';
+    const apply = (boot: any) => {
+      this.featureEnabled = !!boot.featureEnabled;
+      this.formKey = boot.formKey;
+      this.parentFormKey = boot.parentFormKey ?? 'parent_master';
+      this.guardiansAnswerKey = boot.guardiansAnswerKey ?? 'guardians';
+      this.parentFields = this.extractFields(boot.parentForm);
+      this.formSections = this.extractSections(boot.form);
+      this.masterFields = this.extractFields(boot.form).filter(
+        (f) => f.key !== this.guardiansAnswerKey && f.key !== 'guardians',
+      );
+      const visible = this.visibleEditSections();
+      this.activeEditSectionId = visible[0]?.id || '';
+      if (boot.identity && typeof boot.identity === 'object') {
+        this.identity = { ...this.identity, ...boot.identity };
+      }
+      this.resetGuardianDraft();
+      this.loading = false;
+      this.loadStudents();
+    };
+    const peeked = this.modules.peek(path);
+    if (peeked) {
+      apply(peeked);
+      return;
+    }
+    this.modules.load(path).subscribe({
+      next: apply,
       error: (err) => {
         this.loading = false;
         // Keep featureEnabled unchanged on transport errors so we don't imply FEATURE_STUDENT_MASTER is off.
-        const status = err?.status;
-        const detail = err?.error?.message ?? err?.message ?? 'Student bootstrap failed';
-        this.error =
-          status === 503 || status === 0
-            ? `Student service unavailable (${status || 'network'}). ${detail}`
-            : detail;
+        this.error = ModuleBootstrapService.errorMessage(err, 'Student bootstrap failed');
+        if (ModuleBootstrapService.isFeatureDisabled(err)) {
+          this.featureEnabled = false;
+        } else {
+          // Do NOT imply plan feature is off on workflow/form/network errors
+          this.featureEnabled = true;
+        }
       },
     });
   }

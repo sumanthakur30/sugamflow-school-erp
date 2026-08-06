@@ -68,7 +68,14 @@
           <span class="user-name">{{ sessionChip() }}</span>
           <span class="user-role">{{ roleLabel() }}</span>
         </div>
-        <button type="button" class="logout-btn" (click)="logout()">Sign out</button>
+        <button
+          type="button"
+          class="logout-btn"
+          data-sf-nav-keep
+          (click)="logout($event)"
+        >
+          Sign out
+        </button>
       </div>
     </div>
   </header>

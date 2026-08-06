@@ -1,8 +1,11 @@
-import { Component, OnInit, inject } from '@angular/core';
+import { Component, OnDestroy, OnInit, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute } from '@angular/router';
+import { Subscription } from 'rxjs';
 import { ApiService } from '../../core/api.service';
+import { TenantContextService } from '../../core/tenant-context.service';
+import { ModuleBootstrapService } from '../../core/module-bootstrap.service';
 import { StudentLookupComponent } from '../../shared/student-lookup/student-lookup.component';
 import { StudentLookupRow } from '../../shared/student-lookup/student-lookup.models';
 
@@ -18,9 +21,12 @@ interface MapRow {
   templateUrl: './lifecycle.component.html',
   styleUrls: ['../../shared/admin-page.scss', './lifecycle.component.scss'],
 })
-export class LifecycleComponent implements OnInit {
+export class LifecycleComponent implements OnInit, OnDestroy {
   private readonly api = inject(ApiService);
   private readonly route = inject(ActivatedRoute);
+  private readonly tenantContext = inject(TenantContextService);
+  private readonly modules = inject(ModuleBootstrapService);
+  private campusReadySub?: Subscription;
 
   loading = true;
   error = '';
@@ -67,36 +73,47 @@ export class LifecycleComponent implements OnInit {
 
   ngOnInit(): void {
     this.selectedStudentId = this.route.snapshot.queryParamMap.get('studentId') || '';
-    this.reload();
+    this.campusReadySub = this.tenantContext.whenCampusReady().subscribe(() => this.reload());
   }
 
-  reload(): void {
+  ngOnDestroy(): void {
+    this.campusReadySub?.unsubscribe();
+  }
+
+  reload(force = false): void {
     this.loading = true;
     this.error = '';
-    this.api.get<any>('/api/student/lifecycle/bootstrap').subscribe({
-      next: (boot) => {
-        this.reportBuilderEnabled = !!boot.reportBuilderEnabled;
-        this.classFieldKey = boot.classFieldKey ?? 'classApplied';
-        this.promotionMaps = boot.promotionMaps ?? [];
-        this.sessions = boot.sessions ?? [];
-        this.tcPolicies = boot.tcPolicies ?? [];
-        if (this.promotionMaps.length) {
-          const first = this.payload(this.promotionMaps[0]);
-          this.promotionMapKey = first.definitionKey ?? this.promotionMapKey;
-          this.mapDraftKey = this.promotionMapKey;
-          this.mapRows = this.toRows(first.mappings ?? {});
-        }
-        if (!this.targetSessionId) {
-          this.targetSessionId = this.nextSessionKey() || '';
-        }
-        this.loading = false;
-        this.loadStudents();
-        this.loadEvents();
-        this.loadClassOptions();
-      },
+    const path = '/api/student/lifecycle/bootstrap';
+    const apply = (boot: any) => {
+      this.reportBuilderEnabled = !!boot.reportBuilderEnabled;
+      this.classFieldKey = boot.classFieldKey ?? 'classApplied';
+      this.promotionMaps = boot.promotionMaps ?? [];
+      this.sessions = boot.sessions ?? [];
+      this.tcPolicies = boot.tcPolicies ?? [];
+      if (this.promotionMaps.length) {
+        const first = this.payload(this.promotionMaps[0]);
+        this.promotionMapKey = first.definitionKey ?? this.promotionMapKey;
+        this.mapDraftKey = this.promotionMapKey;
+        this.mapRows = this.toRows(first.mappings ?? {});
+      }
+      if (!this.targetSessionId) {
+        this.targetSessionId = this.nextSessionKey() || '';
+      }
+      this.loading = false;
+      this.loadStudents();
+      this.loadEvents();
+      this.loadClassOptions();
+    };
+    const peeked = force ? null : this.modules.peek(path);
+    if (peeked) {
+      apply(peeked);
+      return;
+    }
+    this.modules.load(path, force).subscribe({
+      next: apply,
       error: (err) => {
         this.loading = false;
-        this.error = err?.error?.message ?? 'Lifecycle bootstrap failed';
+        this.error = ModuleBootstrapService.errorMessage(err, 'Lifecycle bootstrap failed');
       },
     });
   }
@@ -361,7 +378,7 @@ export class LifecycleComponent implements OnInit {
           this.busy = false;
           this.editingMap = false;
           this.status = 'Promotion plan saved';
-          this.reload();
+          this.reload(true);
         },
         error: (err) => {
           this.busy = false;

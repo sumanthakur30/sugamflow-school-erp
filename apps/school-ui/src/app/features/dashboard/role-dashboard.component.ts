@@ -4,6 +4,7 @@ import { RouterLink } from '@angular/router';
 import { Observable, Subscription, catchError, of, switchMap, timer, timeout } from 'rxjs';
 import { ApiService, PageResult } from '../../core/api.service';
 import { AuthSessionService } from '../../core/auth-session.service';
+import { TenantContextService } from '../../core/tenant-context.service';
 
 type Metric = {
   id: string;
@@ -56,8 +57,10 @@ type BundleKey = keyof DashboardBundle;
 export class RoleDashboardComponent implements OnInit, OnDestroy {
   private readonly api = inject(ApiService);
   private readonly auth = inject(AuthSessionService);
+  private readonly tenantContext = inject(TenantContextService);
   private readonly cdr = inject(ChangeDetectorRef);
   private loadSub = new Subscription();
+  private requestSub = new Subscription();
   private loadGeneration = 0;
 
   /** True only before the first metric shell is painted. */
@@ -79,31 +82,39 @@ export class RoleDashboardComponent implements OnInit, OnDestroy {
   private bundle: DashboardBundle = this.emptyBundle();
 
   ngOnInit(): void {
-    this.load();
+    // Single load after campus headers are synced — do not also subscribe to epoch
+    // (that caused double fetch / "Updating…" flicker and felt like multiple refreshes).
+    this.loadSub.add(this.tenantContext.whenCampusReady().subscribe(() => this.load()));
   }
 
   ngOnDestroy(): void {
     this.loadSub.unsubscribe();
+    this.requestSub.unsubscribe();
   }
 
   load(): void {
-    this.loadSub.unsubscribe();
-    this.loadSub = new Subscription();
+    this.requestSub.unsubscribe();
+    this.requestSub = new Subscription();
 
     const generation = ++this.loadGeneration;
+    const orgAtStart = this.auth.getOrganizationId();
+    const hadData = this.bundle.students != null || this.bundle.staff != null || this.bundle.finance != null;
     this.error = '';
     this.role = (this.auth.getRole() || 'STAFF').toUpperCase();
     this.wantsFinance = this.isFinanceRole() || this.isLeadershipRole();
     this.wantsTeacher = this.role === 'TEACHER';
-    this.bundle = this.emptyBundle();
     this.pending = 0;
     this.refreshing = true;
 
-    // Paint shell immediately (actions + placeholder metrics) — do not wait on APIs.
-    this.configureRole(null);
-    this.buildMetrics(this.bundle);
-    this.buildActivity(this.bundle);
-    this.unavailable = 0;
+    // First paint: show placeholders. Refresh: keep last KPIs until new data arrives
+    // (avoids "—" / "Count unavailable" flicker that felt like a broken load).
+    if (!hadData) {
+      this.bundle = this.emptyBundle();
+      this.configureRole(null);
+      this.buildMetrics(this.bundle);
+      this.buildActivity(this.bundle);
+      this.unavailable = 0;
+    }
     this.loading = false;
 
     const safeRole = encodeURIComponent(this.role);
@@ -112,14 +123,26 @@ export class RoleDashboardComponent implements OnInit, OnDestroy {
     // Critical path first (core KPIs), then heavier optional reports.
     this.track(
       generation,
+      orgAtStart,
       'config',
       this.safeGet(`/api/config/ui/roles/${safeRole}/dashboard`, 8000),
     );
     // Retry once — first paint often races branch bootstrap / cold Eureka and shows "—".
-    this.track(generation, 'students', this.safeGetRetry('/api/student/directory/summary', 10000));
-    this.track(generation, 'staff', this.safeGetRetry('/api/staff/directory/summary', 10000));
     this.track(
       generation,
+      orgAtStart,
+      'students',
+      this.safeGetRetry('/api/student/directory/summary', 10000),
+    );
+    this.track(
+      generation,
+      orgAtStart,
+      'staff',
+      this.safeGetRetry('/api/staff/directory/summary', 10000),
+    );
+    this.track(
+      generation,
+      orgAtStart,
       'admissions',
       this.safePageRetry('/api/admission/applications', {
         status: 'IN_PROGRESS',
@@ -127,20 +150,31 @@ export class RoleDashboardComponent implements OnInit, OnDestroy {
         sortDir: 'DESC',
       }),
     );
-    this.track(generation, 'attendance', this.safePage('/api/attendance/records'));
-    this.track(generation, 'fees', this.safePage('/api/fee/collections'));
+    this.track(generation, orgAtStart, 'attendance', this.safePage('/api/attendance/records'));
+    this.track(generation, orgAtStart, 'fees', this.safePage('/api/fee/collections'));
 
     if (this.wantsTeacher) {
-      this.track(generation, 'teacherScope', this.safeGet('/api/academic/teacher-scope'));
-      this.track(generation, 'accessScope', this.safeGet('/api/student/access-scope'));
-      this.track(generation, 'mySlots', this.safeGet<any[]>('/api/academic/timetable/my-slots'));
+      this.track(generation, orgAtStart, 'teacherScope', this.safeGet('/api/academic/teacher-scope'));
+      this.track(generation, orgAtStart, 'accessScope', this.safeGet('/api/student/access-scope'));
+      this.track(
+        generation,
+        orgAtStart,
+        'mySlots',
+        this.safeGet<any[]>('/api/academic/timetable/my-slots'),
+      );
     } else {
-      this.track(generation, 'issues', this.safeGet<any[]>('/api/library/circulation/issues'));
+      this.track(
+        generation,
+        orgAtStart,
+        'issues',
+        this.safeGet<any[]>('/api/library/circulation/issues'),
+      );
     }
 
     if (this.wantsFinance) {
       this.track(
         generation,
+        orgAtStart,
         'finance',
         this.safeGet(
           `/api/fee/finance/income-expense?preset=THIS_MONTH&branchIds=${branch}`,
@@ -149,6 +183,7 @@ export class RoleDashboardComponent implements OnInit, OnDestroy {
       );
       this.track(
         generation,
+        orgAtStart,
         'salary',
         this.safeGet(
           `/api/payroll/reports/salary-summary?preset=THIS_MONTH&branchIds=${branch}`,
@@ -164,14 +199,15 @@ export class RoleDashboardComponent implements OnInit, OnDestroy {
 
   private track<K extends BundleKey>(
     generation: number,
+    orgAtStart: string,
     key: K,
     source: Observable<DashboardBundle[K]>,
   ): void {
     this.pending += 1;
-    this.loadSub.add(
+    this.requestSub.add(
       source.subscribe({
-        next: (value) => this.applyPartial(generation, key, value),
-        error: () => this.applyPartial(generation, key, null as DashboardBundle[K]),
+        next: (value) => this.applyPartial(generation, key, value, orgAtStart),
+        error: () => this.applyPartial(generation, key, null as DashboardBundle[K], orgAtStart),
       }),
     );
   }
@@ -180,9 +216,24 @@ export class RoleDashboardComponent implements OnInit, OnDestroy {
     generation: number,
     key: K,
     value: DashboardBundle[K],
+    orgAtStart: string,
   ): void {
     if (generation !== this.loadGeneration) {
       return;
+    }
+    // Drop KPI payloads that belong to another school (stale demo response after HCP login).
+    if (this.auth.getOrganizationId() !== orgAtStart) {
+      return;
+    }
+    if (value && typeof value === 'object') {
+      const scopeOrg = String((value as any).scope?.organizationId ?? '').trim();
+      const topOrg = String((value as any).organizationId ?? '').trim();
+      if (scopeOrg && scopeOrg !== orgAtStart) {
+        return;
+      }
+      if (topOrg && topOrg !== orgAtStart) {
+        return;
+      }
     }
     this.bundle[key] = value;
     if (key === 'config') {
@@ -242,14 +293,12 @@ export class RoleDashboardComponent implements OnInit, OnDestroy {
     return this.api.get<T>(path).pipe(timeout(ms), catchError(() => of(null)));
   }
 
-  /** One delayed retry — covers branch-header race and cold service timeouts. */
+  /** Retry on error/null — campus gate already synced headers, so skip always-double fetch. */
   private safeGetRetry<T = any>(path: string, ms = 15000): Observable<T | null> {
-    return this.api.get<T>(path).pipe(
-      timeout(ms),
-      catchError(() =>
-        timer(900).pipe(
-          switchMap(() => this.api.get<T>(path).pipe(timeout(ms), catchError(() => of(null)))),
-        ),
+    const once = () => this.api.get<T>(path).pipe(timeout(ms), catchError(() => of(null)));
+    return once().pipe(
+      switchMap((first) =>
+        first != null ? of(first) : timer(900).pipe(switchMap(() => once())),
       ),
     );
   }
@@ -270,7 +319,9 @@ export class RoleDashboardComponent implements OnInit, OnDestroy {
     const once = () =>
       this.api.getPage<any>(path, 0, 5, extra).pipe(timeout(10000), catchError(() => of(null)));
     return once().pipe(
-      switchMap((value) => (value != null ? of(value) : timer(900).pipe(switchMap(() => once())))),
+      switchMap((first) =>
+        first != null ? of(first) : timer(900).pipe(switchMap(() => once())),
+      ),
     );
   }
 

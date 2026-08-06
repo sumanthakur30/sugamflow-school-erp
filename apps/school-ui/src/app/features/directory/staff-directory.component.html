@@ -31,7 +31,7 @@
 
   @if (loading) {
     <p class="panel">Loading staff directory…</p>
-  } @else if (!featureEnabled && !showInvite) {
+  } @else if (!featureEnabled && !error && !showInvite) {
     <p class="panel">Staff Directory requires FEATURE_STAFF_MASTER.</p>
   } @else if (showInvite) {
     <section class="panel staff-form-card">

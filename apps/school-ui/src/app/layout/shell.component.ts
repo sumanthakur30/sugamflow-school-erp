@@ -6,8 +6,11 @@ import { EntitlementsService } from '../core/entitlements.service';
 import { OfflineQueueService } from '../core/offline-queue.service';
 import { ProvisionService } from '../core/provision.service';
 import { ThemeService } from '../core/theme.service';
+import { TenantContextService } from '../core/tenant-context.service';
+import { AdmissionBootstrapService } from '../core/admission-bootstrap.service';
+import { ModuleBootstrapService } from '../core/module-bootstrap.service';
 import { BranchSwitcherComponent } from '../features/branches/branch-switcher.component';
-import { filter, switchMap } from 'rxjs';
+import { filter, switchMap, timer } from 'rxjs';
 
 export interface NavItem {
   path: string;
@@ -43,6 +46,9 @@ export class ShellComponent implements OnInit {
   private readonly router = inject(Router);
   private readonly entitlements = inject(EntitlementsService);
   private readonly provision = inject(ProvisionService);
+  private readonly tenantContext = inject(TenantContextService);
+  private readonly admissionBootstrap = inject(AdmissionBootstrapService);
+  private readonly modules = inject(ModuleBootstrapService);
   readonly themeService = inject(ThemeService);
   readonly offlineQueue = inject(OfflineQueueService);
 
@@ -300,12 +306,35 @@ export class ShellComponent implements OnInit {
     this.provision
       .ensureProvisioned()
       .pipe(switchMap(() => this.themeService.loadAuthenticated()))
-      .subscribe();
+      .subscribe((theme) => {
+        // If a previous school's branding is still painted, force reload for this session.
+        if (!this.themeService.matchesSessionOrg(theme)) {
+          this.themeService.clearToFallback();
+          this.themeService.loadAuthenticated().subscribe();
+        }
+      });
     this.entitlements.load().subscribe(() => this.refreshNav());
     this.router.events.pipe(filter((e) => e instanceof NavigationEnd)).subscribe(() => {
       this.closeTopMenu();
       this.mobileNavOpen = false;
       this.ensureActiveSideExpanded();
+    });
+    // Prefetch module bootstraps after campus sync — defer so dashboard KPIs get connections first.
+    this.tenantContext.whenCampusReady().subscribe(() => {
+      timer(2000).subscribe(() => {
+        this.admissionBootstrap.warm();
+        this.modules.warm([
+          '/api/fee/bootstrap',
+          '/api/fee/finance/bootstrap',
+          '/api/student/bootstrap',
+          '/api/student/directory/bootstrap',
+          '/api/staff/directory/bootstrap',
+          '/api/payroll/bootstrap',
+          '/api/attendance/bootstrap',
+          '/api/exam/bootstrap',
+          '/api/library/bootstrap',
+        ]);
+      });
     });
   }
 
@@ -489,11 +518,16 @@ export class ShellComponent implements OnInit {
     this.expandedSide = new Set(this.expandedSide);
   }
 
-  schoolName(theme: { branding?: Record<string, string> } | null): string {
-    return theme?.branding?.['schoolName'] || 'School Admin';
+  schoolName(theme: { organizationId?: string; branding?: Record<string, string> } | null): string {
+    const org = this.auth.getOrganizationId();
+    // Never show another school's Design Studio name for this session.
+    if (!this.themeService.matchesSessionOrg(theme as any, org)) {
+      return org || 'School Admin';
+    }
+    return theme?.branding?.['schoolName'] || org || 'School Admin';
   }
 
-  brandInitial(theme: { branding?: Record<string, string> } | null): string {
+  brandInitial(theme: { organizationId?: string; branding?: Record<string, string> } | null): string {
     const name = this.schoolName(theme);
     return (name.charAt(0) || 'S').toUpperCase();
   }
@@ -543,16 +577,39 @@ export class ShellComponent implements OnInit {
   }
 
   onBranchChanged(): void {
+    this.admissionBootstrap.invalidate();
+    this.modules.invalidate();
     const url = this.router.url;
     this.router.navigateByUrl('/', { skipLocationChange: true }).then(() => {
       this.router.navigateByUrl(url);
     });
   }
 
-  logout(): void {
-    this.auth.logout();
-    this.entitlements.clear();
-    this.themeService.clearToFallback();
-    this.router.navigateByUrl('/login');
+  logout(event?: Event): void {
+    event?.preventDefault();
+    event?.stopPropagation();
+    try {
+      this.closeTopMenu();
+      this.mobileNavOpen = false;
+      this.auth.logout();
+      this.entitlements.clear();
+      this.admissionBootstrap.invalidate();
+      this.modules.invalidate();
+      // Wipe any leftover sf.* keys so login never inherits HCP theme/session.
+      for (let i = localStorage.length - 1; i >= 0; i--) {
+        const key = localStorage.key(i);
+        if (key && key.startsWith('sf.')) {
+          localStorage.removeItem(key);
+        }
+      }
+      sessionStorage.clear();
+      // Drop inline theme vars so a failed paint is not a mint blank page.
+      document.documentElement.removeAttribute('style');
+      document.title = 'SugamFlow School';
+    } catch {
+      // Still leave the app even if a cache clear throws.
+    }
+    // replace (not assign) — no back-button return into a half-cleared session.
+    window.location.replace('/login');
   }
 }

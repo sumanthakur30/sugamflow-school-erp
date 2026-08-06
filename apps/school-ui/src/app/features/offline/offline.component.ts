@@ -72,8 +72,12 @@ export class OfflineComponent implements OnInit, OnDestroy {
       },
       error: (err) => {
         this.loading = false;
-        this.featureEnabled = false;
         this.error = err?.error?.message ?? 'Offline bootstrap failed';
+        // Do NOT imply plan feature is off on transport/server errors
+        const msg = String(this.error).toUpperCase();
+        this.featureEnabled = !(
+          msg.includes('FEATURE_DISABLED') || msg.includes('NOT ENABLED FOR THIS PLAN')
+        );
       },
     });
   }

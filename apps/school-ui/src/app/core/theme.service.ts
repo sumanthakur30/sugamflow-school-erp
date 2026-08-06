@@ -2,6 +2,7 @@ import { Injectable, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { BehaviorSubject, Observable, catchError, map, of, tap } from 'rxjs';
 import { environment } from '../environments/environment';
+import { resolveOrganizationId } from './tenant-context.util';
 
 export interface DesignTheme {
   organizationId?: string;
@@ -22,6 +23,8 @@ export class ThemeService {
   private readonly http = inject(HttpClient);
   private readonly base = environment.apiBaseUrl;
   private readonly themeSubject = new BehaviorSubject<DesignTheme | null>(null);
+  /** Bumped on org switch / logout so late HTTP responses cannot repaint the previous school. */
+  private applyGeneration = 0;
 
   readonly theme$ = this.themeSubject.asObservable();
 
@@ -29,30 +32,46 @@ export class ThemeService {
     return this.themeSubject.value;
   }
 
-  /** Authenticated theme (draft or published) for the current tenant. */
+  /** Call on login/logout/org change before fetching the next theme. */
+  beginSession(): number {
+    return ++this.applyGeneration;
+  }
+
+  private currentOrg(): string {
+    // Same source as API interceptors (JWT shopId wins over stale sf.tenantId).
+    return resolveOrganizationId();
+  }
+
+  /**
+   * Authenticated theme for the signed-in tenant only.
+   * Rejects payloads / late responses that belong to another organization.
+   */
   loadAuthenticated(): Observable<DesignTheme> {
+    const generation = this.applyGeneration;
+    const expectedOrg = this.currentOrg();
     return this.http
       .get<{ success: boolean; data: DesignTheme }>(`${this.base}/api/config/design-studio/theme`)
       .pipe(
         map((r) => r.data),
-        tap((theme) => this.apply(theme)),
-        catchError(() => of(this.applyFallback())),
+        tap((theme) => this.applyForOrg(generation, expectedOrg, theme)),
+        catchError(() => of(this.applyFallbackIfCurrent(generation))),
       );
   }
 
   /** Pre-login white-label for an organization id. */
   loadPublished(organizationId: string, branchId = 'main'): Observable<DesignTheme> {
     const org = organizationId.trim();
+    const generation = this.applyGeneration;
     if (!org) {
-      return of(this.applyFallback());
+      return of(this.applyFallbackIfCurrent(generation));
     }
     const url =
       `${this.base}/api/config/design-studio/theme/published` +
       `?organizationId=${encodeURIComponent(org)}&branchId=${encodeURIComponent(branchId)}`;
     return this.http.get<{ success: boolean; data: DesignTheme }>(url).pipe(
       map((r) => r.data),
-      tap((theme) => this.apply(theme)),
-      catchError(() => of(this.applyFallback())),
+      tap((theme) => this.applyForOrg(generation, org, theme)),
+      catchError(() => of(this.applyFallbackIfCurrent(generation))),
     );
   }
 
@@ -66,11 +85,58 @@ export class ThemeService {
   }
 
   clearToFallback(): void {
+    this.beginSession();
     this.apply(this.platformFallback());
   }
 
-  private applyFallback(): DesignTheme {
-    return this.apply(this.platformFallback());
+  /** True when painted theme matches the signed-in organization. */
+  matchesSessionOrg(theme: DesignTheme | null | undefined, org = this.currentOrg()): boolean {
+    if (!org) {
+      return true;
+    }
+    const themeOrg = (theme?.organizationId || '').trim();
+    if (!themeOrg) {
+      return false;
+    }
+    return themeOrg.toLowerCase() === org.toLowerCase();
+  }
+
+  private applyForOrg(
+    generation: number,
+    expectedOrg: string,
+    theme: DesignTheme | null,
+  ): DesignTheme {
+    if (generation !== this.applyGeneration) {
+      return this.themeSubject.value ?? this.platformFallback();
+    }
+    const liveOrg = this.currentOrg();
+    // Session changed while request was in flight (demo → HCP or reverse).
+    if (expectedOrg && liveOrg && expectedOrg.toLowerCase() !== liveOrg.toLowerCase()) {
+      return this.themeSubject.value ?? this.platformFallback();
+    }
+    const org = liveOrg || expectedOrg;
+    const themeOrg = (theme?.organizationId || '').trim();
+    if (themeOrg && org && themeOrg.toLowerCase() !== org.toLowerCase()) {
+      // Never paint Holly Cross while session is demo-school (or the reverse).
+      return this.themeSubject.value ?? this.platformFallback();
+    }
+    const stamped: DesignTheme = {
+      ...(theme ?? this.platformFallback()),
+      organizationId: themeOrg || org || undefined,
+    };
+    return this.apply(stamped);
+  }
+
+  private applyFallbackIfCurrent(generation: number): DesignTheme {
+    if (generation !== this.applyGeneration) {
+      return this.themeSubject.value ?? this.platformFallback();
+    }
+    const org = this.currentOrg();
+    const fallback = this.platformFallback();
+    if (org) {
+      fallback.organizationId = org;
+    }
+    return this.apply(fallback);
   }
 
   private writeCssVars(theme: DesignTheme): void {
@@ -81,7 +147,6 @@ export class ThemeService {
         root.style.setProperty(`--sf-${key}`, String(value));
       }
     }
-    // Derived tokens if not explicitly configured
     if (!colors['surface'] && colors['primary']) {
       root.style.setProperty('--sf-surface', this.mixHex(String(colors['primary']), '#ffffff', 0.92));
     }
@@ -132,7 +197,6 @@ export class ThemeService {
     }
   }
 
-  /** Turn gateway-relative asset paths into absolute URLs for img/CSS. */
   resolveAssetUrl(raw: string): string {
     const value = (raw || '').trim();
     if (!value) return '';
