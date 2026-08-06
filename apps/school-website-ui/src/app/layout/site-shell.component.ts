@@ -1,7 +1,7 @@
 import { Component, OnInit, inject } from '@angular/core';
 import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { AsyncPipe, NgFor, NgIf } from '@angular/common';
-import { WebsiteApiService } from '../core/website-api.service';
+import { WebsiteApiService, WebsiteResolve, SiteBrandContact } from '../core/website-api.service';
 import { AnalyticsService } from '../core/analytics.service';
 
 @Component({
@@ -10,17 +10,21 @@ import { AnalyticsService } from '../core/analytics.service';
   imports: [RouterOutlet, RouterLink, RouterLinkActive, NgIf, NgFor, AsyncPipe],
   template: `
     <div class="shell" *ngIf="api.resolve() | async as site; else loading">
-      <div class="utility">
+      <div class="utility" *ngIf="hasUtility(site)">
         <div class="utility-inner">
           <div class="utility-left">
-            <a href="mailto:info&#64;hcpschool.com">info&#64;hcpschool.com</a>
-            <span class="sep">|</span>
-            <a href="tel:+918789896189">+91-8789896189</a>
-            <span class="sep hide-sm">|</span>
-            <span class="hide-sm">Mon–Sat · 9:00 AM – 4:00 PM</span>
+            <ng-container *ngIf="brand(site) as b">
+              <a *ngIf="b.contactEmail" [href]="api.mailtoHref(b.contactEmail)">{{ b.contactEmail }}</a>
+              <span class="sep" *ngIf="b.contactEmail && b.contactPhone">|</span>
+              <a *ngIf="b.contactPhone" [href]="api.telHref(b.contactPhone)">{{ b.contactPhone }}</a>
+              <span class="sep hide-sm" *ngIf="(b.contactEmail || b.contactPhone) && b.workingHours">|</span>
+              <span class="hide-sm" *ngIf="b.workingHours">{{ b.workingHours }}</span>
+            </ng-container>
           </div>
           <div class="utility-right">
-            <a [href]="signInUrl" target="_blank" rel="noopener">Sign in</a>
+            <a [href]="parentUrl" target="_blank" rel="noopener">Parent</a>
+            <a [href]="teacherUrl" target="_blank" rel="noopener">Teacher</a>
+            <a [href]="signInUrl" target="_blank" rel="noopener">ERP Login</a>
           </div>
         </div>
       </div>
@@ -39,7 +43,7 @@ import { AnalyticsService } from '../core/analytics.service';
             </ng-template>
             <span class="brand-text">
               <strong>{{ site.displayName }}</strong>
-              <small>CBSE Nursery–VIII · Katihar</small>
+              <small *ngIf="brand(site).tagline">{{ brand(site).tagline }}</small>
             </span>
           </a>
 
@@ -48,11 +52,12 @@ import { AnalyticsService } from '../core/analytics.service';
             class="menu-toggle"
             (click)="menuOpen = !menuOpen"
             [attr.aria-expanded]="menuOpen"
+            [attr.aria-label]="menuOpen ? 'Close menu' : 'Open menu'"
           >
             {{ menuOpen ? 'Close' : 'Menu' }}
           </button>
 
-          <nav [class.open]="menuOpen" (click)="menuOpen = false">
+          <nav [class.open]="menuOpen" (click)="menuOpen = false" aria-label="Primary">
             <a
               *ngFor="let item of primaryNav(site.navigation)"
               [routerLink]="item.path"
@@ -64,7 +69,7 @@ import { AnalyticsService } from '../core/analytics.service';
 
           <div class="header-actions">
             <a class="ghost" routerLink="/admission/apply">Apply</a>
-            <a class="cta" [href]="signInUrl" target="_blank" rel="noopener">Sign in</a>
+            <a class="cta" [href]="signInUrl" target="_blank" rel="noopener">ERP Login</a>
           </div>
         </div>
       </header>
@@ -77,28 +82,44 @@ import { AnalyticsService } from '../core/analytics.service';
         <div class="footer-grid">
           <div>
             <h3>{{ site.displayName }}</h3>
-            <p>
-              Nurturing curious minds with strong academics, character, and a caring campus community.
-            </p>
+            <p *ngIf="brand(site).footerBlurb">{{ brand(site).footerBlurb }}</p>
+            <p *ngIf="brand(site).address">{{ brand(site).address }}</p>
+            <p *ngIf="brand(site).addressLine2">{{ brand(site).addressLine2 }}</p>
           </div>
           <div>
             <h4>Explore</h4>
-            <a routerLink="/about">About</a>
-            <a routerLink="/admission">Admission</a>
-            <a routerLink="/gallery">Gallery</a>
-            <a routerLink="/news">News</a>
-            <a routerLink="/contact">Contact</a>
+            <a
+              *ngFor="let item of footerNav(site.navigation)"
+              [routerLink]="item.path"
+              >{{ item.label }}</a
+            >
           </div>
           <div>
             <h4>Visit / Call</h4>
-            <p>info&#64;hcpschool.com</p>
-            <p>+91-8789896189</p>
-            <p>Mon–Sat, 9:00 AM – 4:00 PM</p>
+            <ng-container *ngIf="brand(site) as b">
+              <p *ngIf="b.contactEmail">
+                <a [href]="api.mailtoHref(b.contactEmail)">{{ b.contactEmail }}</a>
+              </p>
+              <p *ngIf="b.contactPhone">
+                <a [href]="api.telHref(b.contactPhone)">{{ b.contactPhone }}</a>
+              </p>
+              <p *ngIf="b.workingHours">{{ b.workingHours }}</p>
+              <p *ngIf="!b.contactEmail && !b.contactPhone && !b.workingHours">
+                Contact details can be set in Website → Theme.
+              </p>
+            </ng-container>
           </div>
           <div>
             <h4>Account</h4>
-            <a [href]="signInUrl" target="_blank" rel="noopener">Sign in to school ERP</a>
-            <p class="footer-note">Choose Admin, Parent, Teacher, or other role on the sign-in screen.</p>
+            <a [href]="parentUrl" target="_blank" rel="noopener">Parent portal</a>
+            <a [href]="teacherUrl" target="_blank" rel="noopener">Teacher portal</a>
+            <a [href]="signInUrl" target="_blank" rel="noopener">Staff / ERP login</a>
+            <div class="socials" *ngIf="hasSocials(site)">
+              <a *ngIf="brand(site).socialFacebook" [href]="brand(site).socialFacebook" target="_blank" rel="noopener">Facebook</a>
+              <a *ngIf="brand(site).socialInstagram" [href]="brand(site).socialInstagram" target="_blank" rel="noopener">Instagram</a>
+              <a *ngIf="brand(site).socialYoutube" [href]="brand(site).socialYoutube" target="_blank" rel="noopener">YouTube</a>
+              <a *ngIf="brand(site).socialWhatsapp" [href]="brand(site).socialWhatsapp" target="_blank" rel="noopener">WhatsApp</a>
+            </div>
           </div>
         </div>
         <div class="footer-bottom">
@@ -310,6 +331,24 @@ import { AnalyticsService } from '../core/analytics.service';
         color: #9fb0c7 !important;
         line-height: 1.4 !important;
       }
+      .socials {
+        margin-top: 0.75rem;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.65rem;
+      }
+      .socials a {
+        display: inline;
+        margin: 0;
+        font-size: 0.85rem;
+        color: #9fb0c7;
+      }
+      footer .utility-right a,
+      .footer-grid a[href^='mailto'],
+      .footer-grid a[href^='tel'] {
+        display: inline;
+        color: inherit;
+      }
       .footer-bottom {
         margin-top: 1.75rem;
         padding-top: 1rem;
@@ -365,20 +404,38 @@ export class SiteShellComponent implements OnInit {
   readonly api = inject(WebsiteApiService);
   private readonly analytics = inject(AnalyticsService);
   readonly year = new Date().getFullYear();
-  /** Single school ERP sign-in (role chosen on the login screen). */
+  /** Staff / general ERP sign-in (role chosen on login when no destination). */
   signInUrl = '#';
+  parentUrl = '#';
+  teacherUrl = '#';
   menuOpen = false;
 
   ngOnInit(): void {
     this.analytics.start();
     this.api.resolve().subscribe(() => {
-      // No destination/returnUrl — login page lets user pick Admin / Parent / Teacher / etc.
       this.signInUrl = this.api.erpLoginUrl();
+      this.parentUrl = this.api.erpLoginUrl('parent');
+      this.teacherUrl = this.api.erpLoginUrl('teacher');
     });
   }
 
+  brand(site: WebsiteResolve): SiteBrandContact {
+    return this.api.brandContact(site);
+  }
+
+  hasUtility(site: WebsiteResolve): boolean {
+    const b = this.brand(site);
+    return !!(b.contactEmail || b.contactPhone || b.workingHours);
+  }
+
+  hasSocials(site: WebsiteResolve): boolean {
+    const b = this.brand(site);
+    return !!(b.socialFacebook || b.socialInstagram || b.socialYoutube || b.socialWhatsapp);
+  }
+
   brandInitials(name: string): string {
-    const parts = (name || 'HCP').trim().split(/\s+/).filter(Boolean);
+    const parts = (name || 'S').trim().split(/\s+/).filter(Boolean);
+    if (!parts.length) return 'S';
     if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
     return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
   }
@@ -395,7 +452,6 @@ export class SiteShellComponent implements OnInit {
   primaryNav(
     navigation: Array<{ label: string; path: string; order?: number; external?: boolean }>
   ) {
-    // Hide login-style nav items; one Sign in CTA covers all roles.
     return (navigation || []).filter((n) => {
       const label = (n.label || '').toLowerCase();
       const path = (n.path || '').toLowerCase();
@@ -406,5 +462,12 @@ export class SiteShellComponent implements OnInit {
       }
       return true;
     });
+  }
+
+  /** Footer explore links — primary nav, capped for layout. */
+  footerNav(
+    navigation: Array<{ label: string; path: string; order?: number; external?: boolean }>
+  ) {
+    return this.primaryNav(navigation).slice(0, 8);
   }
 }

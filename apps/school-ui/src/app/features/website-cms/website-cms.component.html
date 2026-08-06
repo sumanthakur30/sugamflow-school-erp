@@ -451,8 +451,11 @@
 
     <!-- Theme -->
     <div class="wb-panel panel" *ngIf="tab === 'theme'">
-      <h2>Theme</h2>
-      <p class="hint">Brand colors, logo, and favicon for the public school website.</p>
+      <h2>Theme &amp; school contact</h2>
+      <p class="hint">
+        Brand colors, logo, and public contact details. These drive the website header, footer, and
+        contact page for this school (no code change needed per tenant).
+      </p>
       <form class="editor" (ngSubmit)="saveTheme()">
         <label
           >Primary color
@@ -470,6 +473,32 @@
         </label>
         <label>Logo URL <input name="logoUrl" [(ngModel)]="theme.logoUrl" /></label>
         <label>Favicon URL <input name="faviconUrl" [(ngModel)]="theme.faviconUrl" /></label>
+        <label
+          >Tagline
+          <input
+            name="tagline"
+            [(ngModel)]="theme.tagline"
+            placeholder="e.g. CBSE · Nursery–XII · City"
+          />
+        </label>
+        <label
+          >Footer blurb
+          <textarea name="footerBlurb" rows="2" [(ngModel)]="theme.footerBlurb"></textarea>
+        </label>
+        <h3 class="subhead">Public contact</h3>
+        <label>Email <input name="contactEmail" type="email" [(ngModel)]="theme.contactEmail" /></label>
+        <label>Phone <input name="contactPhone" [(ngModel)]="theme.contactPhone" /></label>
+        <label
+          >Working hours
+          <input name="workingHours" [(ngModel)]="theme.workingHours" placeholder="Mon–Sat · 9 AM – 4 PM" />
+        </label>
+        <label>Address <input name="address" [(ngModel)]="theme.address" /></label>
+        <label>Address line 2 <input name="addressLine2" [(ngModel)]="theme.addressLine2" /></label>
+        <h3 class="subhead">Social (optional URLs)</h3>
+        <label>Facebook <input name="socialFacebook" [(ngModel)]="theme.socialFacebook" /></label>
+        <label>Instagram <input name="socialInstagram" [(ngModel)]="theme.socialInstagram" /></label>
+        <label>YouTube <input name="socialYoutube" [(ngModel)]="theme.socialYoutube" /></label>
+        <label>WhatsApp <input name="socialWhatsapp" [(ngModel)]="theme.socialWhatsapp" /></label>
         <p class="hint">
           Upload assets in
           <button type="button" class="linkish" (click)="setTab('media')">Media</button>

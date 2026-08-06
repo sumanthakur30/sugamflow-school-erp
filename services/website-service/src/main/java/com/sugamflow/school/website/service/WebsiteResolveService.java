@@ -323,15 +323,29 @@ public class WebsiteResolveService {
   @org.springframework.transaction.annotation.Transactional
   public Map<String, Object> updateTheme(String organizationId, Map<String, Object> theme) {
     WebsiteSite site = requireSite(organizationId);
-    Map<String, Object> safe = theme == null ? Collections.emptyMap() : theme;
+    // Merge so partial admin clients (colors/logo only) do not wipe contact/brand keys.
+    Map<String, Object> merged = new java.util.LinkedHashMap<>(readMap(site.getThemeJson()));
+    if (theme != null) {
+      for (Map.Entry<String, Object> e : theme.entrySet()) {
+        if (e.getKey() == null) {
+          continue;
+        }
+        Object v = e.getValue();
+        if (v == null) {
+          merged.remove(e.getKey());
+        } else {
+          merged.put(e.getKey(), v);
+        }
+      }
+    }
     try {
-      site.setThemeJson(objectMapper.writeValueAsString(safe));
+      site.setThemeJson(objectMapper.writeValueAsString(merged));
     } catch (Exception ex) {
       throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid theme JSON");
     }
     site.setUpdatedAt(java.time.Instant.now());
     siteRepository.save(site);
-    return safe;
+    return merged;
   }
 
   @org.springframework.transaction.annotation.Transactional

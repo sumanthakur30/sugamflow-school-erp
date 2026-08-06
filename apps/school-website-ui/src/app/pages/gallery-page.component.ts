@@ -10,7 +10,7 @@ import { WebsiteApiService } from '../core/website-api.service';
     <h1>Gallery</h1>
     <div class="grid">
       <figure *ngFor="let g of items">
-        <img [src]="g['imageUrl']" [alt]="g['title']" />
+        <img [src]="mediaUrl(g['imageUrl'] ?? g['url'])" [alt]="asText(g['title'], 'Gallery')" loading="lazy" />
         <figcaption>
           <strong>{{ g['title'] }}</strong>
           <span>{{ g['caption'] }}</span>
@@ -58,5 +58,15 @@ export class GalleryPageComponent implements OnInit {
     this.api.resolve().subscribe(() => {
       this.api.listGallery().subscribe((rows) => (this.items = rows || []));
     });
+  }
+
+  mediaUrl(path?: string | null | unknown): string {
+    return this.api.mediaUrl(path == null ? undefined : String(path));
+  }
+
+  asText(value: unknown, fallback = ''): string {
+    if (value == null) return fallback;
+    const s = String(value).trim();
+    return s || fallback;
   }
 }

@@ -17,9 +17,9 @@ import { SeoService } from '../core/seo.service';
         [ngStyle]="heroStyles"
       >
         <div class="hero-inner">
-          <p class="eyebrow">CBSE · Nursery to Class VIII · Katihar</p>
+          <p class="eyebrow" *ngIf="heroEyebrow">{{ heroEyebrow }}</p>
           <h1>{{ heroTitle }}</h1>
-          <p class="lead">{{ heroSubtitle }}</p>
+          <p class="lead" *ngIf="heroSubtitle">{{ heroSubtitle }}</p>
           <div class="actions">
             <a routerLink="/admission/apply" class="primary">Admissions</a>
             <a routerLink="/contact" class="ghost">Contact</a>
@@ -262,7 +262,8 @@ export class HomePageComponent implements OnInit {
   site: WebsiteResolve | null = this.api.site();
   sections: Array<Record<string, unknown>> = [];
   heroTitle = 'Welcome';
-  heroSubtitle = 'A modern school experience.';
+  heroSubtitle = '';
+  heroEyebrow = '';
   heroImageUrl = '';
   admissionTitle = 'Admissions Open';
   admissionCta = 'Apply Now';
@@ -282,16 +283,21 @@ export class HomePageComponent implements OnInit {
   ngOnInit(): void {
     this.api.resolve().subscribe((site) => {
       this.site = site;
+      const brand = this.api.brandContact(site);
+      this.heroEyebrow = brand.tagline;
       this.sections = this.enabledSections(site.homepage || []);
       const hero = this.sections.find((s) => s['type'] === 'HERO') as
-        | { content?: { title?: string; subtitle?: string; imageUrl?: string } }
+        | { content?: { title?: string; subtitle?: string; imageUrl?: string; eyebrow?: string } }
         | undefined;
+      if (hero?.content?.eyebrow) {
+        this.heroEyebrow = String(hero.content.eyebrow).trim() || this.heroEyebrow;
+      }
       this.heroTitle = this.normalizeHeroTitle(hero?.content?.title, site.displayName);
       this.heroSubtitle =
-        hero?.content?.subtitle ||
-        'Strong academics, character, and a caring campus community in Mirchaibari, Katihar.';
-      const rawImage =
-        hero?.content?.imageUrl || site.seo?.['ogImageUrl'] || '';
+        (hero?.content?.subtitle || '').trim() ||
+        brand.footerBlurb ||
+        (site.seo?.['defaultDescription'] || '').trim();
+      const rawImage = hero?.content?.imageUrl || site.seo?.['ogImageUrl'] || '';
       this.heroImageUrl = this.mediaUrl(rawImage);
 
       const cta = this.sections.find((s) => s['type'] === 'ADMISSION_CTA') as
@@ -327,14 +333,11 @@ export class HomePageComponent implements OnInit {
     return this.api.mediaUrl(path == null ? undefined : String(path));
   }
 
-  /** Prefer a short brand line over repeating the full school name twice. */
+  /** Prefer CMS hero title; fall back to school display name — no school-specific copy. */
   private normalizeHeroTitle(raw: string | undefined, displayName: string): string {
     const title = (raw || '').trim();
-    if (!title || /^welcome to\b/i.test(title) || title === displayName) {
-      return 'Where curiosity meets character';
-    }
-    if (/^hero$/i.test(title)) {
-      return 'Where curiosity meets character';
+    if (!title || /^hero$/i.test(title)) {
+      return displayName || 'Welcome';
     }
     return title;
   }

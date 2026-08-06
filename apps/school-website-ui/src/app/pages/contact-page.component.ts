@@ -1,7 +1,7 @@
 import { Component, OnInit, inject } from '@angular/core';
 import { NgIf } from '@angular/common';
 import { RouterLink } from '@angular/router';
-import { WebsiteApiService } from '../core/website-api.service';
+import { WebsiteApiService, SiteBrandContact } from '../core/website-api.service';
 import { SeoService } from '../core/seo.service';
 
 @Component({
@@ -17,25 +17,29 @@ import { SeoService } from '../core/seo.service';
 
     <div class="contact-layout">
       <div class="cards">
-        <article>
+        <article *ngIf="brand.contactPhone">
           <h2>Call us</h2>
-          <a href="tel:+918789896189">+91-8789896189</a>
-          <p>Reception desk · Mon–Sat</p>
+          <a [href]="api.telHref(brand.contactPhone)">{{ brand.contactPhone }}</a>
+          <p *ngIf="brand.workingHours">{{ brand.workingHours }}</p>
         </article>
-        <article>
+        <article *ngIf="brand.contactEmail">
           <h2>Email</h2>
-          <a href="mailto:info&#64;hcpschool.com">info&#64;hcpschool.com</a>
+          <a [href]="api.mailtoHref(brand.contactEmail)">{{ brand.contactEmail }}</a>
           <p>We reply within one working day</p>
         </article>
-        <article>
+        <article *ngIf="brand.workingHours">
           <h2>Office hours</h2>
-          <p class="strong">Mon–Sat, 9:00 AM – 4:00 PM</p>
-          <p>Closed on public holidays</p>
+          <p class="strong">{{ brand.workingHours }}</p>
         </article>
-        <article>
+        <article *ngIf="brand.displayName || brand.address">
           <h2>Visit campus</h2>
-          <p class="strong">Holly Cross Public School</p>
-          <p>Main Campus · Schedule a visit via Admissions</p>
+          <p class="strong" *ngIf="brand.displayName">{{ brand.displayName }}</p>
+          <p *ngIf="brand.address">{{ brand.address }}</p>
+          <p *ngIf="brand.addressLine2">{{ brand.addressLine2 }}</p>
+        </article>
+        <article *ngIf="!hasContactCards">
+          <h2>Contact</h2>
+          <p>School contact details are managed in Website → Theme (CMS).</p>
         </article>
       </div>
 
@@ -45,6 +49,14 @@ import { SeoService } from '../core/seo.service';
         <div class="actions">
           <a routerLink="/admission/apply" class="primary">Apply for admission</a>
           <a routerLink="/about" class="ghost">About the school</a>
+          <a
+            *ngIf="brand.socialWhatsapp"
+            class="ghost"
+            [href]="brand.socialWhatsapp"
+            target="_blank"
+            rel="noopener"
+            >WhatsApp</a
+          >
         </div>
         <div class="cms-body" *ngIf="bodyHtml" [innerHTML]="bodyHtml"></div>
       </aside>
@@ -155,14 +167,26 @@ import { SeoService } from '../core/seo.service';
   ],
 })
 export class ContactPageComponent implements OnInit {
-  private readonly api = inject(WebsiteApiService);
+  readonly api = inject(WebsiteApiService);
   private readonly seo = inject(SeoService);
   title = 'Contact Us';
   summary = 'Reach the school office — we are happy to help families and visitors.';
   bodyHtml = '';
+  brand: SiteBrandContact = this.emptyBrand();
+
+  get hasContactCards(): boolean {
+    return !!(
+      this.brand.contactPhone ||
+      this.brand.contactEmail ||
+      this.brand.workingHours ||
+      this.brand.address ||
+      this.brand.displayName
+    );
+  }
 
   ngOnInit(): void {
-    this.api.resolve().subscribe(() => {
+    this.api.resolve().subscribe((site) => {
+      this.brand = this.api.brandContact(site);
       this.api.getPage('contact').subscribe({
         next: (p) => {
           this.title = String(p['title'] || this.title);
@@ -176,5 +200,22 @@ export class ContactPageComponent implements OnInit {
         error: () => undefined,
       });
     });
+  }
+
+  private emptyBrand(): SiteBrandContact {
+    return {
+      displayName: '',
+      tagline: '',
+      contactEmail: '',
+      contactPhone: '',
+      workingHours: '',
+      address: '',
+      addressLine2: '',
+      footerBlurb: '',
+      socialFacebook: '',
+      socialInstagram: '',
+      socialYoutube: '',
+      socialWhatsapp: '',
+    };
   }
 }

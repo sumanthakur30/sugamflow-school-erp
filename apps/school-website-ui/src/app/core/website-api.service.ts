@@ -19,6 +19,22 @@ export interface WebsiteResolve {
   seo?: Record<string, string | null>;
 }
 
+/** School-specific contact/brand — always from theme/CMS, never hardcoded per tenant. */
+export interface SiteBrandContact {
+  displayName: string;
+  tagline: string;
+  contactEmail: string;
+  contactPhone: string;
+  workingHours: string;
+  address: string;
+  addressLine2: string;
+  footerBlurb: string;
+  socialFacebook: string;
+  socialInstagram: string;
+  socialYoutube: string;
+  socialWhatsapp: string;
+}
+
 interface ApiResponse<T> {
   success: boolean;
   data: T;
@@ -186,6 +202,48 @@ export class WebsiteApiService {
       url.searchParams.set('returnUrl', returnUrl);
     }
     return url.toString();
+  }
+
+  /**
+   * Tenant brand/contact from resolve theme (+ displayName / seo fallbacks).
+   * Empty strings mean “not configured” — UI should hide those rows.
+   */
+  brandContact(site?: WebsiteResolve | null): SiteBrandContact {
+    const s = site ?? this.site();
+    const theme = s?.theme || {};
+    const t = (key: string) => this.themeStr(theme, key);
+    const seoDesc = (s?.seo?.['defaultDescription'] || '').trim();
+    return {
+      displayName: (s?.displayName || '').trim(),
+      tagline: t('tagline'),
+      contactEmail: t('contactEmail') || t('email'),
+      contactPhone: t('contactPhone') || t('phone'),
+      workingHours: t('workingHours') || t('hours'),
+      address: t('address') || t('campusAddress'),
+      addressLine2: t('addressLine2'),
+      footerBlurb: t('footerBlurb') || seoDesc,
+      socialFacebook: t('socialFacebook'),
+      socialInstagram: t('socialInstagram'),
+      socialYoutube: t('socialYoutube'),
+      socialWhatsapp: t('socialWhatsapp'),
+    };
+  }
+
+  themeStr(theme: Record<string, string | null> | null | undefined, key: string): string {
+    const raw = theme?.[key];
+    if (raw == null) return '';
+    const v = String(raw).trim();
+    if (!v || v === 'null' || v === 'undefined') return '';
+    return v;
+  }
+
+  telHref(phone: string): string {
+    const digits = phone.replace(/[^\d+]/g, '');
+    return digits ? `tel:${digits}` : '';
+  }
+
+  mailtoHref(email: string): string {
+    return email ? `mailto:${email}` : '';
   }
 
   private detectHost(): string {

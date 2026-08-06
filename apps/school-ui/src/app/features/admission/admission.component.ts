@@ -9,7 +9,7 @@ import {
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
-import { Subscription } from 'rxjs';
+import { Subscription, timer } from 'rxjs';
 import { ApiService, PageResult } from '../../core/api.service';
 import { AuthSessionService } from '../../core/auth-session.service';
 import { ListToolbarComponent } from '../../shared/list-toolbar/list-toolbar.component';
@@ -86,6 +86,9 @@ export class AdmissionComponent implements OnInit, OnDestroy {
   private submitLocked = false;
   private lastSubmitFingerprint = '';
   private lastSubmitAt = 0;
+  private listLoadSub?: Subscription;
+  /** Bumps on each list fetch so late responses from a prior tenant/branch race are ignored. */
+  private listLoadGeneration = 0;
 
   listQ = '';
   listStatus = '';
@@ -122,6 +125,7 @@ export class AdmissionComponent implements OnInit, OnDestroy {
 
   ngOnDestroy(): void {
     this.routeSub?.unsubscribe();
+    this.listLoadSub?.unsubscribe();
   }
 
   @HostListener('document:keydown.escape')
@@ -371,6 +375,7 @@ export class AdmissionComponent implements OnInit, OnDestroy {
     this.loading = true;
     this.error = '';
     this.bootstrapBlocked = false;
+    this.clearApplicationsList();
     this.api.get<any>('/api/admission/bootstrap').subscribe({
       next: (boot) => {
         this.featureEnabled = !!boot.featureEnabled;
@@ -387,10 +392,13 @@ export class AdmissionComponent implements OnInit, OnDestroy {
           }
         }
         this.loading = false;
-        this.loadApplications();
+        // Settle retry covers tenant/branch header race after login or campus switch.
+        this.loadApplications({ settleRetry: true });
       },
       error: (err) => {
         this.loading = false;
+        // Avoid showing another org's leftover list if bootstrap fails mid-switch.
+        this.clearApplicationsList();
         const body = err?.error;
         const code = String(body?.data?.code ?? body?.code ?? '').toUpperCase();
         this.error = body?.message ?? err?.message ?? 'Admission bootstrap failed';
@@ -415,26 +423,100 @@ export class AdmissionComponent implements OnInit, OnDestroy {
     });
   }
 
-  loadApplications(): void {
+  loadApplications(options?: { settleRetry?: boolean }): void {
+    const generation = ++this.listLoadGeneration;
+    const settleRetry = !!options?.settleRetry;
     this.searching = true;
-    this.api
-      .getPage<any>('/api/admission/applications', this.pageIndex, this.pageSize, {
+    this.error = '';
+    // Drop any previous tenant's rows immediately so the UI never flashes mixed data.
+    this.clearApplicationsList();
+    this.listLoadSub?.unsubscribe();
+
+    const request = () =>
+      this.api.getPage<any>('/api/admission/applications', this.pageIndex, this.pageSize, {
         q: this.listQ || undefined,
         status: this.listStatus || undefined,
         sortBy: this.sortBy || undefined,
         sortDir: this.sortDir || undefined,
-      })
-      .subscribe({
-        next: (p) => {
-          this.page = p;
-          this.applications = p.items || [];
-          this.searching = false;
-        },
-        error: (err) => {
-          this.searching = false;
-          this.error = err?.error?.message ?? 'Failed to load applications';
-        },
       });
+
+    const apply = (p: PageResult<any>) => {
+      if (generation !== this.listLoadGeneration) {
+        return;
+      }
+      this.page = p;
+      this.applications = p.items || [];
+      this.searching = false;
+      this.cdr.markForCheck();
+    };
+
+    this.listLoadSub = request().subscribe({
+      next: (p) => {
+        apply(p);
+        if (!settleRetry || generation !== this.listLoadGeneration) {
+          return;
+        }
+        // One delayed refresh after headers/branch catch up (same idea as dashboard KPI retry).
+        this.listLoadSub = timer(900).subscribe(() => {
+          if (generation !== this.listLoadGeneration) {
+            return;
+          }
+          this.searching = true;
+          this.cdr.markForCheck();
+          this.listLoadSub = request().subscribe({
+            next: (p2) => apply(p2),
+            error: () => {
+              if (generation !== this.listLoadGeneration) {
+                return;
+              }
+              this.searching = false;
+              this.cdr.markForCheck();
+            },
+          });
+        });
+      },
+      error: (err) => {
+        if (generation !== this.listLoadGeneration) {
+          return;
+        }
+        this.searching = false;
+        this.error = err?.error?.message ?? 'Failed to load applications';
+        this.cdr.markForCheck();
+        if (!settleRetry) {
+          return;
+        }
+        this.listLoadSub = timer(900).subscribe(() => {
+          if (generation !== this.listLoadGeneration) {
+            return;
+          }
+          this.searching = true;
+          this.cdr.markForCheck();
+          this.listLoadSub = request().subscribe({
+            next: (p2) => apply(p2),
+            error: (err2) => {
+              if (generation !== this.listLoadGeneration) {
+                return;
+              }
+              this.searching = false;
+              this.error = err2?.error?.message ?? this.error;
+              this.cdr.markForCheck();
+            },
+          });
+        });
+      },
+    });
+  }
+
+  private clearApplicationsList(): void {
+    this.applications = [];
+    this.page = {
+      items: [],
+      page: this.pageIndex,
+      size: this.pageSize,
+      totalElements: 0,
+      totalPages: 0,
+      hasNext: false,
+    };
   }
 
   get showingFrom(): number {

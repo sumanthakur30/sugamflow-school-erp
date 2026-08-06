@@ -498,6 +498,23 @@ export class ShellComponent implements OnInit {
     return (name.charAt(0) || 'S').toUpperCase();
   }
 
+  /** Broken logo URL → show letter mark instead of empty img. */
+  onBrandLogoError(event: Event): void {
+    const img = event.target as HTMLImageElement | null;
+    if (!img) return;
+    img.style.display = 'none';
+    const mark = document.createElement('span');
+    mark.className = img.classList.contains('sidebar-brand-logo')
+      ? 'sidebar-brand-mark'
+      : 'context-brand-mark';
+    mark.textContent = (
+      img.alt?.trim()?.charAt(0) ||
+      this.schoolName(this.themeService.theme()).charAt(0) ||
+      'S'
+    ).toUpperCase();
+    img.parentElement?.insertBefore(mark, img.nextSibling);
+  }
+
   sessionChip(): string {
     const s = this.auth.getSession();
     if (!s) return '';

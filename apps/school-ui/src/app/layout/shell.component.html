@@ -25,6 +25,7 @@
               class="context-brand-logo"
               [src]="themeService.resolveAssetUrl(theme.branding?.['schoolLogo'] || '')"
               [alt]="schoolName(theme)"
+              (error)="onBrandLogoError($event)"
             />
           } @else {
             <span class="context-brand-mark">{{ brandInitial(theme) }}</span>
@@ -153,7 +154,16 @@
       <div class="sidebar-card">
         @if (theme$ | async; as theme) {
           <div class="sidebar-brand">
-            <span class="sidebar-brand-mark">{{ brandInitial(theme) }}</span>
+            @if (theme.branding?.['schoolLogo']) {
+              <img
+                class="sidebar-brand-logo"
+                [src]="themeService.resolveAssetUrl(theme.branding?.['schoolLogo'] || '')"
+                [alt]="schoolName(theme)"
+                (error)="onBrandLogoError($event)"
+              />
+            } @else {
+              <span class="sidebar-brand-mark">{{ brandInitial(theme) }}</span>
+            }
             <div class="sidebar-brand-copy">
               <span class="sidebar-brand-name">{{ schoolName(theme) }}</span>
               <span class="sidebar-brand-sub">Workspace</span>
