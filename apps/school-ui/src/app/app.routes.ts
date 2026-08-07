@@ -494,6 +494,81 @@ export const routes: Routes = [
         loadComponent: () =>
           import('./features/audit/audit.component').then((m) => m.AuditComponent),
       },
+      {
+        path: 'admin/compliance',
+        canActivate: [featureGuard],
+        data: { feature: 'FEATURE_CBSE_COMPLIANCE' },
+        loadComponent: () =>
+          import('./features/compliance/compliance-dashboard.component').then(
+            (m) => m.ComplianceDashboardComponent,
+          ),
+      },
+      {
+        path: 'admin/compliance/readiness',
+        canActivate: [featureGuard],
+        data: { feature: 'FEATURE_CBSE_COMPLIANCE' },
+        loadComponent: () =>
+          import('./features/compliance/compliance-readiness.component').then(
+            (m) => m.ComplianceReadinessComponent,
+          ),
+      },
+      {
+        path: 'admin/compliance/infrastructure',
+        canActivate: [featureGuard],
+        data: { feature: 'FEATURE_CBSE_COMPLIANCE' },
+        loadComponent: () =>
+          import('./features/compliance/compliance-infrastructure.component').then(
+            (m) => m.ComplianceInfrastructureComponent,
+          ),
+      },
+      {
+        path: 'admin/compliance/documents',
+        canActivate: [featureGuard],
+        data: { feature: 'FEATURE_CBSE_COMPLIANCE' },
+        loadComponent: () =>
+          import('./features/compliance/compliance-documents.component').then(
+            (m) => m.ComplianceDocumentsComponent,
+          ),
+      },
+      {
+        path: 'admin/compliance/campaigns',
+        canActivate: [featureGuard],
+        data: { feature: 'FEATURE_CBSE_COMPLIANCE' },
+        loadComponent: () =>
+          import('./features/compliance/compliance-campaigns.component').then(
+            (m) => m.ComplianceCampaignsComponent,
+          ),
+      },
+      {
+        path: 'admin/compliance/disclosure',
+        canActivate: [featureGuard],
+        data: { feature: 'FEATURE_CBSE_COMPLIANCE' },
+        loadComponent: () =>
+          import('./features/compliance/compliance-disclosure.component').then(
+            (m) => m.ComplianceDisclosureComponent,
+          ),
+      },
+      {
+        path: 'admin/compliance/profile',
+        canActivate: [featureGuard],
+        data: { feature: 'FEATURE_CBSE_COMPLIANCE' },
+        loadComponent: () =>
+          import('./features/compliance/compliance-profile.component').then(
+            (m) => m.ComplianceProfileComponent,
+          ),
+      },
+      {
+        path: 'admin/compliance/platform-templates',
+        canActivate: [featureGuard],
+        data: {
+          feature: 'FEATURE_CBSE_COMPLIANCE',
+          roles: PLATFORM_ADMIN_ROLES,
+        },
+        loadComponent: () =>
+          import('./features/compliance/compliance-platform-templates.component').then(
+            (m) => m.CompliancePlatformTemplatesComponent,
+          ),
+      },
     ],
   },
   {

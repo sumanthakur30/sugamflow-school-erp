@@ -50,6 +50,7 @@ public class WorkflowDefinitionService {
     upsertSystem("hostel", defaultHostel());
     upsertSystem("transport", defaultTransport());
     upsertSystem("payroll", defaultPayroll());
+    upsertSystem("cbse_compliance", defaultCbseCompliance());
   }
 
   private void upsertSystem(String key, Map<String,Object> payload){
@@ -151,6 +152,20 @@ public class WorkflowDefinitionService {
       step(1,"Staff","PAYROLL_STAFF",8),
       step(2,"Approver","ACCOUNTANT",24),
       step(3,"Completed","SYSTEM",0)));
+    wf.put("autoApproveRules", List.of()); wf.put("rejectRules", List.of());
+    wf.put("escalationRules", List.of()); wf.put("notificationRules", List.of());
+    return wf;
+  }
+
+  private Map<String,Object> defaultCbseCompliance(){
+    Map<String,Object> wf=new LinkedHashMap<>();
+    wf.put("workflowKey","cbse_compliance"); wf.put("name","CBSE Compliance Submission");
+    wf.put("steps", List.of(
+      step(1,"Prepare / Validate","COMPLIANCE_OFFICER",72),
+      step(2,"Principal","PRINCIPAL",48),
+      step(3,"Management","MANAGEMENT",72),
+      step(4,"Lock & Export","COMPLIANCE_OFFICER",24),
+      step(5,"Submit / Archive","SYSTEM",0)));
     wf.put("autoApproveRules", List.of()); wf.put("rejectRules", List.of());
     wf.put("escalationRules", List.of()); wf.put("notificationRules", List.of());
     return wf;

@@ -448,3 +448,26 @@ services:
       CMS_MEDIA_S3_ENDPOINT: ${CMS_MEDIA_S3_ENDPOINT:-}
       CMS_MEDIA_S3_ACCESS_KEY: ${CMS_MEDIA_S3_ACCESS_KEY:-}
       CMS_MEDIA_S3_SECRET_KEY: ${CMS_MEDIA_S3_SECRET_KEY:-}
+
+  compliance-service:
+    <<: *jvm-service
+    image: ${IMAGE_PREFIX:-sumanthakur30}/compliance-service:${IMAGE_TAG:-1.0.0}
+    environment:
+      <<: *common-env
+      EUREKA_INSTANCE_HOSTNAME: compliance-service
+      SERVER_PORT: 8202
+      SCHOOL_COMPLIANCE_DB_URL: ${SCHOOL_COMPLIANCE_DB_URL}
+      SCHOOL_COMPLIANCE_DB_USERNAME: ${SCHOOL_COMPLIANCE_DB_USERNAME}
+      SCHOOL_COMPLIANCE_DB_PASSWORD: ${SCHOOL_COMPLIANCE_DB_PASSWORD}
+      SPRING_DATASOURCE_URL: ${SCHOOL_COMPLIANCE_DB_URL}
+      SPRING_DATASOURCE_USERNAME: ${SCHOOL_COMPLIANCE_DB_USERNAME}
+      SPRING_DATASOURCE_PASSWORD: ${SCHOOL_COMPLIANCE_DB_PASSWORD}
+      COMPLIANCE_SUBSCRIPTION_URL: http://subscription-service:8182
+      COMPLIANCE_STUDENT_URL: http://student-service:8191
+      COMPLIANCE_STAFF_URL: http://staff-service:8198
+      COMPLIANCE_CMS_URL: http://cms-service:8201
+      COMPLIANCE_DOCUMENTS_DIR: /var/lib/school-compliance-documents
+      COMPLIANCE_EXPORTS_DIR: /var/lib/school-compliance-exports
+    volumes:
+      - ${SCHOOL_COMPLIANCE_DOCS_HOST_DIR:-/opt/school/data/compliance-documents}:/var/lib/school-compliance-documents
+      - ${SCHOOL_COMPLIANCE_EXPORTS_HOST_DIR:-/opt/school/data/compliance-exports}:/var/lib/school-compliance-exports
