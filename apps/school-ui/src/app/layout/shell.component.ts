@@ -274,6 +274,54 @@ export class ShellComponent implements OnInit {
         },
       ],
     },
+    {
+      id: 'compliance',
+      label: 'Compliance',
+      icon: 'shield',
+      items: [
+        {
+          path: '/admin/compliance',
+          label: 'Board Compliance',
+          feature: 'FEATURE_CBSE_COMPLIANCE',
+        },
+        {
+          path: '/admin/compliance/readiness',
+          label: 'Data Readiness',
+          feature: 'FEATURE_CBSE_COMPLIANCE',
+        },
+        {
+          path: '/admin/compliance/infrastructure',
+          label: 'Infrastructure',
+          feature: 'FEATURE_CBSE_COMPLIANCE',
+        },
+        {
+          path: '/admin/compliance/documents',
+          label: 'Documents Vault',
+          feature: 'FEATURE_CBSE_COMPLIANCE',
+        },
+        {
+          path: '/admin/compliance/campaigns',
+          label: 'Campaign Workspace',
+          feature: 'FEATURE_CBSE_COMPLIANCE',
+        },
+        {
+          path: '/admin/compliance/disclosure',
+          label: 'Disclosure Preview',
+          feature: 'FEATURE_CBSE_COMPLIANCE',
+        },
+        {
+          path: '/admin/compliance/profile',
+          label: 'School profile',
+          feature: 'FEATURE_CBSE_COMPLIANCE',
+        },
+        {
+          path: '/admin/compliance/platform-templates',
+          label: 'Platform Templates',
+          feature: 'FEATURE_CBSE_COMPLIANCE',
+          roles: ['SHOP_OWNER', 'SUPER_ADMIN', 'ADMIN'],
+        },
+      ],
+    },
   ];
 
   topGroups: NavGroup[] = [...this.topCatalog];
@@ -281,7 +329,7 @@ export class ShellComponent implements OnInit {
 
   openTopId: string | null = null;
   dropdownStyle: Record<string, string> = {};
-  expandedSide = new Set<string>(['reports']);
+  expandedSide = new Set<string>(['reports', 'compliance']);
   mobileNavOpen = false;
   sidebarCollapsed = false;
 
