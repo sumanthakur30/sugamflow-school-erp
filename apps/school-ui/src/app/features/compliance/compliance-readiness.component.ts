@@ -23,6 +23,7 @@ import {
         </div>
         <div style="display: flex; gap: 0.5rem; flex-wrap: wrap">
           <a routerLink="/admin/compliance" class="btn">Dashboard</a>
+          <a routerLink="/admin/compliance/import" class="btn">Import Center</a>
           <button class="btn primary" type="button" [disabled]="running" (click)="runValidate()">
             {{ running ? 'Validating…' : 'Run validation' }}
           </button>

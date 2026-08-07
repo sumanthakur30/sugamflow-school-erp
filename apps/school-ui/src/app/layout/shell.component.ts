@@ -322,6 +322,11 @@ export class ShellComponent implements OnInit {
           feature: 'FEATURE_CBSE_COMPLIANCE',
         },
         {
+          path: '/admin/compliance/import',
+          label: 'Import Center',
+          feature: 'FEATURE_CBSE_COMPLIANCE',
+        },
+        {
           path: '/admin/compliance/disclosure',
           label: 'Disclosure Preview',
           feature: 'FEATURE_CBSE_COMPLIANCE',
@@ -339,6 +344,15 @@ export class ShellComponent implements OnInit {
         },
       ],
     },
+    {
+      id: 'support',
+      label: 'Support',
+      icon: 'help',
+      items: [
+        { path: '/admin/support/new', label: 'Report issue' },
+        { path: '/admin/support/tickets', label: 'My tickets' },
+      ],
+    },
   ];
 
   topGroups: NavGroup[] = [...this.topCatalog];
@@ -346,7 +360,7 @@ export class ShellComponent implements OnInit {
 
   openTopId: string | null = null;
   dropdownStyle: Record<string, string> = {};
-  expandedSide = new Set<string>(['reports', 'compliance']);
+  expandedSide = new Set<string>(['reports', 'support', 'compliance']);
   mobileNavOpen = false;
   sidebarCollapsed = false;
 

@@ -33,6 +33,12 @@ export interface SiteBrandContact {
   socialInstagram: string;
   socialYoutube: string;
   socialWhatsapp: string;
+  /** Google Maps share / short link (Open in Maps). */
+  mapUrl: string;
+  /** Optional iframe embed src from Google Maps → Share → Embed a map. */
+  mapEmbedUrl: string;
+  /** Campus / school building photo shown with the Contact map. */
+  mapPhotoUrl: string;
 }
 
 interface ApiResponse<T> {
@@ -226,7 +232,35 @@ export class WebsiteApiService {
       socialInstagram: t('socialInstagram'),
       socialYoutube: t('socialYoutube'),
       socialWhatsapp: t('socialWhatsapp'),
+      mapUrl: t('mapUrl') || t('googleMapsUrl'),
+      mapEmbedUrl: t('mapEmbedUrl') || t('googleMapsEmbedUrl'),
+      mapPhotoUrl: t('mapPhotoUrl') || t('campusPhotoUrl') || t('mapImageUrl'),
     };
+  }
+
+  /** External Maps link — prefer configured mapUrl, else search from address. */
+  mapOpenUrl(brand?: SiteBrandContact | null): string {
+    const b = brand || this.brandContact();
+    if (b.mapUrl) return b.mapUrl;
+    const q = this.mapQuery(b);
+    return q ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(q)}` : '';
+  }
+
+  /**
+   * Iframe src for Contact map. Prefer explicit embed URL; otherwise build a
+   * no-API-key embed from school name + address (works for most campuses).
+   */
+  mapEmbedSrc(brand?: SiteBrandContact | null): string {
+    const b = brand || this.brandContact();
+    if (b.mapEmbedUrl) return b.mapEmbedUrl;
+    const q = this.mapQuery(b);
+    if (!q) return '';
+    return `https://maps.google.com/maps?q=${encodeURIComponent(q)}&hl=en&z=16&output=embed`;
+  }
+
+  private mapQuery(b: SiteBrandContact): string {
+    const parts = [b.displayName, b.address, b.addressLine2].map((x) => (x || '').trim()).filter(Boolean);
+    return parts.join(', ');
   }
 
   themeStr(theme: Record<string, string | null> | null | undefined, key: string): string {

@@ -540,6 +540,15 @@ export const routes: Routes = [
           ),
       },
       {
+        path: 'admin/compliance/import',
+        canActivate: [featureGuard],
+        data: { feature: 'FEATURE_CBSE_COMPLIANCE' },
+        loadComponent: () =>
+          import('./features/compliance/compliance-import.component').then(
+            (m) => m.ComplianceImportComponent,
+          ),
+      },
+      {
         path: 'admin/compliance/disclosure',
         canActivate: [featureGuard],
         data: { feature: 'FEATURE_CBSE_COMPLIANCE' },
@@ -567,6 +576,27 @@ export const routes: Routes = [
         loadComponent: () =>
           import('./features/compliance/compliance-platform-templates.component').then(
             (m) => m.CompliancePlatformTemplatesComponent,
+          ),
+      },
+      {
+        path: 'admin/support/new',
+        loadComponent: () =>
+          import('./features/support/support-ticket-form.component').then(
+            (m) => m.SupportTicketFormComponent,
+          ),
+      },
+      {
+        path: 'admin/support/tickets',
+        loadComponent: () =>
+          import('./features/support/support-ticket-list.component').then(
+            (m) => m.SupportTicketListComponent,
+          ),
+      },
+      {
+        path: 'admin/support/tickets/:id',
+        loadComponent: () =>
+          import('./features/support/support-ticket-detail.component').then(
+            (m) => m.SupportTicketDetailComponent,
           ),
       },
     ],

@@ -22,6 +22,14 @@ import { AnalyticsService } from '../core/analytics.service';
             </ng-container>
           </div>
           <div class="utility-right">
+            <a
+              *ngIf="brand(site).socialFacebook"
+              class="hide-sm"
+              [href]="brand(site).socialFacebook"
+              target="_blank"
+              rel="noopener"
+              >Facebook</a
+            >
             <a [href]="parentUrl" target="_blank" rel="noopener">Parent</a>
             <a [href]="teacherUrl" target="_blank" rel="noopener">Teacher</a>
             <a [href]="signInUrl" target="_blank" rel="noopener">ERP Login</a>
@@ -104,7 +112,10 @@ import { AnalyticsService } from '../core/analytics.service';
                 <a [href]="api.telHref(b.contactPhone)">{{ b.contactPhone }}</a>
               </p>
               <p *ngIf="b.workingHours">{{ b.workingHours }}</p>
-              <p *ngIf="!b.contactEmail && !b.contactPhone && !b.workingHours">
+              <p *ngIf="api.mapOpenUrl(b)">
+                <a [href]="api.mapOpenUrl(b)" target="_blank" rel="noopener">Google Maps</a>
+              </p>
+              <p *ngIf="!b.contactEmail && !b.contactPhone && !b.workingHours && !api.mapOpenUrl(b)">
                 Contact details can be set in Website → Theme.
               </p>
             </ng-container>

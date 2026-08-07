@@ -48,6 +48,7 @@ import {
             <h3 style="margin: 0; font-size: 1.1rem">Principal action items</h3>
             <div style="display: flex; gap: 0.5rem; flex-wrap: wrap">
               <a routerLink="/admin/compliance/readiness" class="btn">Data Readiness</a>
+              <a routerLink="/admin/compliance/import" class="btn">Import Center</a>
               <a routerLink="/admin/compliance/infrastructure" class="btn">Infrastructure</a>
               <a routerLink="/admin/compliance/documents" class="btn">Documents Vault</a>
               <a routerLink="/admin/compliance/campaigns" class="btn">Campaign Workspace</a>

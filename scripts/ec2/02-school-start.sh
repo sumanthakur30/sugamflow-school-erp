@@ -27,6 +27,8 @@ PHASE_A=(
   student-service
   admission-service
   fee-service
+  compliance-service
+  support-service
 )
 
 PHASE_B=(

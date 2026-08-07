@@ -10,7 +10,9 @@ import com.sugamflow.school.cms.persistence.repo.CmsNewsRepository;
 import com.sugamflow.school.cms.persistence.repo.CmsPageRepository;
 import com.sugamflow.school.cms.web.dto.EventResponse;
 import com.sugamflow.school.cms.web.dto.GalleryItemResponse;
+import com.sugamflow.school.cms.web.dto.GalleryUpsertRequest;
 import com.sugamflow.school.cms.web.dto.NewsResponse;
+import com.sugamflow.school.cms.web.dto.NewsUpsertRequest;
 import com.sugamflow.school.cms.web.dto.PageResponse;
 import com.sugamflow.school.cms.web.dto.PageUpsertRequest;
 import java.time.Instant;
@@ -170,6 +172,172 @@ public class CmsContentService {
     return toPage(pageRepository.save(page));
   }
 
+  public List<NewsResponse> listAdminNews(String organizationId) {
+    return newsRepository
+        .findByOrganizationIdOrderByUpdatedAtDesc(requireOrg(organizationId))
+        .stream()
+        .map(this::toNews)
+        .toList();
+  }
+
+  @Transactional
+  public NewsResponse createNews(String organizationId, NewsUpsertRequest request) {
+    String org = requireOrg(organizationId);
+    String slug = normalizeSlug(request.slug());
+    newsRepository
+        .findByOrganizationIdAndSlug(org, slug)
+        .ifPresent(
+            n -> {
+              throw new ResponseStatusException(HttpStatus.CONFLICT, "Slug already used");
+            });
+    Instant now = Instant.now();
+    CmsNews news = new CmsNews();
+    news.setId(UUID.randomUUID());
+    news.setOrganizationId(org);
+    news.setSlug(slug);
+    applyNews(news, request);
+    news.setStatus(DRAFT);
+    news.setCreatedAt(now);
+    news.setUpdatedAt(now);
+    return toNews(newsRepository.save(news));
+  }
+
+  @Transactional
+  public NewsResponse updateNews(String organizationId, UUID id, NewsUpsertRequest request) {
+    String org = requireOrg(organizationId);
+    CmsNews news =
+        newsRepository
+            .findByIdAndOrganizationId(id, org)
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "News not found"));
+    String slug = normalizeSlug(request.slug());
+    newsRepository
+        .findByOrganizationIdAndSlug(org, slug)
+        .filter(other -> !other.getId().equals(id))
+        .ifPresent(
+            n -> {
+              throw new ResponseStatusException(HttpStatus.CONFLICT, "Slug already used");
+            });
+    news.setSlug(slug);
+    applyNews(news, request);
+    news.setUpdatedAt(Instant.now());
+    return toNews(newsRepository.save(news));
+  }
+
+  @Transactional
+  public NewsResponse publishNews(String organizationId, UUID id) {
+    String org = requireOrg(organizationId);
+    CmsNews news =
+        newsRepository
+            .findByIdAndOrganizationId(id, org)
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "News not found"));
+    news.setStatus(PUBLISHED);
+    news.setPublishedAt(Instant.now());
+    news.setUpdatedAt(Instant.now());
+    return toNews(newsRepository.save(news));
+  }
+
+  @Transactional
+  public NewsResponse unpublishNews(String organizationId, UUID id) {
+    String org = requireOrg(organizationId);
+    CmsNews news =
+        newsRepository
+            .findByIdAndOrganizationId(id, org)
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "News not found"));
+    news.setStatus(DRAFT);
+    news.setUpdatedAt(Instant.now());
+    return toNews(newsRepository.save(news));
+  }
+
+  public List<GalleryItemResponse> listAdminGallery(String organizationId) {
+    return galleryRepository
+        .findByOrganizationIdOrderByAlbumAscSortOrderAsc(requireOrg(organizationId))
+        .stream()
+        .map(this::toGallery)
+        .toList();
+  }
+
+  @Transactional
+  public GalleryItemResponse createGalleryItem(String organizationId, GalleryUpsertRequest request) {
+    String org = requireOrg(organizationId);
+    Instant now = Instant.now();
+    CmsGalleryItem item = new CmsGalleryItem();
+    item.setId(UUID.randomUUID());
+    item.setOrganizationId(org);
+    applyGallery(item, request);
+    item.setStatus(DRAFT);
+    item.setCreatedAt(now);
+    item.setUpdatedAt(now);
+    return toGallery(galleryRepository.save(item));
+  }
+
+  @Transactional
+  public GalleryItemResponse updateGalleryItem(
+      String organizationId, UUID id, GalleryUpsertRequest request) {
+    String org = requireOrg(organizationId);
+    CmsGalleryItem item =
+        galleryRepository
+            .findByIdAndOrganizationId(id, org)
+            .orElseThrow(
+                () -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Gallery item not found"));
+    applyGallery(item, request);
+    item.setUpdatedAt(Instant.now());
+    return toGallery(galleryRepository.save(item));
+  }
+
+  @Transactional
+  public GalleryItemResponse publishGalleryItem(String organizationId, UUID id) {
+    String org = requireOrg(organizationId);
+    CmsGalleryItem item =
+        galleryRepository
+            .findByIdAndOrganizationId(id, org)
+            .orElseThrow(
+                () -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Gallery item not found"));
+    item.setStatus(PUBLISHED);
+    item.setPublishedAt(Instant.now());
+    item.setUpdatedAt(Instant.now());
+    return toGallery(galleryRepository.save(item));
+  }
+
+  @Transactional
+  public GalleryItemResponse unpublishGalleryItem(String organizationId, UUID id) {
+    String org = requireOrg(organizationId);
+    CmsGalleryItem item =
+        galleryRepository
+            .findByIdAndOrganizationId(id, org)
+            .orElseThrow(
+                () -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Gallery item not found"));
+    item.setStatus(DRAFT);
+    item.setUpdatedAt(Instant.now());
+    return toGallery(galleryRepository.save(item));
+  }
+
+  @Transactional
+  public void deleteGalleryItem(String organizationId, UUID id) {
+    String org = requireOrg(organizationId);
+    CmsGalleryItem item =
+        galleryRepository
+            .findByIdAndOrganizationId(id, org)
+            .orElseThrow(
+                () -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Gallery item not found"));
+    galleryRepository.delete(item);
+  }
+
+  private void applyNews(CmsNews news, NewsUpsertRequest request) {
+    news.setTitle(request.title().trim());
+    news.setSummary(blankToNull(request.summary()));
+    news.setBodyHtml(request.bodyHtml() == null ? "" : request.bodyHtml());
+    news.setCoverImageUrl(blankToNull(request.coverImageUrl()));
+  }
+
+  private void applyGallery(CmsGalleryItem item, GalleryUpsertRequest request) {
+    item.setTitle(request.title().trim());
+    item.setCaption(blankToNull(request.caption()));
+    item.setImageUrl(request.imageUrl().trim());
+    item.setAlbum(
+        request.album() == null || request.album().isBlank() ? "general" : request.album().trim());
+    item.setSortOrder(request.sortOrder() == null ? 0 : Math.max(0, request.sortOrder()));
+  }
+
   private PageResponse toPage(CmsPage p) {
     return new PageResponse(
         p.getId(),
@@ -192,7 +360,8 @@ public class CmsContentService {
         n.getSummary(),
         n.getBodyHtml(),
         n.getCoverImageUrl(),
-        n.getPublishedAt());
+        n.getPublishedAt(),
+        n.getStatus());
   }
 
   private EventResponse toEvent(CmsEvent e) {
@@ -209,7 +378,13 @@ public class CmsContentService {
 
   private GalleryItemResponse toGallery(CmsGalleryItem g) {
     return new GalleryItemResponse(
-        g.getId(), g.getTitle(), g.getCaption(), g.getImageUrl(), g.getAlbum(), g.getSortOrder());
+        g.getId(),
+        g.getTitle(),
+        g.getCaption(),
+        g.getImageUrl(),
+        g.getAlbum(),
+        g.getSortOrder(),
+        g.getStatus());
   }
 
   private static String requireOrg(String organizationId) {

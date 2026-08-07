@@ -296,9 +296,162 @@
               </label>
             </div>
 
+            <div class="hero-fields" *ngIf="s.type === 'ABOUT_SCHOOL'">
+              <label
+                >Section title
+                <input
+                  [name]="'at' + selectedSectionIndex"
+                  [(ngModel)]="s.content!.title"
+                  (ngModelChange)="ensureContent(s)"
+                />
+              </label>
+              <label
+                >About text
+                <textarea
+                  [name]="'ab' + selectedSectionIndex"
+                  rows="4"
+                  [(ngModel)]="s.content!.body"
+                  (ngModelChange)="ensureContent(s)"
+                  placeholder="Short school story for the homepage"
+                ></textarea>
+              </label>
+              <label
+                >Side highlight
+                <input
+                  [name]="'ah' + selectedSectionIndex"
+                  [(ngModel)]="s.content!.highlight"
+                  (ngModelChange)="ensureContent(s)"
+                  placeholder="Academics · Values · Campus life"
+                />
+              </label>
+              <label
+                >Link label
+                <input
+                  [name]="'ac' + selectedSectionIndex"
+                  [(ngModel)]="s.content!.ctaLabel"
+                  (ngModelChange)="ensureContent(s)"
+                />
+              </label>
+            </div>
+
+            <div class="hero-fields" *ngIf="s.type === 'PRINCIPAL_MESSAGE'">
+              <label
+                >Heading
+                <input
+                  [name]="'pt' + selectedSectionIndex"
+                  [(ngModel)]="s.content!.title"
+                  (ngModelChange)="ensureContent(s)"
+                />
+              </label>
+              <label
+                >Name
+                <input
+                  [name]="'pn' + selectedSectionIndex"
+                  [(ngModel)]="s.content!.name"
+                  (ngModelChange)="ensureContent(s)"
+                />
+              </label>
+              <label
+                >Role
+                <input
+                  [name]="'pr' + selectedSectionIndex"
+                  [(ngModel)]="s.content!.role"
+                  (ngModelChange)="ensureContent(s)"
+                />
+              </label>
+              <label
+                >Message
+                <textarea
+                  [name]="'pm' + selectedSectionIndex"
+                  rows="4"
+                  [(ngModel)]="s.content!.message"
+                  (ngModelChange)="ensureContent(s)"
+                ></textarea>
+              </label>
+              <label
+                >Photo URL
+                <input
+                  [name]="'pp' + selectedSectionIndex"
+                  [(ngModel)]="s.content!.photoUrl"
+                  (ngModelChange)="ensureContent(s)"
+                />
+              </label>
+            </div>
+
+            <div class="hero-fields" *ngIf="s.type === 'STATISTICS'">
+              <label
+                >Section title
+                <input
+                  [name]="'st' + selectedSectionIndex"
+                  [(ngModel)]="s.content!.title"
+                  (ngModelChange)="ensureContent(s)"
+                />
+              </label>
+              <label
+                >Stat 1 value / label
+                <input
+                  [name]="'sv1' + selectedSectionIndex"
+                  [(ngModel)]="s.content!.value1"
+                  (ngModelChange)="ensureContent(s)"
+                  placeholder="500+"
+                />
+                <input
+                  [name]="'sl1' + selectedSectionIndex"
+                  [(ngModel)]="s.content!.label1"
+                  (ngModelChange)="ensureContent(s)"
+                  placeholder="Students"
+                />
+              </label>
+              <label
+                >Stat 2 value / label
+                <input
+                  [name]="'sv2' + selectedSectionIndex"
+                  [(ngModel)]="s.content!.value2"
+                  (ngModelChange)="ensureContent(s)"
+                />
+                <input
+                  [name]="'sl2' + selectedSectionIndex"
+                  [(ngModel)]="s.content!.label2"
+                  (ngModelChange)="ensureContent(s)"
+                />
+              </label>
+              <label
+                >Stat 3 value / label
+                <input
+                  [name]="'sv3' + selectedSectionIndex"
+                  [(ngModel)]="s.content!.value3"
+                  (ngModelChange)="ensureContent(s)"
+                />
+                <input
+                  [name]="'sl3' + selectedSectionIndex"
+                  [(ngModel)]="s.content!.label3"
+                  (ngModelChange)="ensureContent(s)"
+                />
+              </label>
+              <label
+                >Stat 4 value / label
+                <input
+                  [name]="'sv4' + selectedSectionIndex"
+                  [(ngModel)]="s.content!.value4"
+                  (ngModelChange)="ensureContent(s)"
+                />
+                <input
+                  [name]="'sl4' + selectedSectionIndex"
+                  [(ngModel)]="s.content!.label4"
+                  (ngModelChange)="ensureContent(s)"
+                />
+              </label>
+            </div>
+
             <div
               class="hero-fields"
-              *ngIf="s.type !== 'HERO' && s.type !== 'ADMISSION_CTA'"
+              *ngIf="
+                s.type !== 'HERO' &&
+                s.type !== 'ADMISSION_CTA' &&
+                s.type !== 'ABOUT_SCHOOL' &&
+                s.type !== 'PRINCIPAL_MESSAGE' &&
+                s.type !== 'STATISTICS'
+              "
             >
               <label
                 >Title
@@ -321,7 +474,7 @@
             <p class="hint">
               Tip: upload images in
               <button type="button" class="linkish" (click)="setTab('media')">Media</button>
-              then Use as hero.
+              then paste the URL here.
             </p>
           </ng-container>
           <ng-template #noSection>
@@ -409,8 +562,9 @@
     <div class="wb-panel panel" *ngIf="tab === 'media'">
       <h2>School media library</h2>
       <p class="hint">
-        Upload campus photos, logos, and gallery images. Then insert into page Body HTML or set as
-        OG image. Counts toward plan storage quota.
+        Upload campus photos, logos, and gallery images. Then insert into page Body HTML, Gallery, or
+        Theme. Broken thumbnails mean the file is missing on the server — Delete the row and upload
+        again.
       </p>
       <div *ngIf="mediaUsage as m" class="usage compact">
         <p>
@@ -494,6 +648,36 @@
         </label>
         <label>Address <input name="address" [(ngModel)]="theme.address" /></label>
         <label>Address line 2 <input name="addressLine2" [(ngModel)]="theme.addressLine2" /></label>
+        <h3 class="subhead">Google Maps (optional)</h3>
+        <label
+          >Maps link
+          <input
+            name="mapUrl"
+            [(ngModel)]="theme.mapUrl"
+            placeholder="https://maps.app.goo.gl/... or goo.gl/maps/..."
+          />
+        </label>
+        <label
+          >Maps embed URL (iframe src)
+          <input
+            name="mapEmbedUrl"
+            [(ngModel)]="theme.mapEmbedUrl"
+            placeholder="From Google Maps → Share → Embed a map → copy src"
+          />
+        </label>
+        <label
+          >Campus photo (shown with map)
+          <input
+            name="mapPhotoUrl"
+            [(ngModel)]="theme.mapPhotoUrl"
+            placeholder="Media URL of school building / campus photo"
+          />
+        </label>
+        <p class="hint">
+          Maps link opens directions. Embed URL shows the map on Contact. Campus photo appears next
+          to the map (upload in Media, paste URL). If embed is blank, the public site builds a map
+          from school name + address.
+        </p>
         <h3 class="subhead">Social (optional URLs)</h3>
         <label>Facebook <input name="socialFacebook" [(ngModel)]="theme.socialFacebook" /></label>
         <label>Instagram <input name="socialInstagram" [(ngModel)]="theme.socialInstagram" /></label>
@@ -536,6 +720,94 @@
           <input name="displayName" [(ngModel)]="campusDraft.displayName" />
         </label>
         <button type="submit" class="primary" [disabled]="saving">Create campus</button>
+      </form>
+    </div>
+
+    <!-- News -->
+    <div class="wb-panel panel" *ngIf="tab === 'news'">
+      <h2>News</h2>
+      <p class="hint">
+        Form-based stories for the public <code>/news</code> page and homepage Latest news block.
+        No raw page HTML required — title, summary, and optional body/cover image.
+      </p>
+      <article *ngFor="let n of newsItems">
+        <div>
+          <strong>{{ n.title }}</strong>
+          <div class="meta">/{{ n.slug }} · {{ n.status }}</div>
+          <div class="meta" *ngIf="n.summary">{{ n.summary }}</div>
+        </div>
+        <div class="actions">
+          <button type="button" (click)="startEditNews(n)">Edit</button>
+          <button type="button" *ngIf="n.status !== 'PUBLISHED'" (click)="publishNews(n)">
+            Publish
+          </button>
+        </div>
+      </article>
+      <form class="editor" (ngSubmit)="saveNews()">
+        <h3>{{ editingNewsId ? 'Edit news' : 'Add news' }}</h3>
+        <label>Slug <input name="nSlug" [(ngModel)]="newsDraft.slug" required /></label>
+        <label>Title <input name="nTitle" [(ngModel)]="newsDraft.title" required /></label>
+        <label>Summary <textarea name="nSum" rows="2" [(ngModel)]="newsDraft.summary"></textarea></label>
+        <label
+          >Body (optional HTML)
+          <textarea name="nBody" rows="5" [(ngModel)]="newsDraft.bodyHtml"></textarea>
+        </label>
+        <label
+          >Cover image URL
+          <input name="nCover" [(ngModel)]="newsDraft.coverImageUrl" placeholder="From Media" />
+        </label>
+        <div class="actions row">
+          <button type="submit" class="primary" [disabled]="saving">
+            {{ saving ? 'Saving…' : editingNewsId ? 'Save news' : 'Add news' }}
+          </button>
+          <button type="button" *ngIf="editingNewsId" (click)="cancelEditNews()">Cancel</button>
+        </div>
+      </form>
+    </div>
+
+    <!-- Gallery -->
+    <div class="wb-panel panel" *ngIf="tab === 'gallery'">
+      <h2>Gallery</h2>
+      <p class="hint">
+        Upload in
+        <button type="button" class="linkish" (click)="setTab('media')">Media</button>, paste the
+        URL here, then Publish. Items appear on <code>/gallery</code> and the homepage gallery
+        block.
+      </p>
+      <article *ngFor="let g of galleryItems">
+        <div>
+          <strong>{{ g.title }}</strong>
+          <div class="meta">{{ g.album }} · {{ g.status }} · order {{ g.sortOrder }}</div>
+          <div class="meta" *ngIf="g.caption">{{ g.caption }}</div>
+        </div>
+        <div class="actions">
+          <button type="button" (click)="startEditGallery(g)">Edit</button>
+          <button type="button" *ngIf="g.status !== 'PUBLISHED'" (click)="publishGallery(g)">
+            Publish
+          </button>
+          <button type="button" class="danger" (click)="deleteGallery(g)">Delete</button>
+        </div>
+      </article>
+      <form class="editor" (ngSubmit)="saveGallery()">
+        <h3>{{ editingGalleryId ? 'Edit gallery item' : 'Add gallery item' }}</h3>
+        <label>Title <input name="gTitle" [(ngModel)]="galleryDraft.title" required /></label>
+        <label>Caption <input name="gCap" [(ngModel)]="galleryDraft.caption" /></label>
+        <label
+          >Image URL <input name="gUrl" [(ngModel)]="galleryDraft.imageUrl" required
+        /></label>
+        <label>Album <input name="gAlbum" [(ngModel)]="galleryDraft.album" /></label>
+        <label
+          >Sort order
+          <input name="gSort" type="number" [(ngModel)]="galleryDraft.sortOrder" />
+        </label>
+        <div class="actions row">
+          <button type="submit" class="primary" [disabled]="saving">
+            {{ saving ? 'Saving…' : editingGalleryId ? 'Save item' : 'Add item' }}
+          </button>
+          <button type="button" *ngIf="editingGalleryId" (click)="cancelEditGallery()">
+            Cancel
+          </button>
+        </div>
       </form>
     </div>
 
@@ -782,23 +1054,19 @@
           </button>
           <button
             type="button"
-            *ngIf="tab === 'blogs' || tab === 'events' || tab === 'news' || tab === 'achievements'"
+            *ngIf="tab === 'blogs' || tab === 'events' || tab === 'achievements'"
             (click)="setTab('pages')"
           >
             Pages
           </button>
           <button
             type="button"
-            *ngIf="tab === 'blogs' || tab === 'events' || tab === 'news'"
+            *ngIf="tab === 'blogs' || tab === 'events'"
             (click)="setTab('ai')"
           >
             AI Assistant
           </button>
-          <button
-            type="button"
-            *ngIf="tab === 'gallery' || tab === 'downloads'"
-            (click)="setTab('media')"
-          >
+          <button type="button" *ngIf="tab === 'downloads'" (click)="setTab('media')">
             Media
           </button>
           <button type="button" *ngIf="tab === 'staff'" (click)="setTab('alumni')">Alumni</button>

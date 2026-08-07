@@ -434,8 +434,11 @@ public class AttendanceAlertService {
   }
 
   /**
-   * Build a channel-capable guardian contact map. Prefer the primary guardian, then fill missing
-   * email/mobile from other guardians so SMS and EMAIL can both deliver when contacts are split.
+   * Pick the best guardian contact for alerts.
+   *
+   * <p>Preference: Father with mobile → Mother with mobile → primary guardian → any guardian with
+   * contact. Missing mobile/email on the chosen guardian are filled from other guardians when
+   * contacts are split across rows.
    */
   @SuppressWarnings("unchecked")
   private Map<String, Object> primaryGuardian(Map<String, Object> student) {
@@ -451,13 +454,17 @@ public class AttendanceAlertService {
           fallback.put("fullName", nz(str(a.get("guardianFullName")), "Guardian"));
           fallback.put("mobile", str(mobile));
           fallback.put("email", str(email));
+          fallback.put("relation", nz(str(a.get("guardianRelation")), "Guardian"));
           return fallback;
         }
       }
       return Map.of();
     }
 
+    Map<String, Object> father = null;
+    Map<String, Object> mother = null;
     Map<String, Object> primary = null;
+    Map<String, Object> firstWithMobile = null;
     Map<String, Object> firstWithContact = null;
     String mobile = null;
     String email = null;
@@ -466,25 +473,41 @@ public class AttendanceAlertService {
         continue;
       }
       Map<String, Object> guardian = (Map<String, Object>) g;
-      boolean hasContact = hasText(guardian.get("mobile")) || hasText(guardian.get("email"));
-      if (!hasContact) {
+      boolean hasMobile = hasText(guardian.get("mobile"));
+      boolean hasEmail = hasText(guardian.get("email"));
+      if (!hasMobile && !hasEmail) {
         continue;
       }
-      if (mobile == null && hasText(guardian.get("mobile"))) {
+      if (mobile == null && hasMobile) {
         mobile = str(guardian.get("mobile"));
       }
-      if (email == null && hasText(guardian.get("email"))) {
+      if (email == null && hasEmail) {
         email = str(guardian.get("email"));
+      }
+      String relation = str(guardian.get("relation")).toLowerCase(Locale.ROOT);
+      if (father == null && hasMobile && relation.contains("father")) {
+        father = guardian;
+      }
+      if (mother == null && hasMobile && relation.contains("mother")) {
+        mother = guardian;
       }
       if (Boolean.TRUE.equals(guardian.get("isPrimary"))
           || "true".equalsIgnoreCase(str(guardian.get("isPrimary")))) {
         primary = guardian;
       }
+      if (firstWithMobile == null && hasMobile) {
+        firstWithMobile = guardian;
+      }
       if (firstWithContact == null) {
         firstWithContact = guardian;
       }
     }
-    Map<String, Object> chosen = primary != null ? primary : firstWithContact;
+    Map<String, Object> chosen =
+        father != null
+            ? father
+            : mother != null
+                ? mother
+                : primary != null ? primary : firstWithMobile != null ? firstWithMobile : firstWithContact;
     if (chosen == null) {
       return Map.of();
     }

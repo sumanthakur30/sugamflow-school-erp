@@ -88,6 +88,57 @@ public class MasterDataClient {
     return new ArrayList<>(byId.values());
   }
 
+  /** Partial answers merge on student master (PUT /api/student/students/{id}). */
+  public Map<String, Object> patchStudentAnswers(
+      TenantScope scope, String studentId, Map<String, Object> answers) {
+    return putAnswers(
+        scope,
+        properties.getIntegrations().getStudentBaseUrl() + "/api/student/students/" + studentId,
+        answers,
+        "student");
+  }
+
+  /** Partial answers merge on staff master (PUT /api/staff/staff/{id}). */
+  public Map<String, Object> patchStaffAnswers(
+      TenantScope scope, String staffId, Map<String, Object> answers) {
+    return putAnswers(
+        scope,
+        properties.getIntegrations().getStaffBaseUrl() + "/api/staff/staff/" + staffId,
+        answers,
+        "staff");
+  }
+
+  private Map<String, Object> putAnswers(
+      TenantScope scope, String url, Map<String, Object> answers, String kind) {
+    try {
+      Map<String, Object> body = new LinkedHashMap<>();
+      body.put("answers", answers != null ? answers : Map.of());
+      body.put("reason", "Compliance Import Center gap-fill");
+      Map<String, Object> envelope =
+          restClientBuilder
+              .build()
+              .put()
+              .uri(url)
+              .headers(h -> TenantHeaders.apply(h, scope))
+              .body(body)
+              .retrieve()
+              .body(MAP_TYPE);
+      if (envelope == null) {
+        return Map.of();
+      }
+      Object data = envelope.get("data");
+      if (data instanceof Map<?, ?> m) {
+        @SuppressWarnings("unchecked")
+        Map<String, Object> cast = (Map<String, Object>) m;
+        return cast;
+      }
+      return Map.of();
+    } catch (Exception ex) {
+      log.warn("Master data {} patch failed ({}): {}", kind, url, ex.getMessage());
+      throw new IllegalStateException("Failed to update " + kind + " record: " + ex.getMessage(), ex);
+    }
+  }
+
   private List<Map<String, Object>> pageAll(TenantScope scope, String firstUrlTemplate, String kind) {
     List<Map<String, Object>> all = new ArrayList<>();
     for (int page = 0; page < MAX_PAGES; page++) {

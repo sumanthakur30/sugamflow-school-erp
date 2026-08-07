@@ -76,7 +76,9 @@ $PhaseB = @(
 $Extra = @(
   "audit-service",
   "rule-engine-service",
-  "report-builder-service"
+  "report-builder-service",
+  "compliance-service",
+  "support-service"
 )
 
 # HCP public site — compose profile website

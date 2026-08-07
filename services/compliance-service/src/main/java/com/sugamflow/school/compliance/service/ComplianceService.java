@@ -93,6 +93,7 @@ public class ComplianceService {
             scope.organizationId(), "OPEN", "WARN");
     if (openBlockers > 0) {
       actions.add(openBlockers + " data blocker(s) — fix in Data Readiness before submission.");
+      actions.add("Use Import Center to gap-fill blank student/staff fields from Excel/CSV.");
     } else if (openWarns > 0) {
       actions.add(openWarns + " data warning(s) to review in Data Readiness.");
     } else if (campaigns.isEmpty()) {

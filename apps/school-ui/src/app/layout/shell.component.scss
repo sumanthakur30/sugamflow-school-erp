@@ -567,6 +567,7 @@
 .side-icon[data-icon='wallet']::after { content: 'F'; }
 .side-icon[data-icon='building']::after { content: 'O'; }
 .side-icon[data-icon='chat']::after { content: 'C'; }
+.side-icon[data-icon='help']::after { content: '?'; }
 
 .side-label {
   flex: 1;

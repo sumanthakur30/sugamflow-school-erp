@@ -25,6 +25,20 @@ interface HomepageSection {
     subtitle?: string;
     imageUrl?: string;
     ctaLabel?: string;
+    body?: string;
+    highlight?: string;
+    name?: string;
+    role?: string;
+    message?: string;
+    photoUrl?: string;
+    value1?: string;
+    label1?: string;
+    value2?: string;
+    label2?: string;
+    value3?: string;
+    label3?: string;
+    value4?: string;
+    label4?: string;
     [key: string]: unknown;
   };
 }
@@ -45,6 +59,27 @@ interface AlumniRow {
   batchYear?: number;
   headline?: string;
   bioHtml?: string;
+  status: string;
+}
+
+interface NewsRow {
+  id: string;
+  slug: string;
+  title: string;
+  summary?: string;
+  bodyHtml?: string;
+  coverImageUrl?: string;
+  status: string;
+  publishedAt?: string;
+}
+
+interface GalleryRow {
+  id: string;
+  title: string;
+  caption?: string;
+  imageUrl: string;
+  album: string;
+  sortOrder: number;
   status: string;
 }
 
@@ -128,6 +163,9 @@ export class WebsiteCmsComponent implements OnInit {
     socialInstagram: '',
     socialYoutube: '',
     socialWhatsapp: '',
+    mapUrl: '',
+    mapEmbedUrl: '',
+    mapPhotoUrl: '',
   };
   siteMeta = {
     organizationId: '',
@@ -146,15 +184,16 @@ export class WebsiteCmsComponent implements OnInit {
   previewSrc = (environment as { websitePreviewUrl?: string }).websitePreviewUrl || 'http://localhost:4300';
   readonly sectionCatalog: Array<{ type: string; label: string; supported: boolean }> = [
     { type: 'HERO', label: 'Hero', supported: true },
+    { type: 'ABOUT_SCHOOL', label: 'About school', supported: true },
+    { type: 'STATISTICS', label: 'Statistics', supported: true },
+    { type: 'PRINCIPAL_MESSAGE', label: 'Principal message', supported: true },
+    { type: 'QUICK_LINKS', label: 'Quick links', supported: true },
     { type: 'LATEST_NEWS', label: 'Latest news', supported: true },
+    { type: 'GALLERY', label: 'Gallery block', supported: true },
     { type: 'UPCOMING_EVENTS', label: 'Events', supported: true },
     { type: 'ADMISSION_CTA', label: 'Admission CTA', supported: true },
-    { type: 'PRINCIPAL_MESSAGE', label: 'Principal message', supported: false },
-    { type: 'ABOUT_SCHOOL', label: 'About school', supported: false },
-    { type: 'STATISTICS', label: 'Statistics', supported: false },
     { type: 'FACILITIES', label: 'Facilities', supported: false },
     { type: 'TESTIMONIALS', label: 'Testimonials', supported: false },
-    { type: 'GALLERY', label: 'Gallery block', supported: false },
     { type: 'FAQ', label: 'FAQ', supported: false },
     { type: 'CUSTOM_HTML', label: 'Custom HTML', supported: false },
   ];
@@ -168,8 +207,8 @@ export class WebsiteCmsComponent implements OnInit {
     { id: 'forms', label: 'Forms', group: 'Content', ready: false },
     { id: 'blogs', label: 'Blogs', group: 'Content', ready: false },
     { id: 'events', label: 'Events', group: 'Content', ready: false },
-    { id: 'news', label: 'News', group: 'Content', ready: false },
-    { id: 'gallery', label: 'Gallery', group: 'Content', ready: false },
+    { id: 'news', label: 'News', group: 'Content', ready: true },
+    { id: 'gallery', label: 'Gallery', group: 'Content', ready: true },
     { id: 'alumni', label: 'Alumni', group: 'Content', ready: true },
     { id: 'campuses', label: 'Campuses', group: 'ERP', ready: true },
     { id: 'admissions', label: 'Admissions', group: 'ERP', ready: false },
@@ -185,6 +224,8 @@ export class WebsiteCmsComponent implements OnInit {
   ];
   campuses: CampusRow[] = [];
   alumni: AlumniRow[] = [];
+  newsItems: NewsRow[] = [];
+  galleryItems: GalleryRow[] = [];
   templates: TemplateRow[] = [];
   mediaAssets: MediaRow[] = [];
   mediaUploading = false;
@@ -224,6 +265,22 @@ export class WebsiteCmsComponent implements OnInit {
     bioHtml: '',
   };
   editingAlumniId: string | null = null;
+  newsDraft = {
+    slug: '',
+    title: '',
+    summary: '',
+    bodyHtml: '',
+    coverImageUrl: '',
+  };
+  editingNewsId: string | null = null;
+  galleryDraft = {
+    title: '',
+    caption: '',
+    imageUrl: '',
+    album: 'campus',
+    sortOrder: 0,
+  };
+  editingGalleryId: string | null = null;
   aiDraft = { kind: 'page', topic: '', tone: 'warm and professional' };
   aiResult: Record<string, unknown> | null = null;
   selectedTemplate = '';
@@ -278,6 +335,8 @@ export class WebsiteCmsComponent implements OnInit {
     }
     if (tab === 'campuses') this.loadCampuses();
     if (tab === 'alumni') this.loadAlumni();
+    if (tab === 'news') this.loadNews();
+    if (tab === 'gallery') this.loadGallery();
     if (tab === 'marketplace') this.loadTemplates();
     if (tab === 'pages') this.reload();
   }
@@ -329,7 +388,7 @@ export class WebsiteCmsComponent implements OnInit {
         },
         error: (err) => {
           this.mediaUploading = false;
-          this.error = err?.error?.message || 'Upload failed';
+          this.error = this.apiError(err, 'Upload failed — check media storage permissions');
         },
       });
   }
@@ -511,6 +570,9 @@ export class WebsiteCmsComponent implements OnInit {
             socialInstagram: theme['socialInstagram'] || '',
             socialYoutube: theme['socialYoutube'] || '',
             socialWhatsapp: theme['socialWhatsapp'] || '',
+            mapUrl: theme['mapUrl'] || theme['googleMapsUrl'] || '',
+            mapEmbedUrl: theme['mapEmbedUrl'] || theme['googleMapsEmbedUrl'] || '',
+            mapPhotoUrl: theme['mapPhotoUrl'] || theme['campusPhotoUrl'] || theme['mapImageUrl'] || '',
           };
           this.siteMeta = {
             organizationId: String(data['organizationId'] || ''),
@@ -651,6 +713,152 @@ export class WebsiteCmsComponent implements OnInit {
         next: () => this.loadAlumni(),
         error: (err) => (this.error = err?.error?.message || 'Publish failed'),
       });
+  }
+
+  loadNews(): void {
+    this.http
+      .get<ApiResponse<NewsRow[]>>(`${environment.apiBaseUrl}/api/cms/admin/news`)
+      .subscribe({
+        next: (res) => (this.newsItems = res.data || []),
+        error: (err) => (this.error = err?.error?.message || 'Failed to load news'),
+      });
+  }
+
+  saveNews(): void {
+    this.saving = true;
+    this.error = '';
+    const body = { ...this.newsDraft };
+    const req$ = this.editingNewsId
+      ? this.http.put<ApiResponse<NewsRow>>(
+          `${environment.apiBaseUrl}/api/cms/admin/news/${this.editingNewsId}`,
+          body
+        )
+      : this.http.post<ApiResponse<NewsRow>>(
+          `${environment.apiBaseUrl}/api/cms/admin/news`,
+          body
+        );
+    req$.subscribe({
+      next: () => {
+        this.saving = false;
+        this.editingNewsId = null;
+        this.newsDraft = { slug: '', title: '', summary: '', bodyHtml: '', coverImageUrl: '' };
+        this.mediaNotice = 'News saved. Publish if draft, then refresh /news on the public site.';
+        this.loadNews();
+      },
+      error: (err) => {
+        this.saving = false;
+        this.error = err?.error?.message || 'Failed to save news';
+      },
+    });
+  }
+
+  startEditNews(row: NewsRow): void {
+    this.editingNewsId = row.id;
+    this.newsDraft = {
+      slug: row.slug,
+      title: row.title,
+      summary: row.summary || '',
+      bodyHtml: row.bodyHtml || '',
+      coverImageUrl: row.coverImageUrl || '',
+    };
+    this.tab = 'news';
+  }
+
+  cancelEditNews(): void {
+    this.editingNewsId = null;
+    this.newsDraft = { slug: '', title: '', summary: '', bodyHtml: '', coverImageUrl: '' };
+  }
+
+  publishNews(row: NewsRow): void {
+    this.http
+      .post(`${environment.apiBaseUrl}/api/cms/admin/news/${row.id}/publish`, {})
+      .subscribe({
+        next: () => this.loadNews(),
+        error: (err) => (this.error = err?.error?.message || 'Publish failed'),
+      });
+  }
+
+  loadGallery(): void {
+    this.http
+      .get<ApiResponse<GalleryRow[]>>(`${environment.apiBaseUrl}/api/cms/admin/gallery`)
+      .subscribe({
+        next: (res) => (this.galleryItems = res.data || []),
+        error: (err) => (this.error = err?.error?.message || 'Failed to load gallery'),
+      });
+  }
+
+  saveGallery(): void {
+    this.saving = true;
+    this.error = '';
+    const body = { ...this.galleryDraft };
+    const req$ = this.editingGalleryId
+      ? this.http.put<ApiResponse<GalleryRow>>(
+          `${environment.apiBaseUrl}/api/cms/admin/gallery/${this.editingGalleryId}`,
+          body
+        )
+      : this.http.post<ApiResponse<GalleryRow>>(
+          `${environment.apiBaseUrl}/api/cms/admin/gallery`,
+          body
+        );
+    req$.subscribe({
+      next: () => {
+        this.saving = false;
+        this.editingGalleryId = null;
+        this.galleryDraft = {
+          title: '',
+          caption: '',
+          imageUrl: '',
+          album: 'campus',
+          sortOrder: 0,
+        };
+        this.mediaNotice = 'Gallery item saved. Publish if draft, then refresh /gallery.';
+        this.loadGallery();
+      },
+      error: (err) => {
+        this.saving = false;
+        this.error = err?.error?.message || 'Failed to save gallery item';
+      },
+    });
+  }
+
+  startEditGallery(row: GalleryRow): void {
+    this.editingGalleryId = row.id;
+    this.galleryDraft = {
+      title: row.title,
+      caption: row.caption || '',
+      imageUrl: row.imageUrl,
+      album: row.album || 'campus',
+      sortOrder: row.sortOrder ?? 0,
+    };
+    this.tab = 'gallery';
+  }
+
+  cancelEditGallery(): void {
+    this.editingGalleryId = null;
+    this.galleryDraft = {
+      title: '',
+      caption: '',
+      imageUrl: '',
+      album: 'campus',
+      sortOrder: 0,
+    };
+  }
+
+  publishGallery(row: GalleryRow): void {
+    this.http
+      .post(`${environment.apiBaseUrl}/api/cms/admin/gallery/${row.id}/publish`, {})
+      .subscribe({
+        next: () => this.loadGallery(),
+        error: (err) => (this.error = err?.error?.message || 'Publish failed'),
+      });
+  }
+
+  deleteGallery(row: GalleryRow): void {
+    if (!confirm(`Delete gallery item “${row.title}”?`)) return;
+    this.http.delete(`${environment.apiBaseUrl}/api/cms/admin/gallery/${row.id}`).subscribe({
+      next: () => this.loadGallery(),
+      error: (err) => (this.error = err?.error?.message || 'Delete failed'),
+    });
   }
 
   runAiDraft(): void {
@@ -828,7 +1036,26 @@ export class WebsiteCmsComponent implements OnInit {
 
   ensureContent(section: HomepageSection): void {
     if (!section.content) {
-      section.content = { title: '', subtitle: '', imageUrl: '', ctaLabel: '' };
+      section.content = {
+        title: '',
+        subtitle: '',
+        imageUrl: '',
+        ctaLabel: '',
+        body: '',
+        highlight: '',
+        name: '',
+        role: '',
+        message: '',
+        photoUrl: '',
+        value1: '',
+        label1: '',
+        value2: '',
+        label2: '',
+        value3: '',
+        label3: '',
+        value4: '',
+        label4: '',
+      };
     }
   }
 

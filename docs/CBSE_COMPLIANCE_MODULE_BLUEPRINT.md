@@ -185,7 +185,7 @@ Delivered in this sequence:
 | Compose | `compliance-service` in `docker-compose.school.ec2-rds.yml` |
 | school-ui | Compliance nav + dashboard + profile (feature-gated) |
 
-**Next sequence:** GA hardening / pilot feedback (multi-board packs delivered in P6).
+**Next sequence:** clean demo masters / HCP-01 pilot / EC2 deploy (Import Center delivered in P7).
 
 | Phase | Weeks | Scope |
 |---|---|---|
@@ -196,6 +196,16 @@ Delivered in this sequence:
 | P4 Disclosure | 2 | CMS auto-publish |
 | P5 AI + Adapters | 2–3 | AI WARN jobs, SFTP/REST stubs |
 | P6 Multi-board | done | ICSE / State packs via config + platform templates |
+| P7 Import Center | done | Bulk CSV/XLSX gap-fill into student/staff answers |
+
+**P7 delivered:**
+
+| Item | Location |
+|---|---|
+| Flyway V8 import jobs | `V8__compliance_import_center.sql` |
+| Parse + match + commit | `ComplianceImportService` (POI + CSV) |
+| APIs | `GET/POST /api/compliance/import/**` |
+| school-ui | Import Center page + nav |
 
 **P6 delivered:**
 

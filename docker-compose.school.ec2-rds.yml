@@ -247,6 +247,46 @@ services:
       ACADEMIC_SUBSCRIPTION_URL: http://subscription-service:8182
       ACADEMIC_SETTINGS_URL: http://school-settings-service:8181
 
+  support-service:
+    <<: *jvm-service
+    image: ${IMAGE_PREFIX:-sumanthakur30}/support-service:${IMAGE_TAG:-1.0.0}
+    environment:
+      <<: *common-env
+      EUREKA_INSTANCE_HOSTNAME: support-service
+      SERVER_PORT: 8195
+      SCHOOL_SUPPORT_DB_URL: ${SCHOOL_SUPPORT_DB_URL}
+      SCHOOL_SUPPORT_DB_USERNAME: ${SCHOOL_SUPPORT_DB_USERNAME}
+      SCHOOL_SUPPORT_DB_PASSWORD: ${SCHOOL_SUPPORT_DB_PASSWORD}
+      SPRING_DATASOURCE_URL: ${SCHOOL_SUPPORT_DB_URL}
+      SPRING_DATASOURCE_USERNAME: ${SCHOOL_SUPPORT_DB_USERNAME}
+      SPRING_DATASOURCE_PASSWORD: ${SCHOOL_SUPPORT_DB_PASSWORD}
+      SCHOOL_SUPPORT_STORAGE_DIR: ${SCHOOL_SUPPORT_STORAGE_DIR:-/var/lib/school-support-attachments}
+    volumes:
+      - ${SCHOOL_SUPPORT_HOST_DIR:-/opt/school/data/support-attachments}:/var/lib/school-support-attachments
+
+  compliance-service:
+    <<: *jvm-service
+    image: ${IMAGE_PREFIX:-sumanthakur30}/compliance-service:${IMAGE_TAG:-1.0.0}
+    environment:
+      <<: *common-env
+      EUREKA_INSTANCE_HOSTNAME: compliance-service
+      SERVER_PORT: 8202
+      SCHOOL_COMPLIANCE_DB_URL: ${SCHOOL_COMPLIANCE_DB_URL}
+      SCHOOL_COMPLIANCE_DB_USERNAME: ${SCHOOL_COMPLIANCE_DB_USERNAME}
+      SCHOOL_COMPLIANCE_DB_PASSWORD: ${SCHOOL_COMPLIANCE_DB_PASSWORD}
+      SPRING_DATASOURCE_URL: ${SCHOOL_COMPLIANCE_DB_URL}
+      SPRING_DATASOURCE_USERNAME: ${SCHOOL_COMPLIANCE_DB_USERNAME}
+      SPRING_DATASOURCE_PASSWORD: ${SCHOOL_COMPLIANCE_DB_PASSWORD}
+      COMPLIANCE_SUBSCRIPTION_URL: http://subscription-service:8182
+      COMPLIANCE_STUDENT_URL: http://student-service:8191
+      COMPLIANCE_STAFF_URL: http://staff-service:8198
+      COMPLIANCE_CMS_URL: http://cms-service:8201
+      COMPLIANCE_DOCUMENTS_DIR: /var/lib/school-compliance-documents
+      COMPLIANCE_EXPORTS_DIR: /var/lib/school-compliance-exports
+    volumes:
+      - ${SCHOOL_COMPLIANCE_DOCS_HOST_DIR:-/opt/school/data/compliance-documents}:/var/lib/school-compliance-documents
+      - ${SCHOOL_COMPLIANCE_EXPORTS_HOST_DIR:-/opt/school/data/compliance-exports}:/var/lib/school-compliance-exports
+
   # -------------------------------------------------------------------------
   # Phase B (opt-in: --profile phase-b  or  COMPOSE_PROFILES=phase-b)
   # -------------------------------------------------------------------------
@@ -293,6 +333,7 @@ services:
       ATTENDANCE_ACADEMIC_URL: http://academic-structure-service:8199
       ATTENDANCE_PUBLIC_API_URL: http://gateway-service:9090
       ATTENDANCE_NOTIF_DELIVERY_URL: http://notification-service:8087
+      ATTENDANCE_NOTIF_CFG_URL: http://school-notification-config-service:8187
       ATTENDANCE_DB_POOL_MAX_SIZE: ${ATTENDANCE_DB_POOL_MAX_SIZE:-5}
       ATTENDANCE_DB_POOL_MIN_IDLE: ${ATTENDANCE_DB_POOL_MIN_IDLE:-0}
 
@@ -442,32 +483,20 @@ services:
       CMS_SUBSCRIPTION_URL: http://subscription-service:8182
       WEBSITE_CDN_BASE_URL: ${WEBSITE_CDN_BASE_URL:-}
       CMS_MEDIA_CDN_BASE_URL: ${CMS_MEDIA_CDN_BASE_URL:-}
+      # Persist uploads across container recreate (local store until S3 is enabled).
+      CMS_MEDIA_STORAGE_DIR: ${CMS_MEDIA_STORAGE_DIR:-/var/lib/school-cms-media}
       CMS_MEDIA_S3_ENABLED: ${CMS_MEDIA_S3_ENABLED:-false}
       CMS_MEDIA_S3_BUCKET: ${CMS_MEDIA_S3_BUCKET:-}
       CMS_MEDIA_S3_REGION: ${CMS_MEDIA_S3_REGION:-ap-south-1}
       CMS_MEDIA_S3_ENDPOINT: ${CMS_MEDIA_S3_ENDPOINT:-}
       CMS_MEDIA_S3_ACCESS_KEY: ${CMS_MEDIA_S3_ACCESS_KEY:-}
       CMS_MEDIA_S3_SECRET_KEY: ${CMS_MEDIA_S3_SECRET_KEY:-}
-
-  compliance-service:
-    <<: *jvm-service
-    image: ${IMAGE_PREFIX:-sumanthakur30}/compliance-service:${IMAGE_TAG:-1.0.0}
-    environment:
-      <<: *common-env
-      EUREKA_INSTANCE_HOSTNAME: compliance-service
-      SERVER_PORT: 8202
-      SCHOOL_COMPLIANCE_DB_URL: ${SCHOOL_COMPLIANCE_DB_URL}
-      SCHOOL_COMPLIANCE_DB_USERNAME: ${SCHOOL_COMPLIANCE_DB_USERNAME}
-      SCHOOL_COMPLIANCE_DB_PASSWORD: ${SCHOOL_COMPLIANCE_DB_PASSWORD}
-      SPRING_DATASOURCE_URL: ${SCHOOL_COMPLIANCE_DB_URL}
-      SPRING_DATASOURCE_USERNAME: ${SCHOOL_COMPLIANCE_DB_USERNAME}
-      SPRING_DATASOURCE_PASSWORD: ${SCHOOL_COMPLIANCE_DB_PASSWORD}
-      COMPLIANCE_SUBSCRIPTION_URL: http://subscription-service:8182
-      COMPLIANCE_STUDENT_URL: http://student-service:8191
-      COMPLIANCE_STAFF_URL: http://staff-service:8198
-      COMPLIANCE_CMS_URL: http://cms-service:8201
-      COMPLIANCE_DOCUMENTS_DIR: /var/lib/school-compliance-documents
-      COMPLIANCE_EXPORTS_DIR: /var/lib/school-compliance-exports
     volumes:
-      - ${SCHOOL_COMPLIANCE_DOCS_HOST_DIR:-/opt/school/data/compliance-documents}:/var/lib/school-compliance-documents
-      - ${SCHOOL_COMPLIANCE_EXPORTS_HOST_DIR:-/opt/school/data/compliance-exports}:/var/lib/school-compliance-exports
+      # Host path (not anonymous root-owned volume) so school uid 10001 can write.
+      - ${CMS_MEDIA_HOST_DIR:-/opt/school/data/cms-media}:/var/lib/school-cms-media
+
+volumes:
+  # Kept for older installs; cms-service now prefers bind mount CMS_MEDIA_HOST_DIR.
+  cms_media_data:
+    name: school_cms_media_data
+

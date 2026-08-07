@@ -2,6 +2,7 @@ package com.sugamflow.school.cms.storage;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.file.AccessDeniedException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Optional;
@@ -41,6 +42,10 @@ public class LocalMediaObjectStore implements MediaObjectStore {
       Files.createDirectories(orgDir);
       Path target = orgDir.resolve(id + "-" + fileName);
       Files.copy(data, target);
+    } catch (AccessDeniedException ex) {
+      throw new ResponseStatusException(
+          HttpStatus.INTERNAL_SERVER_ERROR,
+          "Media storage is not writable. Fix volume ownership (chown 10001) or enable S3.");
     } catch (IOException ex) {
       throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Failed to store file");
     }

@@ -37,6 +37,7 @@
     <module>academic-structure-service</module>
     <module>website-service</module>
     <module>cms-service</module>
+    <module>support-service</module>
     <module>compliance-service</module>
   </modules>
 

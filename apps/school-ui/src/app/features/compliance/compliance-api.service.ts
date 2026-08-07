@@ -302,6 +302,59 @@ export interface ValidationRuleRow {
   active: boolean;
 }
 
+export interface ImportColumn {
+  fieldKey: string;
+  label: string;
+  required: boolean;
+  severity: string;
+  formatRegex?: string;
+}
+
+export interface ImportBootstrap {
+  boardCode: string;
+  packKey?: string;
+  matchKeyStudent: string;
+  matchKeyStaff: string;
+  fillBlankOnlyDefault: boolean;
+  studentColumns: ImportColumn[];
+  staffColumns: ImportColumn[];
+}
+
+export interface ImportJobRow {
+  id: number;
+  rowNo: number;
+  matchKey?: string;
+  entityId?: string;
+  status: string;
+  payload: Record<string, unknown>;
+  errorMessage?: string;
+}
+
+export interface ImportJob {
+  id: number;
+  organizationId?: string;
+  boardCode: string;
+  packKey?: string;
+  entityType: string;
+  fileName?: string;
+  status: string;
+  fillBlankOnly: boolean;
+  totalRows: number;
+  readyCount: number;
+  errorCount: number;
+  matchedCount: number;
+  updatedCount: number;
+  createdBy?: string;
+  createdAt?: string;
+  updatedAt?: string;
+  rows?: ImportJobRow[];
+}
+
+export interface ImportCommitResult {
+  job: ImportJob;
+  hint?: string;
+}
+
 @Injectable({ providedIn: 'root' })
 export class ComplianceApiService {
   private readonly http = inject(HttpClient);
@@ -628,6 +681,57 @@ export class ComplianceApiService {
   ): Observable<ValidationRuleRow> {
     return this.http
       .put<ApiResponse<ValidationRuleRow>>(`${this.base}/platform/rules/${id}`, body)
+      .pipe(map((r) => r.data));
+  }
+
+  importBootstrap(): Observable<ImportBootstrap> {
+    return this.http
+      .get<ApiResponse<ImportBootstrap>>(`${this.base}/import/bootstrap`)
+      .pipe(map((r) => r.data));
+  }
+
+  downloadImportTemplate(entityType: string): Observable<Blob> {
+    return this.http.get(`${this.base}/import/template.csv`, {
+      params: { entityType },
+      responseType: 'blob',
+    });
+  }
+
+  listImportJobs(): Observable<ImportJob[]> {
+    return this.http
+      .get<ApiResponse<ImportJob[]>>(`${this.base}/import/jobs`)
+      .pipe(map((r) => r.data));
+  }
+
+  getImportJob(id: number): Observable<ImportJob> {
+    return this.http
+      .get<ApiResponse<ImportJob>>(`${this.base}/import/jobs/${id}`)
+      .pipe(map((r) => r.data));
+  }
+
+  uploadImport(
+    file: File,
+    entityType: string,
+    fillBlankOnly = true,
+  ): Observable<ImportJob> {
+    const form = new FormData();
+    form.append('file', file, file.name);
+    return this.http
+      .post<ApiResponse<ImportJob>>(`${this.base}/import`, form, {
+        params: { entityType, fillBlankOnly: String(fillBlankOnly) },
+      })
+      .pipe(map((r) => r.data));
+  }
+
+  validateImportJob(id: number): Observable<ImportJob> {
+    return this.http
+      .post<ApiResponse<ImportJob>>(`${this.base}/import/jobs/${id}/validate`, {})
+      .pipe(map((r) => r.data));
+  }
+
+  commitImportJob(id: number): Observable<ImportCommitResult> {
+    return this.http
+      .post<ApiResponse<ImportCommitResult>>(`${this.base}/import/jobs/${id}/commit`, {})
       .pipe(map((r) => r.data));
   }
 }
