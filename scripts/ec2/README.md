@@ -25,6 +25,7 @@ Docker network (external): `sumanthakur30_default`
 | `03-sugamflow-start.sh` | Start SugamFlow shop apps only |
 | `03-sugamflow-stop.sh` | Stop SugamFlow shop apps only |
 | `04-pull-recreate-all-school.sh` | Pull Hub images + recreate all School services (Phase A+B) |
+| `demo/*.sh` | **Demo on-demand** — retail always-on; school/clinic/IPD/fieldforce only when showing that vertical (see `demo/README.md`) |
 
 **PC prod env preflight:** `D:\school\scripts\check-prod-env.ps1`  
 (JWT secret match, internal API key match, SMTP not localhost, Website CMS DB vars)
@@ -56,7 +57,27 @@ WITH_IPD=1 SCHOOL_PHASE=b bash scripts/ec2/00-full-deploy-and-flyway-check.sh
 CHECK_ONLY=1 bash scripts/ec2/00-full-deploy-and-flyway-check.sh
 ```
 
-Script defaults: `SUGAMFLOW_DIR=/home/ec2-user/opt/sugamflow`, `SCHOOL_DIR=/home/ec2-user/opt/school`. Override if your paths differ (`/opt/sugamflow`, etc.).
+Script defaults: `SUGAMFLOW_DIR=/opt/sugamflow`, `SCHOOL_DIR=/opt/school`.
+
+### Demo day (RAM-saving)
+
+```bash
+# Everyday retail (GEN/MED/CLO/GRO) — keep only core + retail
+bash /opt/school/scripts/ec2/demo/up-retail.sh
+bash /opt/school/scripts/ec2/demo/down-demos.sh
+
+# Before a specific pitch
+bash /opt/school/scripts/ec2/demo/up-school.sh      # PHASE=all
+bash /opt/school/scripts/ec2/demo/up-clinic.sh
+bash /opt/school/scripts/ec2/demo/up-ipd.sh
+bash /opt/school/scripts/ec2/demo/up-fieldforce.sh
+
+# After demos
+bash /opt/school/scripts/ec2/demo/down-demos.sh
+bash /opt/school/scripts/ec2/demo/status.sh
+```
+
+Same scripts are also at `/opt/sugamflow/scripts/demo/`.
 
 ### Compose + env (production)
 

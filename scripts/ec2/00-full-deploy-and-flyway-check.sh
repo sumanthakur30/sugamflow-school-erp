@@ -27,8 +27,8 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-SUGAMFLOW_DIR="${SUGAMFLOW_DIR:-/home/ec2-user/opt/sugamflow}"
-SCHOOL_DIR="${SCHOOL_DIR:-/home/ec2-user/opt/school}"
+SUGAMFLOW_DIR="${SUGAMFLOW_DIR:-/opt/sugamflow}"
+SCHOOL_DIR="${SCHOOL_DIR:-/opt/school}"
 SUGAMFLOW_COMPOSE="${SUGAMFLOW_COMPOSE:-docker-compose.ec2-rds.yml}"
 SUGAMFLOW_IPD_COMPOSE="${SUGAMFLOW_IPD_COMPOSE:-docker-compose.ec2-ipd.yml}"
 SUGAMFLOW_ENV="${SUGAMFLOW_ENV:-.env.production}"
