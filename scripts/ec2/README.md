@@ -59,25 +59,31 @@ CHECK_ONLY=1 bash scripts/ec2/00-full-deploy-and-flyway-check.sh
 
 Script defaults: `SUGAMFLOW_DIR=/opt/sugamflow`, `SCHOOL_DIR=/opt/school`.
 
-### Demo day (RAM-saving)
+### Demo day (RAM-saving) — prefer `docker compose`
+
+Full copy-paste commands: [`demo/README.md`](demo/README.md) (also on EC2 at `/opt/school/scripts/ec2/demo/README.md` and `/opt/sugamflow/scripts/demo/README.md`).
 
 ```bash
-# Everyday retail (GEN/MED/CLO/GRO) — keep only core + retail
-bash /opt/school/scripts/ec2/demo/up-retail.sh
-bash /opt/school/scripts/ec2/demo/down-demos.sh
+# Everyday retail — keep core + retail apps up (see demo/README.md)
 
-# Before a specific pitch
-bash /opt/school/scripts/ec2/demo/up-school.sh      # PHASE=all
-bash /opt/school/scripts/ec2/demo/up-clinic.sh
-bash /opt/school/scripts/ec2/demo/up-ipd.sh
-bash /opt/school/scripts/ec2/demo/up-fieldforce.sh
+# School pitch
+cd /opt/school
+docker compose -f docker-compose.school.ec2-rds.yml --env-file .env.school.production \
+  --profile phase-b --profile website up -d
+# after:
+docker compose -f docker-compose.school.ec2-rds.yml --env-file .env.school.production \
+  --profile phase-b --profile website stop
 
-# After demos
-bash /opt/school/scripts/ec2/demo/down-demos.sh
-bash /opt/school/scripts/ec2/demo/status.sh
+# Clinic pitch
+cd /opt/sugamflow
+docker compose -f docker-compose.ec2-rds.yml --env-file .env.production up -d \
+  doctor-service appointment-service queue-management-service
+# after:
+docker compose -f docker-compose.ec2-rds.yml --env-file .env.production stop \
+  doctor-service appointment-service queue-management-service
 ```
 
-Same scripts are also at `/opt/sugamflow/scripts/demo/`.
+Optional wrappers (same groups): `demo/up-*.sh`, `demo/down-demos.sh`.
 
 ### Compose + env (production)
 
