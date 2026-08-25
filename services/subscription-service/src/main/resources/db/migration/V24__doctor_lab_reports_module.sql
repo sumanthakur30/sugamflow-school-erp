@@ -16,26 +16,18 @@ INSERT INTO feature_definition (code, module_code, name, description, sort_order
 ON CONFLICT (code) DO NOTHING;
 
 UPDATE subscription_plan
-SET feature_flags_json = jsonb_set(
-        COALESCE(feature_flags_json::jsonb, '{}'::jsonb),
-        '{DOCTOR_LAB_REPORTS}',
-        'true'::jsonb,
-        true
-    )::text,
+SET feature_flags_json = COALESCE(feature_flags_json, '{}'::jsonb)
+        || '{"DOCTOR_LAB_REPORTS": true}'::jsonb,
     updated_at = NOW()
 WHERE id = 'poly-starter'
-  AND COALESCE(feature_flags_json, '') NOT LIKE '%DOCTOR_LAB_REPORTS%';
+  AND COALESCE(feature_flags_json->>'DOCTOR_LAB_REPORTS', '') = '';
 
 UPDATE subscription_plan
-SET feature_flags_json = jsonb_set(
-        COALESCE(feature_flags_json::jsonb, '{}'::jsonb),
-        '{HOSPITAL_DOCTOR_LAB_REPORTS}',
-        'false'::jsonb,
-        true
-    )::text,
+SET feature_flags_json = COALESCE(feature_flags_json, '{}'::jsonb)
+        || '{"HOSPITAL_DOCTOR_LAB_REPORTS": false}'::jsonb,
     updated_at = NOW()
 WHERE id IN ('hospital-starter', 'hospital-pro')
-  AND COALESCE(feature_flags_json, '') NOT LIKE '%HOSPITAL_DOCTOR_LAB_REPORTS%';
+  AND COALESCE(feature_flags_json->>'HOSPITAL_DOCTOR_LAB_REPORTS', '') = '';
 
 INSERT INTO plan_feature (plan_id, feature_code, enabled, updated_at)
 VALUES ('poly-starter', 'DOCTOR_LAB_REPORTS', TRUE, NOW())
