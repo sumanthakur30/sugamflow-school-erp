@@ -1,0 +1,224 @@
+{
+  "summary": {
+    "generatedAt": "2026-07-18T13:09:11.361Z",
+    "endpoints": 16,
+    "healthyEndpoints": 16,
+    "failedEndpoints": 0,
+    "p95Under500Ms": 16,
+    "p95Over1000Ms": 0
+  },
+  "results": [
+    {
+      "endpoint": "/api/config/branches/bootstrap",
+      "requests": 8,
+      "successful": 8,
+      "statuses": [
+        200
+      ],
+      "p50Ms": 56,
+      "p95Ms": 94,
+      "maxMs": 94,
+      "errors": []
+    },
+    {
+      "endpoint": "/api/subscription/tenants/current/entitlements",
+      "requests": 8,
+      "successful": 8,
+      "statuses": [
+        200
+      ],
+      "p50Ms": 9,
+      "p95Ms": 18,
+      "maxMs": 18,
+      "errors": []
+    },
+    {
+      "endpoint": "/api/student/directory/summary",
+      "requests": 8,
+      "successful": 8,
+      "statuses": [
+        200
+      ],
+      "p50Ms": 72,
+      "p95Ms": 142,
+      "maxMs": 142,
+      "errors": []
+    },
+    {
+      "endpoint": "/api/student/students?page=0&size=20",
+      "requests": 8,
+      "successful": 8,
+      "statuses": [
+        200
+      ],
+      "p50Ms": 45,
+      "p95Ms": 58,
+      "maxMs": 58,
+      "errors": []
+    },
+    {
+      "endpoint": "/api/staff/directory/staff?page=0&size=20",
+      "requests": 8,
+      "successful": 8,
+      "statuses": [
+        200
+      ],
+      "p50Ms": 59,
+      "p95Ms": 93,
+      "maxMs": 93,
+      "errors": []
+    },
+    {
+      "endpoint": "/api/admission/applications?page=0&size=20",
+      "requests": 8,
+      "successful": 8,
+      "statuses": [
+        200
+      ],
+      "p50Ms": 51,
+      "p95Ms": 165,
+      "maxMs": 165,
+      "errors": []
+    },
+    {
+      "endpoint": "/api/fee/collections?page=0&size=20",
+      "requests": 8,
+      "successful": 8,
+      "statuses": [
+        200
+      ],
+      "p50Ms": 51,
+      "p95Ms": 74,
+      "maxMs": 74,
+      "errors": []
+    },
+    {
+      "endpoint": "/api/fee/finance/income-expense?preset=THIS_MONTH&branchIds=ALL",
+      "requests": 8,
+      "successful": 8,
+      "statuses": [
+        200
+      ],
+      "p50Ms": 67,
+      "p95Ms": 166,
+      "maxMs": 166,
+      "errors": []
+    },
+    {
+      "endpoint": "/api/payroll/records?page=0&size=20",
+      "requests": 8,
+      "successful": 8,
+      "statuses": [
+        200
+      ],
+      "p50Ms": 65,
+      "p95Ms": 106,
+      "maxMs": 106,
+      "errors": []
+    },
+    {
+      "endpoint": "/api/payroll/reports/salary-summary?preset=THIS_MONTH&branchIds=ALL",
+      "requests": 8,
+      "successful": 8,
+      "statuses": [
+        200
+      ],
+      "p50Ms": 26,
+      "p95Ms": 27,
+      "maxMs": 27,
+      "errors": []
+    },
+    {
+      "endpoint": "/api/attendance/records?page=0&size=20",
+      "requests": 8,
+      "successful": 8,
+      "statuses": [
+        200
+      ],
+      "p50Ms": 33,
+      "p95Ms": 55,
+      "maxMs": 55,
+      "errors": []
+    },
+    {
+      "endpoint": "/api/exam/records?page=0&size=20",
+      "requests": 8,
+      "successful": 8,
+      "statuses": [
+        200
+      ],
+      "p50Ms": 34,
+      "p95Ms": 48,
+      "maxMs": 48,
+      "errors": []
+    },
+    {
+      "endpoint": "/api/library/records?page=0&size=20",
+      "requests": 8,
+      "successful": 8,
+      "statuses": [
+        200
+      ],
+      "p50Ms": 76,
+      "p95Ms": 120,
+      "maxMs": 120,
+      "errors": []
+    },
+    {
+      "endpoint": "/api/hostel/records?page=0&size=20",
+      "requests": 8,
+      "successful": 8,
+      "statuses": [
+        200
+      ],
+      "p50Ms": 33,
+      "p95Ms": 84,
+      "maxMs": 84,
+      "errors": []
+    },
+    {
+      "endpoint": "/api/transport/records?page=0&size=20",
+      "requests": 8,
+      "successful": 8,
+      "statuses": [
+        200
+      ],
+      "p50Ms": 33,
+      "p95Ms": 198,
+      "maxMs": 198,
+      "errors": []
+    },
+    {
+      "endpoint": "/api/audit/config-changes?page=0&size=20",
+      "requests": 8,
+      "successful": 8,
+      "statuses": [
+        200
+      ],
+      "p50Ms": 47,
+      "p95Ms": 63,
+      "maxMs": 63,
+      "errors": []
+    }
+  ],
+  "concurrent": [
+    {
+      "endpoint": "/api/student/students?page=0&size=20",
+      "concurrency": 20,
+      "wallMs": 439,
+      "successful": 20,
+      "p50Ms": 295,
+      "p95Ms": 430,
+      "maxMs": 430
+    },
+    {
+      "endpoint": "/api/fee/finance/income-expense?preset=THIS_MONTH&branchIds=ALL",
+      "concurrency": 20,
+      "wallMs": 527,
+      "successful": 20,
+      "p50Ms": 410,
+      "p95Ms": 507,
+      "maxMs": 521
+    }
+  ]
+}

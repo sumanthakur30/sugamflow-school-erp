@@ -1,0 +1,21 @@
+=== Login ===
+OK   admin_demo-school
+
+=== Feature flags ===
+OK   FEATURE_PARENT_APP
+OK   FEATURE_TEACHER_APP
+
+=== Parent bootstrap ===
+OK   parent nav=4 widgets=4
+
+=== Teacher bootstrap ===
+OK   teacher nav=4 widgets=4
+
+=== Module settings present ===
+OK   parent_portal title=Parent App
+OK   teacher_portal title=Teacher App
+
+=== Portal list ===
+OK   portals=parent,teacher
+
+PASS  verify-portals

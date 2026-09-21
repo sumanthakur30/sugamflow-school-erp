@@ -1,0 +1,19 @@
+<section class="page">
+  <div class="page-head">
+    <h2>AI Configuration</h2>
+    <p>Schools decide AI usage via toggles — gated by subscription AI limits.</p>
+  </div>
+  <div class="panel">
+    @for (entry of entries(); track entry[0]) {
+      <div class="toggle">
+        <span>{{ entry[0] }}</span>
+        <input type="checkbox" [(ngModel)]="flags[entry[0]]" />
+      </div>
+    }
+  </div>
+  <div class="actions">
+    <button type="button" (click)="save()">Save</button>
+    <a class="secondary-link" routerLink="/admin/devices">Open device adapters →</a>
+    @if (status) { <span class="status">{{ status }}</span> }
+  </div>
+</section>

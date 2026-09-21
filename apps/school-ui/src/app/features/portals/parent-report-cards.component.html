@@ -1,0 +1,78 @@
+<section class="page">
+  <div class="page-head">
+    <h2>Report cards</h2>
+    <p>Published term report cards for your child. Download a printable PDF.</p>
+  </div>
+
+  @if (error) {
+    <p class="error panel" role="alert">{{ error }}</p>
+  }
+
+  @if (loading) {
+    <p class="panel">Loading…</p>
+  } @else if (!cards.length) {
+    <p class="panel muted">No published report cards yet.</p>
+  } @else {
+    <ul class="card-list">
+      @for (card of cards; track card.sectionId + '|' + card.termKey + '|' + (card.student?.admissionNo || '')) {
+        <li class="panel report-card">
+          <div class="rc-head">
+            <div>
+              <strong>{{ card.student?.studentName || card.student?.admissionNo }}</strong>
+              <p class="muted">{{ card.sectionLabel }} · {{ card.termKey }}</p>
+            </div>
+            <div class="rc-summary">
+              <span class="chip">{{ card.student?.percentage != null ? card.student.percentage + '%' : '–' }}</span>
+              <span class="chip">Grade {{ card.student?.overallGrade || '–' }}</span>
+              <span class="badge" [class.fail]="card.student?.result === 'FAIL'">
+                {{ card.student?.result || '–' }}
+              </span>
+            </div>
+          </div>
+
+          <ul class="subject-lines">
+            @for (s of card.student?.subjects; track s.subjectId) {
+              <li>
+                <span>{{ s.name }}</span>
+                <span class="muted">
+                  {{ s.marksObtained != null ? s.marksObtained + '/' + s.maxMarks : '–' }}
+                  @if (s.grade) {
+                    · {{ s.grade }}
+                  }
+                </span>
+              </li>
+            }
+          </ul>
+
+          <div class="actions">
+            <button
+              type="button"
+              class="insight-button"
+              (click)="toggleInsights(card)"
+              [disabled]="isInsightLoading(card)"
+            >
+              {{
+                isInsightLoading(card)
+                  ? 'Analyzing…'
+                  : expandedInsightKey === cardKey(card)
+                    ? 'Hide insights'
+                    : 'View performance insights'
+              }}
+            </button>
+            <button type="button" class="secondary" (click)="download(card)" [disabled]="busy">
+              Download PDF
+            </button>
+          </div>
+
+          @if (expandedInsightKey === cardKey(card)) {
+            @if (isInsightLoading(card)) {
+              <p class="insight-loading">Analyzing published marks and term history…</p>
+            } @else if (insightFor(card)) {
+              <sf-report-card-insights [insight]="insightFor(card)" />
+            }
+          }
+        </li>
+      }
+    </ul>
+  }
+</section>

@@ -1,0 +1,228 @@
+package com.sugamflow.school.cms.web;
+
+import com.sugamflow.school.cms.service.CmsAiAssistService;
+import com.sugamflow.school.cms.service.CmsAlumniService;
+import com.sugamflow.school.cms.service.CmsBlogService;
+import com.sugamflow.school.cms.service.CmsContentService;
+import com.sugamflow.school.cms.service.CmsMediaService;
+import com.sugamflow.school.cms.web.dto.AlumniResponse;
+import com.sugamflow.school.cms.web.dto.AlumniUpsertRequest;
+import com.sugamflow.school.cms.web.dto.BlogPostResponse;
+import com.sugamflow.school.cms.web.dto.BlogUpsertRequest;
+import com.sugamflow.school.cms.web.dto.GalleryItemResponse;
+import com.sugamflow.school.cms.web.dto.GalleryUpsertRequest;
+import com.sugamflow.school.cms.web.dto.MediaAssetResponse;
+import com.sugamflow.school.cms.web.dto.MediaRegisterRequest;
+import com.sugamflow.school.cms.web.dto.NewsResponse;
+import com.sugamflow.school.cms.web.dto.NewsUpsertRequest;
+import com.sugamflow.school.cms.web.dto.PageResponse;
+import com.sugamflow.school.cms.web.dto.PageUpsertRequest;
+import com.sugamflow.school.common.api.ApiResponse;
+import com.sugamflow.school.common.tenant.TenantContext;
+import jakarta.validation.Valid;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+import org.springframework.http.MediaType;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestPart;
+import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
+
+@RestController
+@RequestMapping("/api/cms/admin")
+public class CmsAdminController {
+
+  private final CmsContentService contentService;
+  private final CmsMediaService mediaService;
+  private final CmsBlogService blogService;
+  private final CmsAlumniService alumniService;
+  private final CmsAiAssistService aiAssistService;
+
+  public CmsAdminController(
+      CmsContentService contentService,
+      CmsMediaService mediaService,
+      CmsBlogService blogService,
+      CmsAlumniService alumniService,
+      CmsAiAssistService aiAssistService) {
+    this.contentService = contentService;
+    this.mediaService = mediaService;
+    this.blogService = blogService;
+    this.alumniService = alumniService;
+    this.aiAssistService = aiAssistService;
+  }
+
+  @GetMapping("/pages")
+  public ApiResponse<List<PageResponse>> listPages() {
+    return ApiResponse.ok(contentService.listAdminPages(orgId()));
+  }
+
+  @PostMapping("/pages")
+  public ApiResponse<PageResponse> create(@Valid @RequestBody PageUpsertRequest request) {
+    return ApiResponse.ok(contentService.createPage(orgId(), request));
+  }
+
+  @PutMapping("/pages/{id}")
+  public ApiResponse<PageResponse> update(
+      @PathVariable("id") UUID id, @Valid @RequestBody PageUpsertRequest request) {
+    return ApiResponse.ok(contentService.updatePage(orgId(), id, request));
+  }
+
+  @PostMapping("/pages/{id}/publish")
+  public ApiResponse<PageResponse> publish(@PathVariable("id") UUID id) {
+    return ApiResponse.ok(contentService.publishPage(orgId(), id));
+  }
+
+  @PostMapping("/pages/{id}/unpublish")
+  public ApiResponse<PageResponse> unpublish(@PathVariable("id") UUID id) {
+    return ApiResponse.ok(contentService.unpublishPage(orgId(), id));
+  }
+
+  @GetMapping("/media")
+  public ApiResponse<List<MediaAssetResponse>> listMedia() {
+    return ApiResponse.ok(mediaService.list(orgId()));
+  }
+
+  @GetMapping("/media/usage")
+  public ApiResponse<Map<String, Object>> mediaUsage() {
+    return ApiResponse.ok(mediaService.usage(orgId()));
+  }
+
+  @PostMapping("/media")
+  public ApiResponse<MediaAssetResponse> registerMedia(
+      @Valid @RequestBody MediaRegisterRequest request) {
+    return ApiResponse.ok(mediaService.register(orgId(), request));
+  }
+
+  @PostMapping(value = "/media/upload", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+  public ApiResponse<MediaAssetResponse> uploadMedia(@RequestPart("file") MultipartFile file) {
+    return ApiResponse.ok(mediaService.upload(orgId(), file));
+  }
+
+  @DeleteMapping("/media/{id}")
+  public ApiResponse<Map<String, Object>> deleteMedia(@PathVariable("id") UUID id) {
+    mediaService.delete(orgId(), id);
+    return ApiResponse.ok(Map.of("deleted", true, "id", id.toString()));
+  }
+
+  @GetMapping("/blog")
+  public ApiResponse<List<BlogPostResponse>> listBlog() {
+    return ApiResponse.ok(blogService.listAdmin(orgId()));
+  }
+
+  @PostMapping("/blog")
+  public ApiResponse<BlogPostResponse> createBlog(@Valid @RequestBody BlogUpsertRequest request) {
+    return ApiResponse.ok(blogService.create(orgId(), request));
+  }
+
+  @PutMapping("/blog/{id}")
+  public ApiResponse<BlogPostResponse> updateBlog(
+      @PathVariable("id") UUID id, @Valid @RequestBody BlogUpsertRequest request) {
+    return ApiResponse.ok(blogService.update(orgId(), id, request));
+  }
+
+  @PostMapping("/blog/{id}/publish")
+  public ApiResponse<BlogPostResponse> publishBlog(@PathVariable("id") UUID id) {
+    return ApiResponse.ok(blogService.publish(orgId(), id));
+  }
+
+  @PostMapping("/blog/{id}/unpublish")
+  public ApiResponse<BlogPostResponse> unpublishBlog(@PathVariable("id") UUID id) {
+    return ApiResponse.ok(blogService.unpublish(orgId(), id));
+  }
+
+  @GetMapping("/news")
+  public ApiResponse<List<NewsResponse>> listNews() {
+    return ApiResponse.ok(contentService.listAdminNews(orgId()));
+  }
+
+  @PostMapping("/news")
+  public ApiResponse<NewsResponse> createNews(@Valid @RequestBody NewsUpsertRequest request) {
+    return ApiResponse.ok(contentService.createNews(orgId(), request));
+  }
+
+  @PutMapping("/news/{id}")
+  public ApiResponse<NewsResponse> updateNews(
+      @PathVariable("id") UUID id, @Valid @RequestBody NewsUpsertRequest request) {
+    return ApiResponse.ok(contentService.updateNews(orgId(), id, request));
+  }
+
+  @PostMapping("/news/{id}/publish")
+  public ApiResponse<NewsResponse> publishNews(@PathVariable("id") UUID id) {
+    return ApiResponse.ok(contentService.publishNews(orgId(), id));
+  }
+
+  @PostMapping("/news/{id}/unpublish")
+  public ApiResponse<NewsResponse> unpublishNews(@PathVariable("id") UUID id) {
+    return ApiResponse.ok(contentService.unpublishNews(orgId(), id));
+  }
+
+  @GetMapping("/gallery")
+  public ApiResponse<List<GalleryItemResponse>> listGallery() {
+    return ApiResponse.ok(contentService.listAdminGallery(orgId()));
+  }
+
+  @PostMapping("/gallery")
+  public ApiResponse<GalleryItemResponse> createGallery(
+      @Valid @RequestBody GalleryUpsertRequest request) {
+    return ApiResponse.ok(contentService.createGalleryItem(orgId(), request));
+  }
+
+  @PutMapping("/gallery/{id}")
+  public ApiResponse<GalleryItemResponse> updateGallery(
+      @PathVariable("id") UUID id, @Valid @RequestBody GalleryUpsertRequest request) {
+    return ApiResponse.ok(contentService.updateGalleryItem(orgId(), id, request));
+  }
+
+  @PostMapping("/gallery/{id}/publish")
+  public ApiResponse<GalleryItemResponse> publishGallery(@PathVariable("id") UUID id) {
+    return ApiResponse.ok(contentService.publishGalleryItem(orgId(), id));
+  }
+
+  @PostMapping("/gallery/{id}/unpublish")
+  public ApiResponse<GalleryItemResponse> unpublishGallery(@PathVariable("id") UUID id) {
+    return ApiResponse.ok(contentService.unpublishGalleryItem(orgId(), id));
+  }
+
+  @DeleteMapping("/gallery/{id}")
+  public ApiResponse<Map<String, Object>> deleteGallery(@PathVariable("id") UUID id) {
+    contentService.deleteGalleryItem(orgId(), id);
+    return ApiResponse.ok(Map.of("deleted", true, "id", id.toString()));
+  }
+
+  @GetMapping("/alumni")
+  public ApiResponse<List<AlumniResponse>> listAlumni() {
+    return ApiResponse.ok(alumniService.listAdmin(orgId()));
+  }
+
+  @PostMapping("/alumni")
+  public ApiResponse<AlumniResponse> createAlumni(@Valid @RequestBody AlumniUpsertRequest request) {
+    return ApiResponse.ok(alumniService.create(orgId(), request));
+  }
+
+  @PutMapping("/alumni/{id}")
+  public ApiResponse<AlumniResponse> updateAlumni(
+      @PathVariable("id") UUID id, @Valid @RequestBody AlumniUpsertRequest request) {
+    return ApiResponse.ok(alumniService.update(orgId(), id, request));
+  }
+
+  @PostMapping("/alumni/{id}/publish")
+  public ApiResponse<AlumniResponse> publishAlumni(@PathVariable("id") UUID id) {
+    return ApiResponse.ok(alumniService.publish(orgId(), id));
+  }
+
+  @PostMapping("/ai/draft")
+  public ApiResponse<Map<String, Object>> aiDraft(@RequestBody Map<String, Object> body) {
+    return ApiResponse.ok(aiAssistService.draft(orgId(), body));
+  }
+
+  private static String orgId() {
+    return TenantContext.require().organizationId();
+  }
+}

@@ -1,0 +1,96 @@
+<section class="page">
+  <div class="page-head">
+    <h2>Workflow Builder</h2>
+    <p>Configure approval steps, roles, and SLA hours — tenant overrides without code.</p>
+  </div>
+
+  @if (error) {
+    <p class="error panel" role="alert">{{ error }}</p>
+  }
+  @if (status) {
+    <p class="status panel">{{ status }}</p>
+  }
+
+  <div class="editor-layout">
+    <section class="panel">
+      <div class="actions" style="margin-top: 0">
+        <button type="button" (click)="startNew()">New workflow</button>
+      </div>
+      <ul class="editor-list">
+        @for (wf of workflows; track wf.workflowKey) {
+          <li>
+            <button
+              type="button"
+              class="editor-row"
+              [class.active]="!isNew && wf.workflowKey === selectedKey"
+              (click)="select(wf.workflowKey)"
+            >
+              <strong>{{ wf.name || wf.workflowKey }}</strong>
+              <span>{{ wf.workflowKey }} · {{ wf.steps?.length || 0 }} steps</span>
+            </button>
+          </li>
+        }
+      </ul>
+    </section>
+
+    <section class="panel">
+      @if (!draft) {
+        <p class="muted">Select a workflow or create a new one.</p>
+      } @else {
+        <h3>{{ isNew ? 'New workflow' : 'Edit workflow' }}</h3>
+        <div class="grid two">
+          <label>
+            Workflow key
+            <input [(ngModel)]="draft.workflowKey" name="workflowKey" [readonly]="!isNew" />
+          </label>
+          <label>
+            Name
+            <input [(ngModel)]="draft.name" name="name" />
+          </label>
+        </div>
+
+        <h3>Steps</h3>
+        @for (step of draft.steps; track $index; let i = $index) {
+          <div class="step-grid">
+            <label>
+              Seq
+              <input type="number" [(ngModel)]="step.sequence" [name]="'seq' + i" />
+            </label>
+            <label>
+              Name
+              <input [(ngModel)]="step.name" [name]="'sn' + i" />
+            </label>
+            <label>
+              Role
+              <select [(ngModel)]="step.assignRole" [name]="'sr' + i">
+                @for (r of roles; track r) {
+                  <option [value]="r">{{ r }}</option>
+                }
+              </select>
+            </label>
+            <label>
+              SLA (h)
+              <input type="number" [(ngModel)]="step.slaHours" [name]="'sla' + i" />
+            </label>
+            <label>
+              Auto
+              <input type="checkbox" [(ngModel)]="step.autoApprove" [name]="'aa' + i" />
+            </label>
+            <div class="actions" style="margin-top: 0">
+              <button type="button" class="secondary" (click)="moveStep(i, -1)">↑</button>
+              <button type="button" class="secondary" (click)="moveStep(i, 1)">↓</button>
+              <button type="button" class="secondary danger" (click)="removeStep(i)">Remove</button>
+            </div>
+          </div>
+        }
+
+        <div class="actions">
+          <button type="button" class="secondary" (click)="addStep()">Add step</button>
+          <button type="button" (click)="save()" [disabled]="busy">
+            {{ busy ? 'Saving…' : 'Save workflow' }}
+          </button>
+        </div>
+      }
+    </section>
+  </div>
+</section>

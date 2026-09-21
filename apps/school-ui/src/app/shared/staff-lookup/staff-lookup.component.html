@@ -1,0 +1,143 @@
+<div class="slu" [class.is-disabled]="disabled">
+  <div class="slu-label-row">
+    <label class="slu-label" [attr.for]="inputId">{{ label }}</label>
+    @if (showFilters) {
+      <button
+        type="button"
+        class="slu-link"
+        (click)="showFilterPanel = !showFilterPanel"
+        [disabled]="disabled"
+      >
+        {{ showFilterPanel ? 'Hide filters' : 'Filters' }}
+      </button>
+    }
+  </div>
+
+  @if (showFilters && showFilterPanel) {
+    <div class="slu-filters">
+      <label>
+        Status
+        <select
+          [(ngModel)]="filters.status"
+          name="stfStatus"
+          [disabled]="disabled"
+          (ngModelChange)="applyFilters()"
+        >
+          <option value="ACTIVE">Active</option>
+          <option value="">All</option>
+          <option value="INACTIVE">Inactive</option>
+        </select>
+      </label>
+      <label>
+        Department
+        <input
+          [(ngModel)]="filters.department"
+          name="stfDept"
+          placeholder="e.g. Accounts"
+          [disabled]="disabled"
+          (keyup.enter)="applyFilters()"
+        />
+      </label>
+      <button type="button" class="slu-apply" (click)="applyFilters()" [disabled]="disabled">
+        Apply
+      </button>
+    </div>
+  }
+
+  @if (selected) {
+    <div class="slu-selected">
+      <div class="slu-selected-main">
+        <div class="slu-avatar" aria-hidden="true">
+          {{ (displayName(selected) || '?').charAt(0).toUpperCase() }}
+        </div>
+        <div>
+          <div class="slu-selected-name">{{ displayName(selected) }}</div>
+          <div class="slu-selected-meta">
+            {{ selected.employeeNo || selected.id }}
+            @if (selected.department) {
+              · {{ selected.department }}
+            }
+            @if (selected.designation) {
+              · {{ selected.designation }}
+            }
+          </div>
+        </div>
+      </div>
+      <button type="button" class="slu-change" (click)="clearSelection()" [disabled]="disabled">
+        Change staff
+      </button>
+    </div>
+  } @else {
+    <div class="slu-input-wrap">
+      <input
+        #searchInput
+        [id]="inputId"
+        class="slu-input"
+        type="search"
+        autocomplete="off"
+        [placeholder]="placeholder"
+        [ngModel]="q"
+        (ngModelChange)="onQueryChange($event)"
+        (focus)="onFocus()"
+        (keydown)="onKeydown($event)"
+        [disabled]="disabled"
+        role="combobox"
+        aria-autocomplete="list"
+        [attr.aria-expanded]="open"
+        [attr.aria-controls]="listId"
+      />
+      @if (searching) {
+        <span class="slu-spinner" aria-label="Searching"></span>
+      }
+    </div>
+  }
+
+  @if (error) {
+    <p class="slu-error" role="alert">{{ error }}</p>
+  }
+
+  @if (open && !selected) {
+    <ul class="slu-dropdown" role="listbox" [id]="listId">
+      @if (!searching && !results.length) {
+        <li class="slu-empty muted">{{ emptyHint || 'No matching staff.' }}</li>
+      }
+      @for (row of results; track trackById($index, row); let i = $index) {
+        <li
+          role="option"
+          class="slu-option"
+          [class.is-active]="i === highlightIndex"
+          [attr.aria-selected]="i === highlightIndex"
+          (mousedown)="selectRow(row, $event)"
+          (mouseenter)="highlightIndex = i"
+        >
+          <div class="slu-avatar sm" aria-hidden="true">
+            {{ (displayName(row) || '?').charAt(0).toUpperCase() }}
+          </div>
+          <div class="slu-option-body">
+            <div class="slu-option-title">
+              {{ displayName(row) }}
+              <span class="slu-badge slu-ok">{{ row.status || 'ACTIVE' }}</span>
+            </div>
+            <div class="slu-option-line">
+              ID: {{ row.employeeNo || row.id }}
+              @if (row.department) {
+                · {{ row.department }}
+              }
+              @if (row.designation) {
+                · {{ row.designation }}
+              }
+            </div>
+            <div class="slu-option-line">
+              @if (row.mobile) {
+                Mobile: {{ row.mobile }}
+              }
+              @if (row.email) {
+                · {{ row.email }}
+              }
+            </div>
+          </div>
+        </li>
+      }
+    </ul>
+  }
+</div>

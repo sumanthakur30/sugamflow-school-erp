@@ -1,0 +1,36 @@
+.branch-switcher {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  font-size: 0.78rem;
+  margin: 0;
+  min-width: 0;
+}
+
+.bs-label {
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  opacity: 0.65;
+  font-size: 0.65rem;
+  color: var(--sf-text, #0f172a);
+}
+
+.branch-switcher select {
+  border: 1px solid color-mix(in srgb, var(--sf-menu) 18%, #cbd5e1);
+  border-radius: 8px;
+  background: var(--sf-panel, #fff);
+  color: var(--sf-text, #0f172a);
+  padding: 0.4rem 0.55rem;
+  font-weight: 600;
+  max-width: 160px;
+}
+
+.branch-switcher select:disabled {
+  opacity: 0.85;
+  cursor: default;
+}
+
+.bs-loading {
+  opacity: 0.7;
+  color: color-mix(in srgb, var(--sf-text) 60%, #64748b);
+}

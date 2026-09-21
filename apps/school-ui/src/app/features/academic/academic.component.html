@@ -1,0 +1,299 @@
+<section class="admin-page academic-page">
+  <header class="page-head">
+    <div>
+      <h1>Academic Structure</h1>
+      <p class="muted">
+        Classes, sections, subjects, and teaching assignments. Section
+        <strong>student label</strong> must match the class string on student records
+        so teacher RBAC scopes correctly.
+      </p>
+    </div>
+    <div class="head-actions">
+      <a class="btn ghost" routerLink="/admin/timetable">Timetable</a>
+      <a class="btn ghost" routerLink="/admin/attendance">Attendance</a>
+      <a class="btn ghost" routerLink="/admin/exam">Exam / Gradebook</a>
+      <button type="button" class="btn ghost" (click)="reload()" [disabled]="loading || busy">Refresh</button>
+    </div>
+  </header>
+
+  <p class="error" *ngIf="error">{{ error }}</p>
+  <p class="ok" *ngIf="status && !error">{{ status }}</p>
+  <p class="muted" *ngIf="loading">Loading…</p>
+
+  <div class="grid" *ngIf="!loading">
+    <!-- Classes -->
+    <article class="panel">
+      <h2>Classes</h2>
+      <p class="panel-err" *ngIf="classesError">{{ classesError }}</p>
+      <ul class="list" *ngIf="classes.length; else noClasses">
+        <li
+          *ngFor="let c of classes"
+          [class.active]="selectedClassId === c.id"
+          (click)="selectClass(c.id)"
+        >
+          <div class="row-main">
+            <strong>{{ c.name }}</strong>
+            <span class="muted">{{ c.code || '—' }} · seq {{ c.sequenceNo }}</span>
+          </div>
+          <div class="row-actions" *ngIf="canManage" (click)="$event.stopPropagation()">
+            <button type="button" class="linkish" (click)="startEditClass(c)">Edit</button>
+            <button type="button" class="linkish danger" (click)="deleteClass(c.id)">Delete</button>
+          </div>
+        </li>
+      </ul>
+      <ng-template #noClasses><p class="muted">No classes yet.</p></ng-template>
+
+      <div class="form" *ngIf="canManage">
+        <h3>{{ editingClassId ? 'Edit class' : 'Add class' }}</h3>
+        <label>
+          Name
+          <input [(ngModel)]="classDraft.name" name="className" placeholder="Class 10" />
+        </label>
+        <label>
+          Code
+          <input [(ngModel)]="classDraft.code" name="classCode" placeholder="C10" />
+        </label>
+        <label>
+          Sequence
+          <input type="number" [(ngModel)]="classDraft.sequenceNo" name="classSeq" />
+        </label>
+        <div class="form-actions">
+          <button type="button" class="btn primary" (click)="saveClass()" [disabled]="busy">
+            {{ editingClassId ? 'Update' : 'Create' }}
+          </button>
+          <button
+            type="button"
+            class="btn ghost"
+            *ngIf="editingClassId"
+            (click)="cancelEditClass()"
+            [disabled]="busy"
+          >
+            Cancel
+          </button>
+        </div>
+      </div>
+    </article>
+
+    <!-- Sections -->
+    <article class="panel">
+      <h2>
+        Sections
+        <span class="muted" *ngIf="selectedClassId">· {{ className(selectedClassId) }}</span>
+        <span class="muted" *ngIf="!selectedClassId">· all</span>
+      </h2>
+      <p class="hint">
+        Tip: set student label to the same value as student <code>classSection</code> /
+        <code>classApplied</code> (e.g. <code>Class 10-A</code>).
+      </p>
+      <p class="panel-err" *ngIf="sectionsError">{{ sectionsError }}</p>
+      <div class="table-wrap" *ngIf="sections.length; else noSections">
+        <table>
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Student label</th>
+              <th>Class teacher</th>
+              <th>Room</th>
+              <th *ngIf="canManage"></th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let s of sections" [class.editing]="editingSectionId === s.id">
+              <td>{{ s.name }}</td>
+              <td><code>{{ s.studentLabel }}</code></td>
+              <td>{{ s.classTeacherUsername || '—' }}</td>
+              <td>{{ s.room || '—' }}</td>
+              <td class="actions" *ngIf="canManage">
+                <button type="button" class="linkish" (click)="startEditSection(s)">Edit</button>
+                <button type="button" class="linkish danger" (click)="deleteSection(s.id)">Delete</button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <ng-template #noSections><p class="muted">No sections yet.</p></ng-template>
+
+      <div class="form" *ngIf="canManage">
+        <h3>{{ editingSectionId ? 'Edit section' : 'Add section' }}</h3>
+        <p class="muted" *ngIf="!selectedClassId && !editingSectionId">
+          Select a class on the left to add a section.
+        </p>
+        <ng-container *ngIf="selectedClassId || editingSectionId">
+          <label>
+            Name
+            <input [(ngModel)]="sectionDraft.name" name="secName" placeholder="A" />
+          </label>
+          <label>
+            Code
+            <input [(ngModel)]="sectionDraft.code" name="secCode" placeholder="A" />
+          </label>
+          <label>
+            Student label
+            <input
+              [(ngModel)]="sectionDraft.studentLabel"
+              name="secLabel"
+              [placeholder]="suggestedLabel() || 'Class 10-A'"
+            />
+          </label>
+          <p class="hint" *ngIf="!sectionDraft.studentLabel && suggestedLabel()">
+            Will default to <code>{{ suggestedLabel() }}</code>
+          </p>
+          <label>
+            Class teacher username
+            <input
+              [(ngModel)]="sectionDraft.classTeacherUsername"
+              name="secTeacher"
+              placeholder="teacher1"
+            />
+          </label>
+          <label>
+            Room
+            <input [(ngModel)]="sectionDraft.room" name="secRoom" placeholder="R101" />
+          </label>
+          <label>
+            Capacity
+            <input type="number" [(ngModel)]="sectionDraft.capacity" name="secCap" />
+          </label>
+          <div class="form-actions">
+            <button type="button" class="btn primary" (click)="saveSection()" [disabled]="busy">
+              {{ editingSectionId ? 'Update' : 'Create' }}
+            </button>
+            <button
+              type="button"
+              class="btn ghost"
+              *ngIf="editingSectionId"
+              (click)="cancelEditSection()"
+              [disabled]="busy"
+            >
+              Cancel
+            </button>
+          </div>
+        </ng-container>
+      </div>
+    </article>
+
+    <!-- Subjects -->
+    <article class="panel">
+      <h2>Subjects</h2>
+      <p class="panel-err" *ngIf="subjectsError">{{ subjectsError }}</p>
+      <ul class="list" *ngIf="subjects.length; else noSubjects">
+        <li *ngFor="let s of subjects">
+          <div class="row-main">
+            <strong>{{ s.name }}</strong>
+            <span class="muted">{{ s.code || '—' }} · {{ s.subjectType }}</span>
+          </div>
+          <div class="row-actions" *ngIf="canManage">
+            <button type="button" class="linkish" (click)="startEditSubject(s)">Edit</button>
+            <button type="button" class="linkish danger" (click)="deleteSubject(s.id)">Delete</button>
+          </div>
+        </li>
+      </ul>
+      <ng-template #noSubjects><p class="muted">No subjects yet.</p></ng-template>
+
+      <div class="form" *ngIf="canManage">
+        <h3>{{ editingSubjectId ? 'Edit subject' : 'Add subject' }}</h3>
+        <label>
+          Name
+          <input [(ngModel)]="subjectDraft.name" name="subName" placeholder="Mathematics" />
+        </label>
+        <label>
+          Code
+          <input [(ngModel)]="subjectDraft.code" name="subCode" placeholder="MATH" />
+        </label>
+        <label>
+          Type
+          <select [(ngModel)]="subjectDraft.subjectType" name="subType">
+            <option value="CORE">CORE</option>
+            <option value="ELECTIVE">ELECTIVE</option>
+            <option value="ACTIVITY">ACTIVITY</option>
+          </select>
+        </label>
+        <div class="form-actions">
+          <button type="button" class="btn primary" (click)="saveSubject()" [disabled]="busy">
+            {{ editingSubjectId ? 'Update' : 'Create' }}
+          </button>
+          <button
+            type="button"
+            class="btn ghost"
+            *ngIf="editingSubjectId"
+            (click)="cancelEditSubject()"
+            [disabled]="busy"
+          >
+            Cancel
+          </button>
+        </div>
+      </div>
+    </article>
+
+    <!-- Teaching assignments -->
+    <article class="panel wide">
+      <h2>Teaching assignments</h2>
+      <p class="hint">
+        Assigns teachers to sections (and optionally subjects). Class-teacher flag updates the
+        section’s class teacher username used for RBAC.
+      </p>
+      <p class="panel-err" *ngIf="assignmentsError">{{ assignmentsError }}</p>
+      <div class="table-wrap" *ngIf="assignments.length; else noAssign">
+        <table>
+          <thead>
+            <tr>
+              <th>Teacher</th>
+              <th>Section</th>
+              <th>Subject</th>
+              <th>Class teacher</th>
+              <th *ngIf="canManage"></th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let a of assignments">
+              <td>{{ a.teacherUsername }}</td>
+              <td>{{ sectionLabel(a.sectionId) }}</td>
+              <td>{{ subjectName(a.subjectId) }}</td>
+              <td>{{ a.classTeacher ? 'Yes' : 'No' }}</td>
+              <td class="actions" *ngIf="canManage">
+                <button type="button" class="linkish danger" (click)="deleteAssignment(a.id)">
+                  Remove
+                </button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <ng-template #noAssign><p class="muted">No assignments yet.</p></ng-template>
+
+      <div class="form row" *ngIf="canManage">
+        <label>
+          Section
+          <select [(ngModel)]="assignmentDraft.sectionId" name="asSec">
+            <option value="">Select…</option>
+            <option *ngFor="let s of allSections" [value]="s.id">
+              {{ s.studentLabel || s.name }}
+            </option>
+          </select>
+        </label>
+        <label>
+          Subject (optional)
+          <select [(ngModel)]="assignmentDraft.subjectId" name="asSub">
+            <option value="">—</option>
+            <option *ngFor="let s of subjects" [value]="s.id">{{ s.name }}</option>
+          </select>
+        </label>
+        <label>
+          Teacher username
+          <input
+            [(ngModel)]="assignmentDraft.teacherUsername"
+            name="asTeacher"
+            placeholder="teacher1"
+          />
+        </label>
+        <label class="check">
+          <input type="checkbox" [(ngModel)]="assignmentDraft.classTeacher" name="asCt" />
+          Class teacher
+        </label>
+        <button type="button" class="btn primary" (click)="createAssignment()" [disabled]="busy">
+          Assign
+        </button>
+      </div>
+    </article>
+  </div>
+</section>

@@ -1,0 +1,287 @@
+<section class="page lifecycle-page">
+  <div class="page-head">
+    <h2>Promotions &amp; Transfers</h2>
+    <p>
+      Move students to the next class at the end of the year, start a new academic year, or issue a
+      transfer certificate when a student leaves the school.
+    </p>
+  </div>
+
+  @if (error) {
+    <p class="error panel" role="alert">{{ error }}</p>
+  }
+  @if (status) {
+    <p class="status panel">{{ status }}</p>
+  }
+
+  @if (loading) {
+    <p class="panel">Loading…</p>
+  } @else {
+    <!-- Year at a glance -->
+    <section class="panel year-banner">
+      <div>
+        <span class="year-label">Current academic year</span>
+        <strong>{{ currentSessionKey() || '—' }}</strong>
+      </div>
+      <span class="year-arrow" aria-hidden="true">→</span>
+      <div>
+        <span class="year-label">Next academic year</span>
+        <strong>{{ nextSessionKey() || 'not set' }}</strong>
+      </div>
+    </section>
+
+    <!-- Promotion plan -->
+    <section class="panel">
+      <div class="panel-title-row">
+        <div>
+          <h3>Promotion plan</h3>
+          <p class="muted">
+            This decides which class students move to when they are promoted. For example,
+            everyone in Grade 8-A moves to Grade 9-A.
+          </p>
+        </div>
+        @if (!editingMap) {
+          <button type="button" class="ghost-btn" (click)="editingMap = true">Edit plan</button>
+        }
+      </div>
+
+      @if (!editingMap) {
+        <div class="plan-flow">
+          @for (row of mapRows; track row.from) {
+            <div class="plan-step">
+              <span class="plan-class">{{ row.from }}</span>
+              <span class="plan-arrow" aria-hidden="true">→</span>
+              <span class="plan-class next">{{ row.to }}</span>
+            </div>
+          } @empty {
+            <p class="muted">No promotion steps set yet. Click “Edit plan” to add them.</p>
+          }
+        </div>
+      } @else {
+        <div class="plan-editor">
+          <div class="plan-editor-head">
+            <span>Current class</span>
+            <span></span>
+            <span>Moves to</span>
+            <span></span>
+          </div>
+          @for (row of mapRows; track $index) {
+            <div class="plan-editor-row">
+              <input [(ngModel)]="row.from" [name]="'from' + $index" placeholder="e.g. Grade 8-A" list="classOptionsList" />
+              <span class="plan-arrow" aria-hidden="true">→</span>
+              <input [(ngModel)]="row.to" [name]="'to' + $index" placeholder="e.g. Grade 9-A" list="classOptionsList" />
+              <button type="button" class="icon-btn" (click)="removeMapRow($index)" title="Remove this step">✕</button>
+            </div>
+          }
+          <datalist id="classOptionsList">
+            @for (c of classOptions; track c) {
+              <option [value]="c"></option>
+            }
+          </datalist>
+          <button type="button" class="ghost-btn" (click)="addMapRow()">+ Add step</button>
+          <div class="actions">
+            <button type="button" class="primary-btn" (click)="savePromotionMap()" [disabled]="busy">
+              Save plan
+            </button>
+            <button type="button" class="ghost-btn" (click)="editingMap = false" [disabled]="busy">
+              Cancel
+            </button>
+          </div>
+        </div>
+      }
+    </section>
+
+    <div class="grid two">
+      <!-- Promote one student -->
+      <section class="panel task-card">
+        <h3>Promote one student</h3>
+        <p class="muted">
+          Search by student name, admission number, roll number, parent name, mobile, or class.
+        </p>
+        @if (!selectedStudentId) {
+          <sf-student-lookup
+            label="Find student"
+            placeholder="Name, admission no, roll no, parent, mobile…"
+            [showFilters]="true"
+            [pageSize]="12"
+            (studentSelected)="selectStudent($event)"
+          />
+        } @else {
+          @if (selectedStudent(); as student) {
+            <div class="promotion-student">
+              <div class="student-avatar" aria-hidden="true">
+                {{ studentName(selectedStudentId).charAt(0).toUpperCase() }}
+              </div>
+              <div class="student-identity">
+                <strong>{{ studentName(selectedStudentId) }}</strong>
+                <span>
+                  Admission No: {{ studentAdmissionNo(student) }}
+                  · Class: {{ studentClass(student) }}
+                </span>
+                <span>Parent / Guardian: {{ studentParent(student) }}</span>
+              </div>
+              <button type="button" class="ghost-btn" (click)="clearStudentSelection()">
+                Change
+              </button>
+            </div>
+            @if (promotionPreview()) {
+              <p class="preview-line">
+                Promotion: <strong>{{ promotionPreview() }}</strong>
+              </p>
+            } @else {
+              <p class="mapping-alert">
+                No next class is configured for {{ studentClass(student) }} in the promotion plan.
+              </p>
+            }
+          }
+        }
+        <div class="actions">
+          <button
+            type="button"
+            class="primary-btn"
+            (click)="promoteStudent()"
+            [disabled]="busy || !selectedStudentId || !promotionPreview()"
+          >
+            Promote this student
+          </button>
+        </div>
+      </section>
+
+      <!-- Whole class -->
+      <section class="panel task-card">
+        <h3>Promote or move a whole class</h3>
+        <p class="muted">
+          Promote every student in a class at once, or move them into the next academic year.
+        </p>
+        <label>
+          Class
+          <select [(ngModel)]="classValue" name="classValue">
+            <option value="" disabled>Select a class…</option>
+            @for (c of classOptions; track c) {
+              <option [value]="c">{{ c }}</option>
+            }
+          </select>
+        </label>
+        @if (classValue) {
+          <p class="preview-line">
+            {{ classStudentCount(classValue) }} student(s) in {{ classValue }}
+            @if (classPromotionTarget(classValue); as target) {
+              · promotes to <strong>{{ target }}</strong>
+            }
+          </p>
+        }
+        <label>
+          New academic year (for “Start new year”)
+          <select [(ngModel)]="targetSessionId" name="targetSessionId">
+            @for (s of sessions; track s.definitionKey || s.id) {
+              <option [value]="payload(s).definitionKey || s.definitionKey">
+                {{ sessionName(s) }}
+              </option>
+            }
+          </select>
+        </label>
+        <label class="check-line">
+          <input type="checkbox" [(ngModel)]="alsoPromote" name="alsoPromote" />
+          Also promote them to the next class while moving
+        </label>
+        <div class="actions">
+          <button type="button" class="primary-btn" (click)="promoteByClass()" [disabled]="busy">
+            Promote whole class
+          </button>
+          <button type="button" class="ghost-btn" (click)="rolloverClass()" [disabled]="busy">
+            Start new year for this class
+          </button>
+        </div>
+      </section>
+    </div>
+
+    <!-- Transfer certificate -->
+    <section class="panel task-card">
+      <h3>Transfer certificate (TC)</h3>
+      <p class="muted">
+        When a student leaves the school, first check that they have no pending dues, then issue the
+        certificate.
+        @if (selectedStudentId) {
+          This will be issued for <strong>{{ studentName(selectedStudentId) }}</strong>.
+        } @else {
+          Select the student in “Promote one student” above first.
+        }
+      </p>
+      <div class="grid two">
+        <label>
+          Reason for leaving
+          <select [(ngModel)]="tcReason" name="tcReason">
+            @for (reason of tcReasonOptions; track reason) {
+              <option [value]="reason">{{ reason }}</option>
+            }
+          </select>
+        </label>
+        <label>
+          Remarks (optional)
+          <input [(ngModel)]="tcRemarks" name="tcRemarks" placeholder="Any note for the certificate" />
+        </label>
+      </div>
+      <div class="actions">
+        <button
+          type="button"
+          class="ghost-btn"
+          (click)="previewTcClearance()"
+          [disabled]="busy || !selectedStudentId"
+        >
+          1. Check for pending dues
+        </button>
+        <button
+          type="button"
+          class="primary-btn"
+          (click)="issueTc()"
+          [disabled]="busy || !selectedStudentId || !clearance?.cleared"
+        >
+          2. Issue certificate
+        </button>
+      </div>
+      @if (clearance) {
+        <div class="clearance-box" [class.ok]="clearance.cleared" [class.blocked]="!clearance.cleared">
+          @if (clearance.cleared) {
+            <strong>✓ All clear</strong>
+            <p class="muted">No pending dues found. You can issue the certificate.</p>
+          } @else {
+            <strong>✕ Pending items found</strong>
+            <ul>
+              @if (clearance.fees?.hasDues) {
+                <li>Fee dues are pending</li>
+              }
+              @if (clearance.library?.hasOutstanding) {
+                <li>Library books are not returned</li>
+              }
+              @if (clearance.blockReason) {
+                <li>{{ clearance.blockReason }}</li>
+              }
+            </ul>
+          }
+        </div>
+      }
+    </section>
+
+    <!-- Recent activity -->
+    <section class="panel">
+      <h3>Recent activity</h3>
+      @if (!events.length) {
+        <p class="muted">Nothing has happened yet. Promotions and certificates will show up here.</p>
+      } @else {
+        <ul class="activity-list">
+          @for (e of events; track e.id) {
+            <li>
+              <strong>{{ eventTitle(e) }}</strong>
+              <span class="muted">
+                {{ studentName(e.studentId) }} · {{ e.referenceNo }} · {{ e.createdAt | date: 'medium' }}
+              </span>
+              @if (e.hasDocument) {
+                <button type="button" class="tiny" (click)="downloadEventPdf(e)">Download PDF</button>
+              }
+            </li>
+          }
+        </ul>
+      }
+    </section>
+  }
+</section>

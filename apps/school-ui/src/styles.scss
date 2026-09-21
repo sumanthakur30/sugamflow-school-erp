@@ -1,0 +1,169 @@
+:root {
+  --sf-primary: #0b6e4f;
+  --sf-secondary: #084c61;
+  --sf-accent: #e9b44c;
+  --sf-menu: #0b3d2e;
+  --sf-button: #0b6e4f;
+  --sf-text: #1a1a1a;
+  --sf-warning: #d97706;
+  --sf-success: #15803d;
+  --sf-error: #b91c1c;
+  --sf-surface: #f3f7f5;
+  --sf-panel: #ffffff;
+  --sf-radius: 8px;
+  --sf-font: 'Source Sans 3', 'Segoe UI', sans-serif;
+  --sf-display: 'Fraunces', Georgia, serif;
+  --sf-font-size: 14px;
+  --sf-bg-glow-a: rgba(233, 180, 76, 0.18);
+  --sf-bg-glow-b: rgba(11, 110, 79, 0.16);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  min-height: 100%;
+  overflow-x: clip;
+  font-family: var(--sf-font);
+  font-size: var(--sf-font-size);
+  color: var(--sf-text);
+  background:
+    radial-gradient(circle at 12% 18%, var(--sf-bg-glow-a), transparent 34%),
+    radial-gradient(circle at 88% 0%, var(--sf-bg-glow-b), transparent 40%),
+    linear-gradient(160deg, var(--sf-surface) 0%, #f7faf8 45%, color-mix(in srgb, var(--sf-surface) 80%, #dfece6) 100%);
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+/* —— Shared button system (all admin pages) —— */
+button.tiny,
+.tiny {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.25rem;
+  padding: 0.32rem 0.7rem;
+  min-height: 2rem;
+  font-size: 0.8rem;
+  font-weight: 700;
+  line-height: 1.1;
+  border-radius: calc(var(--sf-radius) - 2px);
+  white-space: nowrap;
+}
+
+button.tiny.secondary,
+.tiny.secondary {
+  background: #fff;
+  color: var(--sf-primary, #0b6e4f);
+  border: 1px solid color-mix(in srgb, var(--sf-primary, #0b6e4f) 30%, #cbd5e1);
+}
+
+button.tiny.secondary:hover:not(:disabled),
+.tiny.secondary:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--sf-primary, #0b6e4f) 8%, #fff);
+}
+
+/* Outlined danger for compact list actions (Cancel) — never solid fill */
+button.tiny.danger,
+.tiny.danger {
+  background: #fff !important;
+  color: #b91c1c !important;
+  border: 1px solid color-mix(in srgb, #b91c1c 42%, #fecaca) !important;
+}
+
+button.tiny.danger:hover:not(:disabled),
+.tiny.danger:hover:not(:disabled) {
+  background: #fef2f2 !important;
+  color: #991b1b !important;
+}
+
+/* Solid danger — white on red (full-size Reject / Soft delete / Suspend) */
+button.danger:not(.linkish):not(.secondary):not(.danger-link):not(.danger-item):not(.tiny) {
+  background: #b91c1c;
+  color: #fff;
+  border: 1px solid #991b1b;
+}
+
+button.danger:not(.linkish):not(.secondary):not(.danger-link):not(.danger-item):not(.tiny):hover:not(:disabled) {
+  background: #991b1b;
+}
+
+button.linkish.danger,
+.linkish.danger,
+button.danger-link,
+.danger-link {
+  background: transparent !important;
+  color: #b91c1c !important;
+  border: 0 !important;
+}
+
+button.linkish.danger:hover:not(:disabled),
+.linkish.danger:hover:not(:disabled),
+button.danger-link:hover:not(:disabled),
+.danger-link:hover:not(:disabled) {
+  background: color-mix(in srgb, #b91c1c 10%, #fff) !important;
+  color: #991b1b !important;
+}
+
+button.secondary.danger {
+  background: #fff !important;
+  color: #b91c1c !important;
+  border: 1px solid #b91c1c !important;
+}
+
+button.secondary.danger:hover:not(:disabled) {
+  background: color-mix(in srgb, #b91c1c 8%, #fff) !important;
+  color: #991b1b !important;
+}
+
+h1,
+h2,
+h3 {
+  font-family: var(--sf-display);
+  margin: 0 0 0.35rem;
+}
+
+p {
+  margin: 0;
+}
+
+@media print {
+  body {
+    background: #fff !important;
+  }
+
+  sf-shell .context-bar,
+  sf-shell .module-nav,
+  sf-shell .sidebar,
+  sf-shell .sidebar-backdrop,
+  sf-shell .mobile-nav,
+  sf-shell .top-menu-popover,
+  .context-bar,
+  .module-nav,
+  .sidebar,
+  .no-print {
+    display: none !important;
+  }
+
+  sf-shell .shell-main,
+  .shell-main,
+  .page {
+    margin: 0 !important;
+    padding: 0 !important;
+    max-width: none !important;
+  }
+}
+

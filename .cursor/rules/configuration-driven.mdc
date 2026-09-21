@@ -1,0 +1,23 @@
+---
+description: SugamFlow School ERP configuration-first implementation rules
+alwaysApply: true
+---
+
+# Configuration-Driven School ERP
+
+- Configuration > Customization > Development
+- Never write school-specific Java or Angular code
+- Every feature must support Feature Flags
+- Every screen must support dynamic field configuration
+- Every report must be template-driven
+- Every workflow must be configurable
+- Every business rule must use the Rule Engine
+- Every subscription must control features through configuration
+- Org / branch / academic session independent settings
+- White-label without code changes
+- Metadata-driven UI where feasible
+- Multi-tenancy and horizontal scalability from day one
+- School management is a separate Angular UI (`apps/school-ui`) and dedicated microservices (`services/*`)
+- Audit every configuration change with rollback support
+
+See `docs/IMPLEMENTATION_RULES.md`.

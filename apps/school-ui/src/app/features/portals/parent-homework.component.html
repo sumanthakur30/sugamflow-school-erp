@@ -1,0 +1,63 @@
+<section class="page">
+  <div class="page-head">
+    <h2>Homework</h2>
+    <p>Assignments for your child — submit responses and see teacher feedback.</p>
+  </div>
+
+  @if (error) {
+    <p class="error panel" role="alert">{{ error }}</p>
+  }
+  @if (status) {
+    <p class="status panel">{{ status }}</p>
+  }
+
+  @if (loading) {
+    <p class="panel">Loading…</p>
+  } @else if (!items.length) {
+    <p class="panel muted">No homework assigned yet.</p>
+  } @else {
+    <ul class="hw-list">
+      @for (item of items; track rowKey(item)) {
+        <li class="panel">
+          <div class="hw-head">
+            <div>
+              <strong>{{ item.title }}</strong>
+              <p class="muted">
+                {{ item.studentName || item.admissionNo }} · {{ item.subjectKey }} · due
+                {{ item.dueAt || '—' }}
+              </p>
+            </div>
+            <span class="chip">{{ item.submissionStatus || 'PENDING' }}</span>
+          </div>
+          @if (item.description) {
+            <p>{{ item.description }}</p>
+          }
+          @if (item.submission) {
+            <p class="muted">Submitted {{ item.submission.submittedAt }}</p>
+            <p>{{ item.submission.body }}</p>
+            @if (item.submission.status === 'GRADED') {
+              <p>
+                Marks: <strong>{{ item.submission.gradedMarks ?? '—' }}</strong>
+                @if (item.submission.feedback) {
+                  · {{ item.submission.feedback }}
+                }
+              </p>
+            }
+          } @else {
+            <label>
+              Your response
+              <textarea
+                rows="3"
+                [(ngModel)]="drafts[rowKey(item)]"
+                [ngModelOptions]="{ standalone: true }"
+              ></textarea>
+            </label>
+            <div class="actions">
+              <button type="button" (click)="submit(item)" [disabled]="busy">Submit</button>
+            </div>
+          }
+        </li>
+      }
+    </ul>
+  }
+</section>

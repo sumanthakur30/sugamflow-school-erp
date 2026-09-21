@@ -1,0 +1,27 @@
+<div class="list-pager-bar">
+  @if (showMeta) {
+    <div class="list-meta">
+      @if (totalElements) {
+        Showing {{ from }}–{{ to }} of {{ totalElements }} {{ itemLabel }}
+        · Page {{ pageDisplay }} / {{ totalPages }}
+      } @else {
+        0 {{ itemLabel }}
+      }
+    </div>
+  }
+
+  <div class="list-pager actions">
+    <button type="button" class="secondary" [disabled]="!canPrev" (click)="goFirst()">
+      First
+    </button>
+    <button type="button" class="secondary" [disabled]="!canPrev" (click)="goPrev()">
+      Prev
+    </button>
+    <button type="button" class="secondary" [disabled]="!canNext" (click)="goNext()">
+      Next
+    </button>
+    <button type="button" class="secondary" [disabled]="!canNext" (click)="goLast()">
+      Last
+    </button>
+  </div>
+</div>

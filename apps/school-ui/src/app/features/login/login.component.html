@@ -1,0 +1,82 @@
+<div class="login-page">
+  <section class="login-visual" aria-hidden="true">
+    <div class="login-visual__veil">
+      @if (loginLogo) {
+        <img class="login-visual__logo" [src]="loginLogo" [alt]="schoolName" />
+      } @else {
+        <p class="login-visual__brand">{{ schoolName }}</p>
+      }
+      <p class="login-visual__tagline">{{ tagline }}</p>
+      @if (showAnnouncement) {
+        <p class="login-visual__note">Announcements &amp; notices follow Design Studio toggles.</p>
+      }
+      @if (showAdmissionBanner) {
+        <p class="login-visual__banner">Admissions open — configure forms without code.</p>
+      }
+    </div>
+  </section>
+
+  <section class="login-card">
+    <p class="eyebrow">{{ schoolName }}</p>
+    <h1>Sign in</h1>
+    <p class="lead">{{ tagline }}</p>
+
+    @if (error) {
+      <p class="error" role="alert">{{ error }}</p>
+    }
+    @if (success) {
+      <p class="success" role="status">{{ success }}</p>
+    }
+
+    <form (ngSubmit)="onSubmit()">
+      <label>
+        Organization ID
+        <input
+          [(ngModel)]="organizationId"
+          (ngModelChange)="onOrgChange()"
+          name="organizationId"
+          required
+          autocomplete="organization"
+        />
+      </label>
+      <label>
+        Username
+        <input
+          [(ngModel)]="username"
+          (ngModelChange)="onUsernameChange()"
+          name="username"
+          required
+          autocomplete="username"
+        />
+        <span class="hint">Scoped as <code>{{ username }}_{{ organizationId }}</code></span>
+      </label>
+      <label>
+        Password
+        <input
+          [(ngModel)]="password"
+          name="password"
+          type="password"
+          required
+          autocomplete="current-password"
+        />
+      </label>
+      <label>
+        Open after sign-in
+        <select [(ngModel)]="destination" name="destination">
+          @for (opt of destinations; track opt.value) {
+            <option [value]="opt.value">{{ opt.label }}</option>
+          }
+        </select>
+        <span class="hint">
+          Choose School Admin, Parent App, Teacher App, etc. After sign-in you open that area of
+          the school ERP. Your account permissions still apply.
+        </span>
+      </label>
+      <button type="submit" [disabled]="submitting">
+        {{ submitting ? 'Signing in…' : 'Sign in' }}
+      </button>
+    </form>
+
+    <p class="demo-hint">{{ footer }}</p>
+  </section>
+</div>

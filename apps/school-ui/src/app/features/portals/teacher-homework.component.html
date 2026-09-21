@@ -1,0 +1,106 @@
+<section class="page">
+  <div class="page-head">
+    <h2>Homework</h2>
+    <p>Publish assignments for your section and review student submissions.</p>
+  </div>
+
+  @if (error) {
+    <p class="error panel" role="alert">{{ error }}</p>
+  }
+  @if (status) {
+    <p class="status panel">{{ status }}</p>
+  }
+
+  @if (loading) {
+    <p class="panel">Loading…</p>
+  } @else {
+    <div class="panel filters">
+      <label>
+        Section
+        <select [(ngModel)]="sectionId" (ngModelChange)="refresh()" name="sectionId">
+          @for (s of sections; track s.id) {
+            <option [value]="s.id">{{ s.studentLabel || s.name }}</option>
+          }
+        </select>
+      </label>
+    </div>
+
+    <div class="panel">
+      <h3>Publish homework</h3>
+      <div class="form-grid">
+        <label>
+          Title
+          <input [(ngModel)]="form.title" name="title" />
+        </label>
+        <label>
+          Subject
+          <input [(ngModel)]="form.subjectKey" name="subjectKey" />
+        </label>
+        <label>
+          Due date
+          <input type="date" [(ngModel)]="form.dueDate" name="dueDate" />
+        </label>
+        <label class="full">
+          Description
+          <textarea [(ngModel)]="form.description" name="description" rows="3"></textarea>
+        </label>
+      </div>
+      <div class="actions">
+        <button type="button" (click)="create()" [disabled]="busy">
+          {{ busy ? 'Publishing…' : 'Publish' }}
+        </button>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h3>Assignments</h3>
+      <ul class="record-list">
+        @for (item of items; track item.id) {
+          <li [class.active]="selectedId === item.id">
+            <button type="button" class="linkish" (click)="open(item)">
+              <strong>{{ item.title }}</strong>
+            </button>
+            <p class="muted">
+              {{ item.subjectKey }} · {{ item.classSection || '—' }} · due {{ item.dueAt || '—' }}
+            </p>
+          </li>
+        } @empty {
+          <li class="muted">No homework for this section yet.</li>
+        }
+      </ul>
+    </div>
+
+    @if (selectedId) {
+      <div class="panel">
+        <h3>Submissions</h3>
+        <ul class="record-list">
+          @for (sub of submissions; track sub.id) {
+            <li>
+              <strong>{{ sub.studentName || sub.admissionNo }}</strong>
+              <p class="muted">{{ sub.status }} · {{ sub.submittedAt }}</p>
+              @if (sub.body) {
+                <p>{{ sub.body }}</p>
+              }
+              <div class="grade-row">
+                <input
+                  type="number"
+                  [(ngModel)]="sub._marks"
+                  [ngModelOptions]="{ standalone: true }"
+                  placeholder="Marks"
+                />
+                <input
+                  [(ngModel)]="sub._feedback"
+                  [ngModelOptions]="{ standalone: true }"
+                  placeholder="Feedback"
+                />
+                <button type="button" (click)="grade(sub)" [disabled]="busy">Grade</button>
+              </div>
+            </li>
+          } @empty {
+            <li class="muted">No submissions yet.</li>
+          }
+        </ul>
+      </div>
+    }
+  }
+</section>

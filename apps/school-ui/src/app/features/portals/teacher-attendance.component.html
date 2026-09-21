@@ -1,0 +1,124 @@
+<section class="page">
+  <div class="page-head">
+    <h2>Class attendance</h2>
+    <p>Mark the section roster for a day (optional period). Submit when the roll is final.</p>
+  </div>
+
+  @if (error) {
+    <p class="error panel" role="alert">{{ error }}</p>
+  }
+  @if (status) {
+    <p class="status panel">{{ status }}</p>
+  }
+  @if (parentAlerts) {
+    <section class="panel alert-summary" aria-label="Parent alert delivery summary">
+      <div class="alert-summary__head">
+        <div>
+          <h3>Parent alerts</h3>
+          <p>
+            ABSENT/LATE notifications: {{ parentAlerts.notified || 0 }} queued,
+            {{ parentAlerts.skipped || 0 }} skipped.
+          </p>
+        </div>
+        @if (parentAlerts.disabled) {
+          <span class="chip">Disabled in module settings</span>
+        }
+      </div>
+
+      @if (parentAlerts.error) {
+        <p class="error">Alert delivery issue: {{ parentAlerts.error }}</p>
+      }
+      @if (alertDeliveries().length) {
+        <ul class="alert-deliveries">
+          @for (delivery of alertDeliveries(); track $index) {
+            <li>
+              <span>
+                <strong>{{ delivery.studentName }}</strong>
+                <small>{{ delivery.markStatus }} · {{ delivery.channel }}</small>
+              </span>
+              <span class="chip">{{ delivery.status }}</span>
+              @if (delivery.error) {
+                <small class="error">{{ delivery.error }}</small>
+              }
+            </li>
+          }
+        </ul>
+      }
+    </section>
+  }
+
+  @if (loading) {
+    <p class="panel">Loading…</p>
+  } @else {
+    <div class="panel filters grid three">
+      <label>
+        Section
+        <select [(ngModel)]="sectionId" (ngModelChange)="loadRoster()" name="sectionId">
+          @for (s of sections; track s.id) {
+            <option [value]="s.id">{{ s.studentLabel || s.name }}</option>
+          }
+        </select>
+      </label>
+      <label>
+        Date
+        <input type="date" [(ngModel)]="date" (ngModelChange)="loadRoster()" name="date" />
+      </label>
+      <label>
+        Period id (optional)
+        <input
+          type="text"
+          [(ngModel)]="periodId"
+          (change)="loadRoster()"
+          name="periodId"
+          placeholder="Leave blank for day roll"
+        />
+      </label>
+    </div>
+
+    @if (roster) {
+      <div class="panel meta-row">
+        <span>{{ roster.sectionLabel }}</span>
+        <span class="chip">{{ sessionLabel() }}</span>
+        <span class="muted">{{ (roster.students || []).length }} students</span>
+      </div>
+
+      <div class="actions panel">
+        <button type="button" class="secondary" (click)="markAll('PRESENT')" [disabled]="busy || locked()">
+          All present
+        </button>
+        <button type="button" class="secondary" (click)="markAll('ABSENT')" [disabled]="busy || locked()">
+          All absent
+        </button>
+        <button type="button" (click)="save(false)" [disabled]="busy || locked()">Save draft</button>
+        <button type="button" (click)="submit()" [disabled]="busy || locked()">Submit</button>
+      </div>
+
+      @if (!(roster.students || []).length) {
+        <p class="panel muted">
+          No students in directory for this section label. Ensure student
+          <code>classSection</code> matches the section <code>studentLabel</code>.
+        </p>
+      } @else {
+        <ul class="roster-list">
+          @for (s of roster.students; track s.studentId || s.admissionNo) {
+            <li class="panel roster-row">
+              <div>
+                <strong>{{ s.studentName || s.admissionNo }}</strong>
+                <p class="muted">{{ s.admissionNo }} · {{ s.classSection }}</p>
+              </div>
+              <select
+                [(ngModel)]="draft[s.studentId || s.admissionNo]"
+                [name]="'mark-' + (s.studentId || s.admissionNo)"
+                [disabled]="busy || locked()"
+              >
+                @for (opt of markOptions; track opt) {
+                  <option [value]="opt">{{ opt }}</option>
+                }
+              </select>
+            </li>
+          }
+        </ul>
+      }
+    }
+  }
+</section>

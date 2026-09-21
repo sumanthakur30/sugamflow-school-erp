@@ -1,0 +1,43 @@
+id,employeeNo,fullName,gender,designation,mobile,email,joiningDate,department
+7bebd70b-0648-4f0f-be44-2ecd997341f0,EMP-MAIN-7E7F6E,Verify Teacher,Female,Teacher,9888800001,verify.teacher@example.com,2026-07-16,Academics
+cce88b6f-37d3-4637-822f-dac33de3290a,EMP-MAIN-0330A4,Verify Teacher,Female,Teacher,9888800001,verify.teacher@example.com,2026-07-16,Academics
+fc1215aa-3580-4055-b95b-7a1994e7ecef,EMP-MAIN-6208A3,Verify Teacher,Female,Teacher,9888800001,verify.teacher@example.com,2026-07-16,Academics
+33333cbd-481d-4361-91f0-0a3916f6cec3,EMP-MAIN-C54FF8,Verify Teacher,Female,Teacher,9888800001,verify.teacher@example.com,2026-07-16,Academics
+2cf29fa1-9df6-4a1e-8adc-c9449497348d,EMP-MAIN-7202DB,Verify Teacher,Female,Teacher,9888800001,verify.teacher@example.com,2026-07-16,Academics
+2d51d124-98fe-4445-b3ef-682ef6078f7a,EMP-MAIN-CC3CE0,Verify Teacher,Female,Teacher,9888800001,verify.teacher@example.com,2026-07-16,Academics
+1dd8d4be-f128-4236-a8de-9d33ba7e712d,EMP-MAIN-E56B82,Priya Nair,Female,Teacher,9811100003,priya.nair@demo-school.local,2024-06-01,Academics
+a7e1b1ab-a10a-4a3d-b953-f6ad3aa2e004,EMP-MAIN-2F2D0F,Meera Iyer,Female,Teacher,9811100005,meera.iyer@demo-school.local,2024-06-01,Academics
+7205e54e-aa46-43ad-a7a6-bc0df4a2dbc0,EMP-MAIN-46F897,Joseph D'Souza,Male,Security,9811100013,joseph.d.souza@demo-school.local,2024-06-01,Security
+247bfdd7-c426-432b-8c0c-e920e0716c7b,EMP-MAIN-267D96,Nisha Agarwal,Female,Management,9811100014,nisha.agarwal@demo-school.local,2024-06-01,Management
+42cdaf77-7b7e-4494-9128-111262e32ffe,EMP-MAIN-A6BF56,Priya Nair,Female,Teacher,9811100003,priya.nair@demo-school.local,2024-06-01,Academics
+4a872659-32da-457b-b9ae-8968245ac3f9,EMP-MAIN-5EE4EC,Meera Iyer,Female,Teacher,9811100005,meera.iyer@demo-school.local,2024-06-01,Academics
+35902c88-57b0-4d0d-880b-c8e8ea33607c,EMP-MAIN-E79D0D,Joseph D'Souza,Male,Security,9811100013,joseph.d.souza@demo-school.local,2024-06-01,Security
+506f0860-d1ee-4680-a6d3-30f85ec812cf,EMP-MAIN-D3EBC6,Nisha Agarwal,Female,Management,9811100014,nisha.agarwal@demo-school.local,2024-06-01,Management
+94863254-3f05-4ea0-a608-86202ac0d01f,EMP-MAIN-F89CA6,Suman Thakur,Male,Senior Teacher,8800706663,skthakurmca@gmail.com,2026-07-18,Information Technology
+3c7e03a3-5563-461f-bf72-f3b6ea403be0,EMP-MAIN-E0F1CB,Verify Teacher,Female,Teacher,9888800001,verify.teacher@example.com,2026-07-16,Academics
+53085afe-46f4-4ca6-8d64-73e44bb7d4d4,EMP-MAIN-F8FE5B,Verify Teacher,Female,Teacher,9888800001,verify.teacher@example.com,2026-07-16,Academics
+3597e1d7-3b52-4310-b8ae-83de17db9ab5,EMP-MAIN-E39AFB,Verify Teacher,Female,Teacher,9888800001,verify.teacher@example.com,2026-07-16,Academics
+da1ad3bd-ff3d-42df-960c-da31fdc17683,EMP-MAIN-EDB9C8,Verify Teacher,Female,Teacher,9888800001,verify.teacher@example.com,2026-07-16,Academics
+00ec0042-4efc-4fba-a82d-7095721b9cdf,EMP-MAIN-62FE13,Verify Teacher,Female,Teacher,9888800001,verify.teacher@example.com,2026-07-16,Academics
+0502c335-154e-4676-b379-48ade9a44ea4,EMP-MAIN-1E4E05,Verify Teacher,Female,Teacher,9888800001,verify.teacher@example.com,2026-07-16,Academics
+2231a897-ad6e-46e2-b671-56d182cfb559,EMP-MAIN-FBB78B,Balu Yadav,Male,Driver,9811100012,balu.yadav@demo-school.local,2024-06-01,Transport
+ad576ad5-f86b-46b3-a9a7-c6022bfb940c,EMP-MAIN-029685,Imran Sheikh,Male,Transport Staff,9811100011,imran.sheikh@demo-school.local,2024-06-01,Transport
+0ee323c4-fe26-4dd8-b241-dcc70a3cf03a,EMP-MAIN-D0C746,Geeta More,Female,Hostel Staff,9811100010,geeta.more@demo-school.local,2024-06-01,Hostel
+e3936d58-4212-4a40-a026-1c371eb83ac0,EMP-MAIN-982CFD,Farhan Ali,Male,Librarian,9811100009,farhan.ali@demo-school.local,2024-06-01,Library
+a5317e39-bdf1-4f4d-9d57-0ef539a48316,EMP-MAIN-014FD6,Sunita Rao,Female,Accountant,9811100008,sunita.rao@demo-school.local,2024-06-01,Accounts
+61fa5308-8446-49ab-b693-6acce29e9383,EMP-MAIN-EA68BB,Vikram Singh,Male,HR,9811100007,vikram.singh@demo-school.local,2024-06-01,HR
+bbee054e-3ad9-417f-a54f-71e2f206eb83,EMP-MAIN-9A7BE9,Kavita Deshmukh,Female,Reception,9811100006,kavita.deshmukh@demo-school.local,2024-06-01,Administration
+53fd4613-240f-4ee3-be41-4c694084f533,EMP-MAIN-5651E7,Suresh Patil,Male,Teacher,9811100004,suresh.patil@demo-school.local,2024-06-01,Academics
+89e04669-a6cf-4518-aed4-9db9f725e63b,EMP-MAIN-D62922,Ramesh Kulkarni,Male,Vice Principal,9811100002,ramesh.kulkarni@demo-school.local,2024-06-01,Academics
+f3c6fb23-d9f4-44a2-991d-e74f33f6abaf,EMP-MAIN-E411C7,Anita Sharma,Female,Principal,9811100001,anita.sharma@demo-school.local,2024-06-01,Academics
+398ee109-1608-4fdc-84cb-2cb459aacc3e,EMP-MAIN-00CB7E,Balu Yadav,Male,Driver,9811100012,balu.yadav@demo-school.local,2024-06-01,Transport
+d0cd50fa-bec2-4f82-b075-d8591803461f,EMP-MAIN-D2BFBA,Imran Sheikh,Male,Transport Staff,9811100011,imran.sheikh@demo-school.local,2024-06-01,Transport
+9ab9a911-c884-4ba8-b51c-f7806e306152,EMP-MAIN-91357D,Geeta More,Female,Hostel Staff,9811100010,geeta.more@demo-school.local,2024-06-01,Hostel
+adc62849-1d70-4bde-a1f6-c442875444df,EMP-MAIN-FAAA63,Farhan Ali,Male,Librarian,9811100009,farhan.ali@demo-school.local,2024-06-01,Library
+8bc1cbd4-7e97-40eb-a149-eb67d011d5ad,EMP-MAIN-80F279,Sunita Rao,Female,Accountant,9811100008,sunita.rao@demo-school.local,2024-06-01,Accounts
+d99f8f99-c03a-4bfd-bfc0-b8ea85112714,EMP-MAIN-C6C091,Vikram Singh,Male,HR,9811100007,vikram.singh@demo-school.local,2024-06-01,HR
+8f7fa07d-4191-404c-b0af-42af031d5f1f,EMP-MAIN-201C81,Kavita Deshmukh,Female,Reception,9811100006,kavita.deshmukh@demo-school.local,2024-06-01,Administration
+99ff0873-a2be-4c76-aa15-1e4a5a565aef,EMP-MAIN-D7C0F0,Suresh Patil,Male,Teacher,9811100004,suresh.patil@demo-school.local,2024-06-01,Academics
+07201f22-6178-4eee-b216-7298cb4c9d80,EMP-MAIN-EAF1E2,Ramesh Kulkarni,Male,Vice Principal,9811100002,ramesh.kulkarni@demo-school.local,2024-06-01,Academics
+7c8077c6-6f20-4860-a262-e280dcc456a5,EMP-MAIN-B929C7,Anita Sharma,Female,Principal,9811100001,anita.sharma@demo-school.local,2024-06-01,Academics
+7b9cb9be-4c02-4d08-abdf-80a0f8863a69,EMP-MAIN-83BB06,Verify Teacher,Female,Teacher,9888800001,verify.teacher@example.com,2026-07-16,Academics

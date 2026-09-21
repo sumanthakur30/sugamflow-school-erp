@@ -1,0 +1,42 @@
+.connectivity {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  align-items: center;
+}
+
+.chip.ok {
+  background: color-mix(in srgb, var(--sf-success, #15803d) 18%, transparent);
+}
+
+.chip.warn {
+  background: color-mix(in srgb, var(--sf-warning, #d97706) 20%, transparent);
+}
+
+.entity-list,
+.batch-list,
+.queue-list {
+  list-style: none;
+  margin: 0.75rem 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.queue-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 0;
+}
+
+.muted {
+  color: color-mix(in srgb, var(--sf-text) 62%, #64748b);
+  font-size: 0.88rem;
+}
+
+.error {
+  color: var(--sf-error, #b91c1c);
+}

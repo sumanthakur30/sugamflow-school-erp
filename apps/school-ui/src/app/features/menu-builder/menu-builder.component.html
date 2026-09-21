@@ -1,0 +1,113 @@
+<section class="page">
+  <div class="page-head">
+    <h2>Menu Builder</h2>
+    <p>Create, hide, reorder, and nest navigation — roles, feature flags, and branches.</p>
+  </div>
+
+  @if (error) {
+    <p class="error panel" role="alert">{{ error }}</p>
+  }
+  @if (status) {
+    <p class="status panel">{{ status }}</p>
+  }
+
+  <div class="editor-layout">
+    <section class="panel">
+      <div class="actions" style="margin-top: 0">
+        <button type="button" (click)="addRoot()">Add root</button>
+        <button type="button" class="secondary" (click)="addChild()" [disabled]="!draft">Add child</button>
+      </div>
+      <ul class="editor-list">
+        @for (node of menus; track node.id; let i = $index) {
+          <li>
+            <button
+              type="button"
+              class="editor-row"
+              [class.active]="selectedPath.length === 1 && selectedPath[0] === i"
+              (click)="select([i])"
+            >
+              <strong>{{ node.label }}</strong>
+              <span>{{ node.route }} · order {{ node.order }}</span>
+            </button>
+            @if (node.children.length) {
+              <ul class="editor-list" style="margin-left: 0.75rem">
+                @for (child of node.children; track child.id; let j = $index) {
+                  <li>
+                    <button
+                      type="button"
+                      class="editor-row"
+                      [class.active]="
+                        selectedPath.length === 2 && selectedPath[0] === i && selectedPath[1] === j
+                      "
+                      (click)="select([i, j])"
+                    >
+                      <strong>{{ child.label }}</strong>
+                      <span>{{ child.route }}</span>
+                    </button>
+                  </li>
+                }
+              </ul>
+            }
+          </li>
+        }
+      </ul>
+    </section>
+
+    <section class="panel">
+      @if (!draft) {
+        <p class="muted">Select a menu node to edit.</p>
+      } @else {
+        <h3>Edit node</h3>
+        <div class="grid two">
+          <label>
+            Id
+            <input [(ngModel)]="draft.id" name="id" (ngModelChange)="applyDraft()" />
+          </label>
+          <label>
+            Label
+            <input [(ngModel)]="draft.label" name="label" (ngModelChange)="applyDraft()" />
+          </label>
+          <label>
+            Route
+            <input [(ngModel)]="draft.route" name="route" (ngModelChange)="applyDraft()" />
+          </label>
+          <label>
+            Order
+            <input
+              type="number"
+              [(ngModel)]="draft.order"
+              name="order"
+              (ngModelChange)="applyDraft()"
+            />
+          </label>
+          <label>
+            Icon
+            <input [(ngModel)]="draft.icon" name="icon" (ngModelChange)="applyDraft()" />
+          </label>
+        </div>
+        <div class="toggle">
+          <span>Visible</span>
+          <input type="checkbox" [(ngModel)]="draft.visible" name="visible" (ngModelChange)="applyDraft()" />
+        </div>
+        <label>
+          Roles (comma-separated)
+          <input [(ngModel)]="rolesText" name="roles" (ngModelChange)="applyDraft()" />
+        </label>
+        <label>
+          Required feature flags (comma-separated)
+          <input [(ngModel)]="flagsText" name="flags" (ngModelChange)="applyDraft()" />
+        </label>
+        <label>
+          Branch ids (comma-separated)
+          <input [(ngModel)]="branchesText" name="branches" (ngModelChange)="applyDraft()" />
+        </label>
+        <div class="actions">
+          <button type="button" class="secondary danger" (click)="removeSelected()">Remove node</button>
+          <button type="button" (click)="save()" [disabled]="busy">
+            {{ busy ? 'Saving…' : 'Save menu tree' }}
+          </button>
+        </div>
+      }
+    </section>
+  </div>
+</section>

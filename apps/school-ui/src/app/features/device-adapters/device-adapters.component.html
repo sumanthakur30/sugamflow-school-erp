@@ -1,0 +1,118 @@
+<section class="page">
+  <div class="page-head">
+    <h2>AI attendance / device adapters</h2>
+    <p>
+      Pluggable biometric, face, GPS, and AI camera adapters — config-driven ingest into
+      attendance workflows (no vendor SDKs in code).
+    </p>
+  </div>
+
+  @if (error) {
+    <p class="error panel" role="alert">{{ error }}</p>
+  }
+  @if (status) {
+    <p class="status panel">{{ status }}</p>
+  }
+
+  @if (loading) {
+    <p class="panel">Loading adapters…</p>
+  } @else {
+    <section class="panel">
+      <h3>Runtime knobs (module settings)</h3>
+      <div class="chip-list">
+        <span class="chip" [class.ok]="aiAttendanceEnabled">aiAttendanceEnabled: {{ aiAttendanceEnabled }}</span>
+        <span class="chip">autoSubmit: {{ autoSubmitFromDevice }}</span>
+        <span class="chip">minConfidence: {{ minConfidence }}</span>
+      </div>
+      <p class="muted">Edit under Module Settings → attendance. Flags from subscription:</p>
+      <div class="chip-list">
+        @for (entry of flags | keyvalue; track entry.key) {
+          <span class="chip" [class.ok]="entry.value">{{ entry.key }}: {{ entry.value }}</span>
+        }
+      </div>
+    </section>
+
+    <section class="panel">
+      <h3>Adapter catalog</h3>
+      <div class="grid two">
+        @for (t of adapterTypes; track t.type) {
+          <div class="adapter-type" [class.disabled]="!t.featureEnabled">
+            <strong>{{ t.label }}</strong>
+            <p class="muted"><code>{{ t.type }}</code> · {{ t.requiredFeatureFlag }}</p>
+            <span class="chip" [class.ok]="t.featureEnabled">
+              {{ t.featureEnabled ? 'enabled' : 'flag off' }}
+            </span>
+          </div>
+        }
+      </div>
+    </section>
+
+    <section class="panel">
+      <h3>Register device</h3>
+      <div class="grid two">
+        <label>
+          Device key
+          <input [(ngModel)]="draft.deviceKey" name="deviceKey" placeholder="gate-ai-1" />
+        </label>
+        <label>
+          Name
+          <input [(ngModel)]="draft.name" name="name" placeholder="Main gate AI camera" />
+        </label>
+        <label>
+          Adapter type
+          <select [(ngModel)]="draft.adapterType" name="adapterType">
+            @for (t of enabledTypes(); track t.type) {
+              <option [value]="t.type">{{ t.label }}</option>
+            }
+          </select>
+        </label>
+        <label>
+          Location
+          <input [(ngModel)]="draft.location" name="location" placeholder="Main Gate" />
+        </label>
+      </div>
+      <div class="actions">
+        <button type="button" (click)="register()" [disabled]="busy || !enabledTypes().length">
+          Register adapter
+        </button>
+      </div>
+    </section>
+
+    <div class="device-grid">
+      @for (d of devices; track d.id) {
+        <article class="panel">
+          <h3>{{ d.name }}</h3>
+          <p class="muted">
+            <code>{{ d.deviceKey }}</code> · {{ d.adapterType }} · {{ d.status }}
+          </p>
+          <div class="actions">
+            <button type="button" (click)="simulate(d.id)" [disabled]="busy || d.status !== 'ACTIVE'">
+              Simulate punch
+            </button>
+            <button type="button" class="secondary" (click)="toggleDevice(d)" [disabled]="busy">
+              {{ d.status === 'ACTIVE' ? 'Disable' : 'Enable' }}
+            </button>
+          </div>
+        </article>
+      }
+    </div>
+
+    <section class="panel">
+      <h3>Recent device events</h3>
+      @if (!events.length) {
+        <p class="muted">No events yet — register a device and simulate a punch.</p>
+      }
+      <ul class="event-list">
+        @for (e of events; track e.id) {
+          <li>
+            <strong>{{ e.status }}</strong>
+            <span class="muted"> · {{ e.adapterType }} · {{ e.createdAt }}</span>
+            @if (e.attendanceRecordId) {
+              <span class="chip ok">record {{ e.attendanceRecordId }}</span>
+            }
+          </li>
+        }
+      </ul>
+    </section>
+  }
+</section>

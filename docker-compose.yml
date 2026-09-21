@@ -1,0 +1,19 @@
+# School ERP local helpers.
+# IMPORTANT: Use the SAME host PostgreSQL as SugamFlow (postgresql-x64-17 on :5432).
+# Do NOT start a competing school-postgres on 5432 — it will fail / conflict.
+#
+# Create school DBs:
+#   .\infra\postgres\init-local.ps1
+#
+# SMTP sink for EMAIL SENT (used by notification-service on localhost:1025):
+#   docker compose up -d mailhog
+#   UI: http://localhost:8025
+# Or: .\scripts\start-platform.ps1 (starts MailHog automatically)
+
+services:
+  mailhog:
+    image: mailhog/mailhog:v1.0.1
+    container_name: school-mailhog
+    ports:
+      - "1025:1025"
+      - "8025:8025"

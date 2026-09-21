@@ -1,0 +1,143 @@
+# Phase A — School ERP (legacy filename).
+#
+# Prefer school-specific names (do not clash with SugamFlow on EC2):
+#   docker-compose.school.ec2-rds.yml
+#   .env.school.production   (from .env.school.production.example)
+#
+#   docker compose -f docker-compose.school.ec2-rds.yml --env-file .env.school.production up -d
+#
+# See: EC2-FILES-TO-COPY.txt and docs/EC2_SCHOOL_PHASE_A_FOLLOW_ALONG.md
+
+name: school-phase-a
+
+x-logging: &docker-logging
+  driver: json-file
+  options:
+    max-size: "25m"
+    max-file: "3"
+
+x-jvm-service: &jvm-service
+  restart: unless-stopped
+  logging: *docker-logging
+  mem_limit: ${SCHOOL_JVM_MEM_LIMIT:-384m}
+  oom_score_adj: 300
+  networks:
+    - sugamflow_net
+
+x-common-env: &common-env
+  SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-prod}
+  TZ: Asia/Kolkata
+  JAVA_TOOL_OPTIONS: ${SCHOOL_JAVA_TOOL_OPTIONS:--Duser.timezone=Asia/Kolkata -Xms96m -Xmx192m -XX:+ExitOnOutOfMemoryError}
+  SPRING_CLOUD_CONFIG_URI: http://config-service:8888
+  EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://discovery-service:8761/eureka
+  EUREKA_INSTANCE_PREFER_IP_ADDRESS: "true"
+  SECURITY_JWT_ENFORCE: "${SECURITY_JWT_ENFORCE:-true}"
+  SECURITY_JWT_SECRET: "${SECURITY_JWT_SECRET}"
+  SECURITY_INVITE_INTERNAL_KEY: "${SECURITY_INVITE_INTERNAL_KEY:-}"
+  SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE: ${DB_POOL_MAX_SIZE:-3}
+  SPRING_DATASOURCE_HIKARI_MINIMUM_IDLE: ${DB_POOL_MIN_IDLE:-1}
+
+networks:
+  sugamflow_net:
+    external: true
+    # Default Compose network for project "sumanthakur30" (docker-compose.ec2-rds.yml name:).
+    name: ${SUGAMFLOW_DOCKER_NETWORK:-sumanthakur30_default}
+
+services:
+  school-settings-service:
+    <<: *jvm-service
+    image: ${IMAGE_PREFIX:-sumanthakur30}/school-settings-service:${SCHOOL_IMAGE_TAG:-${IMAGE_TAG:-1.0.0}}
+    environment:
+      <<: *common-env
+      EUREKA_INSTANCE_HOSTNAME: school-settings-service
+      SERVER_PORT: 8181
+      SCHOOL_SETTINGS_DB_URL: ${SCHOOL_SETTINGS_DB_URL}
+      SCHOOL_SETTINGS_DB_USERNAME: ${SCHOOL_SETTINGS_DB_USERNAME}
+      SCHOOL_SETTINGS_DB_PASSWORD: ${SCHOOL_SETTINGS_DB_PASSWORD}
+      SPRING_DATASOURCE_URL: ${SCHOOL_SETTINGS_DB_URL}
+      SPRING_DATASOURCE_USERNAME: ${SCHOOL_SETTINGS_DB_USERNAME}
+      SPRING_DATASOURCE_PASSWORD: ${SCHOOL_SETTINGS_DB_PASSWORD}
+
+  subscription-service:
+    <<: *jvm-service
+    image: ${IMAGE_PREFIX:-sumanthakur30}/subscription-service:${SCHOOL_IMAGE_TAG:-${IMAGE_TAG:-1.0.0}}
+    environment:
+      <<: *common-env
+      EUREKA_INSTANCE_HOSTNAME: subscription-service
+      SERVER_PORT: 8182
+      SCHOOL_SUBSCRIPTION_DB_URL: ${SCHOOL_SUBSCRIPTION_DB_URL}
+      SCHOOL_SUBSCRIPTION_DB_USERNAME: ${SCHOOL_SUBSCRIPTION_DB_USERNAME}
+      SCHOOL_SUBSCRIPTION_DB_PASSWORD: ${SCHOOL_SUBSCRIPTION_DB_PASSWORD}
+      SPRING_DATASOURCE_URL: ${SCHOOL_SUBSCRIPTION_DB_URL}
+      SPRING_DATASOURCE_USERNAME: ${SCHOOL_SUBSCRIPTION_DB_USERNAME}
+      SPRING_DATASOURCE_PASSWORD: ${SCHOOL_SUBSCRIPTION_DB_PASSWORD}
+
+  admission-service:
+    <<: *jvm-service
+    image: ${IMAGE_PREFIX:-sumanthakur30}/admission-service:${SCHOOL_IMAGE_TAG:-${IMAGE_TAG:-1.0.0}}
+    environment:
+      <<: *common-env
+      EUREKA_INSTANCE_HOSTNAME: admission-service
+      SERVER_PORT: 8189
+      SCHOOL_ADMISSION_DB_URL: ${SCHOOL_ADMISSION_DB_URL}
+      SCHOOL_ADMISSION_DB_USERNAME: ${SCHOOL_ADMISSION_DB_USERNAME}
+      SCHOOL_ADMISSION_DB_PASSWORD: ${SCHOOL_ADMISSION_DB_PASSWORD}
+      SPRING_DATASOURCE_URL: ${SCHOOL_ADMISSION_DB_URL}
+      SPRING_DATASOURCE_USERNAME: ${SCHOOL_ADMISSION_DB_USERNAME}
+      SPRING_DATASOURCE_PASSWORD: ${SCHOOL_ADMISSION_DB_PASSWORD}
+
+  fee-service:
+    <<: *jvm-service
+    image: ${IMAGE_PREFIX:-sumanthakur30}/fee-service:${SCHOOL_IMAGE_TAG:-${IMAGE_TAG:-1.0.0}}
+    environment:
+      <<: *common-env
+      EUREKA_INSTANCE_HOSTNAME: fee-service
+      SERVER_PORT: 8190
+      SCHOOL_FEE_DB_URL: ${SCHOOL_FEE_DB_URL}
+      SCHOOL_FEE_DB_USERNAME: ${SCHOOL_FEE_DB_USERNAME}
+      SCHOOL_FEE_DB_PASSWORD: ${SCHOOL_FEE_DB_PASSWORD}
+      SPRING_DATASOURCE_URL: ${SCHOOL_FEE_DB_URL}
+      SPRING_DATASOURCE_USERNAME: ${SCHOOL_FEE_DB_USERNAME}
+      SPRING_DATASOURCE_PASSWORD: ${SCHOOL_FEE_DB_PASSWORD}
+
+  student-service:
+    <<: *jvm-service
+    image: ${IMAGE_PREFIX:-sumanthakur30}/student-service:${SCHOOL_IMAGE_TAG:-${IMAGE_TAG:-1.0.0}}
+    environment:
+      <<: *common-env
+      EUREKA_INSTANCE_HOSTNAME: student-service
+      SERVER_PORT: 8191
+      SCHOOL_STUDENT_DB_URL: ${SCHOOL_STUDENT_DB_URL}
+      SCHOOL_STUDENT_DB_USERNAME: ${SCHOOL_STUDENT_DB_USERNAME}
+      SCHOOL_STUDENT_DB_PASSWORD: ${SCHOOL_STUDENT_DB_PASSWORD}
+      SPRING_DATASOURCE_URL: ${SCHOOL_STUDENT_DB_URL}
+      SPRING_DATASOURCE_USERNAME: ${SCHOOL_STUDENT_DB_USERNAME}
+      SPRING_DATASOURCE_PASSWORD: ${SCHOOL_STUDENT_DB_PASSWORD}
+
+  staff-service:
+    <<: *jvm-service
+    image: ${IMAGE_PREFIX:-sumanthakur30}/staff-service:${SCHOOL_IMAGE_TAG:-${IMAGE_TAG:-1.0.0}}
+    environment:
+      <<: *common-env
+      EUREKA_INSTANCE_HOSTNAME: staff-service
+      SERVER_PORT: 8198
+      SCHOOL_STAFF_DB_URL: ${SCHOOL_STAFF_DB_URL}
+      SCHOOL_STAFF_DB_USERNAME: ${SCHOOL_STAFF_DB_USERNAME}
+      SCHOOL_STAFF_DB_PASSWORD: ${SCHOOL_STAFF_DB_PASSWORD}
+      SPRING_DATASOURCE_URL: ${SCHOOL_STAFF_DB_URL}
+      SPRING_DATASOURCE_USERNAME: ${SCHOOL_STAFF_DB_USERNAME}
+      SPRING_DATASOURCE_PASSWORD: ${SCHOOL_STAFF_DB_PASSWORD}
+
+  academic-structure-service:
+    <<: *jvm-service
+    image: ${IMAGE_PREFIX:-sumanthakur30}/academic-structure-service:${SCHOOL_IMAGE_TAG:-${IMAGE_TAG:-1.0.0}}
+    environment:
+      <<: *common-env
+      EUREKA_INSTANCE_HOSTNAME: academic-structure-service
+      SERVER_PORT: 8199
+      SCHOOL_ACADEMIC_DB_URL: ${SCHOOL_ACADEMIC_DB_URL}
+      SCHOOL_ACADEMIC_DB_USERNAME: ${SCHOOL_ACADEMIC_DB_USERNAME}
+      SCHOOL_ACADEMIC_DB_PASSWORD: ${SCHOOL_ACADEMIC_DB_PASSWORD}
+      SPRING_DATASOURCE_URL: ${SCHOOL_ACADEMIC_DB_URL}
+      SPRING_DATASOURCE_USERNAME: ${SCHOOL_ACADEMIC_DB_USERNAME}
+      SPRING_DATASOURCE_PASSWORD: ${SCHOOL_ACADEMIC_DB_PASSWORD}

@@ -1,0 +1,63 @@
+.reports-hub {
+  max-width: 1100px;
+}
+
+.hub-section {
+  margin-bottom: 1.75rem;
+}
+
+.hub-section h3 {
+  margin: 0 0 0.75rem;
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: color-mix(in srgb, var(--sf-text) 55%, #64748b);
+}
+
+.hub-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 0.85rem;
+}
+
+.hub-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  padding: 1.1rem 1.15rem;
+  background: var(--sf-panel, #fff);
+  border: 1px solid color-mix(in srgb, var(--sf-menu) 14%, #e2e8f0);
+  border-radius: calc(var(--sf-radius) + 2px);
+  text-decoration: none;
+  color: inherit;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.hub-card:hover {
+  border-color: color-mix(in srgb, var(--sf-primary) 45%, #cbd5e1);
+  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.06);
+}
+
+.hub-title {
+  font-weight: 700;
+  font-size: 1.02rem;
+  color: var(--sf-text, #0f172a);
+}
+
+.hub-desc {
+  font-size: 0.88rem;
+  line-height: 1.4;
+  color: color-mix(in srgb, var(--sf-text) 62%, #64748b);
+  flex: 1;
+}
+
+.hub-go {
+  margin-top: 0.4rem;
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--sf-primary);
+}
+
+.muted {
+  color: #64748b;
+}
