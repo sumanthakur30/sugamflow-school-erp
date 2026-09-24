@@ -32,7 +32,10 @@ public class PortalController {
     try {
       return ApiResponse.ok(portals.bootstrap(portalKey));
     } catch (IllegalArgumentException ex) {
-      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, ex.getMessage());
+      String message = ex.getMessage() == null ? "Invalid portal request" : ex.getMessage();
+      HttpStatus status =
+          message.toLowerCase().contains("requires") ? HttpStatus.FORBIDDEN : HttpStatus.BAD_REQUEST;
+      throw new ResponseStatusException(status, message);
     }
   }
 }

@@ -97,6 +97,22 @@
                   Mandatory
                   <input type="checkbox" [(ngModel)]="field.mandatory" [name]="'fm' + si + '_' + fi" />
                 </label>
+                <label>
+                  Show in reports
+                  <input
+                    type="checkbox"
+                    [(ngModel)]="field.showInReports"
+                    [name]="'fr' + si + '_' + fi"
+                  />
+                </label>
+                <label>
+                  Show on ID card
+                  <input
+                    type="checkbox"
+                    [(ngModel)]="field.showOnIdCard"
+                    [name]="'fid' + si + '_' + fi"
+                  />
+                </label>
                 <div class="actions" style="margin-top: 0">
                   <button type="button" class="secondary" (click)="moveField(si, fi, -1)">↑</button>
                   <button type="button" class="secondary" (click)="moveField(si, fi, 1)">↓</button>

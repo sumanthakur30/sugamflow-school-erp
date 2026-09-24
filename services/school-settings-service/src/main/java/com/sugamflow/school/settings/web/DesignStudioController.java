@@ -47,7 +47,7 @@ public class DesignStudioController {
     if (branch == null || branch.isBlank()) {
       branch = "main";
     }
-    return ApiResponse.ok(store.getOrCreateTheme(org, branch));
+    return ApiResponse.ok(store.findThemeOrPlatformDefault(org, branch));
   }
 
   @GetMapping("/theme")

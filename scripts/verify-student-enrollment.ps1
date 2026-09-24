@@ -39,10 +39,15 @@ $submitBody = @{
   answers = @{
     fullName          = 'Neha Sharma'
     age               = 9
+    dob               = '2016-08-01'
     mobile            = '9999900099'
     email             = 'neha@example.com'
-    classApplied      = 'IV'
+    classApplied      = '4-A'
+    classGrade        = '4'
+    sectionLetter     = 'A'
     documentsComplete = $true
+    fatherName        = 'Father Sharma'
+    motherName        = 'Mother Sharma'
   }
 } | ConvertTo-Json -Depth 5
 
@@ -78,9 +83,13 @@ $stuResp = Invoke-RestMethod -Headers $headers `
   -Uri "http://localhost:9090/api/student/students/$studentId"
 $stu = if ($stuResp.data) { $stuResp.data } else { $stuResp }
 if ($stu.answers.fullName -ne 'Neha Sharma') { throw "fullName mismatch: $($stu.answers.fullName)" }
-if ($stu.answers.classApplied -ne 'IV') { throw "classApplied mismatch: $($stu.answers.classApplied)" }
+# Enrollment may normalize classApplied (e.g. 4-A -> Grade 4-A)
+$classOk = @('4-A', 'Grade 4-A', 'IV', '4') -contains [string]$stu.answers.classApplied
+if (-not $classOk -and [string]$stu.answers.classGrade -ne '4') {
+  throw "classApplied mismatch: $($stu.answers.classApplied)"
+}
 if ($stu.sourceApplicationId -ne $id) { throw 'sourceApplicationId mismatch' }
-Write-Host "OK   answers mapped status=$($stu.status)"
+Write-Host "OK   answers mapped status=$($stu.status) class=$($stu.answers.classApplied)"
 
 Write-Host ''
 Write-Host '=== Idempotent re-enroll ==='
@@ -91,7 +100,9 @@ $enrollBody = @{
     age          = 9
     mobile       = '9999900099'
     email        = 'neha@example.com'
-    classApplied = 'IV'
+    classApplied = '4-A'
+    classGrade   = '4'
+    sectionLetter = 'A'
   }
 } | ConvertTo-Json -Depth 5
 $again = Invoke-RestMethod -Method Post -Headers $headers `

@@ -24,6 +24,7 @@ Legend: **P** = parity target, **D** = differentiator (SugamFlow ahead via confi
 | Localization | PowerSchool, Classter | Locale, currency, paper size, grade systems | P |
 | Config audit / rollback | Rare | Full version control + approval | D |
 | Library / Hostel / Transport / Payroll | Fedena, OpenEduCat, Entab | Module flags + module settings pages | P |
+| **Student / Staff Directory** | PowerSchool, Fedena, Entab, Teachmint | Phase 22 Global Directory (search, filters, summary, CSV, staff master) | P |
 | Offline mode | Done (Phase 16) | Outbox + sync API + admin UI | — |
 | Biometric / Face / GPS | Niche | Plan feature flags wired to adapters | L |
 

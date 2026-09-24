@@ -7,6 +7,7 @@ public class AdmissionProperties {
 
   private final Defaults defaults = new Defaults();
   private final Integrations integrations = new Integrations();
+  private final PublicCaptcha publicCaptcha = new PublicCaptcha();
 
   public Defaults getDefaults() {
     return defaults;
@@ -14,6 +15,41 @@ public class AdmissionProperties {
 
   public Integrations getIntegrations() {
     return integrations;
+  }
+
+  public PublicCaptcha getPublicCaptcha() {
+    return publicCaptcha;
+  }
+
+  public static class PublicCaptcha {
+    /** When true, public apply requires captchaToken (reCAPTCHA when secret set). */
+    private boolean enabled = false;
+    private String secret = "";
+    private String verifyUrl = "https://www.google.com/recaptcha/api/siteverify";
+
+    public boolean isEnabled() {
+      return enabled;
+    }
+
+    public void setEnabled(boolean enabled) {
+      this.enabled = enabled;
+    }
+
+    public String getSecret() {
+      return secret;
+    }
+
+    public void setSecret(String secret) {
+      this.secret = secret;
+    }
+
+    public String getVerifyUrl() {
+      return verifyUrl;
+    }
+
+    public void setVerifyUrl(String verifyUrl) {
+      this.verifyUrl = verifyUrl;
+    }
   }
 
   public static class Defaults {

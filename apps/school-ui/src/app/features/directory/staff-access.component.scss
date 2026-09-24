@@ -1,0 +1,146 @@
+.staff-access-page {
+  max-width: 1200px;
+}
+
+.access-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.notice {
+  margin-bottom: 0.85rem;
+  padding: 0.8rem 1rem;
+  border-radius: 12px;
+  border: 1px solid #e2e8f0;
+}
+
+.error-notice {
+  border-color: #fecaca;
+  background: #fef2f2;
+  color: #b91c1c;
+}
+
+.success-notice {
+  border-color: #bbf7d0;
+  background: #f0fdf4;
+  color: #166534;
+}
+
+.roles-panel h3,
+.account-list h3,
+.permission-editor h3 {
+  margin: 0 0 0.25rem;
+}
+
+.muted {
+  margin: 0;
+  color: #64748b;
+  font-size: 0.88rem;
+}
+
+.role-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+
+.role-chip {
+  display: grid;
+  gap: 0.1rem;
+  padding: 0.55rem 0.75rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  background: #fff;
+}
+
+.role-chip small {
+  color: #64748b;
+  font-size: 0.72rem;
+}
+
+.access-layout {
+  display: grid;
+  grid-template-columns: minmax(220px, 300px) minmax(0, 1fr);
+  gap: 0.9rem;
+  align-items: start;
+}
+
+.search {
+  width: 100%;
+  margin: 0.75rem 0;
+}
+
+.account-list ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.35rem;
+  max-height: 520px;
+  overflow: auto;
+}
+
+.account-item {
+  width: 100%;
+  display: grid;
+  gap: 0.15rem;
+  padding: 0.65rem 0.75rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  background: #fff;
+  color: inherit;
+  text-align: left;
+}
+
+.account-item.active {
+  border-color: color-mix(in srgb, var(--sf-primary, #166534) 55%, #e2e8f0);
+  background: color-mix(in srgb, var(--sf-primary, #166534) 8%, #fff);
+  box-shadow: inset 3px 0 0 var(--sf-primary, #166534);
+}
+
+.account-item span,
+.perm-toggle span {
+  color: #64748b;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.perm-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 0.65rem;
+  margin-top: 0.85rem;
+}
+
+.perm-toggle {
+  display: grid;
+  gap: 0.25rem;
+  padding: 0.85rem 0.9rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  background: #fff;
+  color: inherit;
+  text-align: left;
+}
+
+.perm-toggle.on {
+  border-color: color-mix(in srgb, var(--sf-primary, #166534) 45%, #e2e8f0);
+  background: color-mix(in srgb, var(--sf-primary, #166534) 10%, #fff);
+}
+
+.perm-toggle.on strong {
+  color: var(--sf-primary, #166534);
+}
+
+.empty {
+  padding: 0.75rem 0;
+}
+
+@media (max-width: 860px) {
+  .access-layout {
+    grid-template-columns: 1fr;
+  }
+}

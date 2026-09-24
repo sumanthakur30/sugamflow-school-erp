@@ -1,0 +1,242 @@
+.staff-page-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+}
+
+.staff-page-head h2 {
+  margin: 0.15rem 0 0.35rem;
+}
+
+.staff-page-head p {
+  margin: 0;
+}
+
+.staff-eyebrow {
+  color: var(--sf-primary);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.staff-head-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.staff-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 2.25rem;
+  border-radius: var(--sf-radius);
+  padding: 0.5rem 0.85rem;
+  font-size: 0.88rem;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.staff-btn--primary {
+  background: var(--sf-button, var(--sf-primary));
+  color: #fff;
+}
+
+.staff-btn--secondary {
+  border: 1px solid color-mix(in srgb, var(--sf-primary) 35%, transparent);
+  color: var(--sf-primary);
+}
+
+.staff-form-card {
+  max-width: 980px;
+}
+
+.invite-result {
+  margin-top: 1.25rem;
+  padding-top: 1rem;
+  border-top: 1px solid color-mix(in srgb, var(--sf-primary) 18%, transparent);
+  display: grid;
+  gap: 0.75rem;
+}
+
+.staff-form-intro {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.staff-form-intro h3,
+.staff-form-intro p {
+  margin: 0;
+}
+
+.required {
+  color: var(--sf-error, #b91c1c);
+}
+
+.field-title {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.25rem;
+}
+
+.date-field {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.date-field input[type='text'] {
+  flex: 1;
+  min-width: 0;
+}
+
+.date-picker-btn {
+  flex: 0 0 auto;
+  min-height: 2.35rem;
+  padding: 0.35rem 0.6rem;
+  border: 1px solid color-mix(in srgb, var(--sf-primary) 35%, #cbd5e1);
+  border-radius: var(--sf-radius, 8px);
+  background: #fff;
+  cursor: pointer;
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.date-picker-btn:hover {
+  background: color-mix(in srgb, var(--sf-primary) 8%, #fff);
+}
+
+/* Rendered (so the picker can open) but invisible; anchors the popup to the field. */
+.date-picker-native {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  border: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.field-hint {
+  display: block;
+  margin-top: 0.25rem;
+  font-size: 0.75rem;
+  color: color-mix(in srgb, var(--sf-text) 55%, #64748b);
+}
+
+.staff-form-actions {
+  padding-top: 0.5rem;
+  border-top: 1px solid color-mix(in srgb, var(--sf-text) 10%, transparent);
+}
+
+.staff-list-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.75rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid color-mix(in srgb, var(--sf-text) 10%, transparent);
+}
+
+.staff-export-btn {
+  flex-shrink: 0;
+  border: 1px solid color-mix(in srgb, var(--sf-primary) 35%, transparent);
+  background: var(--sf-panel, #fff);
+  color: var(--sf-primary);
+}
+
+.staff-export-btn:hover {
+  background: color-mix(in srgb, var(--sf-primary) 8%, #fff);
+}
+
+.col-actions {
+  width: 1%;
+  white-space: nowrap;
+}
+
+.row-action {
+  display: inline-flex;
+  align-items: center;
+  min-height: 1.9rem;
+  margin: 0 0.25rem 0.25rem 0;
+  padding: 0.25rem 0.65rem;
+  border: 1px solid color-mix(in srgb, var(--sf-primary) 35%, #cbd5e1);
+  border-radius: var(--sf-radius, 8px);
+  background: #fff;
+  color: var(--sf-primary);
+  font-size: 0.8rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.row-action:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--sf-primary) 8%, #fff);
+}
+
+.row-action:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.row-action--danger {
+  border-color: color-mix(in srgb, var(--sf-error, #b91c1c) 40%, #cbd5e1);
+  color: var(--sf-error, #b91c1c);
+}
+
+.row-action--danger:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--sf-error, #b91c1c) 8%, #fff);
+}
+
+.invite-result input[readonly] {
+  width: 100%;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  word-break: break-all;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.8rem;
+}
+
+@media (max-width: 800px) {
+  .staff-page-head {
+    flex-direction: column;
+  }
+
+  .staff-head-actions,
+  .staff-btn {
+    width: 100%;
+  }
+
+  .staff-list-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .col-actions {
+    width: auto;
+    white-space: normal;
+  }
+
+  .col-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem;
+    min-width: 8.5rem;
+  }
+
+  .row-action {
+    margin: 0;
+  }
+}
+
+@media (max-width: 480px) {
+  .invite-result input[readonly] {
+    font-size: 0.72rem;
+  }
+}

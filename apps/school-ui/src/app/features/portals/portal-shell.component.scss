@@ -1,9 +1,98 @@
+/* Portal keeps classic left-rail layout (admin uses top-nav shell). */
+.portal-shell.shell {
+  display: grid;
+  grid-template-columns: 280px 1fr;
+  min-height: 100vh;
+  background: transparent;
+}
+
 .portal-shell .rail {
+  display: flex;
+  flex-direction: column;
   background: linear-gradient(
     180deg,
     color-mix(in srgb, var(--sf-primary) 88%, #0b3d2e),
     color-mix(in srgb, var(--sf-menu) 70%, #041510)
   );
+  color: #f4fbf7;
+  padding: 1.5rem 1rem;
+}
+
+.portal-shell .brand-logo {
+  display: block;
+  max-width: 160px;
+  max-height: 48px;
+  width: auto;
+  height: auto;
+  object-fit: contain;
+  margin-bottom: 0.75rem;
+}
+
+.portal-shell .brand .eyebrow {
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  font-size: 0.72rem;
+  opacity: 0.8;
+}
+
+.portal-shell .brand h1 {
+  font-size: 1.8rem;
+  color: #fff;
+}
+
+.portal-shell .tagline {
+  font-size: 0.9rem;
+  opacity: 0.75;
+  margin-bottom: 0.75rem;
+}
+
+.portal-shell nav {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.portal-shell nav a {
+  padding: 0.65rem 0.8rem;
+  border-radius: 8px;
+  opacity: 0.86;
+  color: inherit;
+  text-decoration: none;
+}
+
+.portal-shell nav a:hover,
+.portal-shell nav a.active {
+  background: rgba(255, 255, 255, 0.12);
+  opacity: 1;
+}
+
+.portal-shell .session {
+  margin-top: auto;
+  padding-top: 1.5rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.portal-shell .session-label {
+  margin: 0 0 0.5rem;
+  font-size: 0.8rem;
+  opacity: 0.85;
+  word-break: break-word;
+}
+
+.portal-shell .logout {
+  width: 100%;
+  padding: 0.55rem 0.75rem;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.portal-shell main {
+  padding: 1.5rem 1.75rem 2.5rem;
+  min-width: 0;
+  overflow-x: clip;
 }
 
 .nav-status {
@@ -26,8 +115,93 @@
   color: var(--sf-error, #b91c1c);
 }
 
-@media (max-width: 800px) {
+/* Branch switcher on dark rail */
+.portal-shell .branch-switcher {
+  margin: 0.75rem 0 1rem;
+}
+
+.portal-shell .bs-label {
+  color: #f8fafc;
+  opacity: 0.75;
+}
+
+.portal-shell .branch-switcher select {
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  background: rgba(0, 0, 0, 0.18);
+  color: #f8fafc;
+  max-width: none;
+}
+
+.portal-shell .bs-loading {
+  color: #f8fafc;
+}
+
+@media (max-width: 900px) {
   .portal-shell.shell {
-    grid-template-columns: 1fr;
+    width: 100%;
+    max-width: 100%;
+    grid-template-columns: minmax(0, 1fr);
+    overflow-x: hidden;
+  }
+
+  .portal-shell .rail {
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    padding: 0.85rem 0.85rem 0.65rem;
+    gap: 0.55rem;
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .portal-shell .brand h1 {
+    font-size: 1.35rem;
+  }
+
+  .portal-shell .brand .tagline {
+    display: none;
+  }
+
+  .portal-shell nav {
+    flex-direction: row;
+    flex-wrap: nowrap;
+    gap: 0.35rem;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: thin;
+    padding-bottom: 0.25rem;
+  }
+
+  .portal-shell nav a {
+    flex: 0 0 auto;
+    white-space: nowrap;
+    padding: 0.5rem 0.75rem;
+    font-size: 0.9rem;
+  }
+
+  .portal-shell .session {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.45rem;
+    margin-top: 0.35rem;
+    padding-top: 0.65rem;
+  }
+
+  .portal-shell .logout {
+    width: auto;
+    flex: 1 1 auto;
+  }
+
+  .portal-shell main {
+    padding: 1rem 0.85rem 2rem;
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .portal-error {
+    margin: 0.75rem 0.85rem;
   }
 }

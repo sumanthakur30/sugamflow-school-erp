@@ -1,0 +1,25 @@
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  min-height: 100%;
+  font-family: 'DM Sans', 'Segoe UI', system-ui, sans-serif;
+  background: #f4f6f9;
+  color: #122033;
+}
+
+h1,
+h2,
+h3 {
+  font-family: 'Fraunces', Georgia, 'Times New Roman', serif;
+  font-weight: 650;
+}
+
+a {
+  color: inherit;
+}

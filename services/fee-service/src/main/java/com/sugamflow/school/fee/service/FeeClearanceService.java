@@ -1,7 +1,9 @@
 package com.sugamflow.school.fee.service;
 
+import com.sugamflow.school.common.security.AccessScope;
 import com.sugamflow.school.common.tenant.TenantContext;
 import com.sugamflow.school.common.tenant.TenantScope;
+import com.sugamflow.school.fee.integration.StudentAccessClient;
 import com.sugamflow.school.fee.persistence.entity.FeeCollectionEntity;
 import com.sugamflow.school.fee.persistence.repo.FeeCollectionRepository;
 import com.sugamflow.school.fee.web.FeeException;
@@ -18,9 +20,12 @@ import org.springframework.transaction.annotation.Transactional;
 public class FeeClearanceService {
 
   private final FeeCollectionRepository repository;
+  private final StudentAccessClient studentAccess;
 
-  public FeeClearanceService(FeeCollectionRepository repository) {
+  public FeeClearanceService(
+      FeeCollectionRepository repository, StudentAccessClient studentAccess) {
     this.repository = repository;
+    this.studentAccess = studentAccess;
   }
 
   @Transactional(readOnly = true)
@@ -30,6 +35,10 @@ public class FeeClearanceService {
       throw new FeeException("VALIDATION", "admissionNo is required");
     }
     String ref = admissionNo.trim();
+    AccessScope access = studentAccess.resolve(scope);
+    if (access.restricted() && !access.allowsAdmissionNo(ref)) {
+      throw new FeeException("FORBIDDEN", "Admission number is outside your access scope");
+    }
     List<FeeCollectionEntity> records = scopedRecords(scope);
     BigDecimal pendingAmount = BigDecimal.ZERO;
     int pendingDays = 0;

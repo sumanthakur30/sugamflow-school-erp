@@ -25,10 +25,15 @@ function New-LifecycleStudent($headers, $suffix, $classApplied) {
     answers = @{
       fullName          = "Lifecycle $suffix"
       age               = 12
+      dob               = '2013-04-01'
       mobile            = "99999$(Get-Random -Minimum 10000 -Maximum 99999)"
       email             = "lifecycle.$suffix@example.com"
       classApplied      = $classApplied
+      classGrade        = (($classApplied -split '[-/]')[0] -replace '\D','')
+      sectionLetter     = if ($classApplied -match '[-/]([A-Za-z])') { $Matches[1].ToUpper() } else { 'A' }
       documentsComplete = $true
+      fatherName        = 'Lifecycle Father'
+      motherName        = 'Lifecycle Mother'
     }
   } | ConvertTo-Json -Depth 5
   $created = Invoke-RestMethod -Method Post -Headers $headers `
@@ -120,6 +125,7 @@ $feeSubmit = @{
     studentName = 'Lifecycle FeeBlock'
     admissionNo = $feeStudent.admissionNo
     feeHead     = 'Tuition'
+    feeMonth    = '2025-08'
     amount      = 5000
     pendingDays = 15
     paymentMode = 'CASH'

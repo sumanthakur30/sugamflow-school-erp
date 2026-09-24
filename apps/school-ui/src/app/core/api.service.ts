@@ -28,8 +28,21 @@ export class ApiService {
   }
 
   /** Paged list helper — normalizes PageResult envelopes. */
-  getPage<T>(path: string, page = 0, size = 50): Observable<PageResult<T>> {
-    const params = new HttpParams().set('page', String(page)).set('size', String(size));
+  getPage<T>(
+    path: string,
+    page = 0,
+    size = 50,
+    extra?: Record<string, string | number | boolean | null | undefined>,
+  ): Observable<PageResult<T>> {
+    let params = new HttpParams().set('page', String(page)).set('size', String(size));
+    if (extra) {
+      for (const [k, v] of Object.entries(extra)) {
+        if (v === null || v === undefined || v === '') {
+          continue;
+        }
+        params = params.set(k, String(v));
+      }
+    }
     return this.http
       .get<ApiResponse<PageResult<T> | T[]>>(`${this.base}${path}`, { params })
       .pipe(
@@ -61,6 +74,10 @@ export class ApiService {
 
   post<T>(path: string, body: unknown): Observable<T> {
     return this.http.post<ApiResponse<T>>(`${this.base}${path}`, body).pipe(map((r) => r.data));
+  }
+
+  delete<T>(path: string): Observable<T> {
+    return this.http.delete<ApiResponse<T>>(`${this.base}${path}`).pipe(map((r) => r.data));
   }
 
   getBlob(path: string): Observable<Blob> {

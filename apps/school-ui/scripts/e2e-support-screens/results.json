@@ -1,0 +1,90 @@
+[
+  {
+    "name": "login",
+    "pass": true,
+    "detail": "https://school.sugamflow.com/admin/dashboard"
+  },
+  {
+    "name": "desktop-sidebar-visible",
+    "pass": true
+  },
+  {
+    "name": "desktop-support-page",
+    "pass": true,
+    "detail": "https://school.sugamflow.com/admin/support/tickets"
+  },
+  {
+    "name": "desktop-report-form",
+    "pass": true,
+    "detail": "controls=5"
+  },
+  {
+    "name": "desktop-create-ticket",
+    "pass": true,
+    "detail": "https://school.sugamflow.com/admin/support/tickets/4"
+  },
+  {
+    "name": "desktop-sees-staff-reply",
+    "pass": true
+  },
+  {
+    "name": "desktop-hides-internal-note",
+    "pass": true
+  },
+  {
+    "name": "mobile-login-width",
+    "pass": true,
+    "detail": "w=358"
+  },
+  {
+    "name": "mobile-login",
+    "pass": true,
+    "detail": "https://school.sugamflow.com/admin/dashboard"
+  },
+  {
+    "name": "mobile-no-h-overflow",
+    "pass": true,
+    "detail": "{\"vw\":390,\"scrollW\":390,\"bodyW\":390}"
+  },
+  {
+    "name": "mobile-hamburger-opens-nav",
+    "pass": true
+  },
+  {
+    "name": "mobile-tickets-no-overflow",
+    "pass": true,
+    "detail": "{\"vw\":390,\"scrollW\":390}"
+  },
+  {
+    "name": "mobile-tickets-content",
+    "pass": true
+  },
+  {
+    "name": "mobile-report-form",
+    "pass": true,
+    "detail": "{\"vw\":390,\"scrollW\":390,\"inputs\":9}"
+  },
+  {
+    "name": "mobile-report-no-overflow",
+    "pass": true
+  },
+  {
+    "name": "mobile-detail-staff-reply",
+    "pass": true
+  },
+  {
+    "name": "mobile-dashboard-no-overflow",
+    "pass": true,
+    "detail": "{\"vw\":390,\"scrollW\":390,\"title\":\"Saraswati vidya mandir\",\"url\":\"https://school.sugamflow.com/admin/dashboard\"}"
+  },
+  {
+    "name": "mobile-students-no-overflow",
+    "pass": true,
+    "detail": "{\"vw\":390,\"scrollW\":390,\"title\":\"Saraswati vidya mandir\",\"url\":\"https://school.sugamflow.com/admin/students\"}"
+  },
+  {
+    "name": "mobile-attendance-no-overflow",
+    "pass": true,
+    "detail": "{\"vw\":390,\"scrollW\":390,\"title\":\"Saraswati vidya mandir\",\"url\":\"https://school.sugamflow.com/admin/attendance\"}"
+  }
+]

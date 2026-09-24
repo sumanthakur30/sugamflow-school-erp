@@ -6,7 +6,10 @@ import com.sugamflow.school.student.service.LifecycleService;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -124,6 +127,15 @@ public class LifecycleController {
   @PostMapping("/alumni")
   public ApiResponse<Map<String, Object>> alumni(@RequestBody Map<String, Object> body) {
     return ApiResponse.ok(wrap(() -> service.markAlumni(body)));
+  }
+
+  @GetMapping("/events/{eventId}/document")
+  public ResponseEntity<byte[]> eventDocument(@PathVariable("eventId") UUID eventId) {
+    byte[] pdf = wrap(() -> service.eventDocumentPdf(eventId));
+    return ResponseEntity.ok()
+        .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"lifecycle-" + eventId + ".pdf\"")
+        .contentType(MediaType.APPLICATION_PDF)
+        .body(pdf);
   }
 
   @GetMapping("/events")

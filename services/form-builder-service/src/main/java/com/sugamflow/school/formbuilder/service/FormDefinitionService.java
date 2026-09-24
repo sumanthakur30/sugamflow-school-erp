@@ -103,6 +103,9 @@ public class FormDefinitionService {
         if ("payroll_run".equals(key)) {
           ensurePayrollRunFormEnriched();
         }
+        if ("employee_master".equals(key)) {
+          ensureEmployeeMasterFormEnriched();
+        }
         continue;
       }
       FormDefinitionEntity e = new FormDefinitionEntity();
@@ -117,22 +120,89 @@ public class FormDefinitionService {
   /** Phase 5 — ensure platform admission form has fields used by admission rules. */
   private void ensureAdmissionFormEnriched() {
     repo.findByOrganizationIdIsNullAndFormKey("admission_form").ifPresent(e -> {
-      String payload = String.valueOf(e.getPayload());
-      if (payload.contains("age")
-          && payload.contains("documentsComplete")
-          && payload.contains("guardianFullName")) {
+      Map<String, Object> payload = e.getPayload();
+      String raw = String.valueOf(payload);
+      boolean needsRebuild =
+          !raw.contains("age")
+              || !raw.contains("documentsComplete")
+              || !raw.contains("guardianFullName");
+      if (needsRebuild) {
+        e.setPayload(admissionForm());
+        e.setUpdatedAt(Instant.now());
+        repo.save(e);
         return;
       }
-      e.setPayload(admissionForm());
-      e.setUpdatedAt(Instant.now());
-      repo.save(e);
+      boolean changed = upgradeFieldType(payload, "classApplied", "DROPDOWN");
+      changed |=
+          ensureSectionFields(
+              payload,
+              "government_ids",
+              "Government IDs",
+              List.of(
+                  field("aadhaar", "Aadhaar Number", "TEXTBOX", false, true, false),
+                  field("penNumber", "PEN Number", "TEXTBOX", false, true, true),
+                  field("apaarId", "APAAR ID", "TEXTBOX", false, true, true),
+                  field("samagraId", "Samagra ID", "TEXTBOX", false, true, false),
+                  field("schoolStudentId", "School Student ID", "TEXTBOX", false, true, true)));
+      changed |=
+          ensureSectionFields(
+              payload,
+              "applicant",
+              "Applicant",
+              List.of(
+                  field("classGrade", "Grade", "TEXTBOX", true, true, false),
+                  field("sectionLetter", "Section", "TEXTBOX", true, true, false),
+                  field("rollNo", "Roll Number", "TEXTBOX", false, true, true)));
+      changed |= ensureFieldVisibilityFlags(payload);
+      if (changed) {
+        e.setPayload(payload);
+        e.setUpdatedAt(Instant.now());
+        repo.save(e);
+      }
     });
+  }
+
+  /** Mutates form payload in place; returns true when a field type was changed. */
+  @SuppressWarnings("unchecked")
+  private boolean upgradeFieldType(Map<String, Object> form, String fieldKey, String type) {
+    Object sectionsObj = form.get("sections");
+    if (!(sectionsObj instanceof List<?> sections)) {
+      return false;
+    }
+    boolean changed = false;
+    for (Object sectionObj : sections) {
+      if (!(sectionObj instanceof Map<?, ?> sectionRaw)) {
+        continue;
+      }
+      Map<String, Object> section = (Map<String, Object>) sectionRaw;
+      Object fieldsObj = section.get("fields");
+      if (!(fieldsObj instanceof List<?> fields)) {
+        continue;
+      }
+      for (Object fieldObj : fields) {
+        if (!(fieldObj instanceof Map<?, ?> fieldRaw)) {
+          continue;
+        }
+        Map<String, Object> field = (Map<String, Object>) fieldRaw;
+        if (!fieldKey.equals(String.valueOf(field.get("key")))) {
+          continue;
+        }
+        if (!type.equalsIgnoreCase(String.valueOf(field.get("type")))) {
+          field.put("type", type);
+          changed = true;
+        }
+      }
+    }
+    return changed;
   }
 
   private void ensureFeeFormEnriched() {
     repo.findByOrganizationIdIsNullAndFormKey("fee_collection").ifPresent(e -> {
       String payload = String.valueOf(e.getPayload());
-      if (payload.contains("amount") && payload.contains("pendingDays") && payload.contains("email")) {
+      if (payload.contains("amount")
+          && payload.contains("pendingDays")
+          && payload.contains("email")
+          && payload.contains("feeMonth")) {
         return;
       }
       e.setPayload(feeCollectionForm());
@@ -167,13 +237,46 @@ public class FormDefinitionService {
 
   private void ensureStudentMasterFormEnriched() {
     repo.findByOrganizationIdIsNullAndFormKey("student_master").ifPresent(e -> {
-      String payload = String.valueOf(e.getPayload());
-      if (payload.contains("admissionNo") && payload.contains("classApplied")) {
+      Map<String, Object> payload = e.getPayload();
+      String raw = String.valueOf(payload);
+      if (!raw.contains("admissionNo") || !raw.contains("classApplied")) {
+        e.setPayload(studentMasterForm());
+        e.setUpdatedAt(Instant.now());
+        repo.save(e);
         return;
       }
-      e.setPayload(studentMasterForm());
-      e.setUpdatedAt(Instant.now());
-      repo.save(e);
+      boolean changed =
+          ensureSectionFields(
+              payload,
+              "main",
+              "Student",
+              List.of(
+                  field("fullName", "Full Name", "TEXTBOX", true, true, true),
+                  field("admissionNo", "Admission No", "TEXTBOX", false, true, true),
+                  field("rollNo", "Roll Number", "TEXTBOX", false, true, true),
+                  field("classApplied", "Class", "DROPDOWN", true, true, true),
+                  field("classGrade", "Grade", "TEXTBOX", true, true, false),
+                  field("sectionLetter", "Section", "TEXTBOX", true, true, false),
+                  field("age", "Age (years)", "NUMBER", false),
+                  field("mobile", "Mobile", "PHONE", true),
+                  field("email", "Email", "EMAIL", false)));
+      changed |=
+          ensureSectionFields(
+              payload,
+              "government_ids",
+              "Government IDs",
+              List.of(
+                  field("aadhaar", "Aadhaar Number", "TEXTBOX", false, true, false),
+                  field("penNumber", "PEN Number", "TEXTBOX", false, true, true),
+                  field("apaarId", "APAAR ID", "TEXTBOX", false, true, true),
+                  field("samagraId", "Samagra ID", "TEXTBOX", false, true, false),
+                  field("schoolStudentId", "School Student ID", "TEXTBOX", false, true, true)));
+      changed |= ensureFieldVisibilityFlags(payload);
+      if (changed) {
+        e.setPayload(payload);
+        e.setUpdatedAt(Instant.now());
+        repo.save(e);
+      }
     });
   }
 
@@ -232,6 +335,18 @@ public class FormDefinitionService {
         return;
       }
       e.setPayload(payrollRunForm());
+      e.setUpdatedAt(Instant.now());
+      repo.save(e);
+    });
+  }
+
+  private void ensureEmployeeMasterFormEnriched() {
+    repo.findByOrganizationIdIsNullAndFormKey("employee_master").ifPresent(e -> {
+      String payload = String.valueOf(e.getPayload());
+      if (payload.contains("employeeNo") && payload.contains("department") && payload.contains("joiningDate")) {
+        return;
+      }
+      e.setPayload(employeeMasterForm());
       e.setUpdatedAt(Instant.now());
       repo.save(e);
     });
@@ -303,6 +418,9 @@ public class FormDefinitionService {
     if ("payroll_run".equals(key)) {
       return payrollRunForm();
     }
+    if ("employee_master".equals(key)) {
+      return employeeMasterForm();
+    }
     Map<String, Object> form = new LinkedHashMap<>();
     form.put("formKey", key);
     form.put("title", key.replace('_', ' '));
@@ -337,8 +455,23 @@ public class FormDefinitionService {
                     field("age", "Age (years)", "NUMBER", true),
                     field("mobile", "Mobile", "PHONE", true),
                     field("email", "Email", "EMAIL", false),
-                    field("classApplied", "Class Applied", "TEXTBOX", true),
+                    field("classApplied", "Class Applied", "DROPDOWN", true),
+                    field("rollNo", "Roll Number", "TEXTBOX", false),
                     field("documentsComplete", "Documents Complete", "CHECKBOX", true))),
+            Map.of(
+                "id",
+                "government_ids",
+                "title",
+                "Government IDs",
+                "repeatable",
+                false,
+                "fields",
+                List.of(
+                    field("aadhaar", "Aadhaar Number", "TEXTBOX", false),
+                    field("penNumber", "PEN Number", "TEXTBOX", false),
+                    field("apaarId", "APAAR ID", "TEXTBOX", false),
+                    field("samagraId", "Samagra ID", "TEXTBOX", false),
+                    field("schoolStudentId", "School Student ID", "TEXTBOX", false))),
             Map.of(
                 "id",
                 "guardian",
@@ -377,6 +510,7 @@ public class FormDefinitionService {
                     field("relation", "Relation", "TEXTBOX", true),
                     field("mobile", "Mobile", "PHONE", true),
                     field("email", "Email", "EMAIL", false),
+                    field("userId", "Linked Login Username", "TEXTBOX", false),
                     field("isPrimary", "Primary Contact", "CHECKBOX", false)))));
     form.put("validationRules", List.of());
     form.put("conditionalVisibility", List.of());
@@ -387,15 +521,39 @@ public class FormDefinitionService {
     Map<String, Object> form = new LinkedHashMap<>();
     form.put("formKey", "student_master");
     form.put("title", "Student Master");
-    form.put("sections", List.of(Map.of(
-        "id", "main", "title", "Student", "repeatable", false,
-        "fields", List.of(
-            field("fullName","Full Name","TEXTBOX",true),
-            field("admissionNo","Admission No","TEXTBOX",false),
-            field("age","Age (years)","NUMBER",false),
-            field("mobile","Mobile","PHONE",true),
-            field("email","Email","EMAIL",false),
-            field("classApplied","Class","TEXTBOX",true)))));
+    form.put(
+        "sections",
+        List.of(
+            Map.of(
+                "id",
+                "main",
+                "title",
+                "Student",
+                "repeatable",
+                false,
+                "fields",
+                List.of(
+                    field("fullName", "Full Name", "TEXTBOX", true),
+                    field("admissionNo", "Admission No", "TEXTBOX", false),
+                    field("rollNo", "Roll Number", "TEXTBOX", false),
+                    field("classApplied", "Class", "DROPDOWN", true),
+                    field("age", "Age (years)", "NUMBER", false),
+                    field("mobile", "Mobile", "PHONE", true),
+                    field("email", "Email", "EMAIL", false))),
+            Map.of(
+                "id",
+                "government_ids",
+                "title",
+                "Government IDs",
+                "repeatable",
+                false,
+                "fields",
+                List.of(
+                    field("aadhaar", "Aadhaar Number", "TEXTBOX", false),
+                    field("penNumber", "PEN Number", "TEXTBOX", false),
+                    field("apaarId", "APAAR ID", "TEXTBOX", false),
+                    field("samagraId", "Samagra ID", "TEXTBOX", false),
+                    field("schoolStudentId", "School Student ID", "TEXTBOX", false)))));
     form.put("validationRules", List.of());
     form.put("conditionalVisibility", List.of());
     return form;
@@ -411,6 +569,7 @@ public class FormDefinitionService {
             field("studentName","Student Name","TEXTBOX",true),
             field("admissionNo","Admission No","TEXTBOX",true),
             field("feeHead","Fee Head","TEXTBOX",true),
+            field("feeMonth","Payment for Month","TEXTBOX",true),
             field("amount","Amount","NUMBER",true),
             field("pendingDays","Pending Days","NUMBER",false),
             field("paymentMode","Payment Mode","TEXTBOX",true),
@@ -546,10 +705,143 @@ public class FormDefinitionService {
     return form;
   }
 
+  private Map<String, Object> employeeMasterForm() {
+    Map<String, Object> form = new LinkedHashMap<>();
+    form.put("formKey", "employee_master");
+    form.put("title", "Employee Master");
+    form.put("sections", List.of(Map.of(
+        "id", "employee", "title", "Employee", "repeatable", false,
+        "fields", List.of(
+            field("employeeNo","Employee No","TEXTBOX",false),
+            field("fullName","Full Name","TEXTBOX",true),
+            field("mobile","Mobile","PHONE",true),
+            field("email","Email","EMAIL",false),
+            field("department","Department","TEXTBOX",true),
+            field("designation","Designation","TEXTBOX",true),
+            field("employmentType","Employment Type","TEXTBOX",true),
+            field("authUsername","Linked Login Username","TEXTBOX",false),
+            field("assignedClassSections","Assigned Class Sections","TEXTBOX",false),
+            field("gender","Gender","TEXTBOX",false),
+            field("joiningDate","Joining Date","TEXTBOX",true),
+            field("status","Status","TEXTBOX",false)))));
+    form.put("validationRules", List.of());
+    form.put("conditionalVisibility", List.of());
+    return form;
+  }
+
   private Map<String, Object> field(String key, String label, String type, boolean mandatory) {
+    return field(key, label, type, mandatory, true, false);
+  }
+
+  private Map<String, Object> field(
+      String key,
+      String label,
+      String type,
+      boolean mandatory,
+      boolean showInReports,
+      boolean showOnIdCard) {
     Map<String, Object> f = new LinkedHashMap<>();
-    f.put("key", key); f.put("label", label); f.put("type", type); f.put("mandatory", mandatory);
+    f.put("key", key);
+    f.put("label", label);
+    f.put("type", type);
+    f.put("mandatory", mandatory);
+    f.put("showInReports", showInReports);
+    f.put("showOnIdCard", showOnIdCard);
     return f;
+  }
+
+  /** Backfill report/ID-card visibility flags on existing form fields (config-driven). */
+  @SuppressWarnings("unchecked")
+  private boolean ensureFieldVisibilityFlags(Map<String, Object> form) {
+    Object sectionsObj = form.get("sections");
+    if (!(sectionsObj instanceof List<?> sections)) {
+      return false;
+    }
+    boolean changed = false;
+    for (Object sectionObj : sections) {
+      if (!(sectionObj instanceof Map<?, ?>)) {
+        continue;
+      }
+      Map<String, Object> section = (Map<String, Object>) sectionObj;
+      Object fieldsObj = section.get("fields");
+      if (!(fieldsObj instanceof List<?> fields)) {
+        continue;
+      }
+      for (Object fieldObj : fields) {
+        if (!(fieldObj instanceof Map<?, ?>)) {
+          continue;
+        }
+        Map<String, Object> field = (Map<String, Object>) fieldObj;
+        String key = String.valueOf(field.get("key"));
+        if (!field.containsKey("showInReports")) {
+          field.put("showInReports", true);
+          changed = true;
+        }
+        if (!field.containsKey("showOnIdCard")) {
+          boolean onCard =
+              "fullName".equals(key)
+                  || "admissionNo".equals(key)
+                  || "classApplied".equals(key)
+                  || "rollNo".equals(key)
+                  || "penNumber".equals(key)
+                  || "apaarId".equals(key)
+                  || "schoolStudentId".equals(key);
+          field.put("showOnIdCard", onCard);
+          changed = true;
+        }
+      }
+    }
+    return changed;
+  }
+
+  /** Adds missing fields to a section (creates the section when absent). */
+  @SuppressWarnings("unchecked")
+  private boolean ensureSectionFields(
+      Map<String, Object> form,
+      String sectionId,
+      String sectionTitle,
+      List<Map<String, Object>> desiredFields) {
+    Object sectionsObj = form.get("sections");
+    List<Object> sections =
+        sectionsObj instanceof List<?> existing ? new ArrayList<>(existing) : new ArrayList<>();
+    Map<String, Object> section = null;
+    for (Object sectionObj : sections) {
+      if (sectionObj instanceof Map<?, ?> raw && sectionId.equals(String.valueOf(raw.get("id")))) {
+        section = (Map<String, Object>) raw;
+        break;
+      }
+    }
+    boolean changed = false;
+    if (section == null) {
+      section = new LinkedHashMap<>();
+      section.put("id", sectionId);
+      section.put("title", sectionTitle);
+      section.put("repeatable", false);
+      section.put("fields", new ArrayList<Map<String, Object>>());
+      sections.add(section);
+      form.put("sections", sections);
+      changed = true;
+    }
+    Object fieldsObj = section.get("fields");
+    List<Object> fields =
+        fieldsObj instanceof List<?> list ? new ArrayList<>(list) : new ArrayList<>();
+    Set<String> present = new LinkedHashSet<>();
+    for (Object f : fields) {
+      if (f instanceof Map<?, ?> m) {
+        present.add(String.valueOf(m.get("key")));
+      }
+    }
+    for (Map<String, Object> desired : desiredFields) {
+      String key = String.valueOf(desired.get("key"));
+      if (present.contains(key)) {
+        continue;
+      }
+      fields.add(new LinkedHashMap<>(desired));
+      present.add(key);
+      changed = true;
+    }
+    section.put("fields", fields);
+    return changed;
   }
 }
 

@@ -1,7 +1,10 @@
-import { Component, OnInit, inject } from '@angular/core';
+import { Component, OnDestroy, OnInit, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { Subscription } from 'rxjs';
 import { ApiService } from '../../core/api.service';
+import { TenantContextService } from '../../core/tenant-context.service';
+import { ModuleBootstrapService } from '../../core/module-bootstrap.service';
 
 export interface ReportElement {
   id: string;
@@ -36,8 +39,11 @@ export interface ReportTemplate {
   templateUrl: './report-builder.component.html',
   styleUrls: ['../../shared/admin-page.scss', './report-builder.component.scss'],
 })
-export class ReportBuilderComponent implements OnInit {
+export class ReportBuilderComponent implements OnInit, OnDestroy {
   private readonly api = inject(ApiService);
+  private readonly tenantContext = inject(TenantContextService);
+  private readonly modules = inject(ModuleBootstrapService);
+  private campusReadySub?: Subscription;
 
   loading = true;
   featureEnabled = false;
@@ -71,28 +77,44 @@ export class ReportBuilderComponent implements OnInit {
   } | null = null;
 
   ngOnInit(): void {
-    this.bootstrap();
+    this.campusReadySub = this.tenantContext.whenCampusReady().subscribe(() => this.bootstrap());
+  }
+
+  ngOnDestroy(): void {
+    this.campusReadySub?.unsubscribe();
   }
 
   bootstrap(): void {
     this.loading = true;
     this.error = '';
-    this.api.get<any>('/api/reports/bootstrap').subscribe({
-      next: (boot) => {
-        this.featureEnabled = !!boot.featureEnabled;
-        this.elementTypes = boot.elementTypes ?? [];
-        this.samplePreviewData = boot.samplePreviewData ?? {};
-        this.formats = boot.exportFormats ?? [];
-        this.templates = boot.templates ?? [];
-        this.loading = false;
-        if (this.featureEnabled && this.templates.length) {
-          this.selectTemplate(this.templates[0].templateKey);
-        }
-      },
+    const path = '/api/reports/bootstrap';
+    const apply = (boot: any) => {
+      this.featureEnabled = !!boot.featureEnabled;
+      this.elementTypes = boot.elementTypes ?? [];
+      this.samplePreviewData = boot.samplePreviewData ?? {};
+      this.formats = boot.exportFormats ?? [];
+      this.templates = boot.templates ?? [];
+      this.loading = false;
+      if (this.featureEnabled && this.templates.length) {
+        this.selectTemplate(this.templates[0].templateKey);
+      }
+    };
+    const peeked = this.modules.peek(path);
+    if (peeked) {
+      apply(peeked);
+      return;
+    }
+    this.modules.load(path).subscribe({
+      next: apply,
       error: (err) => {
         this.loading = false;
-        this.featureEnabled = false;
-        this.error = err?.error?.message ?? err?.message ?? 'Report bootstrap failed';
+        this.error = ModuleBootstrapService.errorMessage(err, 'Report bootstrap failed');
+        if (ModuleBootstrapService.isFeatureDisabled(err)) {
+          this.featureEnabled = false;
+        } else {
+          // Do NOT imply plan feature is off on workflow/form/network errors
+          this.featureEnabled = true;
+        }
       },
     });
   }

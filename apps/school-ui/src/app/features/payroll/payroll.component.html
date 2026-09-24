@@ -1,107 +1,611 @@
-<div class="page">
-  <header class="page-head">
-    <h2>Payroll Run</h2>
-    <p>
-      Config-driven vertical slice — form <code>{{ formKey }}</code>, workflow
-      <code>{{ workflowKey }}</code>, rules &amp; FEATURE_PAYROLL.
-    </p>
-  </header>
+<div class="page payroll-page">
+  @if (formOpen && featureEnabled && !loading) {
+    <!-- SugamFlow Add Product: full-page create -->
+    <div class="form-page" [class.is-busy]="submitting">
+      <p class="crumb">
+        <button type="button" class="crumb-link" (click)="closeForm()" [disabled]="submitting">
+          Payroll
+        </button>
+        / {{ editingId ? 'Edit' : runType === 'CORRECTION' ? 'Correction' : runType === 'ADJUSTMENT' ? 'Adjustment' : 'New' }}
+      </p>
+      <header class="page-head list-head">
+        <div>
+          <h2>{{ formTitle() }}</h2>
+          <p>{{ formSubtitle() }}</p>
+          @if (parentRecordId) {
+            <p class="muted parent-link">Linked parent: {{ parentRecordId }}</p>
+          }
+        </div>
+      </header>
 
-  @if (error) {
-    <p class="error panel" role="alert">{{ error }}</p>
-  }
+      @if (error) {
+        <p class="error panel" role="alert">{{ error }}</p>
+      }
+      @if (submitting) {
+        <div class="processing-banner" role="alert" aria-live="assertive">
+          <span class="spinner" aria-hidden="true"></span>
+          <div>
+            <strong>{{ statusMsg || 'Saving payroll run…' }}</strong>
+            <p>Please wait — do not click again.</p>
+          </div>
+        </div>
+      } @else if (statusMsg) {
+        <p class="status panel" role="status" aria-live="polite">{{ statusMsg }}</p>
+      }
 
-  @if (loading) {
-    <p class="panel">Loading payroll configuration…</p>
-  } @else if (!featureEnabled) {
-    <p class="panel">Payroll is not enabled for this plan (FEATURE_PAYROLL).</p>
-  } @else {
-    <section class="panel">
-      <h3>New record</h3>
-      <div class="grid two">
-        @for (field of fields; track field.key) {
+      <section class="form-section panel">
+        <h3 class="form-section-title">Employee and payroll period</h3>
+        <div class="employee-lookup-block" [class.invalid]="fieldInvalid('employeeName')">
+          <span class="field-title">Employee <span class="req">*</span></span>
+          @for (_ of [lookupNonce]; track lookupNonce) {
+            <sf-staff-lookup
+              label="Search staff"
+              [disabled]="submitting"
+              (staffSelected)="onStaffSelected($event)"
+              (cleared)="onStaffCleared()"
+            />
+          }
+          @if (fieldErrors['employeeName']) {
+            <span class="field-error">{{ fieldErrors['employeeName'] }}</span>
+          } @else if (!selectedStaff) {
+            <span class="field-help">Search by name, employee ID, department, or mobile - do not type payee identity by hand.</span>
+          }
+        </div>
+
+        <div class="grid three" [attr.aria-busy]="submitting">
           <label>
-            {{ field.label }}
-            @if (field.mandatory) {
-              <span class="req">*</span>
-            }
-            @if (field.type === 'CHECKBOX') {
-              <input type="checkbox" [(ngModel)]="answers[field.key]" [name]="field.key" />
-            } @else if (field.type === 'NUMBER') {
-              <input type="number" [(ngModel)]="answers[field.key]" [name]="field.key" />
-            } @else {
-              <input [(ngModel)]="answers[field.key]" [name]="field.key" />
+            <span class="field-title">Month <span class="req">*</span></span>
+            <select
+              [(ngModel)]="answers['month']"
+              name="payrollMonth"
+              [disabled]="submitting"
+              (ngModelChange)="clearFieldError('month')"
+            >
+              @for (month of monthOptions; track month) {
+                <option [value]="month">{{ month }}</option>
+              }
+            </select>
+            @if (fieldErrors['month']) {
+              <span class="field-error">{{ fieldErrors['month'] }}</span>
             }
           </label>
-        }
-      </div>
-      <div class="actions">
-        <button type="button" (click)="submit()" [disabled]="submitting">
-          {{ submitting ? 'Submitting…' : 'Submit record' }}
-        </button>
-      </div>
-    </section>
 
-    <div class="payroll-layout">
-      <section class="panel">
-        <h3>Inbox</h3>
-        @if (!records.length) {
-          <p class="muted">No records yet.</p>
-        }
-        <ul class="app-list">
-          @for (row of records; track row.id) {
-            <li>
-              <button
-                type="button"
-                class="app-row"
-                [class.active]="row.id === selectedId"
-                (click)="select(row)"
-              >
-                <strong>{{ row.answers?.employeeName || row.id }}</strong>
-                <span>{{ row.status }} · {{ row.currentStepName }} · net {{ row.answers?.netPay }}</span>
-              </button>
-            </li>
-          }
-        </ul>
+          <label [class.invalid]="fieldInvalid('year')">
+            <span class="field-title">Year <span class="req">*</span></span>
+            <select
+              [(ngModel)]="answers['year']"
+              name="payrollYear"
+              [disabled]="submitting"
+              (ngModelChange)="clearFieldError('year')"
+            >
+              @for (year of yearOptions; track year) {
+                <option [value]="year">{{ year }}</option>
+              }
+            </select>
+            @if (fieldErrors['year']) {
+              <span class="field-error">{{ fieldErrors['year'] }}</span>
+            }
+          </label>
+        </div>
+
+        <div class="employee-summary">
+          <div>
+            <span>Employee ID</span>
+            <strong>{{ answers['employeeId'] || 'Select an employee' }}</strong>
+          </div>
+          <div>
+            <span>Email</span>
+            <strong>{{ answers['email'] || '—' }}</strong>
+          </div>
+          <div>
+            <span>Mobile</span>
+            <strong>{{ answers['mobile'] || '—' }}</strong>
+          </div>
+        </div>
       </section>
 
-      <section class="panel">
-        <h3>Detail</h3>
-        @if (!selected) {
-          <p class="muted">Select a record.</p>
-        } @else {
+      <section class="form-section panel">
+        <h3 class="form-section-title">Pay calculation</h3>
+        <div class="grid three" [attr.aria-busy]="submitting">
+          <label [class.invalid]="fieldInvalid('basicPay')">
+            <span class="field-title">Basic pay <span class="req">*</span></span>
+            <input
+              type="number"
+              min="0"
+              step="0.01"
+              [(ngModel)]="answers['basicPay']"
+              name="basicPay"
+              placeholder="0.00"
+              [disabled]="submitting"
+              (ngModelChange)="recalculatePay()"
+            />
+            @if (fieldErrors['basicPay']) {
+              <span class="field-error">{{ fieldErrors['basicPay'] }}</span>
+            }
+          </label>
+
+          <label [class.invalid]="fieldInvalid('allowances')">
+            Allowances
+            <input
+              type="number"
+              min="0"
+              step="0.01"
+              [(ngModel)]="answers['allowances']"
+              name="allowances"
+              placeholder="0.00"
+              [disabled]="submitting"
+              (ngModelChange)="recalculatePay()"
+            />
+            @if (fieldErrors['allowances']) {
+              <span class="field-error">{{ fieldErrors['allowances'] }}</span>
+            }
+          </label>
+
+          <label [class.invalid]="fieldInvalid('deductions')">
+            Deductions
+            <input
+              type="number"
+              min="0"
+              step="0.01"
+              [(ngModel)]="answers['deductions']"
+              name="deductions"
+              placeholder="0.00"
+              [disabled]="submitting"
+              (ngModelChange)="recalculatePay()"
+            />
+            @if (fieldErrors['deductions']) {
+              <span class="field-error">{{ fieldErrors['deductions'] }}</span>
+            }
+          </label>
+        </div>
+
+        <div class="pay-summary">
+          <div>
+            <span>Gross pay</span>
+            <strong>{{ formatMoney(answers['grossPay']) }}</strong>
+            <small>Basic pay + allowances</small>
+          </div>
+          <div class="pay-summary-net">
+            <span>Net pay</span>
+            <strong>{{ formatMoney(answers['netPay']) }}</strong>
+            <small>Gross pay − deductions</small>
+          </div>
+        </div>
+      </section>
+
+      <div class="form-actions actions">
+        <button type="button" (click)="submit()" [disabled]="submitting" [attr.aria-busy]="submitting">
+          {{
+            submitting
+              ? editingId
+                ? 'Saving…'
+                : 'Saving…'
+              : editingId
+                ? 'Save changes'
+                : runType === 'CORRECTION'
+                  ? 'Submit correction'
+                  : runType === 'ADJUSTMENT'
+                    ? 'Submit adjustment'
+                    : 'Submit payroll run'
+          }}
+        </button>
+        <button type="button" class="secondary" (click)="closeForm()" [disabled]="submitting">
+          Cancel
+        </button>
+      </div>
+    </div>
+  } @else if (selected && featureEnabled && !loading) {
+    <!-- SugamFlow Edit/Detail: full-page review form -->
+    <div class="form-page detail-page" [class.is-busy]="submitting">
+      <p class="crumb">
+        <button type="button" class="crumb-link" (click)="closeDetail()" [disabled]="submitting">
+          Payroll
+        </button>
+        / {{ employeeName(selected) }}
+      </p>
+
+      <header class="page-head list-head">
+        <div>
+          <h2>{{ employeeName(selected) }}</h2>
           <p>
-            <strong>{{ selected.status }}</strong> — step {{ selected.currentStepSequence }}
-            {{ selected.currentStepName }} ({{ selected.assigneeRole }})
+            Step {{ selected.currentStepSequence || '—' }}
+            · {{ selected.currentStepName || '—' }}
+            @if (selected.assigneeRole) {
+              ({{ selected.assigneeRole }})
+            }
+            · {{ selected.runType || 'REGULAR' }}
+            @if (payoutLabel(selected)) {
+              · {{ payoutLabel(selected) }}
+            }
           </p>
-          <pre class="answers">{{ selected.answers | json }}</pre>
+          @if (selected.parentRecordId) {
+            <p class="muted parent-link">Parent run: {{ selected.parentRecordId }}</p>
+          }
+        </div>
+        <div class="head-actions">
+          <span [class]="statusClass(selected.status)">{{ selected.status }}</span>
+          @if (payoutLabel(selected)) {
+            <span class="payout-chip">{{ payoutLabel(selected) }}</span>
+          }
+          @if (canEdit(selected)) {
+            <button type="button" class="secondary" (click)="openEdit(selected)" [disabled]="submitting">
+              Edit
+            </button>
+            <button
+              type="button"
+              class="secondary danger"
+              (click)="cancelDraft(selected)"
+              [disabled]="submitting"
+            >
+              Cancel draft
+            </button>
+          }
+          @if (canReverse(selected)) {
+            <button type="button" class="secondary" (click)="reverseRun(selected)" [disabled]="submitting">
+              Reverse
+            </button>
+            <button type="button" (click)="correctRun(selected)" [disabled]="submitting">
+              Correct this run
+            </button>
+            <button type="button" class="secondary" (click)="markPaid(selected)" [disabled]="submitting">
+              Mark paid
+            </button>
+          }
+          @if (canCorrect(selected)) {
+            <button type="button" (click)="openCorrection(selected)" [disabled]="submitting">
+              New correction
+            </button>
+          }
+          @if (canAdjust(selected)) {
+            <button type="button" (click)="openAdjustment(selected)" [disabled]="submitting">
+              Adjustment
+            </button>
+          }
+          <button type="button" class="secondary" (click)="closeDetail()" [disabled]="submitting">
+            Back to list
+          </button>
+        </div>
+      </header>
+
+      @if (error) {
+        <p class="error panel" role="alert">{{ error }}</p>
+      }
+      @if (statusMsg) {
+        <p class="status panel" role="status" aria-live="polite">{{ statusMsg }}</p>
+      }
+      @if (submitting) {
+        <div class="processing-banner" role="alert" aria-live="assertive">
+          <span class="spinner" aria-hidden="true"></span>
+          <div>
+            <strong>Processing workflow action…</strong>
+            <p>Please wait. Do not click again.</p>
+          </div>
+        </div>
+      }
+
+      <section class="form-section panel">
+        <h3 class="form-section-title">Employee</h3>
+        <div class="read-grid">
+          <div class="read-field">
+            <span class="read-label">Name</span>
+            <span class="read-value">{{ answer(selected, 'employeeName') }}</span>
+          </div>
+          <div class="read-field">
+            <span class="read-label">Employee ID</span>
+            <span class="read-value">{{ answer(selected, 'employeeId') }}</span>
+          </div>
+          <div class="read-field">
+            <span class="read-label">Mobile</span>
+            <span class="read-value mono">{{ answer(selected, 'mobile') }}</span>
+          </div>
+          <div class="read-field">
+            <span class="read-label">Email</span>
+            <span class="read-value">{{ answer(selected, 'email') }}</span>
+          </div>
+        </div>
+      </section>
+
+      <section class="form-section panel">
+        <h3 class="form-section-title">Pay summary</h3>
+        <div class="read-grid">
+          <div class="read-field">
+            <span class="read-label">Month</span>
+            <span class="read-value">{{ answer(selected, 'month') }}</span>
+          </div>
+          <div class="read-field">
+            <span class="read-label">Year</span>
+            <span class="read-value">{{ answer(selected, 'year') }}</span>
+          </div>
+          <div class="read-field">
+            <span class="read-label">Basic pay</span>
+            <span class="read-value money">{{ formatMoney(selected.answers?.basicPay) }}</span>
+          </div>
+          <div class="read-field">
+            <span class="read-label">Allowances</span>
+            <span class="read-value money">{{ formatMoney(selected.answers?.allowances) }}</span>
+          </div>
+          <div class="read-field">
+            <span class="read-label">Gross</span>
+            <span class="read-value money">{{ formatMoney(selected.answers?.grossPay) }}</span>
+          </div>
+          <div class="read-field">
+            <span class="read-label">Deductions</span>
+            <span class="read-value money">{{ formatMoney(selected.answers?.deductions) }}</span>
+          </div>
+          <div class="read-field highlight">
+            <span class="read-label">Net pay</span>
+            <span class="read-value money">{{ formatMoney(selected.answers?.netPay) }}</span>
+          </div>
+          @for (field of fields; track field.key) {
+            @if (
+              field.key !== 'employeeName' &&
+              field.key !== 'employeeId' &&
+              field.key !== 'mobile' &&
+              field.key !== 'email' &&
+              field.key !== 'month' &&
+              field.key !== 'year' &&
+              field.key !== 'basicPay' &&
+              field.key !== 'allowances' &&
+              field.key !== 'grossPay' &&
+              field.key !== 'deductions' &&
+              field.key !== 'netPay'
+            ) {
+              <div class="read-field">
+                <span class="read-label">{{ field.label }}</span>
+                <span class="read-value">{{ answer(selected, field.key) }}</span>
+              </div>
+            }
+          }
+        </div>
+      </section>
+
+      @if (canWorkflowAct(selected)) {
+        <section class="form-section panel">
+          <h3 class="form-section-title">Workflow action</h3>
           <label>
             Comment
-            <input [(ngModel)]="actionComment" name="actionComment" />
+            <input
+              [(ngModel)]="actionComment"
+              name="actionComment"
+              placeholder="Optional note for this step"
+              [disabled]="submitting"
+            />
           </label>
-          <div class="actions">
-            <button type="button" (click)="act('APPROVE')" [disabled]="submitting">Approve step</button>
-            <button type="button" class="secondary" (click)="act('REQUEST_INFO')" [disabled]="submitting">
+          <div class="form-actions actions">
+            <button type="button" (click)="act('APPROVE')" [disabled]="submitting">
+              Approve step
+            </button>
+            <button
+              type="button"
+              class="secondary"
+              (click)="act('REQUEST_INFO')"
+              [disabled]="submitting"
+            >
               Request info
             </button>
-            <button type="button" class="danger" (click)="act('REJECT')" [disabled]="submitting">Reject</button>
+            <button type="button" class="danger" (click)="act('REJECT')" [disabled]="submitting">
+              Reject
+            </button>
+            <button type="button" class="secondary" (click)="closeDetail()" [disabled]="submitting">
+              Back
+            </button>
           </div>
-          @if (latestApproveDelivery().length) {
-            <h4>Notifications</h4>
-            <ul class="history">
-              @for (d of latestApproveDelivery(); track d.at) {
-                <li>{{ d.channel }} → {{ d.status }}{{ d.recipient ? ' · ' + d.recipient : '' }}</li>
-              }
-            </ul>
-          }
-          <h4>History</h4>
+        </section>
+      } @else {
+        <section class="form-section panel">
+          <h3 class="form-section-title">Lifecycle</h3>
+          <p class="muted">
+            Approved and paid history is immutable. Use Reverse (unpaid), Correction, or Adjustment — never delete.
+          </p>
+        </section>
+      }
+
+      @if (latestApproveDelivery().length) {
+        <section class="form-section panel">
+          <h3 class="form-section-title">Notifications</h3>
           <ul class="history">
-            @for (h of selected.history; track h.at) {
-              <li>{{ h.at }} — {{ h.type }}: {{ h.message }}</li>
+            @for (d of latestApproveDelivery(); track d.at) {
+              <li>{{ d.channel }} → {{ d.status }}{{ d.recipient ? ' · ' + d.recipient : '' }}</li>
             }
           </ul>
+        </section>
+      }
+
+      <section class="form-section panel">
+        <h3 class="form-section-title">History</h3>
+        @if (!selected.history?.length) {
+          <p class="muted">No history yet.</p>
+        } @else {
+          <ol class="timeline">
+            @for (h of selected.history; track h.at) {
+              <li>
+                <div class="timeline-title">{{ h.type || 'EVENT' }}</div>
+                <div class="timeline-msg">{{ h.message }}</div>
+                <div class="timeline-at">{{ formatWhen(h.at) }}</div>
+              </li>
+            }
+          </ol>
         }
       </section>
     </div>
+  } @else {
+    <!-- SugamFlow Product List -->
+    <header class="page-head list-head">
+      <div>
+        <h2>Payroll</h2>
+        <p>Review and approve staff payroll runs.</p>
+      </div>
+      @if (featureEnabled && !loading) {
+        <div class="head-actions">
+          <button type="button" (click)="openForm()">+ New Payroll Run</button>
+        </div>
+      }
+    </header>
+
+    @if (error) {
+      <p class="error panel" role="alert">{{ error }}</p>
+    }
+    @if (statusMsg) {
+      <p class="status panel" role="status" aria-live="polite">{{ statusMsg }}</p>
+    }
+
+    @if (loading) {
+      <p class="panel">Loading payroll configuration…</p>
+    } @else if (!featureEnabled && !error) {
+      <p class="panel">Payroll is not enabled for this plan (FEATURE_PAYROLL).</p>
+    } @else {
+      <section class="panel inbox-panel">
+        <sf-list-toolbar
+          searchPlaceholder="Search employee, mobile, status…"
+          [(q)]="listQ"
+          [(sortBy)]="sortBy"
+          [(sortDir)]="sortDir"
+          [pageSize]="pageSize"
+          [sortOptions]="sortOptions"
+          [statusOptions]="statusOptions"
+          [(status)]="listStatus"
+          [searching]="searching"
+          [clearEnabled]="listClearEnabled"
+          (pageSizeChange)="pageSize = $event; pageIndex = 0; loadRecords()"
+          (statusChange)="pageIndex = 0; loadRecords()"
+          (search)="pageIndex = 0; loadRecords()"
+          (clear)="clearListFilters()"
+        />
+
+        <div class="table-wrap">
+          <table class="payroll-table">
+            <thead>
+              <tr>
+                @for (
+                  col of [
+                    { key: 'employeeName', label: 'Employee' },
+                    { key: 'mobile', label: 'Mobile' },
+                    { key: 'netPay', label: 'Net pay' },
+                    { key: 'status', label: 'Status' },
+                    { key: 'step', label: 'Step' },
+                    { key: 'updatedAt', label: 'Updated' }
+                  ];
+                  track col.key
+                ) {
+                  <th
+                    class="list-th"
+                    [class.sortable-heading]="isSortableColumn(col.key)"
+                    [class.active-sort]="sortBy === col.key"
+                    [attr.aria-sort]="
+                      sortBy === col.key
+                        ? (sortDir === 'ASC' ? 'ascending' : 'descending')
+                        : null
+                    "
+                  >
+                    @if (isSortableColumn(col.key)) {
+                      <button
+                        type="button"
+                        class="heading-sort"
+                        (click)="sortByColumn(col.key)"
+                        [attr.aria-label]="'Sort by ' + col.label"
+                      >
+                        <span>{{ col.label }}</span>
+                        <span class="sort-indicator" aria-hidden="true">{{
+                          sortIndicator(col.key)
+                        }}</span>
+                      </button>
+                    } @else {
+                      <span class="heading-label">{{ col.label }}</span>
+                    }
+                  </th>
+                }
+                <th class="col-actions list-th"><span class="heading-label">Actions</span></th>
+              </tr>
+            </thead>
+            <tbody>
+              @if (!records.length) {
+                <tr>
+                  <td colspan="7" class="muted empty-row">
+                    No payroll runs yet.
+                    <button type="button" class="linkish" (click)="openForm()">
+                      Create the first run
+                    </button>
+                  </td>
+                </tr>
+              }
+              @for (row of records; track row.id) {
+                <tr
+                  class="payroll-row"
+                  [class.selected]="row.id === selectedId"
+                  (click)="select(row)"
+                  tabindex="0"
+                  (keyup.enter)="select(row)"
+                >
+                  <td>
+                    <div class="cell-primary">{{ employeeName(row) }}</div>
+                    <div class="cell-sub">{{ answer(row, 'employeeId') }}</div>
+                  </td>
+                  <td class="mono">{{ answer(row, 'mobile') }}</td>
+                  <td class="money">{{ formatMoney(row.answers?.netPay) }}</td>
+                  <td>
+                    <div class="status-stack">
+                      <span [class]="statusClass(row.status)">{{ row.status || '—' }}</span>
+                      @if (payoutLabel(row)) {
+                        <span class="payout-chip">{{ payoutLabel(row) }}</span>
+                      }
+                      @if (row.runType && row.runType !== 'REGULAR') {
+                        <span class="run-type-chip">{{ row.runType }}</span>
+                      }
+                    </div>
+                  </td>
+                  <td>
+                    <span class="step-chip">{{ row.currentStepName || '—' }}</span>
+                  </td>
+                  <td class="muted-cell">{{ formatWhen(row.updatedAt || row.createdAt) }}</td>
+                  <td class="col-actions" (click)="$event.stopPropagation()">
+                    <div class="action-row" role="group" [attr.aria-label]="'Actions for ' + employeeName(row)">
+                      <button type="button" class="tiny" (click)="select(row)">Open</button>
+                      @if (canEdit(row)) {
+                        <button type="button" class="tiny secondary" (click)="openEdit(row, $event)">
+                          Edit
+                        </button>
+                        <button type="button" class="tiny danger" (click)="cancelDraft(row, $event)">
+                          Cancel
+                        </button>
+                      }
+                      @if (canReverse(row)) {
+                        <button type="button" class="tiny secondary" (click)="reverseRun(row, $event)">
+                          Reverse
+                        </button>
+                        <button type="button" class="tiny secondary" (click)="correctRun(row, $event)">
+                          Correct
+                        </button>
+                        <button type="button" class="tiny secondary" (click)="markPaid(row, $event)">
+                          Mark paid
+                        </button>
+                      }
+                      @if (canCorrect(row)) {
+                        <button type="button" class="tiny secondary" (click)="openCorrection(row, $event)">
+                          Correct
+                        </button>
+                      }
+                      @if (canAdjust(row)) {
+                        <button type="button" class="tiny secondary" (click)="openAdjustment(row, $event)">
+                          Adjust
+                        </button>
+                      }
+                    </div>
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+
+        <sf-list-pager
+          [pageIndex]="pageIndex"
+          [pageSize]="pageSize"
+          [totalElements]="page.totalElements"
+          [hasNext]="page.hasNext"
+          itemLabel="records"
+          (pageChange)="onPageChange($event)"
+        />
+      </section>
+    }
   }
 </div>

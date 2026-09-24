@@ -1,0 +1,100 @@
+<section class="page staff-access-page">
+  <header class="page-head access-head">
+    <div>
+      <h2>Staff access</h2>
+      <p>
+        Limit what each login can do. Invite role sets the default school screens; permissions below fine-tune
+        platform capabilities for that account.
+      </p>
+    </div>
+    <button type="button" class="secondary" (click)="reload()" [disabled]="loading || saving">
+      {{ loading ? 'Loading…' : 'Reload' }}
+    </button>
+  </header>
+
+  @if (error) {
+    <div class="notice error-notice" role="alert">{{ error }}</div>
+  }
+  @if (status) {
+    <div class="notice success-notice" role="status">{{ status }}</div>
+  }
+
+  @if (loading) {
+    <div class="panel loading-state">Loading staff access…</div>
+  } @else {
+    <div class="panel roles-panel">
+      <h3>Role templates (invite defaults)</h3>
+      <p class="muted">Used when inviting staff under Staff → Invite login.</p>
+      <div class="role-chips">
+        @for (role of roleTemplates; track role.code) {
+          <span class="role-chip" [title]="role.description || role.name">
+            <strong>{{ role.name }}</strong>
+            <small>{{ role.code }} · {{ role.permissions.length || 0 }} perms</small>
+          </span>
+        }
+      </div>
+    </div>
+
+    <div class="access-layout">
+      <aside class="panel account-list">
+        <h3>Staff logins</h3>
+        <input class="search" [(ngModel)]="q" name="q" placeholder="Search name, username, role…" />
+        <ul>
+          @for (account of filteredAccounts; track account.id) {
+            <li>
+              <button
+                type="button"
+                class="account-item"
+                [class.active]="selectedId === account.id"
+                (click)="selectAccount(account.id)"
+              >
+                <strong>{{ account.name || account.username || ('#' + account.id) }}</strong>
+                <span>{{ account.role || '—' }} · {{ account.status || 'ACTIVE' }}</span>
+              </button>
+            </li>
+          } @empty {
+            <li class="muted empty">No staff accounts found for this school.</li>
+          }
+        </ul>
+      </aside>
+
+      <section class="panel permission-editor">
+        @if (!selected) {
+          <p class="muted">Select a staff login to edit permissions.</p>
+        } @else {
+          <div class="editor-head">
+            <div>
+              <h3>{{ selected.name || selected.username }}</h3>
+              <p>{{ selected.username }} · {{ selected.role }}</p>
+            </div>
+          </div>
+
+          <div class="perm-grid">
+            @for (opt of permissionOptions; track opt.code) {
+              <button
+                type="button"
+                class="perm-toggle"
+                [class.on]="isOn(opt.code)"
+                [disabled]="saving"
+                (click)="toggle(opt.code)"
+                [attr.aria-pressed]="isOn(opt.code)"
+              >
+                <strong>{{ opt.label }}</strong>
+                <span>{{ opt.hint }}</span>
+              </button>
+            }
+          </div>
+
+          <div class="actions">
+            <button type="button" (click)="save()" [disabled]="saving || !dirty">
+              {{ saving ? 'Saving…' : 'Save permissions' }}
+            </button>
+            <button type="button" class="secondary" (click)="resetDraft()" [disabled]="saving || !dirty">
+              Reset
+            </button>
+          </div>
+        }
+      </section>
+    </div>
+  }
+</section>

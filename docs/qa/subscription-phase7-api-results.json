@@ -1,0 +1,233 @@
+{
+    "date":  "2026-07-29",
+    "baseUrl":  "http://localhost:8182",
+    "generatedAt":  "2026-07-29T10:46:03.8760486+05:30",
+    "branch":  "feature/subscription-plans",
+    "notes":  [
+                  "after rebuild",
+                  "subscription-service rebuilt and restarted with -Xms128m -Xmx384m -XX:+UseSerialGC on :8182",
+                  "NoOpSubscriptionCacheSupport switched to ConditionalOnProperty so cache-off boots without Redis",
+                  "Flyway migrations 4-6 applied (projection, lifecycle, usage)"
+              ],
+    "ui":  {
+               "loginOk":  true,
+               "schoolUiBase":  "http://localhost:4300",
+               "screenshotsDir":  "D:\\school\\docs\\qa\\subscription-screenshots",
+               "note":  "Port 4200 served SugamFlow Lab; school-ui started on 4300 for screenshots."
+           },
+    "summary":  {
+                    "pass":  22,
+                    "fail":  1,
+                    "total":  23
+                },
+    "results":  [
+                    {
+                        "name":  "1_plans",
+                        "method":  "GET",
+                        "url":  "http://localhost:8182/api/subscription/plans",
+                        "status":  200,
+                        "success":  true,
+                        "snippet":  "{\"success\":true,\"data\":[{\"id\":\"government\",\"code\":\"GOVERNMENT\",\"name\":\"Government\",\"planType\":\"GOVERNMENT\",\"active\":true,\"limits\":{\"maxSms\":500,\"maxUsers\":30,\"maxEmails\":1000,\"maxClasses\":20,\"maxReports\":20,\"maxApiCalls\":10000,\"maxBranches\":3,\"maxSections\":40,\"maxSessions\":2,\"maxStudents\":10000,\"maxSubjects\":30,\"maxTeachers\":20,\"maxWhatsApp\":200,\"aiUsageUnits\":0,\"maxStorageGb\":5,\"maxCustomFields\":...",
+                        "error":  null
+                    },
+                    {
+                        "name":  "2_plan_starter",
+                        "method":  "GET",
+                        "url":  "http://localhost:8182/api/subscription/plans/starter",
+                        "status":  200,
+                        "success":  true,
+                        "snippet":  "{\"success\":true,\"data\":{\"id\":\"starter\",\"code\":\"STARTER\",\"name\":\"Starter\",\"planType\":\"STARTER\",\"active\":true,\"limits\":{\"maxSms\":500,\"maxUsers\":30,\"maxEmails\":1000,\"maxClasses\":20,\"maxReports\":20,\"maxApiCalls\":10000,\"maxBranches\":3,\"maxSections\":40,\"maxSessions\":2,\"maxStudents\":200,\"maxSubjects\":30,\"maxTeachers\":20,\"maxWhatsApp\":200,\"aiUsageUnits\":0,\"maxStorageGb\":5,\"maxCustomFields\":10},\"featureFla...",
+                        "error":  null
+                    },
+                    {
+                        "name":  "3_projection",
+                        "method":  "GET",
+                        "url":  "http://localhost:8182/api/subscription/plans/starter/projection",
+                        "status":  200,
+                        "success":  true,
+                        "snippet":  "{\"success\":true,\"data\":{\"planId\":\"starter\",\"sourceOfTruth\":\"subscription_plan JSON\",\"features\":[{\"featureCode\":\"FEATURE_ACADEMIC_LIFECYCLE\",\"enabled\":true},{\"featureCode\":\"FEATURE_ACCOUNTING\",\"enabled\":false},{\"featureCode\":\"FEATURE_ADMIN_CONFIG\",\"enabled\":true},{\"featureCode\":\"FEATURE_ADMISSION\",\"enabled\":true},{\"featureCode\":\"FEATURE_AI\",\"enabled\":true},{\"featureCode\":\"FEATURE_API_ACCESS\",\"enabl...",
+                        "error":  null
+                    },
+                    {
+                        "name":  "4_projection_modules",
+                        "method":  "GET",
+                        "url":  "http://localhost:8182/api/subscription/plans/starter/projection/modules",
+                        "status":  200,
+                        "success":  true,
+                        "snippet":  "{\"success\":true,\"data\":[{\"moduleCode\":\"SCHOOL_ACADEMIC\",\"enabled\":true},{\"moduleCode\":\"SCHOOL_ADMISSION\",\"enabled\":true},{\"moduleCode\":\"SCHOOL_ATTENDANCE\",\"enabled\":true},{\"moduleCode\":\"SCHOOL_COMMS\",\"enabled\":true},{\"moduleCode\":\"SCHOOL_CORE\",\"enabled\":true},{\"moduleCode\":\"SCHOOL_EXAM\",\"enabled\":true},{\"moduleCode\":\"SCHOOL_FEE\",\"enabled\":true},{\"moduleCode\":\"SCHOOL_HOSTEL\",\"enabled\":true},{\"modul...",
+                        "error":  null
+                    },
+                    {
+                        "name":  "5_business_types",
+                        "method":  "GET",
+                        "url":  "http://localhost:8182/api/subscription/catalog/business-types",
+                        "status":  200,
+                        "success":  true,
+                        "snippet":  "{\"success\":true,\"data\":[{\"code\":\"SCHOOL\",\"name\":\"School ERP\",\"description\":\"K-12 / campus education management\",\"sortOrder\":10},{\"code\":\"HOSPITAL\",\"name\":\"Hospital\",\"description\":\"Multi-specialty hospital\",\"sortOrder\":20},{\"code\":\"POLYCLINIC\",\"name\":\"Polyclinic\",\"description\":\"OPD / clinic polyclinic\",\"sortOrder\":30},{\"code\":\"PATHLAB\",\"name\":\"Pathology Lab\",\"description\":\"Diagnostic pathology labo...",
+                        "error":  null
+                    },
+                    {
+                        "name":  "6_modules",
+                        "method":  "GET",
+                        "url":  "http://localhost:8182/api/subscription/catalog/modules?businessType=SCHOOL",
+                        "status":  200,
+                        "success":  true,
+                        "snippet":  "{\"success\":true,\"data\":[{\"code\":\"SCHOOL_CORE\",\"businessTypeCode\":\"SCHOOL\",\"name\":\"Core Administration\",\"description\":\"Admin, branding, forms, workflows\",\"sortOrder\":10},{\"code\":\"SCHOOL_ACADEMIC\",\"businessTypeCode\":\"SCHOOL\",\"name\":\"Academic\",\"description\":\"Classes, sessions, subjects, exams\",\"sortOrder\":20},{\"code\":\"SCHOOL_ADMISSION\",\"businessTypeCode\":\"SCHOOL\",\"name\":\"Admission\",\"description\":\"Adm...",
+                        "error":  null
+                    },
+                    {
+                        "name":  "7_features",
+                        "method":  "GET",
+                        "url":  "http://localhost:8182/api/subscription/catalog/features?module=SCHOOL_FEE",
+                        "status":  200,
+                        "success":  true,
+                        "snippet":  "{\"success\":true,\"data\":[{\"code\":\"FEATURE_FEE\",\"moduleCode\":\"SCHOOL_FEE\",\"name\":\"Fee collection\",\"description\":null,\"sortOrder\":10},{\"code\":\"FEATURE_MULTI_PAYMENT_GATEWAY\",\"moduleCode\":\"SCHOOL_FEE\",\"name\":\"Multi payment gateway\",\"description\":null,\"sortOrder\":20}],\"message\":null}",
+                        "error":  null
+                    },
+                    {
+                        "name":  "8_limits",
+                        "method":  "GET",
+                        "url":  "http://localhost:8182/api/subscription/catalog/limits?businessType=SCHOOL",
+                        "status":  200,
+                        "success":  true,
+                        "snippet":  "{\"success\":true,\"data\":[{\"code\":\"maxStudents\",\"businessTypeCode\":\"SCHOOL\",\"name\":\"Maximum students\",\"unit\":\"COUNT\",\"aggregation\":\"NUMERIC\",\"description\":\"Active student records\",\"sortOrder\":10},{\"code\":\"maxTeachers\",\"businessTypeCode\":\"SCHOOL\",\"name\":\"Maximum teachers\",\"unit\":\"COUNT\",\"aggregation\":\"NUMERIC\",\"description\":\"Teaching staff\",\"sortOrder\":20},{\"code\":\"maxBranches\",\"businessTypeCode\":\"SC...",
+                        "error":  null
+                    },
+                    {
+                        "name":  "9_entitlements",
+                        "method":  "GET",
+                        "url":  "http://localhost:8182/api/subscription/tenants/current/entitlements",
+                        "status":  200,
+                        "success":  true,
+                        "snippet":  "{\"success\":true,\"data\":{\"organizationId\":\"demo-school\",\"planId\":\"starter\",\"limits\":{\"maxSms\":500,\"maxUsers\":30,\"maxEmails\":1000,\"maxClasses\":20,\"maxReports\":20,\"maxApiCalls\":10000,\"maxBranches\":3,\"maxSections\":40,\"maxSessions\":2,\"maxStudents\":200,\"maxSubjects\":30,\"maxTeachers\":20,\"maxWhatsApp\":200,\"aiUsageUnits\":0,\"maxStorageGb\":5,\"maxCustomFields\":10},\"featureFlags\":{\"FEATURE_AI\":true,\"FEATURE_HR...",
+                        "error":  null
+                    },
+                    {
+                        "name":  "10_feature_flag",
+                        "method":  "GET",
+                        "url":  "http://localhost:8182/api/subscription/feature-flags/FEATURE_FEE",
+                        "status":  200,
+                        "success":  true,
+                        "snippet":  "{\"success\":true,\"data\":{\"planId\":\"starter\",\"flag\":\"FEATURE_FEE\",\"enabled\":true},\"message\":null}",
+                        "error":  null
+                    },
+                    {
+                        "name":  "11_license",
+                        "method":  "GET",
+                        "url":  "http://localhost:8182/api/subscription/tenants/current/license",
+                        "status":  200,
+                        "success":  true,
+                        "snippet":  "{\"success\":true,\"data\":{\"organizationId\":\"demo-school\",\"planId\":\"starter\",\"resolvedStatus\":\"ACTIVE\",\"enforcementEnabled\":false,\"accessAllowed\":true,\"sourceOfTruthEntitlements\":\"subscription_plan JSON (unchanged by lifecycle)\",\"status\":\"ACTIVE\",\"trialEndsAt\":null,\"expiresAt\":null,\"graceEndsAt\":null,\"graceDays\":7,\"notes\":\"Phase 3 backfill: ACTIVE forever (enforcement off)\",\"updatedAt\":\"2026-07-29T05...",
+                        "error":  null
+                    },
+                    {
+                        "name":  "12_limits_tenant",
+                        "method":  "GET",
+                        "url":  "http://localhost:8182/api/subscription/tenants/current/limits",
+                        "status":  200,
+                        "success":  true,
+                        "snippet":  "{\"success\":true,\"data\":{\"organizationId\":\"demo-school\",\"planId\":\"starter\",\"limits\":[{\"limitCode\":\"maxSms\",\"limit\":500,\"used\":0,\"remaining\":500,\"periodKey\":\"2026-07\",\"unlimited\":false,\"allowed\":true},{\"limitCode\":\"maxUsers\",\"limit\":30,\"used\":0,\"remaining\":30,\"periodKey\":\"ALL\",\"unlimited\":false,\"allowed\":true},{\"limitCode\":\"maxEmails\",\"limit\":1000,\"used\":0,\"remaining\":1000,\"periodKey\":\"2026-07\",\"unl...",
+                        "error":  null
+                    },
+                    {
+                        "name":  "13_usage",
+                        "method":  "GET",
+                        "url":  "http://localhost:8182/api/subscription/tenants/current/usage",
+                        "status":  200,
+                        "success":  true,
+                        "snippet":  "{\"success\":true,\"data\":{\"organizationId\":\"demo-school\",\"counters\":[]},\"message\":null}",
+                        "error":  null
+                    },
+                    {
+                        "name":  "14_usage_events",
+                        "method":  "GET",
+                        "url":  "http://localhost:8182/api/subscription/tenants/current/usage/events",
+                        "status":  200,
+                        "success":  true,
+                        "snippet":  "{\"success\":true,\"data\":[],\"message\":null}",
+                        "error":  null
+                    },
+                    {
+                        "name":  "15_validate_limit",
+                        "method":  "POST",
+                        "url":  "http://localhost:8182/api/subscription/subscriptions/validate-limit",
+                        "status":  200,
+                        "success":  true,
+                        "snippet":  "{\"success\":true,\"data\":{\"organizationId\":\"demo-school\",\"limitCode\":\"maxStudents\",\"delta\":1,\"planId\":\"starter\",\"limit\":200,\"used\":0,\"remaining\":200,\"periodKey\":\"ALL\",\"unlimited\":false,\"allowed\":true,\"reason\":\"within limit\"},\"message\":null}",
+                        "error":  null
+                    },
+                    {
+                        "name":  "16_validate_feature",
+                        "method":  "POST",
+                        "url":  "http://localhost:8182/api/subscription/subscriptions/validate-feature",
+                        "status":  200,
+                        "success":  true,
+                        "snippet":  "{\"success\":true,\"data\":{\"organizationId\":\"demo-school\",\"featureCode\":\"FEATURE_FEE\",\"planId\":\"starter\",\"allowed\":true,\"reason\":\"feature enabled on plan\"},\"message\":null}",
+                        "error":  null
+                    },
+                    {
+                        "name":  "17_upsert_module",
+                        "method":  "PUT",
+                        "url":  "http://localhost:8182/api/subscription/catalog/modules",
+                        "status":  200,
+                        "success":  true,
+                        "snippet":  "{\"success\":true,\"data\":{\"code\":\"SCHOOL_QA_PHASE7\",\"businessTypeCode\":\"SCHOOL\",\"name\":\"QA Phase7 Temp Module\",\"description\":\"Temporary module for API battery\",\"sortOrder\":999},\"message\":null}",
+                        "error":  null
+                    },
+                    {
+                        "name":  "17b_confirm_modules",
+                        "method":  "GET",
+                        "url":  "http://localhost:8182/api/subscription/catalog/modules?businessType=SCHOOL",
+                        "status":  200,
+                        "success":  true,
+                        "snippet":  "{\"success\":true,\"data\":[{\"code\":\"SCHOOL_CORE\",\"businessTypeCode\":\"SCHOOL\",\"name\":\"Core Administration\",\"description\":\"Admin, branding, forms, workflows\",\"sortOrder\":10},{\"code\":\"SCHOOL_ACADEMIC\",\"businessTypeCode\":\"SCHOOL\",\"name\":\"Academic\",\"description\":\"Classes, sessions, subjects, exams\",\"sortOrder\":20},{\"code\":\"SCHOOL_ADMISSION\",\"businessTypeCode\":\"SCHOOL\",\"name\":\"Admission\",\"description\":\"Adm...",
+                        "error":  null
+                    },
+                    {
+                        "name":  "17c_deactivate_module",
+                        "method":  "PUT",
+                        "url":  "http://localhost:8182/api/subscription/catalog/modules",
+                        "status":  200,
+                        "success":  true,
+                        "snippet":  "{\"success\":true,\"data\":{\"code\":\"SCHOOL_QA_PHASE7\",\"businessTypeCode\":\"SCHOOL\",\"name\":\"QA Phase7 Temp Module\",\"description\":\"Deactivated after API battery\",\"sortOrder\":999},\"message\":null}",
+                        "error":  null
+                    },
+                    {
+                        "name":  "18a_entitlements_cache1",
+                        "method":  "GET",
+                        "url":  "http://localhost:8182/api/subscription/tenants/current/entitlements",
+                        "status":  200,
+                        "success":  true,
+                        "snippet":  "{\"success\":true,\"data\":{\"organizationId\":\"demo-school\",\"planId\":\"starter\",\"limits\":{\"maxSms\":500,\"maxUsers\":30,\"maxEmails\":1000,\"maxClasses\":20,\"maxReports\":20,\"maxApiCalls\":10000,\"maxBranches\":3,\"maxSections\":40,\"maxSessions\":2,\"maxStudents\":200,\"maxSubjects\":30,\"maxTeachers\":20,\"maxWhatsApp\":200,\"aiUsageUnits\":0,\"maxStorageGb\":5,\"maxCustomFields\":10},\"featureFlags\":{\"FEATURE_AI\":true,\"FEATURE_HR...",
+                        "error":  null
+                    },
+                    {
+                        "name":  "18b_entitlements_cache2",
+                        "method":  "GET",
+                        "url":  "http://localhost:8182/api/subscription/tenants/current/entitlements",
+                        "status":  200,
+                        "success":  true,
+                        "snippet":  "{\"success\":true,\"data\":{\"organizationId\":\"demo-school\",\"planId\":\"starter\",\"limits\":{\"maxSms\":500,\"maxUsers\":30,\"maxEmails\":1000,\"maxClasses\":20,\"maxReports\":20,\"maxApiCalls\":10000,\"maxBranches\":3,\"maxSections\":40,\"maxSessions\":2,\"maxStudents\":200,\"maxSubjects\":30,\"maxTeachers\":20,\"maxWhatsApp\":200,\"aiUsageUnits\":0,\"maxStorageGb\":5,\"maxCustomFields\":10},\"featureFlags\":{\"FEATURE_AI\":true,\"FEATURE_HR...",
+                        "error":  null
+                    },
+                    {
+                        "name":  "gateway_entitlements",
+                        "method":  "GET",
+                        "url":  "http://localhost:9090/api/subscription/tenants/current/entitlements",
+                        "status":  401,
+                        "success":  false,
+                        "snippet":  null,
+                        "error":  "The remote server returned an error: (401) Unauthorized."
+                    },
+                    {
+                        "name":  "gateway_login",
+                        "method":  "POST",
+                        "url":  "http://localhost:9090/api/v1/auth/login",
+                        "status":  200,
+                        "success":  true,
+                        "snippet":  "{\"accountId\":72,\"shopId\":\"demo-school\",\"tenantId\":100,\"username\":\"admin_demo-school\",\"role\":\"SHOP_OWNER\",\"promoterId\":null,\"salesmanId\":null,\"accessToken\":\"eyJhbGciOiJIUzI1NiJ9.eyJzaG9wSWQiOiJkZW1vLXNjaG9vbCIsInRlbmFudElkIjoxMDAsInJvbGUiOiJTSE9QX09XTkVSIiwicGVybWlzc2lvbnMiOlsiTUFOQUdFX1BST0RVQ1RTIiw",
+                        "error":  null,
+                        "token":  "present"
+                    }
+                ]
+}

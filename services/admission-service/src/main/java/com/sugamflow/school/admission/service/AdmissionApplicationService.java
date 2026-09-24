@@ -3,12 +3,14 @@ package com.sugamflow.school.admission.service;
 import com.sugamflow.school.admission.config.AdmissionProperties;
 import com.sugamflow.school.admission.integration.ConfigEngineClient;
 import com.sugamflow.school.admission.integration.NotificationDeliveryClient;
+import com.sugamflow.school.admission.integration.PublicCaptchaVerifier;
 import com.sugamflow.school.admission.integration.StudentEnrollmentClient;
 import com.sugamflow.school.admission.persistence.entity.AdmissionApplicationEntity;
 import com.sugamflow.school.admission.persistence.repo.AdmissionApplicationRepository;
 import com.sugamflow.school.admission.web.AdmissionException;
 import com.sugamflow.school.common.api.PageQuery;
 import com.sugamflow.school.common.api.PageResult;
+import com.sugamflow.school.common.security.PersonaRoles;
 import com.sugamflow.school.common.tenant.TenantContext;
 import com.sugamflow.school.common.tenant.TenantScope;
 import java.time.Instant;
@@ -17,7 +19,9 @@ import java.util.Base64;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -29,6 +33,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class AdmissionApplicationService {
 
   public static final String FEATURE_ADMISSION = "FEATURE_ADMISSION";
+  public static final String FEATURE_WEBSITE_ADMISSION = "FEATURE_WEBSITE_ADMISSION";
   public static final String MODULE_ADMISSION = "admission";
   public static final String ACTION_BLOCK = "BLOCK_ADMISSION";
   public static final String ACTION_NOTIFY = "NOTIFY_ADMISSION";
@@ -40,18 +45,21 @@ public class AdmissionApplicationService {
   private final NotificationDeliveryClient notificationDelivery;
   private final StudentEnrollmentClient studentEnrollment;
   private final AdmissionProperties properties;
+  private final PublicCaptchaVerifier captchaVerifier;
 
   public AdmissionApplicationService(
       AdmissionApplicationRepository repository,
       ConfigEngineClient engines,
       NotificationDeliveryClient notificationDelivery,
       StudentEnrollmentClient studentEnrollment,
-      AdmissionProperties properties) {
+      AdmissionProperties properties,
+      PublicCaptchaVerifier captchaVerifier) {
     this.repository = repository;
     this.engines = engines;
     this.notificationDelivery = notificationDelivery;
     this.studentEnrollment = studentEnrollment;
     this.properties = properties;
+    this.captchaVerifier = captchaVerifier;
   }
 
   @Transactional(readOnly = true)
@@ -83,24 +91,118 @@ public class AdmissionApplicationService {
   }
 
   @Transactional(readOnly = true)
-  public PageResult<Map<String, Object>> list(Integer page, Integer size) {
+  public PageResult<Map<String, Object>> list(
+      Integer page, Integer size, String q, String status, String sortBy, String sortDir) {
     TenantScope scope = TenantContext.require();
     requireFeature(scope);
-    PageQuery q = PageQuery.of(page, size);
-    Pageable pageable = PageRequest.of(q.page(), q.size());
-    Page<AdmissionApplicationEntity> result;
-    if (scope.branchId() != null
-        && !scope.branchId().isBlank()
-        && scope.academicSessionId() != null
-        && !scope.academicSessionId().isBlank()) {
-      result =
-          repository.findByOrganizationIdAndBranchIdAndAcademicSessionIdOrderByUpdatedAtDesc(
-              scope.organizationId(), scope.branchId(), scope.academicSessionId(), pageable);
-    } else {
-      result = repository.findByOrganizationIdOrderByUpdatedAtDesc(scope.organizationId(), pageable);
-    }
+    PageQuery pq = PageQuery.of(page, size);
+    // Native query already applies ORDER BY; keep Pageable unsorted to avoid double-sort conflict.
+    Pageable pageable = PageRequest.of(pq.page(), pq.size());
+
+    String branch = blankToEmpty(scope.branchId());
+    String session = blankToEmpty(scope.academicSessionId());
+    String statusFilter = blankToEmpty(status);
+    String query = blankToEmpty(q);
+    String sortKey = normalizeSortKey(sortBy);
+    boolean sortAsc = "ASC".equalsIgnoreCase(blankToEmpty(sortDir));
+
+    Page<AdmissionApplicationEntity> result =
+        repository.search(
+            scope.organizationId(),
+            branch,
+            branch.isBlank(),
+            session,
+            session.isBlank(),
+            statusFilter,
+            statusFilter.isBlank(),
+            query,
+            query.isBlank(),
+            sortKey,
+            sortAsc,
+            pageable);
     return PageResult.of(
-        result.map(this::toDto).getContent(), q.page(), q.size(), result.getTotalElements());
+        result.map(this::toDto).getContent(), pq.page(), pq.size(), result.getTotalElements());
+  }
+
+  /** Admission register export (PDF/Excel/CSV) — columns are config-friendly answer keys. */
+  @Transactional(readOnly = true)
+  public Map<String, Object> registerExport(String status, String q, String format) {
+    TenantScope scope = TenantContext.require();
+    requireFeature(scope);
+    PageResult<Map<String, Object>> page = list(0, 500, q, status, "updatedAt", "DESC");
+    List<Map<String, Object>> columns =
+        List.of(
+            Map.of("key", "fullName", "label", "Applicant"),
+            Map.of("key", "mobile", "label", "Mobile"),
+            Map.of("key", "classApplied", "label", "Class"),
+            Map.of("key", "classGrade", "label", "Grade"),
+            Map.of("key", "sectionLetter", "label", "Section"),
+            Map.of("key", "penNumber", "label", "PEN"),
+            Map.of("key", "apaarId", "label", "APAAR"),
+            Map.of("key", "samagraId", "label", "Samagra"),
+            Map.of("key", "schoolStudentId", "label", "School Student ID"),
+            Map.of("key", "status", "label", "Status"),
+            Map.of("key", "createdAt", "label", "Applied On"),
+            Map.of("key", "email", "label", "Email"));
+    List<Map<String, Object>> rows = new ArrayList<>();
+    for (Map<String, Object> app : page.items()) {
+      @SuppressWarnings("unchecked")
+      Map<String, Object> answers =
+          app.get("answers") instanceof Map<?, ?> m
+              ? new LinkedHashMap<>((Map<String, Object>) m)
+              : Map.of();
+      Map<String, Object> row = new LinkedHashMap<>();
+      row.put("fullName", firstNonBlank(str(answers.get("fullName")), str(app.get("fullName"))));
+      row.put("mobile", firstNonBlank(str(answers.get("mobile")), str(app.get("mobile"))));
+      row.put(
+          "classApplied",
+          firstNonBlank(str(answers.get("classApplied")), str(app.get("classApplied"))));
+      row.put(
+          "classGrade",
+          firstNonBlank(str(answers.get("classGrade")), str(answers.get("grade"))));
+      row.put(
+          "sectionLetter",
+          firstNonBlank(
+              str(answers.get("sectionLetter")),
+              firstNonBlank(str(answers.get("section")), str(answers.get("sectionName")))));
+      row.put("penNumber", str(answers.get("penNumber")));
+      row.put(
+          "apaarId",
+          firstNonBlank(str(answers.get("apaarId")), str(answers.get("apaarNumber"))));
+      row.put("samagraId", str(answers.get("samagraId")));
+      row.put("schoolStudentId", str(answers.get("schoolStudentId")));
+      row.put("status", str(app.get("status")));
+      row.put("createdAt", str(app.get("createdAt")));
+      row.put("email", firstNonBlank(str(answers.get("email")), str(app.get("email"))));
+      rows.add(row);
+    }
+    Map<String, Object> data = new LinkedHashMap<>();
+    data.put("title", "Admission Register");
+    data.put(
+        "subtitle",
+        "Org "
+            + scope.organizationId()
+            + (status != null && !status.isBlank() ? " · Status " + status : "")
+            + " · "
+            + rows.size()
+            + " rows");
+    data.put("columns", columns);
+    data.put("rows", rows);
+    Map<String, Object> rendered =
+        engines.renderReport(scope, "admission_register", data, format == null ? "PDF" : format);
+    if (rendered == null || rendered.get("contentBase64") == null) {
+      throw new AdmissionException("RENDER_FAILED", "Admission register render returned no content");
+    }
+    return rendered;
+  }
+
+  private static String str(Object v) {
+    return v == null ? "" : String.valueOf(v).trim();
+  }
+
+  private static String firstNonBlank(String a, String b) {
+    if (a != null && !a.isBlank()) return a;
+    return b == null ? "" : b;
   }
 
   @Transactional(readOnly = true)
@@ -108,6 +210,54 @@ public class AdmissionApplicationService {
     TenantScope scope = TenantContext.require();
     requireFeature(scope);
     return toDto(requireApp(id, scope.organizationId()));
+  }
+
+  /**
+   * Update applicant answers on a non-terminal application (Open = view, Edit = this path).
+   * Does not advance workflow — only corrects form data.
+   */
+  @Transactional
+  public Map<String, Object> update(UUID id, Map<String, Object> body) {
+    TenantScope scope = TenantContext.require();
+    requireFeature(scope);
+    requireModuleEnabled(scope);
+
+    AdmissionApplicationEntity entity = requireApp(id, scope.organizationId());
+    // Allow correcting applicant details even after approval/rejection.
+    // Workflow status and enrollment are not changed by this path.
+
+    String formKey = stringOr(body.get("formKey"), entity.getFormKey());
+    @SuppressWarnings("unchecked")
+    Map<String, Object> answers =
+        body.get("answers") instanceof Map<?, ?> m
+            ? new LinkedHashMap<>((Map<String, Object>) m)
+            : new LinkedHashMap<>();
+
+    Map<String, Object> form = engines.getForm(scope, formKey);
+    if (form == null) {
+      throw new AdmissionException("FORM_MISSING", "Form definition not found: " + formKey);
+    }
+    validateMandatory(form, answers);
+
+    entity.setFormKey(formKey);
+    entity.setAnswers(answers);
+    entity.setUpdatedAt(Instant.now());
+
+    List<Map<String, Object>> history =
+        entity.getHistory() != null ? new ArrayList<>(entity.getHistory()) : new ArrayList<>();
+    history.add(
+        event(
+            "UPDATED",
+            scope.userId(),
+            scope.roleCode(),
+            isTerminal(entity.getStatus())
+                ? "Application details updated after " + entity.getStatus()
+                : "Application details updated",
+            entity.getCurrentStepSequence(),
+            entity.getCurrentStepName()));
+    entity.setHistory(history);
+
+    return toDto(repository.save(entity));
   }
 
   @Transactional
@@ -188,6 +338,133 @@ public class AdmissionApplicationService {
     return toDto(repository.save(entity));
   }
 
+  /**
+   * Public website admission inquiry. Tenant comes from organizationId (already resolved by website
+   * host mapping); does not trust client for anything beyond the applicant fields.
+   */
+  @Transactional
+  public Map<String, Object> submitFromWebsite(Map<String, Object> body) {
+    captchaVerifier.verifyIfRequired(stringOr(body.get("captchaToken"), ""));
+    String organizationId = stringOr(body.get("organizationId"), "").trim();
+    if (organizationId.isBlank()) {
+      throw new AdmissionException("VALIDATION", "organizationId is required");
+    }
+    String fullName = stringOr(body.get("fullName"), "").trim();
+    String mobile = stringOr(body.get("mobile"), "").trim();
+    String email = stringOr(body.get("email"), "").trim();
+    String classApplied = stringOr(body.get("classApplied"), "").trim();
+    String message = stringOr(firstNonBlank(body.get("message"), body.get("notes")), "").trim();
+    String age = stringOr(body.get("age"), "").trim();
+
+    if (fullName.isBlank()) {
+      throw new AdmissionException("VALIDATION", "fullName is required");
+    }
+    if (mobile.isBlank()) {
+      throw new AdmissionException("VALIDATION", "mobile is required");
+    }
+    if (classApplied.isBlank()) {
+      throw new AdmissionException("VALIDATION", "classApplied is required");
+    }
+
+    TenantScope scope =
+        new TenantScope(
+            organizationId,
+            stringOr(body.get("branchId"), "main"),
+            stringOr(body.get("academicSessionId"), "2025-26"),
+            "website-public",
+            "PUBLIC");
+    TenantContext.set(scope);
+    try {
+      if (!engines.isFeatureEnabled(scope, FEATURE_WEBSITE_ADMISSION)
+          && !engines.isFeatureEnabled(scope, FEATURE_ADMISSION)) {
+        throw new AdmissionException(
+            "FEATURE_DISABLED",
+            "Online admission is not enabled for this school (FEATURE_WEBSITE_ADMISSION).");
+      }
+      requireModuleEnabled(scope);
+
+      Map<String, Object> answers = new LinkedHashMap<>();
+      answers.put("fullName", fullName);
+      answers.put("mobile", mobile);
+      answers.put("email", email);
+      answers.put("classApplied", classApplied);
+      answers.put("notes", message);
+      answers.put("message", message);
+      answers.put("source", "WEBSITE");
+      answers.put("documentsComplete", false);
+      if (!age.isBlank()) {
+        answers.put("age", age);
+      } else {
+        answers.put("age", "0");
+      }
+
+      Map<String, Object> module = engines.getModuleSettings(scope, MODULE_ADMISSION);
+      String formKey = resolveFormKey(module);
+      String workflowKey = resolveWorkflowKey(module);
+
+      Map<String, Object> form = engines.getForm(scope, formKey);
+      Map<String, Object> workflow = engines.getWorkflow(scope, workflowKey);
+      if (workflow == null) {
+        throw new AdmissionException(
+            "WORKFLOW_MISSING", "Workflow definition not found: " + workflowKey);
+      }
+
+      // Public apply: enforce our MVP fields; fill remaining mandatory form keys with placeholders
+      // so staff can complete the dossier in ERP.
+      if (form != null) {
+        fillMissingMandatoryPlaceholders(form, answers);
+      }
+
+      Map<String, Object> ruleContext = new LinkedHashMap<>();
+      ruleContext.put("application", answers);
+      ruleContext.put("admission", Map.of("formKey", formKey, "workflowKey", workflowKey, "source", "WEBSITE"));
+      List<String> matched = engines.evaluateRules(scope, ruleContext);
+      if (matched.contains(ACTION_BLOCK)) {
+        throw new AdmissionException(
+            ACTION_BLOCK, "Admission blocked by rule engine (BLOCK_ADMISSION).");
+      }
+
+      WorkflowStep first = firstStep(workflow);
+      AdmissionApplicationEntity entity = new AdmissionApplicationEntity();
+      entity.setId(UUID.randomUUID());
+      entity.setOrganizationId(organizationId);
+      entity.setBranchId(scope.branchId());
+      entity.setAcademicSessionId(scope.academicSessionId());
+      entity.setFormKey(formKey);
+      entity.setWorkflowKey(workflowKey);
+      entity.setStatus("IN_PROGRESS");
+      entity.setCurrentStepSequence(first.sequence());
+      entity.setCurrentStepName(first.name());
+      entity.setAssigneeRole(first.assignRole());
+      entity.setAnswers(answers);
+      entity.setMatchedActions(matched);
+      entity.setCreatedBy("website-public");
+      entity.setCreatedAt(Instant.now());
+      entity.setUpdatedAt(Instant.now());
+
+      List<Map<String, Object>> history = new ArrayList<>();
+      history.add(
+          event(
+              "WEBSITE_SUBMITTED",
+              "website-public",
+              "PUBLIC",
+              "Application submitted from school website",
+              first.sequence(),
+              first.name()));
+      entity.setHistory(history);
+
+      List<Map<String, Object>> intents = new ArrayList<>();
+      intents.add(recordNotification(scope, entity, "ADMISSION_SUBMITTED"));
+      entity.setNotificationIntents(intents);
+
+      Map<String, Object> dto = toDto(repository.save(entity));
+      dto.put("source", "WEBSITE");
+      return dto;
+    } finally {
+      TenantContext.clear();
+    }
+  }
+
   @Transactional
   public Map<String, Object> act(UUID id, Map<String, Object> body) {
     TenantScope scope = TenantContext.require();
@@ -201,6 +478,8 @@ public class AdmissionApplicationService {
       throw new AdmissionException("TERMINAL", "Application is already " + entity.getStatus());
     }
 
+    requireAssigneeRole(scope, entity);
+
     Map<String, Object> workflow = engines.getWorkflow(scope, entity.getWorkflowKey());
     if (workflow == null) {
       throw new AdmissionException(
@@ -210,9 +489,10 @@ public class AdmissionApplicationService {
     return switch (action) {
       case "REJECT" -> reject(entity, scope, comment);
       case "REQUEST_INFO" -> requestInfo(entity, scope, comment);
+      case "RESUME" -> resume(entity, scope, comment);
       case "APPROVE" -> approve(entity, scope, workflow, comment);
       default -> throw new AdmissionException(
-          "UNKNOWN_ACTION", "Supported actions: APPROVE, REJECT, REQUEST_INFO");
+          "UNKNOWN_ACTION", "Supported actions: APPROVE, REJECT, REQUEST_INFO, RESUME");
     };
   }
 
@@ -247,6 +527,27 @@ public class AdmissionApplicationService {
                 entity.getCurrentStepSequence(),
                 entity.getCurrentStepName()));
     entity.getNotificationIntents().add(recordNotification(scope, entity, "ADMISSION_INFO_REQUESTED"));
+    return toDto(repository.save(entity));
+  }
+
+  private Map<String, Object> resume(
+      AdmissionApplicationEntity entity, TenantScope scope, String comment) {
+    if (!"INFO_REQUESTED".equalsIgnoreCase(entity.getStatus())) {
+      throw new AdmissionException(
+          "INVALID_STATE", "RESUME is only allowed when more information was requested.");
+    }
+    entity.setStatus("IN_PROGRESS");
+    entity.setUpdatedAt(Instant.now());
+    entity
+        .getHistory()
+        .add(
+            event(
+                "INFO_RECEIVED",
+                scope.userId(),
+                scope.roleCode(),
+                comment != null ? comment : "Information received — workflow resumed",
+                entity.getCurrentStepSequence(),
+                entity.getCurrentStepName()));
     return toDto(repository.save(entity));
   }
 
@@ -645,6 +946,52 @@ public class AdmissionApplicationService {
   }
 
   @SuppressWarnings("unchecked")
+  private void fillMissingMandatoryPlaceholders(
+      Map<String, Object> form, Map<String, Object> answers) {
+    Object sectionsObj = form.get("sections");
+    if (!(sectionsObj instanceof List<?> sections)) {
+      return;
+    }
+    for (Object sectionObj : sections) {
+      if (!(sectionObj instanceof Map<?, ?> section)) {
+        continue;
+      }
+      Object fieldsObj = section.get("fields");
+      if (!(fieldsObj instanceof List<?> fields)) {
+        continue;
+      }
+      for (Object fieldObj : fields) {
+        if (!(fieldObj instanceof Map<?, ?> field)) {
+          continue;
+        }
+        if (!Boolean.TRUE.equals(field.get("mandatory"))) {
+          continue;
+        }
+        String key = String.valueOf(field.get("key"));
+        if (answers.containsKey(key) && answers.get(key) != null
+            && !String.valueOf(answers.get(key)).isBlank()) {
+          continue;
+        }
+        String type =
+            String.valueOf(field.get("type") == null ? "TEXTBOX" : field.get("type"))
+                .toUpperCase(Locale.ROOT);
+        if ("CHECKBOX".equals(type)) {
+          answers.put(key, false);
+        } else {
+          answers.put(key, "PENDING");
+        }
+      }
+    }
+  }
+
+  private static Object firstNonBlank(Object primary, Object fallback) {
+    if (primary != null && !String.valueOf(primary).isBlank()) {
+      return primary;
+    }
+    return fallback;
+  }
+
+  @SuppressWarnings("unchecked")
   private void validateMandatory(Map<String, Object> form, Map<String, Object> answers) {
     Object sectionsObj = form.get("sections");
     if (!(sectionsObj instanceof List<?> sections)) {
@@ -667,13 +1014,88 @@ public class AdmissionApplicationService {
         }
         String key = String.valueOf(field.get("key"));
         Object value = answers.get(key);
+        Object typeRaw = field.get("type");
+        String type =
+            String.valueOf(typeRaw == null ? "TEXTBOX" : typeRaw).toUpperCase(Locale.ROOT);
+        Object label = field.get("label");
+        String labelText = label != null ? String.valueOf(label) : key;
+        if ("CHECKBOX".equals(type)) {
+          if (!Boolean.TRUE.equals(value) && !"true".equalsIgnoreCase(String.valueOf(value))) {
+            throw new AdmissionException("VALIDATION", "Mandatory field missing: " + labelText);
+          }
+          continue;
+        }
         if (value == null || String.valueOf(value).isBlank()) {
-          Object label = field.get("label");
-          throw new AdmissionException(
-              "VALIDATION", "Mandatory field missing: " + (label != null ? label : key));
+          throw new AdmissionException("VALIDATION", "Mandatory field missing: " + labelText);
         }
       }
     }
+  }
+
+  private void requireAssigneeRole(TenantScope scope, AdmissionApplicationEntity entity) {
+    if (canActOnStep(scope, entity)) {
+      return;
+    }
+    throw new AdmissionException(
+        "FORBIDDEN_ROLE",
+        "Action requires role "
+            + entity.getAssigneeRole()
+            + " (current: "
+            + scope.roleCode()
+            + ")");
+  }
+
+  private static boolean canActOnStep(TenantScope scope, AdmissionApplicationEntity entity) {
+    if (scope == null) {
+      return false;
+    }
+    if (PersonaRoles.isElevated(scope.roleCode())) {
+      return true;
+    }
+    String required = PersonaRoles.normalize(entity.getAssigneeRole());
+    if (required.isBlank() || "SYSTEM".equals(required) || "ANY".equals(required)) {
+      return true;
+    }
+    String current = PersonaRoles.normalize(scope.roleCode());
+    if (current.equals(required)) {
+      return true;
+    }
+    // Common aliases used in seeded workflows vs platform roles.
+    return switch (required) {
+      case "RECEPTION", "RECEPTIONIST" -> Set.of("RECEPTION", "RECEPTIONIST", "ADMIN").contains(current);
+      case "ACCOUNTS", "ACCOUNTANT" -> Set.of("ACCOUNTS", "ACCOUNTANT", "FINANCE").contains(current);
+      case "MANAGEMENT", "MANAGER" -> Set.of("MANAGEMENT", "MANAGER", "ADMIN").contains(current);
+      default -> false;
+    };
+  }
+
+  private static String normalizeSortKey(String sortBy) {
+    String key = blankToEmpty(sortBy).toLowerCase(Locale.ROOT);
+    return switch (key) {
+      case "fullname", "applicant", "applicantname" -> "fullName";
+      case "status" -> "status";
+      case "updated", "updatedat", "createdat" -> "updatedAt";
+      default -> "updatedAt";
+    };
+  }
+
+  private static String blankToEmpty(String value) {
+    return value == null ? "" : value.trim();
+  }
+
+  private static String statusLabel(String status) {
+    return switch (PersonaRoles.normalize(status)) {
+      case "IN_PROGRESS" -> "Under review";
+      case "INFO_REQUESTED" -> "More information needed";
+      case "APPROVED" -> "Approved";
+      case "REJECTED" -> "Rejected";
+      default -> status == null || status.isBlank() ? "Unknown" : status;
+    };
+  }
+
+  private static boolean isTerminal(String status) {
+    String s = PersonaRoles.normalize(status);
+    return "APPROVED".equals(s) || "REJECTED".equals(s);
   }
 
   private List<WorkflowStep> steps(Map<String, Object> workflow) {
@@ -730,6 +1152,7 @@ public class AdmissionApplicationService {
   }
 
   private Map<String, Object> toDto(AdmissionApplicationEntity e) {
+    TenantScope scope = TenantContext.get().orElse(null);
     Map<String, Object> dto = new LinkedHashMap<>();
     dto.put("id", e.getId().toString());
     dto.put("organizationId", e.getOrganizationId());
@@ -738,9 +1161,28 @@ public class AdmissionApplicationService {
     dto.put("formKey", e.getFormKey());
     dto.put("workflowKey", e.getWorkflowKey());
     dto.put("status", e.getStatus());
+    dto.put("statusLabel", statusLabel(e.getStatus()));
+    dto.put("terminal", isTerminal(e.getStatus()));
+    // Details can always be corrected; workflow actions remain gated by terminal/canAct.
+    dto.put("editable", true);
     dto.put("currentStepSequence", e.getCurrentStepSequence());
     dto.put("currentStepName", e.getCurrentStepName());
     dto.put("assigneeRole", e.getAssigneeRole());
+    boolean canAct = !isTerminal(e.getStatus()) && canActOnStep(scope, e);
+    dto.put("canAct", canAct);
+    List<String> allowed = new ArrayList<>();
+    if (canAct) {
+      if ("INFO_REQUESTED".equalsIgnoreCase(e.getStatus())) {
+        allowed.add("RESUME");
+        allowed.add("APPROVE");
+        allowed.add("REJECT");
+      } else {
+        allowed.add("APPROVE");
+        allowed.add("REQUEST_INFO");
+        allowed.add("REJECT");
+      }
+    }
+    dto.put("allowedActions", allowed);
     dto.put("answers", e.getAnswers());
     dto.put("history", e.getHistory());
     dto.put("matchedActions", e.getMatchedActions());

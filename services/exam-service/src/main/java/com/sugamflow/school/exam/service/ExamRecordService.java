@@ -4,9 +4,13 @@ import com.sugamflow.school.common.tenant.TenantContext;
 import com.sugamflow.school.common.tenant.TenantScope;
 import com.sugamflow.school.common.api.PageQuery;
 import com.sugamflow.school.common.api.PageResult;
+import com.sugamflow.school.common.api.PageResults;
+import com.sugamflow.school.common.security.AccessScope;
+import com.sugamflow.school.common.security.PersonaRoles;
 import com.sugamflow.school.exam.config.ExamProperties;
 import com.sugamflow.school.exam.integration.ConfigEngineClient;
 import com.sugamflow.school.exam.integration.NotificationDeliveryClient;
+import com.sugamflow.school.exam.integration.StudentAccessClient;
 import com.sugamflow.school.exam.persistence.entity.ExamRecordEntity;
 import com.sugamflow.school.exam.persistence.repo.ExamRecordRepository;
 import com.sugamflow.school.exam.web.ExamException;
@@ -35,16 +39,19 @@ public class ExamRecordService {
   private final ConfigEngineClient engines;
   private final NotificationDeliveryClient notificationDelivery;
   private final ExamProperties properties;
+  private final StudentAccessClient studentAccess;
 
   public ExamRecordService(
       ExamRecordRepository repository,
       ConfigEngineClient engines,
       NotificationDeliveryClient notificationDelivery,
-      ExamProperties properties) {
+      ExamProperties properties,
+      StudentAccessClient studentAccess) {
     this.repository = repository;
     this.engines = engines;
     this.notificationDelivery = notificationDelivery;
     this.properties = properties;
+    this.studentAccess = studentAccess;
   }
 
   @Transactional(readOnly = true)
@@ -76,7 +83,22 @@ public class ExamRecordService {
   public PageResult<Map<String, Object>> list(Integer page, Integer size) {
     TenantScope scope = TenantContext.require();
     requireFeature(scope);
-    PageQuery q = PageQuery.of(page, size); Pageable pageable = PageRequest.of(q.page(), q.size());
+    PageQuery q = PageQuery.of(page, size);
+    AccessScope access = studentAccess.resolve(scope);
+
+    if (access.restricted()) {
+      List<ExamRecordEntity> all = loadCandidates(scope);
+      List<Map<String, Object>> dtos = new ArrayList<>();
+      for (ExamRecordEntity e : all) {
+        Map<String, Object> dto = toDto(e);
+        if (access.allowsStudentDto(dto)) {
+          dtos.add(dto);
+        }
+      }
+      return PageResults.filterThenPage(dtos, d -> true, q.page(), q.size());
+    }
+
+    Pageable pageable = PageRequest.of(q.page(), q.size());
     Page<ExamRecordEntity> result;
     if (scope.branchId() != null && !scope.branchId().isBlank() && scope.academicSessionId() != null && !scope.academicSessionId().isBlank()) {
       result = repository.findByOrganizationIdAndBranchIdAndAcademicSessionIdOrderByUpdatedAtDesc(scope.organizationId(), scope.branchId(), scope.academicSessionId(), pageable);
@@ -88,12 +110,22 @@ public class ExamRecordService {
   public Map<String, Object> get(UUID id) {
     TenantScope scope = TenantContext.require();
     requireFeature(scope);
-    return toDto(requireRecord(id, scope.organizationId()));
+    Map<String, Object> dto = toDto(requireRecord(id, scope.organizationId()));
+    AccessScope access = studentAccess.resolve(scope);
+    if (!access.allowsStudentDto(dto)) {
+      throw new ExamException("NOT_FOUND", "Exam record not found");
+    }
+    return dto;
   }
 
   @Transactional
   public Map<String, Object> submit(Map<String, Object> body) {
     TenantScope scope = TenantContext.require();
+    try {
+      PersonaRoles.requireStaffWrite(scope);
+    } catch (SecurityException ex) {
+      throw new ExamException("FORBIDDEN", ex.getMessage());
+    }
     requireFeature(scope);
     requireModuleEnabled(scope);
 
@@ -442,6 +474,20 @@ public class ExamRecordService {
       return (Map<String, Object>) m;
     }
     return module;
+  }
+
+  private List<ExamRecordEntity> loadCandidates(TenantScope scope) {
+    Pageable wide = PageRequest.of(0, 500);
+    if (scope.branchId() != null
+        && !scope.branchId().isBlank()
+        && scope.academicSessionId() != null
+        && !scope.academicSessionId().isBlank()) {
+      return repository
+          .findByOrganizationIdAndBranchIdAndAcademicSessionIdOrderByUpdatedAtDesc(
+              scope.organizationId(), scope.branchId(), scope.academicSessionId(), wide)
+          .getContent();
+    }
+    return repository.findByOrganizationIdOrderByUpdatedAtDesc(scope.organizationId(), wide).getContent();
   }
 
   private ExamRecordEntity requireRecord(UUID id, String org) {

@@ -4,12 +4,19 @@ import com.lowagie.text.Document;
 import com.lowagie.text.DocumentException;
 import com.lowagie.text.Font;
 import com.lowagie.text.FontFactory;
+import com.lowagie.text.Image;
 import com.lowagie.text.PageSize;
 import com.lowagie.text.Phrase;
 import com.lowagie.text.pdf.ColumnText;
 import com.lowagie.text.pdf.PdfContentByte;
 import com.lowagie.text.pdf.PdfWriter;
+import com.google.zxing.BarcodeFormat;
+import com.google.zxing.EncodeHintType;
+import com.google.zxing.client.j2se.MatrixToImageWriter;
+import com.google.zxing.common.BitMatrix;
+import com.google.zxing.qrcode.QRCodeWriter;
 import java.awt.Color;
+import java.awt.image.BufferedImage;
 import java.io.ByteArrayOutputStream;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -18,6 +25,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import javax.imageio.ImageIO;
 import org.springframework.stereotype.Service;
 
 /**
@@ -71,7 +79,9 @@ public class ReportPdfRenderService {
 
         switch (type) {
           case "line" -> drawLine(cb, x, yPdf, w);
-          case "box", "image" -> drawBox(cb, x, yPdf - h, w, h, "image".equals(type));
+          case "box" -> drawBox(cb, x, yPdf - h, w, h, false);
+          case "image" -> drawImage(cb, el, data, x, yPdf - h, w, h);
+          case "qr" -> drawQr(cb, el, data, x, yPdf - h, w, h);
           case "heading", "text", "field" ->
               drawText(cb, el, data, x, yPdf - h * 0.25f, w, h, scaleY);
           default -> drawText(cb, el, data, x, yPdf - h * 0.25f, w, h, scaleY);
@@ -111,6 +121,95 @@ public class ReportPdfRenderService {
           0);
     }
     cb.restoreState();
+  }
+
+  /**
+   * Renders an image from a bound data field. Accepts raw base64, {@code data:image/...;base64,...},
+   * or empty (draws a placeholder box). Template text/bind typically {@code {{student.photoBase64}}}.
+   */
+  private void drawImage(
+      PdfContentByte cb,
+      Map<String, Object> el,
+      Map<String, Object> data,
+      float x,
+      float y,
+      float w,
+      float h) {
+    String raw =
+        el.containsKey("text")
+            ? String.valueOf(el.get("text"))
+            : bindValue(data, String.valueOf(el.getOrDefault("bind", "student.photoBase64")));
+    if ((raw == null || raw.isBlank()) && el.get("bind") != null) {
+      raw = "{{" + el.get("bind") + "}}";
+    }
+    String payload = substitute(raw, data);
+    byte[] bytes = decodeImageBytes(payload);
+    if (bytes == null || bytes.length == 0) {
+      drawBox(cb, x, y, w, h, true);
+      return;
+    }
+    try {
+      Image image = Image.getInstance(bytes);
+      image.setAbsolutePosition(x, y);
+      image.scaleAbsolute(w, h);
+      cb.addImage(image);
+    } catch (Exception ex) {
+      drawBox(cb, x, y, w, h, true);
+    }
+  }
+
+  private static byte[] decodeImageBytes(String payload) {
+    if (payload == null || payload.isBlank() || payload.contains("{{")) {
+      return null;
+    }
+    String b64 = payload.trim();
+    int comma = b64.indexOf(',');
+    if (b64.regionMatches(true, 0, "data:", 0, 5) && comma > 0) {
+      b64 = b64.substring(comma + 1);
+    }
+    try {
+      return java.util.Base64.getDecoder().decode(b64);
+    } catch (IllegalArgumentException ex) {
+      return null;
+    }
+  }
+
+  private void drawQr(
+      PdfContentByte cb,
+      Map<String, Object> el,
+      Map<String, Object> data,
+      float x,
+      float y,
+      float w,
+      float h) {
+    String raw =
+        el.containsKey("text")
+            ? String.valueOf(el.get("text"))
+            : bindValue(data, String.valueOf(el.getOrDefault("bind", "context.verifyUrl")));
+    if ((raw == null || raw.isBlank()) && el.get("bind") != null) {
+      raw = "{{" + el.get("bind") + "}}";
+    }
+    String payload = substitute(raw, data);
+    if (payload == null || payload.isBlank() || payload.contains("{{")) {
+      drawBox(cb, x, y, w, h, true);
+      return;
+    }
+    try {
+      int size = Math.max(64, Math.round(Math.min(w, h)));
+      Map<EncodeHintType, Object> hints = new LinkedHashMap<>();
+      hints.put(EncodeHintType.MARGIN, 1);
+      BitMatrix matrix =
+          new QRCodeWriter().encode(payload, BarcodeFormat.QR_CODE, size, size, hints);
+      BufferedImage buffered = MatrixToImageWriter.toBufferedImage(matrix);
+      ByteArrayOutputStream png = new ByteArrayOutputStream();
+      ImageIO.write(buffered, "png", png);
+      Image image = Image.getInstance(png.toByteArray());
+      image.setAbsolutePosition(x, y);
+      image.scaleAbsolute(w, h);
+      cb.addImage(image);
+    } catch (Exception ex) {
+      drawBox(cb, x, y, w, h, true);
+    }
   }
 
   private void drawText(

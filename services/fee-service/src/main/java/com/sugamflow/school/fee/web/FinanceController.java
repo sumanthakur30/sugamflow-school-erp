@@ -73,6 +73,39 @@ public class FinanceController {
     return ApiResponse.ok(wrap(() -> service.previewDemand(body)));
   }
 
+  @PostMapping("/demands")
+  public ApiResponse<Map<String, Object>> generateDemand(@RequestBody Map<String, Object> body) {
+    return ApiResponse.ok(wrap(() -> service.generateDemand(body)));
+  }
+
+  @PostMapping("/demands/bulk")
+  public ApiResponse<Map<String, Object>> generateBulkDemands(@RequestBody Map<String, Object> body) {
+    return ApiResponse.ok(wrap(() -> service.generateBulkDemands(body)));
+  }
+
+  @PostMapping("/waive")
+  public ApiResponse<Map<String, Object>> waive(@RequestBody Map<String, Object> body) {
+    return ApiResponse.ok(wrap(() -> service.waive(body)));
+  }
+
+  @PostMapping("/refund")
+  public ApiResponse<Map<String, Object>> refund(@RequestBody Map<String, Object> body) {
+    return ApiResponse.ok(wrap(() -> service.refund(body)));
+  }
+
+  @GetMapping("/late-fee-policies")
+  public ApiResponse<List<Map<String, Object>>> lateFeePolicies() {
+    return ApiResponse.ok(wrap(() -> service.listDefinitions(FinanceCatalog.TYPE_LATE_FEE_POLICY)));
+  }
+
+  @PutMapping("/late-fee-policies/{key}")
+  public ApiResponse<Map<String, Object>> saveLateFeePolicy(
+      @PathVariable("key") String key, @RequestBody Map<String, Object> body) {
+    body.put("definitionKey", key);
+    return ApiResponse.ok(
+        wrap(() -> service.saveDefinition(FinanceCatalog.TYPE_LATE_FEE_POLICY, body)));
+  }
+
   @PostMapping("/payments/intents")
   public ApiResponse<Map<String, Object>> createIntent(@RequestBody Map<String, Object> body) {
     return ApiResponse.ok(wrap(() -> service.createPaymentIntent(body)));
@@ -81,6 +114,12 @@ public class FinanceController {
   @PostMapping("/payments/intents/{id}/simulate-capture")
   public ApiResponse<Map<String, Object>> simulateCapture(@PathVariable("id") UUID id) {
     return ApiResponse.ok(wrap(() -> service.simulateCapture(id)));
+  }
+
+  @PostMapping("/payments/intents/{id}/confirm")
+  public ApiResponse<Map<String, Object>> confirmCapture(
+      @PathVariable("id") UUID id, @RequestBody(required = false) Map<String, Object> body) {
+    return ApiResponse.ok(wrap(() -> service.confirmCapture(id, body == null ? Map.of() : body)));
   }
 
   @GetMapping("/transactions")

@@ -1,5 +1,6 @@
 package com.sugamflow.school.subscription.service;
 
+import com.sugamflow.school.subscription.cache.SubscriptionCacheSupport;
 import com.sugamflow.school.subscription.model.SubscriptionPlan;
 import com.sugamflow.school.subscription.persistence.entity.SubscriptionPlanEntity;
 import com.sugamflow.school.subscription.persistence.repo.SubscriptionPlanRepository;
@@ -18,11 +19,18 @@ public class SubscriptionPlanSeeder implements ApplicationRunner {
 
   private final SubscriptionPlanRepository planRepository;
   private final SubscriptionService subscriptionService;
+  private final PlanProjectionService planProjectionService;
+  private final SubscriptionCacheSupport cache;
 
   public SubscriptionPlanSeeder(
-      SubscriptionPlanRepository planRepository, SubscriptionService subscriptionService) {
+      SubscriptionPlanRepository planRepository,
+      SubscriptionService subscriptionService,
+      PlanProjectionService planProjectionService,
+      SubscriptionCacheSupport cache) {
     this.planRepository = planRepository;
     this.subscriptionService = subscriptionService;
+    this.planProjectionService = planProjectionService;
+    this.cache = cache;
   }
 
   @Override
@@ -42,12 +50,17 @@ public class SubscriptionPlanSeeder implements ApplicationRunner {
     ensureAdmissionFlagOnAllPlans();
     ensureFlagOnAllPlans("FEATURE_FEE");
     ensureFlagOnAllPlans("FEATURE_STUDENT_MASTER");
+    ensureFlagOnAllPlans("FEATURE_IMPORT_WORKBENCH");
+    ensureFlagOnAllPlans("FEATURE_COMMS_HUB");
+    ensureFlagOnAllPlans("FEATURE_LMS");
     ensureFlagOnAllPlans("FEATURE_ATTENDANCE");
     ensureFlagOnAllPlans("FEATURE_EXAM");
     ensureFlagOnAllPlans("FEATURE_LIBRARY");
     ensureFlagOnAllPlans("FEATURE_HOSTEL");
     ensureFlagOnAllPlans("FEATURE_TRANSPORT");
     ensureFlagOnAllPlans("FEATURE_PAYROLL");
+    ensureFlagOnAllPlans("FEATURE_STAFF_MASTER");
+    ensureFlagOnAllPlans("FEATURE_HR");
     ensureFlagOnAllPlans("FEATURE_AUDIT_LOGS");
     ensureFlagOnAllPlans("FEATURE_REPORT_BUILDER");
     ensureFlagOnAllPlans("FEATURE_PARENT_APP");
@@ -66,12 +79,93 @@ public class SubscriptionPlanSeeder implements ApplicationRunner {
     ensureFlagOnAllPlans("FEATURE_MULTI_PAYMENT_GATEWAY");
     ensureFlagOnAllPlans("FEATURE_ACADEMIC_LIFECYCLE");
     ensureFlagOnAllPlans("FEATURE_OPS_DEPTH");
+    ensureFlagOnAllPlans("FEATURE_WEBSITE");
+    ensureFlagOnAllPlans("FEATURE_WEBSITE_CMS");
+    ensureFlagOnAllPlans("FEATURE_WEBSITE_ADMISSION");
+    ensureFlagOnAllPlans("FEATURE_WEBSITE_SEO");
+    ensureFlagOnAllPlans("FEATURE_WEBSITE_BLOG");
+    ensureFlagOnAllPlans("FEATURE_WEBSITE_ALUMNI");
+    ensureFlagOnAllPlans("FEATURE_WEBSITE_AI");
+    ensureFlagOnAllPlans("FEATURE_WEBSITE_MARKETPLACE");
     ensureLimitAtLeast("maxBranches", 3L);
+    // Phase 0 CRM: standalone sellable plans only — never merge School flags onto them.
+    ensureCrmStandalonePlans();
+    // Phase 2.3: shop vertical plans (hospital/poly/pharmacy/pathlab/retail).
+    ensureShopVerticalPlans();
+    // Phase 2: project current plan JSON into plan_feature / plan_limit / plan_module.
+    planProjectionService.syncAllPlans();
+    // Phase 7: seed/flag merges may bypass savePlan — clear Redis snapshots.
+    cache.evictAll();
+  }
+
+  /** Idempotent CRM SKUs (Flyway V17 is source of truth; seeder covers empty/dev DBs). */
+  private void ensureCrmStandalonePlans() {
+    seedCrmIfAbsent(SubscriptionPlan.crmStarter());
+    seedCrmIfAbsent(SubscriptionPlan.crmProfessional());
+    seedCrmIfAbsent(SubscriptionPlan.crmEnterprise());
+  }
+
+  private void ensureShopVerticalPlans() {
+    seedVerticalIfAbsent(SubscriptionPlan.hospitalStarter());
+    seedVerticalIfAbsent(SubscriptionPlan.hospitalPro());
+    seedVerticalIfAbsent(SubscriptionPlan.polyStarter());
+    seedVerticalIfAbsent(SubscriptionPlan.pharmacyStarter());
+    seedVerticalIfAbsent(SubscriptionPlan.pathlabStarter());
+    seedVerticalIfAbsent(SubscriptionPlan.retailStarter());
+  }
+
+  private void seedCrmIfAbsent(SubscriptionPlan plan) {
+    if (planRepository.findById(plan.getId()).isEmpty()) {
+      log.info("Seeding CRM plan {}", plan.getId());
+      seed(plan);
+    }
+  }
+
+  private void seedVerticalIfAbsent(SubscriptionPlan plan) {
+    if (planRepository.findById(plan.getId()).isEmpty()) {
+      log.info("Seeding shop vertical plan {}", plan.getId());
+      seed(plan);
+    }
+  }
+
+  private static boolean isCrmPlan(SubscriptionPlanEntity entity) {
+    if (entity == null) {
+      return false;
+    }
+    String id = entity.getId() == null ? "" : entity.getId();
+    String type = entity.getPlanType() == null ? "" : entity.getPlanType();
+    return id.startsWith("crm-") || type.regionMatches(true, 0, "CRM_", 0, 4);
+  }
+
+  /** Shop/CRM vertical SKUs must not receive School FEATURE_* merges. */
+  private static boolean isNonSchoolPlan(SubscriptionPlanEntity entity) {
+    if (entity == null) {
+      return true;
+    }
+    if (isCrmPlan(entity)) {
+      return true;
+    }
+    String id = entity.getId() == null ? "" : entity.getId();
+    String type = entity.getPlanType() == null ? "" : entity.getPlanType().toUpperCase();
+    return id.startsWith("hospital-")
+        || id.startsWith("poly-")
+        || id.startsWith("pharmacy-")
+        || id.startsWith("pathlab-")
+        || id.startsWith("retail-")
+        || id.startsWith("medshop-")
+        || type.startsWith("HOSPITAL_")
+        || type.startsWith("POLY_")
+        || type.startsWith("PHARMACY_")
+        || type.startsWith("PATHLAB_")
+        || type.startsWith("RETAIL_");
   }
 
   private void ensureLimitAtLeast(String limitKey, long minValue) {
     int updated = 0;
     for (SubscriptionPlanEntity entity : planRepository.findAll()) {
+      if (isNonSchoolPlan(entity)) {
+        continue;
+      }
       Map<String, Object> limits = entity.getLimitsJson();
       if (limits == null) {
         continue;
@@ -112,6 +206,9 @@ public class SubscriptionPlanSeeder implements ApplicationRunner {
   private void ensureFlagOnAllPlans(String flag) {
     int updated = 0;
     for (SubscriptionPlanEntity entity : planRepository.findAll()) {
+      if (isNonSchoolPlan(entity)) {
+        continue;
+      }
       Map<String, Object> flags = entity.getFeatureFlagsJson();
       if (flags == null) {
         continue;

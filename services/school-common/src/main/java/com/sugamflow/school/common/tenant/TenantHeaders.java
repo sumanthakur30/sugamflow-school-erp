@@ -1,5 +1,6 @@
 package com.sugamflow.school.common.tenant;
 
+import org.slf4j.MDC;
 import org.springframework.http.HttpHeaders;
 
 /** Shared outbound tenant headers for inter-service calls. */
@@ -31,5 +32,10 @@ public final class TenantHeaders {
     }
     headers.set(GATEWAY_VERIFIED, "true");
     headers.set(INTERNAL_SERVICE, "true");
+    // Propagate inbound correlation id on inter-service hops when present.
+    String requestId = MDC.get(com.sugamflow.school.common.ops.CorrelationIdFilter.MDC_KEY);
+    if (requestId != null && !requestId.isBlank()) {
+      headers.set(com.sugamflow.school.common.ops.CorrelationIdFilter.HEADER, requestId);
+    }
   }
 }

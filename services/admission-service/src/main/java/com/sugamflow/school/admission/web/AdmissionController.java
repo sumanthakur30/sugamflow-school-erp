@@ -12,6 +12,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -34,8 +35,21 @@ public class AdmissionController {
 
   @GetMapping("/applications")
   public ApiResponse<PageResult<Map<String, Object>>> list(
-      @RequestParam(required = false) Integer page, @RequestParam(required = false) Integer size) {
-    return ApiResponse.ok(service.list(page, size));
+      @RequestParam(required = false) Integer page,
+      @RequestParam(required = false) Integer size,
+      @RequestParam(required = false) String q,
+      @RequestParam(required = false) String status,
+      @RequestParam(required = false) String sortBy,
+      @RequestParam(required = false) String sortDir) {
+    return ApiResponse.ok(service.list(page, size, q, status, sortBy, sortDir));
+  }
+
+  @GetMapping("/register")
+  public ApiResponse<Map<String, Object>> register(
+      @RequestParam(required = false) String status,
+      @RequestParam(required = false) String q,
+      @RequestParam(name = "format", defaultValue = "PDF") String format) {
+    return ApiResponse.ok(service.registerExport(status, q, format));
   }
 
   @GetMapping("/applications/{id}")
@@ -46,6 +60,12 @@ public class AdmissionController {
   @PostMapping("/applications")
   public ApiResponse<Map<String, Object>> submit(@RequestBody Map<String, Object> body) {
     return ApiResponse.ok(service.submit(body));
+  }
+
+  @PutMapping("/applications/{id}")
+  public ApiResponse<Map<String, Object>> update(
+      @PathVariable("id") UUID id, @RequestBody Map<String, Object> body) {
+    return ApiResponse.ok(service.update(id, body));
   }
 
   @PostMapping("/applications/{id}/actions")

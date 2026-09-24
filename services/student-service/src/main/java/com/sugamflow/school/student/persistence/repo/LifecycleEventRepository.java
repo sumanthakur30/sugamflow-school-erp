@@ -15,4 +15,6 @@ public interface LifecycleEventRepository extends JpaRepository<LifecycleEventEn
 
   Optional<LifecycleEventEntity> findByOrganizationIdAndIdempotencyKey(
       String organizationId, String idempotencyKey);
+
+  Optional<LifecycleEventEntity> findByIdAndOrganizationId(UUID id, String organizationId);
 }

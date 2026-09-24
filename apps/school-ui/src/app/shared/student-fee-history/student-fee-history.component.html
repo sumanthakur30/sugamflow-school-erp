@@ -1,0 +1,110 @@
+@if (open) {
+  <div class="sfh-backdrop" (click)="close()" aria-hidden="true"></div>
+  <aside class="sfh-panel" role="dialog" aria-modal="true" aria-label="Student fee history">
+    <header class="sfh-head">
+      <div>
+        <h2>Student fee history</h2>
+        <p class="muted">Like customer history — all collections for one student.</p>
+      </div>
+      <button type="button" class="secondary" (click)="close()">Close</button>
+    </header>
+
+    <div class="sfh-lookup">
+      <sf-student-lookup
+        [attr.data-n]="lookupNonce"
+        label="Find student"
+        [includeApplicants]="true"
+        [initialQuery]="admissionNo"
+        (studentSelected)="onStudentSelected($event)"
+        (cleared)="onStudentCleared()"
+      />
+    </div>
+
+    @if (error) {
+      <p class="sfh-error" role="alert">{{ error }}</p>
+    }
+
+    @if (loading) {
+      <p class="muted sfh-pad">Loading history…</p>
+    } @else if (student) {
+      <section class="sfh-identity">
+        <div class="sfh-avatar" aria-hidden="true">
+          {{ (student.fullName || '?').charAt(0).toUpperCase() }}
+        </div>
+        <div>
+          <h3>{{ student.fullName || '—' }}</h3>
+          <p class="mono">
+            {{ student.admissionNo || '—' }}
+            @if (student.classSection) {
+              · {{ student.classSection }}
+            }
+          </p>
+          <p class="muted">
+            @if (student.mobile) {
+              {{ student.mobile }}
+            }
+            @if (student.fatherName) {
+              · Father: {{ student.fatherName }}
+            }
+            @if (student.status) {
+              · {{ student.status }}
+            }
+          </p>
+        </div>
+      </section>
+
+      <section class="sfh-kpis">
+        <div>
+          <span>Paid</span>
+          <strong>{{ formatMoney(paidTotal()) }}</strong>
+        </div>
+        <div>
+          <span>Outstanding</span>
+          <strong>{{ formatMoney(summary?.pendingAmount ?? pendingTotal()) }}</strong>
+        </div>
+        <div>
+          <span>Collections</span>
+          <strong>{{ collections.length }}</strong>
+        </div>
+      </section>
+
+      <div class="sfh-actions">
+        <button type="button" (click)="collectFee()">Collect fee</button>
+        @if (student.id) {
+          <a class="secondary btnish" [routerLink]="['/admin/students']" [queryParams]="{ id: student.id }">
+            Student profile
+          </a>
+          <a class="secondary btnish" [routerLink]="['/admin/students', student.id, '360']">
+            Student 360
+          </a>
+        }
+      </div>
+
+      <section class="sfh-list">
+        <h4>Collections</h4>
+        @if (!collections.length) {
+          <p class="muted">No fee collections for this admission number yet.</p>
+        } @else {
+          <ul>
+            @for (c of collections; track c.id) {
+              <li>
+                <button type="button" class="sfh-row" (click)="openCollection.emit(c.id)">
+                  <div>
+                    <div class="sfh-row-title">
+                      {{ c.answers?.feeHead || 'Fee' }}
+                      <span [class]="statusClass(c.status)">{{ c.status }}</span>
+                    </div>
+                    <div class="muted">{{ formatWhen(c.updatedAt || c.createdAt) }} · {{ c.answers?.paymentMode || '—' }}</div>
+                  </div>
+                  <strong class="money">{{ formatMoney(c.answers?.amount) }}</strong>
+                </button>
+              </li>
+            }
+          </ul>
+        }
+      </section>
+    } @else {
+      <p class="muted sfh-pad">Search and select a student to view their fee history.</p>
+    }
+  </aside>
+}

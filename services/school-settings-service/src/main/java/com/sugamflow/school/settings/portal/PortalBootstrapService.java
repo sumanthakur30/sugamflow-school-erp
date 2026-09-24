@@ -1,5 +1,6 @@
 package com.sugamflow.school.settings.portal;
 
+import com.sugamflow.school.common.security.PersonaRoles;
 import com.sugamflow.school.common.tenant.TenantContext;
 import com.sugamflow.school.common.tenant.TenantScope;
 import com.sugamflow.school.settings.integration.SubscriptionClient;
@@ -30,6 +31,7 @@ public class PortalBootstrapService {
       throw new IllegalArgumentException("Unknown portal: " + portalKey);
     }
     TenantScope scope = TenantContext.require();
+    requirePortalRole(portalKey, scope.roleCode());
     String flag = PortalCatalog.featureFlag(portalKey);
     boolean enabled = subscription.isFeatureEnabled(scope, flag);
     Map<String, Object> out = new LinkedHashMap<>();
@@ -49,14 +51,30 @@ public class PortalBootstrapService {
     out.put("title", cfg.getOrDefault("title", portalKey));
     out.put("subtitle", cfg.getOrDefault("subtitle", ""));
     out.put("roleCode", cfg.getOrDefault("roleCode", portalKey.toUpperCase()));
-    out.put("profile", cfg.getOrDefault("profile", Map.of()));
-    out.put("summary", cfg.getOrDefault("summary", Map.of()));
+    // Live profile/summary are hydrated by the portal UI from relationship-scoped APIs.
+    // Do not expose configured sample values as if they were live metrics.
+    out.put("profile", Map.of());
+    out.put("summary", Map.of());
     out.put("notices", cfg.getOrDefault("notices", List.of()));
     out.put("nav", filterNav(asListOfMaps(cfg.get("nav")), scope));
     out.put("widgets", sortWidgets(asListOfMaps(cfg.get("widgets"))));
     out.put("sections", cfg.getOrDefault("sections", Map.of()));
     out.put("module", module);
     return out;
+  }
+
+  private static void requirePortalRole(String portalKey, String roleCode) {
+    String role = PersonaRoles.normalize(roleCode);
+    if (PersonaRoles.isElevated(role)) {
+      return;
+    }
+    if (PortalCatalog.PARENT.equalsIgnoreCase(portalKey)
+        && !(PersonaRoles.isParent(role) || PersonaRoles.isStudent(role))) {
+      throw new IllegalArgumentException("Parent portal requires PARENT / STUDENT role");
+    }
+    if (PortalCatalog.TEACHER.equalsIgnoreCase(portalKey) && !PersonaRoles.isTeacher(role)) {
+      throw new IllegalArgumentException("Teacher portal requires TEACHER role");
+    }
   }
 
   private List<Map<String, Object>> filterNav(List<Map<String, Object>> nav, TenantScope scope) {

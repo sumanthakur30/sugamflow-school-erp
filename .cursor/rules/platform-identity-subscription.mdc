@@ -1,0 +1,16 @@
+---
+description: School/SugamFlow — unified Identity & Subscription direction (mirror)
+alwaysApply: true
+---
+
+# Platform Identity & Subscription
+
+See also SugamFlow rule `platform-identity-subscription.mdc`.
+
+School ERP must **not** grow a separate long-term user or plan system. Use shared auth/user + platform subscription; school services only enforce feature-flags / entitlements from snapshots.
+
+Phase 1 (current): Identity — role templates by business_type, invite UX, non-breaking adapters.
+Phase 2: Unify subscription catalog; migrate school-local plans.
+Phase 3: Super Admin cross-tenant user ops + audit.
+
+Preserve existing school owner/staff JWT and `X-Tenant-Id` contracts while migrating.

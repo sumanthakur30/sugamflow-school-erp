@@ -4,9 +4,13 @@ import com.sugamflow.school.common.tenant.TenantContext;
 import com.sugamflow.school.common.tenant.TenantScope;
 import com.sugamflow.school.common.api.PageQuery;
 import com.sugamflow.school.common.api.PageResult;
+import com.sugamflow.school.common.api.PageResults;
+import com.sugamflow.school.common.security.AccessScope;
+import com.sugamflow.school.common.security.PersonaRoles;
 import com.sugamflow.school.attendance.config.AttendanceProperties;
 import com.sugamflow.school.attendance.integration.ConfigEngineClient;
 import com.sugamflow.school.attendance.integration.NotificationDeliveryClient;
+import com.sugamflow.school.attendance.integration.StudentAccessClient;
 import com.sugamflow.school.attendance.persistence.entity.AttendanceRecordEntity;
 import com.sugamflow.school.attendance.persistence.repo.AttendanceRecordRepository;
 import com.sugamflow.school.attendance.web.AttendanceException;
@@ -35,16 +39,19 @@ public class AttendanceRecordService {
   private final ConfigEngineClient engines;
   private final NotificationDeliveryClient notificationDelivery;
   private final AttendanceProperties properties;
+  private final StudentAccessClient studentAccess;
 
   public AttendanceRecordService(
       AttendanceRecordRepository repository,
       ConfigEngineClient engines,
       NotificationDeliveryClient notificationDelivery,
-      AttendanceProperties properties) {
+      AttendanceProperties properties,
+      StudentAccessClient studentAccess) {
     this.repository = repository;
     this.engines = engines;
     this.notificationDelivery = notificationDelivery;
     this.properties = properties;
+    this.studentAccess = studentAccess;
   }
 
   @Transactional(readOnly = true)
@@ -77,6 +84,20 @@ public class AttendanceRecordService {
     TenantScope scope = TenantContext.require();
     requireFeature(scope);
     PageQuery q = PageQuery.of(page, size);
+    AccessScope access = studentAccess.resolve(scope);
+
+    if (access.restricted()) {
+      List<AttendanceRecordEntity> all = loadCandidates(scope);
+      List<Map<String, Object>> dtos = new ArrayList<>();
+      for (AttendanceRecordEntity e : all) {
+        Map<String, Object> dto = toDto(e);
+        if (access.allowsStudentDto(dto)) {
+          dtos.add(dto);
+        }
+      }
+      return PageResults.filterThenPage(dtos, d -> true, q.page(), q.size());
+    }
+
     Pageable pageable = PageRequest.of(q.page(), q.size());
     Page<AttendanceRecordEntity> result;
     if (scope.branchId() != null && !scope.branchId().isBlank() && scope.academicSessionId() != null && !scope.academicSessionId().isBlank()) {
@@ -91,12 +112,22 @@ public class AttendanceRecordService {
   public Map<String, Object> get(UUID id) {
     TenantScope scope = TenantContext.require();
     requireFeature(scope);
-    return toDto(requireRecord(id, scope.organizationId()));
+    Map<String, Object> dto = toDto(requireRecord(id, scope.organizationId()));
+    AccessScope access = studentAccess.resolve(scope);
+    if (!access.allowsStudentDto(dto)) {
+      throw new AttendanceException("NOT_FOUND", "Attendance record not found");
+    }
+    return dto;
   }
 
   @Transactional
   public Map<String, Object> submit(Map<String, Object> body) {
     TenantScope scope = TenantContext.require();
+    try {
+      PersonaRoles.requireStaffWrite(scope);
+    } catch (SecurityException ex) {
+      throw new AttendanceException("FORBIDDEN", ex.getMessage());
+    }
     requireFeature(scope);
     requireModuleEnabled(scope);
 
@@ -445,6 +476,21 @@ public class AttendanceRecordService {
       return (Map<String, Object>) m;
     }
     return module;
+  }
+
+  private List<AttendanceRecordEntity> loadCandidates(TenantScope scope) {
+    // Cap scan size for relationship filtering; elevated roles use true DB pagination.
+    Pageable wide = PageRequest.of(0, 500);
+    if (scope.branchId() != null
+        && !scope.branchId().isBlank()
+        && scope.academicSessionId() != null
+        && !scope.academicSessionId().isBlank()) {
+      return repository
+          .findByOrganizationIdAndBranchIdAndAcademicSessionIdOrderByUpdatedAtDesc(
+              scope.organizationId(), scope.branchId(), scope.academicSessionId(), wide)
+          .getContent();
+    }
+    return repository.findByOrganizationIdOrderByUpdatedAtDesc(scope.organizationId(), wide).getContent();
   }
 
   private AttendanceRecordEntity requireRecord(UUID id, String org) {

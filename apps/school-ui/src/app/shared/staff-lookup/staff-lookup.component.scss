@@ -1,0 +1,233 @@
+:host {
+  display: block;
+  position: relative;
+  z-index: 1;
+}
+
+:host(.slu-host-open) {
+  z-index: 80;
+}
+
+.slu {
+  position: relative;
+  margin-bottom: 1rem;
+  z-index: 1;
+}
+
+.slu.is-disabled {
+  opacity: 0.72;
+}
+
+.slu-label-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.75rem;
+  margin-bottom: 0.35rem;
+}
+
+.slu-label {
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #64748b;
+}
+
+.slu-link {
+  border: 0;
+  background: none;
+  padding: 0;
+  color: var(--sf-primary);
+  font: inherit;
+  font-weight: 700;
+  font-size: 0.85rem;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.slu-filters {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+  gap: 0.55rem;
+  margin-bottom: 0.65rem;
+  padding: 0.65rem 0.75rem;
+  border-radius: var(--sf-radius);
+  border: 1px solid color-mix(in srgb, var(--sf-menu) 16%, transparent);
+  background: color-mix(in srgb, var(--sf-primary) 4%, #fff);
+}
+
+.slu-filters label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  margin: 0;
+}
+
+.slu-apply {
+  align-self: end;
+  min-height: 2.2rem;
+}
+
+.slu-input-wrap {
+  position: relative;
+}
+
+.slu-input {
+  width: 100%;
+  padding-right: 2.2rem;
+}
+
+.slu-spinner {
+  position: absolute;
+  right: 0.7rem;
+  top: 50%;
+  width: 1rem;
+  height: 1rem;
+  margin-top: -0.5rem;
+  border: 2px solid color-mix(in srgb, var(--sf-primary) 25%, #cbd5e1);
+  border-top-color: var(--sf-primary);
+  border-radius: 50%;
+  animation: slu-spin 0.7s linear infinite;
+}
+
+@keyframes slu-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.slu-error {
+  margin: 0.4rem 0 0;
+  color: #b91c1c;
+  font-size: 0.88rem;
+}
+
+.slu-dropdown {
+  position: absolute;
+  z-index: 90;
+  left: 0;
+  right: 0;
+  top: calc(100% + 0.25rem);
+  margin: 0;
+  padding: 0.35rem;
+  list-style: none;
+  max-height: min(22rem, 55vh);
+  overflow: auto;
+  background: #fff;
+  border: 1px solid color-mix(in srgb, var(--sf-menu) 20%, transparent);
+  border-radius: var(--sf-radius);
+  box-shadow: 0 16px 36px rgba(15, 23, 42, 0.18);
+}
+
+.slu-empty {
+  padding: 0.85rem 0.75rem;
+  font-size: 0.9rem;
+}
+
+.slu-option {
+  display: flex;
+  gap: 0.7rem;
+  align-items: flex-start;
+  padding: 0.65rem 0.7rem;
+  border-radius: calc(var(--sf-radius) - 2px);
+  cursor: pointer;
+}
+
+.slu-option.is-active,
+.slu-option:hover {
+  background: color-mix(in srgb, var(--sf-primary) 8%, #fff);
+}
+
+.slu-option-title {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  align-items: center;
+  font-weight: 700;
+}
+
+.slu-option-line {
+  margin-top: 0.15rem;
+  font-size: 0.82rem;
+  color: #64748b;
+}
+
+.slu-avatar {
+  flex: 0 0 auto;
+  width: 2.4rem;
+  height: 2.4rem;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  font-weight: 800;
+  color: var(--sf-primary);
+  background: color-mix(in srgb, var(--sf-primary) 14%, #fff);
+  border: 1px solid color-mix(in srgb, var(--sf-primary) 22%, transparent);
+}
+
+.slu-avatar.sm {
+  width: 2.1rem;
+  height: 2.1rem;
+  font-size: 0.9rem;
+}
+
+.slu-badge {
+  display: inline-flex;
+  padding: 0.12rem 0.45rem;
+  border-radius: 999px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  background: #e2e8f0;
+  color: #334155;
+}
+
+.slu-ok {
+  background: color-mix(in srgb, #15803d 16%, #fff);
+  color: #166534;
+}
+
+.slu-selected {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem 0.85rem;
+  border-radius: var(--sf-radius);
+  border: 1px solid color-mix(in srgb, var(--sf-primary) 22%, transparent);
+  background: color-mix(in srgb, var(--sf-primary) 6%, #fff);
+}
+
+.slu-selected-main {
+  display: flex;
+  gap: 0.7rem;
+  align-items: center;
+  min-width: 0;
+}
+
+.slu-selected-name {
+  font-weight: 800;
+}
+
+.slu-selected-meta {
+  font-size: 0.84rem;
+  color: #64748b;
+  margin-top: 0.1rem;
+}
+
+.slu-change {
+  flex: 0 0 auto;
+}
+
+.muted {
+  color: #64748b;
+}
+
+@media (max-width: 640px) {
+  .slu-selected {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}

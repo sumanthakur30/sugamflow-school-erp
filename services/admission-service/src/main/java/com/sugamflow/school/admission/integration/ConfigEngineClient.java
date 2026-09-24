@@ -1,6 +1,7 @@
 package com.sugamflow.school.admission.integration;
 
 import com.sugamflow.school.admission.config.AdmissionProperties;
+import com.sugamflow.school.common.cache.TtlCache;
 import com.sugamflow.school.common.tenant.TenantScope;
 import com.sugamflow.school.common.tenant.TenantHeaders;
 import java.util.LinkedHashMap;
@@ -33,35 +34,68 @@ public class ConfigEngineClient {
     this.properties = properties;
   }
 
+  private final TtlCache<String, Boolean> featureFlagCache = TtlCache.forConfig();
+  private final TtlCache<String, Map<String, Object>> moduleSettingsCache = TtlCache.forConfig();
+  private final TtlCache<String, Map<String, Object>> formCache = TtlCache.forConfig();
+  private final TtlCache<String, Map<String, Object>> workflowCache = TtlCache.forConfig();
+
   public boolean isFeatureEnabled(TenantScope scope, String flag) {
-    Map<String, Object> body =
-        get(
-            properties.getIntegrations().getSubscriptionBaseUrl()
-                + "/api/subscription/feature-flags/"
-                + flag,
-            scope);
-    return body != null && Boolean.TRUE.equals(body.get("enabled"));
+    String cacheKey = scope.organizationId() + "|" + flag;
+    Boolean enabled =
+        featureFlagCache.get(
+            cacheKey,
+            key -> {
+              Map<String, Object> body =
+                  get(
+                      properties.getIntegrations().getSubscriptionBaseUrl()
+                          + "/api/subscription/feature-flags/"
+                          + flag,
+                      scope);
+              return body == null ? null : Boolean.TRUE.equals(body.get("enabled"));
+            });
+    return Boolean.TRUE.equals(enabled);
   }
 
   public Map<String, Object> getModuleSettings(TenantScope scope, String moduleKey) {
+    String cacheKey =
+        scope.organizationId()
+            + "|"
+            + scope.branchId()
+            + "|"
+            + scope.academicSessionId()
+            + "|"
+            + moduleKey;
     Map<String, Object> body =
-        get(
-            properties.getIntegrations().getSettingsBaseUrl()
-                + "/api/config/modules/"
-                + moduleKey,
-            scope);
+        moduleSettingsCache.get(
+            cacheKey,
+            key ->
+                get(
+                    properties.getIntegrations().getSettingsBaseUrl()
+                        + "/api/config/modules/"
+                        + moduleKey,
+                    scope));
     return body != null ? body : Map.of();
   }
 
   public Map<String, Object> getForm(TenantScope scope, String formKey) {
-    return get(
-        properties.getIntegrations().getFormsBaseUrl() + "/api/forms/" + formKey, scope);
+    String cacheKey = scope.organizationId() + "|form|" + formKey;
+    return formCache.get(
+        cacheKey,
+        key ->
+            get(
+                properties.getIntegrations().getFormsBaseUrl() + "/api/forms/" + formKey, scope));
   }
 
   public Map<String, Object> getWorkflow(TenantScope scope, String workflowKey) {
-    return get(
-        properties.getIntegrations().getWorkflowsBaseUrl() + "/api/workflows/" + workflowKey,
-        scope);
+    String cacheKey = scope.organizationId() + "|workflow|" + workflowKey;
+    return workflowCache.get(
+        cacheKey,
+        key ->
+            get(
+                properties.getIntegrations().getWorkflowsBaseUrl()
+                    + "/api/workflows/"
+                    + workflowKey,
+                scope));
   }
 
   @SuppressWarnings("unchecked")
@@ -113,8 +147,13 @@ public class ConfigEngineClient {
 
   public Map<String, Object> renderReport(
       TenantScope scope, String templateKey, Map<String, Object> data) {
+    return renderReport(scope, templateKey, data, "PDF");
+  }
+
+  public Map<String, Object> renderReport(
+      TenantScope scope, String templateKey, Map<String, Object> data, String format) {
     Map<String, Object> payload = new LinkedHashMap<>();
-    payload.put("format", "PDF");
+    payload.put("format", format == null || format.isBlank() ? "PDF" : format);
     payload.put("data", data != null ? data : Map.of());
     Map<String, Object> result =
         post(
