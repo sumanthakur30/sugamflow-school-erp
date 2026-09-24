@@ -15,8 +15,15 @@ export interface WebsiteResolve {
   cdnBaseUrl?: string | null;
   theme: Record<string, string | null>;
   homepage: Array<Record<string, unknown>>;
-  navigation: Array<{ label: string; path: string; order?: number; external?: boolean }>;
+  navigation: Array<{
+    label: string;
+    path: string;
+    order?: number;
+    external?: boolean;
+    children?: Array<{ label: string; path: string; fragment?: string }>;
+  }>;
   seo?: Record<string, string | null>;
+  defaultSite?: boolean;
 }
 
 /** School-specific contact/brand — always from theme/CMS, never hardcoded per tenant. */
@@ -72,51 +79,69 @@ export class WebsiteApiService {
   }
 
   getPage(slug: string) {
-    const org = this.site()?.organizationId;
     return this.http
       .get<ApiResponse<Record<string, unknown>>>(
         `${environment.apiBaseUrl}/api/cms/public/pages/${slug}`,
-        { params: { organizationId: org || '' } }
+        { params: this.cmsParams() }
       )
       .pipe(map((r) => r.data));
   }
 
-  listNews() {
-    const org = this.site()?.organizationId;
+  listNews(limit = 20) {
     return this.http
       .get<ApiResponse<Array<Record<string, unknown>>>>(
         `${environment.apiBaseUrl}/api/cms/public/news`,
-        { params: { organizationId: org || '' } }
+        { params: this.cmsParams({ limit: String(limit) }) }
       )
       .pipe(map((r) => r.data));
   }
 
   getNews(slug: string) {
-    const org = this.site()?.organizationId;
     return this.http
       .get<ApiResponse<Record<string, unknown>>>(
         `${environment.apiBaseUrl}/api/cms/public/news/${slug}`,
-        { params: { organizationId: org || '' } }
+        { params: this.cmsParams() }
       )
       .pipe(map((r) => r.data));
   }
 
-  listEvents() {
-    const org = this.site()?.organizationId;
+  listEvents(limit = 20) {
     return this.http
       .get<ApiResponse<Array<Record<string, unknown>>>>(
         `${environment.apiBaseUrl}/api/cms/public/events`,
-        { params: { organizationId: org || '' } }
+        { params: this.cmsParams({ limit: String(limit) }) }
       )
       .pipe(map((r) => r.data));
   }
 
-  listGallery() {
-    const org = this.site()?.organizationId;
+  listGallery(limit = 24) {
     return this.http
       .get<ApiResponse<Array<Record<string, unknown>>>>(
         `${environment.apiBaseUrl}/api/cms/public/gallery`,
-        { params: { organizationId: org || '' } }
+        { params: this.cmsParams({ limit: String(limit) }) }
+      )
+      .pipe(map((r) => r.data));
+  }
+
+  listDocuments(limit = 50) {
+    return this.http
+      .get<ApiResponse<Array<Record<string, unknown>>>>(
+        `${environment.apiBaseUrl}/api/cms/public/documents`,
+        { params: this.cmsParams({ limit: String(limit) }) }
+      )
+      .pipe(map((r) => r.data));
+  }
+
+  admissionForm() {
+    const site = this.site();
+    const params: Record<string, string> = { organizationId: site?.organizationId || '' };
+    if (site?.branchId) {
+      params['branchId'] = site.branchId;
+    }
+    return this.http
+      .get<ApiResponse<Record<string, unknown>>>(
+        `${environment.apiBaseUrl}/api/admission/public/form`,
+        { params }
       )
       .pipe(map((r) => r.data));
   }
@@ -169,13 +194,15 @@ export class WebsiteApiService {
     message?: string;
     age?: string;
     captchaToken?: string;
+    answers?: Record<string, string>;
   }) {
-    const org = this.site()?.organizationId;
+    const site = this.site();
     return this.http
       .post<ApiResponse<Record<string, unknown>>>(
         `${environment.apiBaseUrl}/api/admission/public/apply`,
         {
-          organizationId: org,
+          organizationId: site?.organizationId,
+          branchId: site?.branchId || undefined,
           ...payload,
         }
       )
@@ -253,9 +280,26 @@ export class WebsiteApiService {
   mapEmbedSrc(brand?: SiteBrandContact | null): string {
     const b = brand || this.brandContact();
     if (b.mapEmbedUrl) return b.mapEmbedUrl;
-    const q = this.mapQuery(b);
-    if (!q) return '';
-    return `https://maps.google.com/maps?q=${encodeURIComponent(q)}&hl=en&z=16&output=embed`;
+    const theme = this.site()?.theme || {};
+    const lat = this.themeStr(theme, 'latitude');
+    const lng = this.themeStr(theme, 'longitude');
+    if (lat && lng) {
+      return `https://maps.google.com/maps?q=${encodeURIComponent(lat + ',' + lng)}&hl=en&z=16&output=embed`;
+    }
+    return '';
+  }
+
+  private cmsParams(extra: Record<string, string> = {}): Record<string, string> {
+    const site = this.site();
+    const params: Record<string, string> = {
+      organizationId: site?.organizationId || '',
+      ...extra,
+    };
+    if (site?.siteId) {
+      params['siteId'] = site.siteId;
+      params['includeLegacy'] = site.defaultSite === false ? 'false' : 'true';
+    }
+    return params;
   }
 
   private mapQuery(b: SiteBrandContact): string {
@@ -290,8 +334,14 @@ export class WebsiteApiService {
 
   private applyTheme(theme: Record<string, string | null>): void {
     const root = document.documentElement;
+    const premium = theme['skin'] === 'premium';
+    root.classList.toggle('skin-premium', premium);
     root.style.setProperty('--sf-primary', theme['primaryColor'] || '#0B3D91');
     root.style.setProperty('--sf-secondary', theme['secondaryColor'] || '#F5B700');
+    if (premium) {
+      root.style.setProperty('--sf-serif', '"Playfair Display", Georgia, serif');
+      root.style.setProperty('--sf-sans', 'Manrope, "Segoe UI", sans-serif');
+    }
     const favicon = this.mediaUrl(theme['faviconUrl'] || theme['logoUrl'] || undefined);
     if (favicon) {
       let link = document.querySelector("link[rel*='icon']") as HTMLLinkElement | null;

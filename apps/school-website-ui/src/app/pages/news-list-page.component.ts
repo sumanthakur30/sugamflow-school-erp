@@ -1,6 +1,6 @@
 import { Component, OnInit, inject } from '@angular/core';
 import { DatePipe, NgFor, NgIf } from '@angular/common';
-import { RouterLink } from '@angular/router';
+import { ActivatedRoute, RouterLink } from '@angular/router';
 import { WebsiteApiService } from '../core/website-api.service';
 import { SeoService } from '../core/seo.service';
 
@@ -11,7 +11,7 @@ import { SeoService } from '../core/seo.service';
   template: `
     <section class="page-hero">
       <p class="eyebrow">Updates</p>
-      <h1>News</h1>
+      <h1>News and events</h1>
       <p class="lead">Announcements and stories from campus.</p>
     </section>
 
@@ -34,6 +34,15 @@ import { SeoService } from '../core/seo.service';
     <ng-template #empty>
       <p class="empty">No published news yet. Schools add stories from Website → News.</p>
     </ng-template>
+
+    <section class="note" id="calendar">
+      <h2>Academic calendar</h2>
+      <p>[Add the academic calendar]</p>
+    </section>
+    <section class="note" id="results">
+      <h2>Results</h2>
+      <p>[Add school results]</p>
+    </section>
   `,
   styles: [
     `
@@ -105,6 +114,21 @@ import { SeoService } from '../core/seo.service';
         border-radius: 12px;
         padding: 1.25rem;
       }
+      .note {
+        margin-top: 1rem;
+        background: #fff;
+        border: 1px dashed #d6d0c4;
+        border-radius: 16px;
+        padding: 1.1rem 1.2rem;
+      }
+      .note h2 {
+        margin: 0 0 0.35rem;
+        font-size: 1.35rem;
+      }
+      .note p {
+        margin: 0;
+        color: #64748b;
+      }
       @media (max-width: 640px) {
         article {
           grid-template-columns: 1fr;
@@ -119,6 +143,7 @@ import { SeoService } from '../core/seo.service';
 export class NewsListPageComponent implements OnInit {
   private readonly api = inject(WebsiteApiService);
   private readonly seo = inject(SeoService);
+  private readonly route = inject(ActivatedRoute);
   news: Array<Record<string, unknown>> = [];
 
   ngOnInit(): void {
@@ -128,6 +153,12 @@ export class NewsListPageComponent implements OnInit {
         description: `Latest news from ${site.displayName}`,
       });
       this.api.listNews().subscribe((rows) => (this.news = rows || []));
+    });
+    this.route.fragment.subscribe((id) => {
+      if (!id) return;
+      setTimeout(() => {
+        document.getElementById(id)?.scrollIntoView({ behavior: 'auto', block: 'start' });
+      }, 60);
     });
   }
 
