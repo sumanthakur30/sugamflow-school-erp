@@ -1,6 +1,6 @@
 import { Component, OnInit, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { NgIf } from '@angular/common';
+import { NgFor, NgIf } from '@angular/common';
 import { RouterLink } from '@angular/router';
 import { WebsiteApiService } from '../core/website-api.service';
 import { environment } from '../../environments/environment';
@@ -18,7 +18,7 @@ declare global {
 @Component({
   selector: 'app-admission-apply-page',
   standalone: true,
-  imports: [FormsModule, NgIf, RouterLink],
+  imports: [FormsModule, NgIf, NgFor, RouterLink],
   template: `
     <section class="wrap">
       <header>
@@ -27,18 +27,49 @@ declare global {
       </header>
 
       <form *ngIf="!submitted; else done" (ngSubmit)="submit()" class="card">
-        <label>Full name <input name="fullName" [(ngModel)]="fullName" required /></label>
-        <label>Mobile <input name="mobile" [(ngModel)]="mobile" required /></label>
-        <label>Email <input name="email" type="email" [(ngModel)]="email" /></label>
-        <label
-          >Class / Grade applied
-          <input name="classApplied" [(ngModel)]="classApplied" required placeholder="e.g. Class 5" />
-        </label>
-        <label>Age (optional) <input name="age" [(ngModel)]="age" /></label>
-        <label
-          >Message
-          <textarea name="message" rows="4" [(ngModel)]="message"></textarea>
-        </label>
+        <ng-container *ngIf="fields.length; else fixedFields">
+          <label *ngFor="let field of fields">
+            {{ field.label }}<span *ngIf="field.mandatory"> *</span>
+            <select
+              *ngIf="field.type === 'DROPDOWN' || field.type === 'SELECT'"
+              [name]="field.key"
+              [(ngModel)]="values[field.key]"
+              [required]="field.mandatory"
+            >
+              <option value="">Select</option>
+              <option *ngFor="let option of field.options" [value]="option">{{ option }}</option>
+            </select>
+            <textarea
+              *ngIf="field.type === 'TEXTAREA'"
+              [name]="field.key"
+              rows="4"
+              [(ngModel)]="values[field.key]"
+              [required]="field.mandatory"
+            ></textarea>
+            <input
+              *ngIf="field.type !== 'DROPDOWN' && field.type !== 'SELECT' && field.type !== 'TEXTAREA'"
+              [name]="field.key"
+              [type]="inputType(field.type)"
+              [(ngModel)]="values[field.key]"
+              [required]="field.mandatory"
+              [placeholder]="field.placeholder || ''"
+            />
+          </label>
+        </ng-container>
+        <ng-template #fixedFields>
+          <label>Full name <input name="fullName" [(ngModel)]="fullName" required /></label>
+          <label>Mobile <input name="mobile" [(ngModel)]="mobile" required /></label>
+          <label>Email <input name="email" type="email" [(ngModel)]="email" /></label>
+          <label
+            >Class / Grade applied
+            <input name="classApplied" [(ngModel)]="classApplied" required placeholder="e.g. Class 5" />
+          </label>
+          <label>Age (optional) <input name="age" [(ngModel)]="age" /></label>
+          <label
+            >Message
+            <textarea name="message" rows="4" [(ngModel)]="message"></textarea>
+          </label>
+        </ng-template>
         <p class="hint" *ngIf="captchaEnabled">Protected by reCAPTCHA.</p>
         <p class="error" *ngIf="error">{{ error }}</p>
         <button type="submit" class="primary" [disabled]="submitting">
@@ -125,9 +156,18 @@ export class AdmissionApplyPageComponent implements OnInit {
   error = '';
   referenceId = '';
   status = '';
+  fields: Array<{
+    key: string;
+    label: string;
+    type: string;
+    mandatory: boolean;
+    placeholder?: string;
+    options: string[];
+  }> = [];
+  values: Record<string, string> = {};
 
   ngOnInit(): void {
-    this.api.resolve().subscribe();
+    this.api.resolve().subscribe(() => this.loadForm());
     if (this.captchaEnabled) {
       this.ensureRecaptchaScript(environment.captchaSiteKey);
     }
@@ -140,14 +180,16 @@ export class AdmissionApplyPageComponent implements OnInit {
       const captchaToken = this.captchaEnabled
         ? await this.executeCaptcha(environment.captchaSiteKey)
         : undefined;
+      const answers = this.fields.length ? { ...this.values } : undefined;
       this.api
         .applyAdmission({
-          fullName: this.fullName.trim(),
-          mobile: this.mobile.trim(),
-          email: this.email.trim() || undefined,
-          classApplied: this.classApplied.trim(),
-          age: this.age.trim() || undefined,
-          message: this.message.trim() || undefined,
+          fullName: this.fieldValue('fullName', this.fullName),
+          mobile: this.fieldValue('mobile', this.mobile),
+          email: this.fieldValue('email', this.email) || undefined,
+          classApplied: this.fieldValue('classApplied', this.classApplied),
+          age: this.fieldValue('age', this.age) || undefined,
+          message: this.fieldValue('message', this.message) || undefined,
+          answers,
           captchaToken,
         })
         .subscribe({
@@ -170,6 +212,60 @@ export class AdmissionApplyPageComponent implements OnInit {
       this.submitting = false;
       this.error = e?.message || 'Captcha failed. Please try again.';
     }
+  }
+
+  inputType(type: string): string {
+    const kind = (type || '').toUpperCase();
+    if (kind === 'EMAIL') return 'email';
+    if (kind === 'PHONE' || kind === 'MOBILE') return 'tel';
+    if (kind === 'NUMBER') return 'number';
+    if (kind === 'DATE') return 'date';
+    return 'text';
+  }
+
+  private loadForm(): void {
+    this.api.admissionForm().subscribe({
+      next: (schema) => {
+        const sections = Array.isArray(schema['sections']) ? schema['sections'] : [];
+        const fields: AdmissionApplyPageComponent['fields'] = [];
+        for (const section of sections) {
+          const rawFields = (section as { fields?: unknown }).fields;
+          if (!Array.isArray(rawFields)) continue;
+          for (const raw of rawFields) {
+            const field = raw as Record<string, unknown>;
+            const key = String(field['key'] || '').trim();
+            if (!key) continue;
+            const options = Array.isArray(field['options'])
+              ? field['options'].map((option) =>
+                  typeof option === 'string'
+                    ? option
+                    : String((option as { label?: string; value?: string }).label || (option as { value?: string }).value || '')
+                )
+              : [];
+            fields.push({
+              key,
+              label: String(field['label'] || key),
+              type: String(field['type'] || 'TEXTBOX').toUpperCase(),
+              mandatory: field['mandatory'] === true,
+              placeholder: field['placeholder'] == null ? '' : String(field['placeholder']),
+              options: options.filter(Boolean),
+            });
+            if (this.values[key] == null) this.values[key] = '';
+          }
+        }
+        this.fields = fields;
+      },
+      error: () => {
+        this.fields = [];
+      },
+    });
+  }
+
+  private fieldValue(key: string, fallback: string): string {
+    if (this.fields.length) {
+      return (this.values[key] || '').trim();
+    }
+    return fallback.trim();
   }
 
   private ensureRecaptchaScript(siteKey: string): void {

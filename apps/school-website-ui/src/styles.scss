@@ -23,3 +23,7 @@ h3 {
 a {
   color: inherit;
 }
+
+html.skin-premium :where(h2, h3, p, ol)[id] {
+  scroll-margin-top: 7rem;
+}
