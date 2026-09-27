@@ -290,6 +290,10 @@ public class StudentDirectoryService {
             stringVal(answers, "photo"),
             stringVal(answers, "studentPhoto")));
     row.put("parentName", parentName(answers));
+    row.put("fatherName", stringVal(answers, "fatherName"));
+    row.put("rte", truthy(answers.get("rte")) || "RTE".equalsIgnoreCase(stringVal(answers, "category")));
+    row.put("householdId", stringVal(answers, "householdId"));
+    row.put("siblingAdmissionNos", answers.get("siblingAdmissionNos"));
     row.put("transport", truthy(answers.get("transport")));
     row.put("hostel", truthy(answers.get("hostel")));
     row.put("scholarship", truthy(answers.get("scholarship")));

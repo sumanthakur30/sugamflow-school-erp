@@ -10,6 +10,7 @@ import { TenantContextService } from '../core/tenant-context.service';
 import { AdmissionBootstrapService } from '../core/admission-bootstrap.service';
 import { ModuleBootstrapService } from '../core/module-bootstrap.service';
 import { BranchSwitcherComponent } from '../features/branches/branch-switcher.component';
+import { StudentGlobalSearchComponent } from './student-global-search.component';
 import { filter, switchMap, timer } from 'rxjs';
 
 export interface NavItem {
@@ -37,7 +38,15 @@ export interface NavGroup {
 @Component({
   selector: 'sf-shell',
   standalone: true,
-  imports: [RouterOutlet, RouterLink, RouterLinkActive, AsyncPipe, NgStyle, BranchSwitcherComponent],
+  imports: [
+    RouterOutlet,
+    RouterLink,
+    RouterLinkActive,
+    AsyncPipe,
+    NgStyle,
+    BranchSwitcherComponent,
+    StudentGlobalSearchComponent,
+  ],
   templateUrl: './shell.component.html',
   styleUrl: './shell.component.scss',
 })
@@ -69,6 +78,8 @@ export class ShellComponent implements OnInit {
           feature: 'FEATURE_STUDENT_MASTER',
         },
         { path: '/admin/students', label: 'Student Master', feature: 'FEATURE_STUDENT_MASTER' },
+        { path: '/admin/leave', label: 'Leave', feature: 'FEATURE_STUDENT_MASTER' },
+        { path: '/admin/gate-pass', label: 'Gate pass', feature: 'FEATURE_STUDENT_MASTER' },
         {
           path: '/admin/import',
           label: 'Import Workbench',
@@ -154,6 +165,7 @@ export class ShellComponent implements OnInit {
       icon: 'wallet',
       items: [
         { path: '/admin/fee', label: 'Fee Collection', feature: 'FEATURE_FEE', permissions: ['MANAGE_FINANCE'] },
+        { path: '/admin/fee-desk', label: 'Fee desk', feature: 'FEATURE_FEE', permissions: ['MANAGE_FINANCE'] },
         { path: '/admin/finance', label: 'Finance / Payments', feature: 'FEATURE_FEE', permissions: ['MANAGE_FINANCE'] },
         {
           path: '/admin/income-expense',
@@ -200,6 +212,24 @@ export class ShellComponent implements OnInit {
         {
           path: '/admin/reports',
           label: 'Report Designer',
+          feature: 'FEATURE_REPORT_BUILDER',
+          roles: ['SHOP_OWNER', 'SUPER_ADMIN', 'ADMIN', 'PRINCIPAL'],
+        },
+        {
+          path: '/admin/reports?template=id_card',
+          label: 'ID cards',
+          feature: 'FEATURE_REPORT_BUILDER',
+          roles: ['SHOP_OWNER', 'SUPER_ADMIN', 'ADMIN', 'PRINCIPAL'],
+        },
+        {
+          path: '/admin/reports?template=admit_card',
+          label: 'Admit cards',
+          feature: 'FEATURE_REPORT_BUILDER',
+          roles: ['SHOP_OWNER', 'SUPER_ADMIN', 'ADMIN', 'PRINCIPAL'],
+        },
+        {
+          path: '/admin/reports?template=transfer_certificate',
+          label: 'Transfer certificates',
           feature: 'FEATURE_REPORT_BUILDER',
           roles: ['SHOP_OWNER', 'SUPER_ADMIN', 'ADMIN', 'PRINCIPAL'],
         },
@@ -464,9 +494,10 @@ export class ShellComponent implements OnInit {
     event?.stopPropagation();
     this.closeTopMenu();
     this.closeMobileNav();
-    const clean = (path || '/').split('?')[0];
+    const target = path || '/';
+    const clean = target.split('?')[0];
     const current = this.router.url.split('?')[0];
-    const hasQuery = this.router.url.includes('?');
+    const hasQuery = this.router.url.includes('?') || target.includes('?');
     if (current === clean && !hasQuery) {
       // Same list URL with stuck in-memory form/detail — force remount.
       void this.router.navigateByUrl('/', { skipLocationChange: true }).then(() => {
@@ -474,7 +505,7 @@ export class ShellComponent implements OnInit {
       });
       return;
     }
-    void this.router.navigateByUrl(clean);
+    void this.router.navigateByUrl(target);
   }
 
   groupHome(group: NavGroup): string {

@@ -1,0 +1,117 @@
+<section class="page">
+  <header class="page-head">
+    <div>
+      <h2>{{ title }}</h2>
+      <p>
+        @if (kind === 'LEAVE') {
+          Student and staff leave requests for this campus.
+        } @else {
+          Visitor gate passes, visit purpose, and exit gates.
+        }
+      </p>
+    </div>
+  </header>
+
+  @if (error) {
+    <div class="notice error-notice" role="alert">{{ error }}</div>
+  }
+  @if (status) {
+    <div class="notice success-notice" role="status">{{ status }}</div>
+  }
+
+  <section class="panel">
+    <form class="grid three" (ngSubmit)="create()">
+      <label>
+        For
+        <select [(ngModel)]="draft.subjectType" name="subjectType">
+          <option value="STUDENT">Student</option>
+          <option value="STAFF">Staff</option>
+          @if (kind === 'GATE_PASS') {
+            <option value="VISITOR">Visitor</option>
+          }
+        </select>
+      </label>
+      <label>
+        Admission / staff id
+        <input [(ngModel)]="draft.subjectRef" name="subjectRef" />
+      </label>
+      <label>
+        Name
+        <input [(ngModel)]="draft.subjectName" name="subjectName" />
+      </label>
+      <label>
+        {{ catalogLabel }}
+        <input [(ngModel)]="draft.title" name="title" [placeholder]="catalogLabel" />
+      </label>
+      <label>
+        Note
+        <input [(ngModel)]="draft.note" name="note" />
+      </label>
+      <div class="filter-apply">
+        <button type="submit" [disabled]="busy">{{ busy ? 'Saving…' : 'Save' }}</button>
+      </div>
+    </form>
+    <form class="filter-grid" (ngSubmit)="addCatalog()">
+      <label>
+        Add {{ catalogLabel | lowercase }}
+        <input [(ngModel)]="draft.catalogKey" name="catalogKey" />
+      </label>
+      <div class="filter-apply">
+        <button type="submit" class="secondary">Add</button>
+      </div>
+    </form>
+    @if (catalog.length) {
+      <p>
+        Settings:
+        @for (item of catalog; track item.id) {
+          <span class="chip">{{ item.title }}</span>
+        }
+      </p>
+    }
+  </section>
+
+  <section class="panel">
+    @if (loading) {
+      <p>Loading…</p>
+    } @else {
+      <table>
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>Ref</th>
+            <th>Type</th>
+            <th>Title</th>
+            <th>Status</th>
+            <th>Note</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (row of items; track row.id) {
+            <tr>
+              <td>{{ row.subjectName }}</td>
+              <td>{{ row.subjectRef }}</td>
+              <td>{{ row.subjectType }}</td>
+              <td>{{ row.title }}</td>
+              <td>{{ row.status }}</td>
+              <td>{{ row.note }}</td>
+              <td>
+                @if (kind === 'LEAVE' && row.status === 'PENDING') {
+                  <button type="button" class="secondary" (click)="setStatus(row, 'APPROVED')">Approve</button>
+                  <button type="button" class="secondary" (click)="setStatus(row, 'REJECTED')">Reject</button>
+                }
+                @if (kind === 'GATE_PASS' && row.status === 'OPEN') {
+                  <button type="button" class="secondary" (click)="setStatus(row, 'EXITED')">Mark exited</button>
+                }
+              </td>
+            </tr>
+          } @empty {
+            <tr>
+              <td colspan="7">No records yet.</td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    }
+  </section>
+</section>
