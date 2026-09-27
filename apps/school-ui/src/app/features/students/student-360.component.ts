@@ -2,7 +2,9 @@ import { Component, OnInit, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, RouterLink } from '@angular/router';
+import { HttpClient } from '@angular/common/http';
 import { ApiService } from '../../core/api.service';
+import { AuthSessionService } from '../../core/auth-session.service';
 
 @Component({
   selector: 'sf-student-360',
@@ -13,10 +15,14 @@ import { ApiService } from '../../core/api.service';
 })
 export class Student360Component implements OnInit {
   private readonly api = inject(ApiService);
+  private readonly http = inject(HttpClient);
+  private readonly auth = inject(AuthSessionService);
   private readonly route = inject(ActivatedRoute);
 
   loading = true;
   error = '';
+  resetMessage = '';
+  portalUsername = '';
   tab = 'profile';
   data: any = null;
   studentId = '';
@@ -36,6 +42,7 @@ export class Student360Component implements OnInit {
     this.api.get<any>(`/api/student/students/${this.studentId}/360`).subscribe({
       next: (d) => {
         this.data = d;
+        this.portalUsername = this.admissionNo() || this.portalUsername;
         this.loading = false;
       },
       error: (err) => {
@@ -65,6 +72,45 @@ export class Student360Component implements OnInit {
         this.data?.student?.answers?.admissionNo ||
         '',
     ).trim();
+  }
+
+  resetPortalPassword(): void {
+    const username = this.portalUsername.trim();
+    if (!username) {
+      this.error = 'Enter the portal username';
+      return;
+    }
+    const session = this.auth.getSession();
+    this.api
+      .post('/api/student/app-users/reset-password', {
+        username,
+        roleCode: 'STUDENT',
+        displayName: this.data?.summary?.displayName,
+        subjectRef: this.admissionNo(),
+        installed: true,
+      })
+      .subscribe({
+        next: () => {
+          this.http
+            .post('/api/v1/auth/password-reset/admin', {
+              shopId: session?.shopId || '',
+              username,
+              sendEmail: false,
+              actorUsername: session?.username || '',
+            })
+            .subscribe({
+              next: () => {
+                this.resetMessage = `Password reset started for ${username}`;
+              },
+              error: (err) => {
+                this.error = err?.error?.message ?? 'Auth password reset failed';
+              },
+            });
+        },
+        error: (err) => {
+          this.error = err?.error?.message ?? 'Could not record the app user';
+        },
+      });
   }
 
   admissionQuery(): Record<string, string> {

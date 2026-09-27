@@ -95,6 +95,14 @@ public final class PortalCatalog {
     nav.add(navItem("exams", "Results", "/parent/exams", "FEATURE_EXAM"));
     nav.add(navItem("report-cards", "Report cards", "/parent/report-cards", "FEATURE_EXAM"));
     nav.add(navItem("homework", "Homework", "/parent/homework", "FEATURE_LMS"));
+    nav.add(navItem("study", "Study", "/parent/study", "FEATURE_LMS"));
+    nav.add(navItem("quiz", "Quiz", "/parent/quiz", "FEATURE_LMS"));
+    nav.add(navItem("calendar", "Calendar", "/parent/calendar", "FEATURE_LMS"));
+    nav.add(navItem("timetable", "Timetable", "/parent/timetable", null));
+    nav.add(navItem("notices", "Notices", "/parent/notices", null));
+    nav.add(navItem("documents", "Documents", "/parent/documents", "FEATURE_EXAM"));
+    nav.add(navItem("leave", "Leave", "/parent/leave", "FEATURE_STUDENT_MASTER"));
+    nav.add(navItem("siblings", "Siblings", "/parent/siblings", "FEATURE_STUDENT_MASTER"));
     return nav;
   }
 
@@ -106,6 +114,12 @@ public final class PortalCatalog {
     nav.add(navItem("gradebook", "Gradebook", "/teacher/gradebook", "FEATURE_EXAM"));
     nav.add(navItem("report-cards", "Report cards", "/teacher/report-cards", "FEATURE_EXAM"));
     nav.add(navItem("homework", "Homework", "/teacher/homework", "FEATURE_LMS"));
+    nav.add(navItem("study", "Study material", "/teacher/study", "FEATURE_LMS"));
+    nav.add(navItem("quiz", "Quiz", "/teacher/quiz", "FEATURE_LMS"));
+    nav.add(navItem("lessons", "Lesson plans", "/teacher/lessons", "FEATURE_LMS"));
+    nav.add(navItem("calendar", "Calendar", "/teacher/calendar", "FEATURE_LMS"));
+    nav.add(navItem("timetable", "Timetable", "/teacher/timetable", null));
+    nav.add(navItem("notices", "Notices", "/teacher/notices", null));
     return nav;
   }
 

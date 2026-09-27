@@ -16,6 +16,10 @@
     </button>
   </div>
 
+  @if (sectionKey === 'fees') {
+    <p class="panel">Open dues stay with the school fee desk. This page shows the fee records already collected or demanded for the linked student.</p>
+  }
+
   @if (error) {
     <div class="message error-message" role="alert">
       <div>

@@ -7,6 +7,9 @@
 param(
   [switch]$Restart,  # stop school service JVMs on 8181-8199 before build/start
   [switch]$SkipBuild, # reuse existing jars (faster / less RAM)
+  # Start only these module names (e.g. -Only subscription-service).
+  # Empty starts the full school set. Used by start-common-platform for :8182.
+  [string[]]$Only = @(),
   # Eureka advertise address reachable FROM the gateway.
   # Host-jar gateway (start-platform.ps1): 127.0.0.1
   # Docker gateway (start-common-platform): host.docker.internal
@@ -43,6 +46,17 @@ $modules = @(
   @{ Name = 'cms-service'; Port = 8201 },
   @{ Name = 'compliance-service'; Port = 8202 }
 )
+
+if ($Only) {
+  $wanted = @($Only | ForEach-Object { "$_".Trim() } | Where-Object { $_ })
+  $known = @($modules | ForEach-Object { $_.Name })
+  $unknown = @($wanted | Where-Object { $_ -notin $known })
+  if ($unknown.Count -gt 0) {
+    throw "Unknown -Only service(s): $($unknown -join ', '). Known: $($known -join ', ')"
+  }
+  $modules = @($modules | Where-Object { $_.Name -in $wanted })
+  Write-Host "Only: $($modules.Name -join ', ')"
+}
 
 function Get-JavaExe {
   if ($env:JAVA_HOME) {
@@ -243,6 +257,10 @@ if (-not (Wait-Http $eurekaHealthUrl 8)) {
 
 if ($SkipBuild) {
   Write-Host 'SkipBuild: reusing existing school jars'
+} elseif ($Only) {
+  $pl = ($modules | ForEach-Object { $_.Name }) -join ','
+  Write-Host "Building $pl ..."
+  mvn -q -DskipTests -pl $pl -am package
 } else {
   Write-Host 'Building school jars...'
   mvn -q -DskipTests package
@@ -292,12 +310,19 @@ foreach ($m in $modules) {
   Start-Sleep -Milliseconds 400
 }
 
-Write-Host 'Waiting for school-settings-service (health on :8181)...'
-if (Wait-Http 'http://localhost:8181/actuator/health' 180 'school-settings-service') {
-  Write-Host 'school-settings-service UP' -ForegroundColor Green
+$healthTargets = if ($Only) {
+  $modules
 } else {
-  Write-Warning 'school-settings-service health not confirmed yet'
-  Write-Warning "Check log: $logDir\school-settings-service.err.log"
+  @($modules | Where-Object { $_.Name -eq 'school-settings-service' })
+}
+foreach ($m in $healthTargets) {
+  Write-Host "Waiting for $($m.Name) (health on :$($m.Port))..."
+  if (Wait-Http "http://localhost:$($m.Port)/actuator/health" 180 $m.Name) {
+    Write-Host "$($m.Name) UP" -ForegroundColor Green
+  } else {
+    Write-Warning "$($m.Name) health not confirmed yet"
+    Write-Warning "Check log: $logDir\$($m.Name).err.log"
+  }
 }
 
 $up = 0
