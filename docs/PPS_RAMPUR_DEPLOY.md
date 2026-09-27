@@ -75,10 +75,24 @@ curl.exe -sS "http://localhost:9090/api/cms/public/pages/academics?organizationI
 
 ## Production deploy (EC2)
 
-Host: `ec2-user@16.192.54.132`  
-School compose root (existing pattern): `/home/ec2-user/opt/school` (docs also mention `/opt/sugamflow` for the shop/gateway stack).  
+Host: `ec2-user@16.170.194.24` (`sugamflow-school`, instance `i-0350f713cd90d83bd`, `m7i-flex.large`).  
+Do **not** deploy school or Rampur onto the shop host `16.192.54.132` (`sugamflows`).  
+School compose root (existing pattern): `/home/ec2-user/opt/school`.  
 Compose file: `docker-compose.school.ec2-rds.yml` · env: `.env.school.production`.  
 Image prefix: `sumanthakur30` · bump `IMAGE_TAG` for each release.
+
+### Status — 24 Sep 2026, 21:20 IST
+
+SSH to `16.170.194.24` works. Docker is not installed, Nginx is not installed, and `/home/ec2-user/opt/school` does not exist. Outbound HTTPS from the instance times out (`curl https://www.google.com` → connection timeout), which is why package installs cannot finish.
+
+Rampur images, the UI, and SQL seeds were **not** applied. Public URL is **not live**.
+
+DNS at that check:
+
+- `school.sugamflow.com` and `hcpschool.com` still point at `16.192.54.132`.
+- `pratibhapublicschoolrampur.com` points at `15.197.148.33` and `3.33.130.190`, not `16.170.194.24`. Leave the domain rows **PENDING**. Do not add a vhost or run certbot until that name points at the School Elastic IP.
+
+Open outbound internet on the School security group before installing Docker or Nginx. This Rampur task does not change security groups.
 
 ### A. Build & push services (from PC)
 
@@ -113,7 +127,7 @@ Until the Rampur DNS/vhost exists, you may refresh the shared school-website sta
 ### C. Pull & restart on EC2
 
 ```bash
-ssh ec2-user@16.192.54.132
+ssh ec2-user@16.170.194.24
 cd /home/ec2-user/opt/school   # or /opt/school if that is the live path
 
 # Set IMAGE_TAG in .env.school.production to the tag you pushed
@@ -153,7 +167,7 @@ Do not invent a production staff password; public resolve does not need a PPS-01
 
 Same pattern as `hcpschool.com` (`docs/HCP_EC2_WEBSITE_DEPLOY.md` Step 7):
 
-1. DNS A/ALIAS for `pratibhapublicschoolrampur.com` (+ www) → EIP `16.192.54.132`.
+1. DNS A/ALIAS for `pratibhapublicschoolrampur.com` (+ www) → School EIP `16.170.194.24`.
 2. Nginx `server_name` for those hosts, `root` → school-website-ui static files, `/api/` → `127.0.0.1:9090`.
 3. `sudo certbot --nginx -d pratibhapublicschoolrampur.com -d www.pratibhapublicschoolrampur.com`
 4. Only then set domain rows **ACTIVE** and site status **PUBLISHED** in Website CMS / Super Admin domain registry.
@@ -193,6 +207,8 @@ Expect PPS / Rampur JSON for the localhost host (ACTIVE). Production host may re
 ---
 
 ## Checklist
+
+Checked 24 Sep 2026 against `16.170.194.24`. None of these ran, because Docker and Nginx are not on that host yet.
 
 - [ ] cms-service image with V8 deployed
 - [ ] website-service image deployed
