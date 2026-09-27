@@ -101,7 +101,11 @@
               <option value="INACTIVE">Inactive</option>
               <option value="ALUMNI">Alumni</option>
               <option value="TC_ISSUED">TC Issued</option>
-              <option value="DROPOUT">Dropout</option>
+              <option value="DROPOUT">Dropped</option>
+              <option value="PASSED_OUT">Passed</option>
+              <option value="SUSPENDED">Suspended</option>
+              <option value="TRANSFERRED">Transferred</option>
+              <option value="LEFT_SCHOOL">Left school</option>
             </select>
           </label>
           <label>
@@ -153,10 +157,34 @@
     </section>
 
     <section class="panel">
+      <form class="filter-grid" (ngSubmit)="linkHousehold()">
+        <label>
+          Parents / siblings
+          <input
+            [(ngModel)]="householdAdmissionNos"
+            name="householdAdmissionNos"
+            placeholder="Admission numbers, separated by comma"
+          />
+        </label>
+        <div class="filter-apply">
+          <button type="submit" class="secondary" [disabled]="bulkBusy">Link household</button>
+        </div>
+      </form>
       @if (selectedCount) {
         <div class="bulk-bar" role="region" aria-label="Bulk actions">
           <span class="bulk-count">{{ selectedCount }} selected</span>
           @if (!trashMode) {
+            <label class="inline-filter">
+              Set status
+              <select [(ngModel)]="bulkStatus" name="bulkStatus">
+                @for (option of lifecycleStatuses; track option.value) {
+                  <option [value]="option.value">{{ option.label }}</option>
+                }
+              </select>
+            </label>
+            <button type="button" (click)="applyBulkStatus()" [disabled]="bulkBusy">
+              Apply
+            </button>
             <button
               type="button"
               class="danger"

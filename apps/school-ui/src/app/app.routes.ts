@@ -180,6 +180,27 @@ export const routes: Routes = [
         loadComponent: () => import('./features/fee/fee.component').then((m) => m.FeeComponent),
       },
       {
+        path: 'admin/fee-desk',
+        canActivate: [featureGuard],
+        data: { feature: 'FEATURE_FEE' },
+        loadComponent: () =>
+          import('./features/fee/fee-desk.component').then((m) => m.FeeDeskComponent),
+      },
+      {
+        path: 'admin/leave',
+        canActivate: [featureGuard],
+        data: { feature: 'FEATURE_STUDENT_MASTER', kind: 'LEAVE', title: 'Leave' },
+        loadComponent: () =>
+          import('./features/desk/campus-desk.component').then((m) => m.CampusDeskComponent),
+      },
+      {
+        path: 'admin/gate-pass',
+        canActivate: [featureGuard],
+        data: { feature: 'FEATURE_STUDENT_MASTER', kind: 'GATE_PASS', title: 'Gate pass' },
+        loadComponent: () =>
+          import('./features/desk/campus-desk.component').then((m) => m.CampusDeskComponent),
+      },
+      {
         path: 'admin/finance',
         canActivate: [featureGuard],
         data: { feature: 'FEATURE_FEE' },

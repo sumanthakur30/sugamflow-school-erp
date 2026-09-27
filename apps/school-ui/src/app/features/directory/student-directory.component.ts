@@ -63,6 +63,18 @@ export class StudentDirectoryComponent implements OnInit, OnDestroy {
   showAdvancedFilters = false;
   bulkBusy = false;
   bulkReason = '';
+  bulkStatus = 'PASSED_OUT';
+  householdAdmissionNos = '';
+  readonly lifecycleStatuses = [
+    { value: 'ACTIVE', label: 'Active' },
+    { value: 'SUSPENDED', label: 'Suspended' },
+    { value: 'PASSED_OUT', label: 'Passed' },
+    { value: 'DROPOUT', label: 'Dropped' },
+    { value: 'TRANSFERRED', label: 'Transferred' },
+    { value: 'LEFT_SCHOOL', label: 'Left school' },
+    { value: 'TC_ISSUED', label: 'TC issued' },
+    { value: 'ALUMNI', label: 'Alumni' },
+  ];
   showBulkDeleteConfirm = false;
   statusMsg = '';
   sortBy = 'updatedAt';
@@ -504,6 +516,58 @@ export class StudentDirectoryComponent implements OnInit, OnDestroy {
 
   isSelected(id: string): boolean {
     return this.selectedIds.has(id);
+  }
+
+  applyBulkStatus(): void {
+    if (!this.selectedCount || this.bulkBusy || this.trashMode) return;
+    this.bulkBusy = true;
+    this.error = '';
+    this.statusMsg = '';
+    this.api
+      .post<any>('/api/student/students/bulk-status', {
+        studentIds: [...this.selectedIds],
+        status: this.bulkStatus,
+        reason: `Bulk status ${this.bulkStatus}`,
+      })
+      .subscribe({
+        next: (res) => {
+          this.bulkBusy = false;
+          this.statusMsg = `Updated ${res?.updated ?? 0} of ${res?.requested ?? 0} students`;
+          this.selectedIds.clear();
+          this.search(this.page.page);
+        },
+        error: (err) => {
+          this.bulkBusy = false;
+          this.error = err?.error?.message ?? 'Bulk status update failed';
+        },
+      });
+  }
+
+  linkHousehold(): void {
+    const admissionNos = this.householdAdmissionNos
+      .split(/[\s,]+/)
+      .map((value) => value.trim())
+      .filter(Boolean);
+    if (admissionNos.length < 2) {
+      this.error = 'Enter at least two admission numbers to link siblings.';
+      return;
+    }
+    this.bulkBusy = true;
+    this.error = '';
+    this.statusMsg = '';
+    this.api.post<any>('/api/student/households', { admissionNos }).subscribe({
+      next: (res) => {
+        this.bulkBusy = false;
+        this.statusMsg = `Linked ${admissionNos.length} students as one household`;
+        this.householdAdmissionNos = '';
+        this.search(this.page.page);
+        return res;
+      },
+      error: (err) => {
+        this.bulkBusy = false;
+        this.error = err?.error?.message ?? 'Could not link siblings';
+      },
+    });
   }
 
   openBulkDelete(): void {

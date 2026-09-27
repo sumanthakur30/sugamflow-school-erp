@@ -129,6 +129,11 @@
 
           <aside class="delivery-options">
             <h4>Delivery</h4>
+            <div class="chip-list">
+              <button type="button" class="chip" (click)="draft.channel = 'IN_APP'">Notice</button>
+              <button type="button" class="chip" (click)="draft.channel = 'SMS'">SMS</button>
+              <button type="button" class="chip" (click)="draft.channel = 'WHATSAPP'">WhatsApp</button>
+            </div>
             <label>
               Channel
               <select [(ngModel)]="draft.channel" name="channel" [disabled]="busy">
