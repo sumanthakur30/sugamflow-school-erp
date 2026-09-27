@@ -41,6 +41,18 @@
       }
     </div>
 
+    <form class="panel" (ngSubmit)="resetPortalPassword()">
+      <h3>Portal password</h3>
+      <label>
+        Student / parent username
+        <input name="portalUsername" [(ngModel)]="portalUsername" />
+      </label>
+      <button type="submit" class="btn">Reset password</button>
+      @if (resetMessage) {
+        <p>{{ resetMessage }}</p>
+      }
+    </form>
+
     <div class="ops-cards">
       <a
         class="ops-card panel"

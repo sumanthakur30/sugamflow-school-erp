@@ -1081,6 +1081,44 @@ public class StudentRecordService {
     return out;
   }
 
+  @Transactional(readOnly = true)
+  public Map<String, Object> listHousehold(String admissionNo) {
+    TenantScope scope = TenantContext.require();
+    if (admissionNo == null || admissionNo.isBlank()) {
+      throw new StudentException("VALIDATION", "admissionNo is required");
+    }
+    StudentRecordEntity entity =
+        repository
+            .findByOrganizationIdAndAdmissionNoIgnoreCaseAndDeletedAtIsNull(
+                scope.organizationId(), admissionNo.trim())
+            .orElseThrow(() -> new StudentException("NOT_FOUND", "Student not found"));
+    Map<String, Object> answers = entity.getAnswers() == null ? Map.of() : entity.getAnswers();
+    List<String> admissionNos = new ArrayList<>();
+    Object raw = answers.get("siblingAdmissionNos");
+    if (raw instanceof List<?> list) {
+      for (Object item : list) {
+        String value = stringOr(item, null);
+        if (value != null) {
+          admissionNos.add(value);
+        }
+      }
+    }
+    if (admissionNos.isEmpty()) {
+      admissionNos.add(entity.getAdmissionNo());
+    }
+    List<Map<String, Object>> students = new ArrayList<>();
+    for (String no : admissionNos) {
+      repository
+          .findByOrganizationIdAndAdmissionNoIgnoreCaseAndDeletedAtIsNull(scope.organizationId(), no)
+          .ifPresent(row -> students.add(toDto(row)));
+    }
+    Map<String, Object> out = new LinkedHashMap<>();
+    out.put("householdId", answers.get("householdId"));
+    out.put("admissionNos", admissionNos);
+    out.put("students", students);
+    return out;
+  }
+
   /**
    * Permanent delete — elevated only, soft-deleted first, blocked when operational history exists.
    */

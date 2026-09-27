@@ -6,6 +6,16 @@ import { UnknownRouteComponent } from './core/unknown-route.component';
 import { unknownRouteGuard } from './core/unknown-route.guard';
 import { LoginComponent } from './features/login/login.component';
 
+function portalPage(path: string, title: string, mode: string, feature?: string) {
+  return {
+    path,
+    canActivate: feature ? [featureGuard] : [],
+    data: { title, mode, ...(feature ? { feature } : {}) },
+    loadComponent: () =>
+      import('./features/portals/portal-extra.component').then((m) => m.PortalExtraComponent),
+  };
+}
+
 const PLATFORM_ADMIN_ROLES = ['SHOP_OWNER', 'SUPER_ADMIN', 'ADMIN'];
 const CAMPUS_ADMIN_ROLES = [...PLATFORM_ADMIN_ROLES, 'PRINCIPAL'];
 const STAFF_DASHBOARD_ROLES = [
@@ -93,6 +103,14 @@ export const routes: Routes = [
             (m) => m.ParentHomeworkComponent,
           ),
       },
+      portalPage('study', 'Study', 'study', 'FEATURE_LMS'),
+      portalPage('quiz', 'Quiz', 'quiz', 'FEATURE_LMS'),
+      portalPage('calendar', 'Calendar', 'calendar', 'FEATURE_LMS'),
+      portalPage('timetable', 'Timetable', 'timetable'),
+      portalPage('notices', 'Notices', 'notices'),
+      portalPage('documents', 'Documents', 'documents', 'FEATURE_EXAM'),
+      portalPage('leave', 'Leave', 'leave', 'FEATURE_STUDENT_MASTER'),
+      portalPage('siblings', 'Siblings', 'siblings', 'FEATURE_STUDENT_MASTER'),
     ],
   },
   {
@@ -149,6 +167,12 @@ export const routes: Routes = [
             (m) => m.TeacherHomeworkComponent,
           ),
       },
+      portalPage('study', 'Study material', 'study', 'FEATURE_LMS'),
+      portalPage('quiz', 'Quiz', 'quiz', 'FEATURE_LMS'),
+      portalPage('lessons', 'Lesson plans', 'lessons', 'FEATURE_LMS'),
+      portalPage('calendar', 'Calendar', 'calendar', 'FEATURE_LMS'),
+      portalPage('timetable', 'Timetable', 'timetable'),
+      portalPage('notices', 'Notices', 'notices'),
     ],
   },
   {
@@ -251,6 +275,20 @@ export const routes: Routes = [
         canActivate: [featureGuard],
         data: { feature: 'FEATURE_LMS' },
         loadComponent: () => import('./features/lms/lms.component').then((m) => m.LmsComponent),
+      },
+      {
+        path: 'admin/classroom',
+        canActivate: [featureGuard],
+        data: { feature: 'FEATURE_LMS' },
+        loadComponent: () =>
+          import('./features/classroom/classroom.component').then((m) => m.ClassroomComponent),
+      },
+      {
+        path: 'admin/app-users',
+        canActivate: [featureGuard],
+        data: { feature: 'FEATURE_STUDENT_MASTER' },
+        loadComponent: () =>
+          import('./features/classroom/app-users.component').then((m) => m.AppUsersComponent),
       },
       {
         path: 'admin/library',

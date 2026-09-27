@@ -1,0 +1,79 @@
+<section class="page">
+  <div class="page-head">
+    <h2>{{ title }}</h2>
+  </div>
+
+  @if (error) {
+    <p class="error panel" role="alert">{{ error }}</p>
+  }
+  @if (message) {
+    <p class="panel">{{ message }}</p>
+  }
+
+  @if (mode === 'quiz') {
+    <form class="panel" (ngSubmit)="submitQuiz()">
+      <label>
+        Quiz
+        <select name="quiz" [(ngModel)]="selectedQuizId">
+          @for (item of items; track item.id) {
+            <option [value]="item.id">{{ item.title }}</option>
+          }
+        </select>
+      </label>
+      <label>Admission no <input name="admissionNo" [(ngModel)]="admissionNo" /></label>
+      <label>Answer <textarea name="answer" rows="3" [(ngModel)]="answer"></textarea></label>
+      <button type="submit" class="btn primary">Submit</button>
+    </form>
+  }
+
+  @if (mode === 'leave') {
+    <form class="panel" (ngSubmit)="applyLeave()">
+      <label>Admission / staff id <input name="subjectRef" [(ngModel)]="leave.subjectRef" /></label>
+      <label>Name <input name="subjectName" [(ngModel)]="leave.subjectName" /></label>
+      <label>Note <textarea name="note" rows="3" [(ngModel)]="leave.note"></textarea></label>
+      <button type="submit" class="btn primary">Apply</button>
+    </form>
+  }
+
+  @if (mode === 'siblings') {
+    <form class="panel" (ngSubmit)="loadSiblings()">
+      <label>Admission no <input name="admissionNo" [(ngModel)]="admissionNo" required /></label>
+      <button type="submit" class="btn primary">Show household</button>
+    </form>
+    @for (student of siblings; track student.id) {
+      <p class="panel">{{ student.fullName || student.studentName || student.admissionNo }} · {{ student.admissionNo }}</p>
+    }
+  }
+
+  @if (mode === 'documents') {
+    <div class="panel">
+      <p>Print packs prepared by the school. Open them from Reports when you are signed in as staff.</p>
+      <ul>
+        @for (doc of documents; track doc.key) {
+          <li>{{ doc.label }}</li>
+        }
+      </ul>
+    </div>
+  }
+
+  @if (loading) {
+    <p class="panel">Loading…</p>
+  } @else if (mode !== 'leave' && mode !== 'siblings' && mode !== 'documents' && mode !== 'quiz') {
+    @if (!items.length && !error) {
+      <p class="panel">Nothing published yet.</p>
+    }
+    @for (item of items; track item.id) {
+      <article class="panel">
+        <h3>{{ item.title || item.subject || item.day || 'Item' }}</h3>
+        <p>{{ item.note || item.body || item.message || item.payload?.url || item.payload?.eventDate || item.startTime }}</p>
+      </article>
+    }
+  } @else if (mode === 'quiz') {
+    @for (item of items; track item.id) {
+      <article class="panel">
+        <h3>{{ item.title }}</h3>
+        <p>{{ item.note }}</p>
+      </article>
+    }
+  }
+</section>

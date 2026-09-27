@@ -160,6 +160,12 @@ public class StudentController {
     return ApiResponse.ok(service.bulkChangeStatus(withClientMeta(body, request)));
   }
 
+  @GetMapping("/households")
+  public ApiResponse<Map<String, Object>> household(
+      @RequestParam("admissionNo") String admissionNo) {
+    return ApiResponse.ok(service.listHousehold(admissionNo));
+  }
+
   @PostMapping("/households")
   public ApiResponse<Map<String, Object>> linkHousehold(@RequestBody Map<String, Object> body) {
     return ApiResponse.ok(service.linkHousehold(body));

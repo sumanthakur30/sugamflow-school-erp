@@ -79,6 +79,7 @@ export class ShellComponent implements OnInit {
         },
         { path: '/admin/students', label: 'Student Master', feature: 'FEATURE_STUDENT_MASTER' },
         { path: '/admin/leave', label: 'Leave', feature: 'FEATURE_STUDENT_MASTER' },
+        { path: '/admin/app-users', label: 'App users', feature: 'FEATURE_STUDENT_MASTER' },
         { path: '/admin/gate-pass', label: 'Gate pass', feature: 'FEATURE_STUDENT_MASTER' },
         {
           path: '/admin/import',
@@ -145,6 +146,7 @@ export class ShellComponent implements OnInit {
         { path: '/admin/attendance', label: 'Attendance', feature: 'FEATURE_ATTENDANCE' },
         { path: '/admin/exam', label: 'Exam / Gradebook', feature: 'FEATURE_EXAM' },
         { path: '/admin/lms', label: 'LMS', feature: 'FEATURE_LMS' },
+        { path: '/admin/classroom', label: 'Classroom', feature: 'FEATURE_LMS' },
         {
           path: '/admin/devices',
           label: 'Device Adapters',

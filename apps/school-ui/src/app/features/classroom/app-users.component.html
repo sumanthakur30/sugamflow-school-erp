@@ -1,0 +1,54 @@
+<section class="page">
+  <div class="page-head">
+    <h2>App users</h2>
+    <p>Who is set up for the student, parent, and teacher portals, and password reset.</p>
+  </div>
+
+  @if (error) {
+    <p class="error panel" role="alert">{{ error }}</p>
+  }
+  @if (message) {
+    <p class="panel">{{ message }}</p>
+  }
+
+  <form class="panel" (ngSubmit)="save()">
+    <label>
+      Role
+      <select name="roleCode" [(ngModel)]="draft.roleCode">
+        <option value="STUDENT">Student</option>
+        <option value="PARENT">Parent</option>
+        <option value="TEACHER">Teacher</option>
+      </select>
+    </label>
+    <label>Username <input name="username" [(ngModel)]="draft.username" required /></label>
+    <label>Name <input name="displayName" [(ngModel)]="draft.displayName" /></label>
+    <label>Admission / staff id <input name="subjectRef" [(ngModel)]="draft.subjectRef" /></label>
+    <label><input type="checkbox" name="installed" [(ngModel)]="draft.installed" /> Installed</label>
+    <button type="submit" class="btn primary">Save</button>
+  </form>
+
+  <table class="data">
+    <thead>
+      <tr>
+        <th>Name</th>
+        <th>Role</th>
+        <th>Username</th>
+        <th>Ref</th>
+        <th>Installed</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      @for (row of rows; track row.id) {
+        <tr>
+          <td>{{ row.displayName }}</td>
+          <td>{{ row.roleCode }}</td>
+          <td>{{ row.username }}</td>
+          <td>{{ row.subjectRef }}</td>
+          <td>{{ row.installed ? 'Yes' : 'No' }}</td>
+          <td><button type="button" class="btn" (click)="reset(row)">Reset password</button></td>
+        </tr>
+      }
+    </tbody>
+  </table>
+</section>
