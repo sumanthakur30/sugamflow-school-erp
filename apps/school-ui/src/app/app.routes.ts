@@ -312,6 +312,11 @@ export const routes: Routes = [
           import('./features/transport/transport.component').then((m) => m.TransportComponent),
       },
       {
+        path: 'admin/addons',
+        loadComponent: () =>
+          import('./features/addons/addons.component').then((m) => m.AddonsComponent),
+      },
+      {
         path: 'admin/payroll',
         canActivate: [featureGuard],
         data: { feature: 'FEATURE_PAYROLL' },

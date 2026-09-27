@@ -28,6 +28,11 @@ public class LibraryCirculationController {
     return ApiResponse.ok(service.listBooks());
   }
 
+  @GetMapping("/books/lookup")
+  public ApiResponse<Map<String, Object>> lookup(@RequestParam("barcode") String barcode) {
+    return ApiResponse.ok(service.findByBarcode(barcode));
+  }
+
   @PostMapping("/books")
   public ApiResponse<Map<String, Object>> upsertBook(@RequestBody Map<String, Object> body) {
     return ApiResponse.ok(service.upsertBook(body));

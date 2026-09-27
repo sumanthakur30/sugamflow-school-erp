@@ -2,10 +2,13 @@ package com.sugamflow.school.exam.web;
 
 import com.sugamflow.school.common.api.ApiResponse;
 import com.sugamflow.school.exam.service.ClassroomService;
+import java.io.IOException;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -48,5 +51,16 @@ public class ClassroomController {
   public ApiResponse<Map<String, Object>> marks(
       @PathVariable("id") UUID id, @RequestBody Map<String, Object> body) {
     return ApiResponse.ok(service.importMarks(id, body == null ? Map.of() : body));
+  }
+
+  @PostMapping("/items/{id}/marks-file")
+  public ApiResponse<Map<String, Object>> marksFile(
+      @PathVariable("id") UUID id, @RequestParam("file") MultipartFile file) throws IOException {
+    return ApiResponse.ok(service.importWorkbook(id, file.getInputStream()));
+  }
+
+  @PostMapping("/paper-builder")
+  public ApiResponse<Map<String, Object>> paper(@RequestBody Map<String, Object> body) {
+    return ApiResponse.ok(service.generatePaper(body == null ? Map.of() : body));
   }
 }

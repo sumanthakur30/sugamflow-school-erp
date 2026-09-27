@@ -1,0 +1,69 @@
+<section class="page">
+  <div class="page-head">
+    <h2>Add-ons</h2>
+    <p>Optional campus tools: inventory, PTM, tasks, diary, desk slip, activity, lecture attendance, barcode, GPS, papers, and payroll structures.</p>
+  </div>
+
+  <div class="panel" style="display:flex; gap:8px; flex-wrap:wrap;">
+    @for (item of tabs; track item.id) {
+      <button type="button" (click)="select(item.id)">{{ item.label }}</button>
+    }
+  </div>
+
+  @if (error) {
+    <p class="error panel" role="alert">{{ error }}</p>
+  }
+  @if (message) {
+    <p class="panel">{{ message }}</p>
+  }
+
+  <form class="panel" (ngSubmit)="save()">
+    @if (tab === 'BARCODE') {
+      <label>Barcode or ISBN <input name="title" [(ngModel)]="draft.title" required /></label>
+      <button type="submit">Look up</button>
+    } @else if (tab === 'GPS') {
+      <label>Vehicle no <input name="title" [(ngModel)]="draft.title" required /></label>
+      <label>Latitude <input name="subjectRef" [(ngModel)]="draft.subjectRef" required /></label>
+      <label>Longitude <input name="note" [(ngModel)]="draft.note" required /></label>
+      <button type="submit">Save ping</button>
+    } @else if (tab === 'PAPER') {
+      <label>Paper title <input name="title" [(ngModel)]="draft.title" required /></label>
+      <label>Note <textarea name="note" rows="3" [(ngModel)]="draft.note"></textarea></label>
+      <button type="submit">Build from question bank</button>
+    } @else if (tab === 'PAYROLL') {
+      <label>Structure name <input name="title" [(ngModel)]="draft.title" required /></label>
+      <label>Basic <input name="subjectRef" [(ngModel)]="draft.subjectRef" /></label>
+      <label>Allowance <input name="note" [(ngModel)]="draft.note" /></label>
+      <button type="submit">Save structure</button>
+    } @else {
+      <label>Title <input name="title" [(ngModel)]="draft.title" required /></label>
+      <label>Reference <input name="subjectRef" [(ngModel)]="draft.subjectRef" /></label>
+      <label>Name <input name="subjectName" [(ngModel)]="draft.subjectName" /></label>
+      <label>Note <textarea name="note" rows="3" [(ngModel)]="draft.note"></textarea></label>
+      <button type="submit">Save</button>
+    }
+  </form>
+
+  @if (tab === 'LECTURE') {
+    <form class="panel" (ngSubmit)="uploadMarks()">
+      <h3>Offline test Excel</h3>
+      <label>
+        Test
+        <select name="test" [(ngModel)]="draft.subjectRef">
+          @for (test of tests; track test.id) {
+            <option [value]="test.id">{{ test.title }}</option>
+          }
+        </select>
+      </label>
+      <label>Workbook <input type="file" accept=".xlsx,.xls" (change)="onMarksFile($event)" /></label>
+      <button type="submit">Import Excel</button>
+    </form>
+  }
+
+  @for (item of items; track item.id) {
+    <article class="panel">
+      <h3>{{ item.title || item.name || item.vehicleNo || item.definitionKey || item.action }}</h3>
+      <p>{{ item.note || item.subjectName || item.isbn || item.latitude }} {{ item.longitude || '' }}</p>
+    </article>
+  }
+</section>

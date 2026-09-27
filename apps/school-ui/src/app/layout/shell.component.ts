@@ -184,6 +184,7 @@ export class ShellComponent implements OnInit {
         { path: '/admin/library', label: 'Library', feature: 'FEATURE_LIBRARY' },
         { path: '/admin/hostel', label: 'Hostel', feature: 'FEATURE_HOSTEL' },
         { path: '/admin/transport', label: 'Transport', feature: 'FEATURE_TRANSPORT' },
+        { path: '/admin/addons', label: 'Add-ons' },
         { path: '/admin/ops', label: 'Ops Depth', feature: 'FEATURE_OPS_DEPTH' },
       ],
     },
