@@ -7,6 +7,8 @@ import com.sugamflow.school.exam.persistence.entity.ClassroomResponseEntity;
 import com.sugamflow.school.exam.persistence.repo.ClassroomItemRepository;
 import com.sugamflow.school.exam.persistence.repo.ClassroomResponseRepository;
 import com.sugamflow.school.exam.web.ExamException;
+import java.io.IOException;
+import java.io.InputStream;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -16,6 +18,12 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import org.apache.poi.ss.usermodel.Cell;
+import org.apache.poi.ss.usermodel.DataFormatter;
+import org.apache.poi.ss.usermodel.Row;
+import org.apache.poi.ss.usermodel.Sheet;
+import org.apache.poi.ss.usermodel.Workbook;
+import org.apache.poi.ss.usermodel.WorkbookFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -88,6 +96,61 @@ public class ClassroomService {
     TenantScope scope = TenantContext.require();
     requireItem(itemId, scope.organizationId());
     return toResponse(saveResponse(scope, itemId, body));
+  }
+
+  @Transactional
+  public Map<String, Object> generatePaper(Map<String, Object> body) {
+    TenantScope scope = TenantContext.require();
+    List<Map<String, Object>> questions =
+        items.findByOrganizationIdAndKindOrderByCreatedAtDesc(scope.organizationId(), "QUESTION")
+            .stream()
+            .map(this::toDto)
+            .toList();
+    Object rawIds = body.get("questionIds");
+    if (rawIds instanceof List<?> ids && !ids.isEmpty()) {
+      List<String> wanted = ids.stream().map(String::valueOf).toList();
+      questions = questions.stream().filter(q -> wanted.contains(String.valueOf(q.get("id")))).toList();
+    }
+    if (questions.isEmpty()) {
+      throw new ExamException("VALIDATION", "Add question-bank items before generating a paper");
+    }
+    Map<String, Object> payload = new LinkedHashMap<>();
+    payload.put("questions", questions);
+    Map<String, Object> paper = new LinkedHashMap<>();
+    paper.put("title", text(body.get("title"), "Question paper"));
+    paper.put("note", text(body.get("note"), questions.size() + " questions"));
+    paper.put("status", "PUBLISHED");
+    paper.put("payload", payload);
+    return create("QUIZ", paper);
+  }
+
+  @Transactional
+  public Map<String, Object> importWorkbook(UUID itemId, InputStream input) {
+    StringBuilder csv = new StringBuilder();
+    DataFormatter formatter = new DataFormatter();
+    try (Workbook workbook = WorkbookFactory.create(input)) {
+      Sheet sheet = workbook.getNumberOfSheets() == 0 ? null : workbook.getSheetAt(0);
+      if (sheet == null) {
+        throw new ExamException("VALIDATION", "Workbook has no sheet");
+      }
+      for (Row row : sheet) {
+        if (row == null) {
+          continue;
+        }
+        String first = formatter.formatCellValue(row.getCell(0)).trim();
+        short last = row.getLastCellNum();
+        Cell marksCell = last > 1 ? row.getCell(last - 1) : row.getCell(1);
+        String marks = formatter.formatCellValue(marksCell).trim();
+        if (!first.isEmpty()) {
+          csv.append(first).append(',').append(marks).append('\n');
+        }
+      }
+    } catch (IOException ex) {
+      throw new ExamException("VALIDATION", "Could not read the workbook");
+    }
+    Map<String, Object> body = new LinkedHashMap<>();
+    body.put("csv", csv.toString());
+    return importMarks(itemId, body);
   }
 
   /** Paste from Excel saved as CSV: admissionNo,marks or admissionNo,name,marks. */

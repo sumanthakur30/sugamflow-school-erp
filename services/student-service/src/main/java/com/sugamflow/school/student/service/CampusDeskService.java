@@ -19,7 +19,19 @@ import org.springframework.transaction.annotation.Transactional;
 public class CampusDeskService {
 
   private static final Set<String> KINDS =
-      Set.of("LEAVE", "LEAVE_TYPE", "GATE_PASS", "VISIT_PURPOSE", "EXIT_GATE");
+      Set.of(
+          "LEAVE",
+          "LEAVE_TYPE",
+          "GATE_PASS",
+          "VISIT_PURPOSE",
+          "EXIT_GATE",
+          "INVENTORY",
+          "PTM",
+          "TASK",
+          "TEACHER_DIARY",
+          "DESK_SLIP",
+          "ACTIVITY",
+          "LECTURE");
 
   private final CampusDeskItemRepository repository;
 
@@ -100,8 +112,9 @@ public class CampusDeskService {
 
   private static String defaultStatus(String kind) {
     return switch (kind) {
-      case "LEAVE" -> "PENDING";
-      case "GATE_PASS" -> "OPEN";
+      case "LEAVE", "PTM", "TASK" -> "PENDING";
+      case "GATE_PASS", "DESK_SLIP" -> "OPEN";
+      case "LECTURE" -> "PRESENT";
       default -> "ACTIVE";
     };
   }
