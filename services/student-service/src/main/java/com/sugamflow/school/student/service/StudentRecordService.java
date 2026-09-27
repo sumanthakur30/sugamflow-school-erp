@@ -1010,6 +1010,77 @@ public class StudentRecordService {
     return toDto(repository.save(entity));
   }
 
+  @Transactional
+  public Map<String, Object> bulkChangeStatus(Map<String, Object> body) {
+    Object rawIds = body.get("studentIds");
+    if (!(rawIds instanceof List<?> ids) || ids.isEmpty()) {
+      throw new StudentException("VALIDATION", "studentIds is required");
+    }
+    int updated = 0;
+    List<String> failed = new ArrayList<>();
+    for (Object raw : ids) {
+      try {
+        changeStatus(UUID.fromString(String.valueOf(raw)), body);
+        updated++;
+      } catch (RuntimeException ex) {
+        failed.add(String.valueOf(raw) + ": " + ex.getMessage());
+      }
+    }
+    Map<String, Object> out = new LinkedHashMap<>();
+    out.put("requested", ids.size());
+    out.put("updated", updated);
+    out.put("failed", failed);
+    return out;
+  }
+
+  /** Link two or more students as one household (siblings under the same parents). */
+  @Transactional
+  public Map<String, Object> linkHousehold(Map<String, Object> body) {
+    TenantScope scope = TenantContext.require();
+    requireStaffWrite(scope);
+    requireFeature(scope);
+    Object raw = body.get("admissionNos");
+    if (!(raw instanceof List<?> list) || list.size() < 2) {
+      throw new StudentException("VALIDATION", "Provide at least two admission numbers");
+    }
+    List<String> admissionNos = new ArrayList<>();
+    List<StudentRecordEntity> students = new ArrayList<>();
+    for (Object item : list) {
+      String admissionNo = stringOr(item, null);
+      if (admissionNo == null) {
+        continue;
+      }
+      StudentRecordEntity entity =
+          repository
+              .findByOrganizationIdAndAdmissionNoIgnoreCaseAndDeletedAtIsNull(
+                  scope.organizationId(), admissionNo)
+              .orElseThrow(
+                  () -> new StudentException("NOT_FOUND", "Student not found: " + admissionNo));
+      admissionNos.add(entity.getAdmissionNo());
+      students.add(entity);
+    }
+    if (students.size() < 2) {
+      throw new StudentException("VALIDATION", "Provide at least two admission numbers");
+    }
+    String householdId = UUID.randomUUID().toString();
+    List<Map<String, Object>> linked = new ArrayList<>();
+    for (StudentRecordEntity entity : students) {
+      Map<String, Object> answers =
+          entity.getAnswers() == null ? new LinkedHashMap<>() : new LinkedHashMap<>(entity.getAnswers());
+      answers.put("householdId", householdId);
+      answers.put("siblingAdmissionNos", admissionNos);
+      entity.setAnswers(answers);
+      entity.setUpdatedAt(Instant.now());
+      repository.save(entity);
+      linked.add(toDto(entity));
+    }
+    Map<String, Object> out = new LinkedHashMap<>();
+    out.put("householdId", householdId);
+    out.put("admissionNos", admissionNos);
+    out.put("students", linked);
+    return out;
+  }
+
   /**
    * Permanent delete — elevated only, soft-deleted first, blocked when operational history exists.
    */

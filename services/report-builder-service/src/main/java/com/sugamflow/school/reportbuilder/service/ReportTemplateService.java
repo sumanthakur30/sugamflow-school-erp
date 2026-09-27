@@ -190,6 +190,7 @@ public class ReportTemplateService {
           List.of(
               "certificate",
               "id_card",
+              "admit_card",
               "fee_receipt",
               "salary_slip",
               "report_card",
@@ -280,6 +281,9 @@ public class ReportTemplateService {
     }
     if ("id_card".equals(key)) {
       return idCardTemplate();
+    }
+    if ("admit_card".equals(key)) {
+      return admitCardTemplate();
     }
     if ("attendance_register".equals(key)
         || "admission_register".equals(key)
@@ -507,6 +511,8 @@ public class ReportTemplateService {
 
   private void ensureStudentDocumentTemplates() {
     upsertCanonicalTemplate("id_card", idCardTemplate(), "context.verifyUrl");
+    upsertCanonicalTemplate("admit_card", admitCardTemplate(), "ADMIT CARD");
+    upsertCanonicalTemplate("transfer_certificate", transferCertificateTemplate(), "TRANSFER CERTIFICATE");
     upsertCanonicalTemplate(
         "bonafide",
         certificateTemplate(
@@ -634,6 +640,30 @@ public class ReportTemplateService {
             element("qr", "{{context.verifyUrl}}", 40, 320, 11, 120, 120),
             element("text", "Scan QR to verify authenticity", 180, 360, 10, 300, 24),
             element("text", "Issued at {{context.issuedAt}}", 40, 470, 10, 400, 24)));
+    t.put("charts", List.of());
+    t.put("filters", List.of());
+    t.put("calculatedFields", List.of());
+    t.put("schedule", Map.of("enabled", false, "channels", List.of("EMAIL")));
+    return normalizeTemplate(t);
+  }
+
+  private Map<String, Object> admitCardTemplate() {
+    Map<String, Object> t = new LinkedHashMap<>();
+    t.put("templateKey", "admit_card");
+    t.put("name", "Admit Card");
+    t.put("layout", Map.of("width", 794, "height", 1123, "units", "px", "paper", "A4"));
+    t.put(
+        "elements",
+        List.of(
+            element("heading", "ADMIT CARD", 40, 48, 18, 420, 28),
+            element("text", "Name: {{student.name}}", 40, 110, 12, 420, 24),
+            element("text", "Admission No: {{student.admissionNo}}", 40, 140, 12, 420, 24),
+            element("text", "Class: {{student.classSection}}", 40, 170, 12, 420, 24),
+            element("text", "Exam: {{exam.name}}", 40, 210, 12, 420, 24),
+            element("text", "Roll No: {{student.rollNo}}", 40, 240, 12, 420, 24),
+            element("text", "Session: {{context.academicSessionId}}", 40, 280, 11, 420, 24),
+            element("text", "Bring this card to the examination hall.", 40, 330, 11, 480, 24),
+            element("qr", "{{context.verifyUrl}}", 40, 380, 11, 100, 100)));
     t.put("charts", List.of());
     t.put("filters", List.of());
     t.put("calculatedFields", List.of());

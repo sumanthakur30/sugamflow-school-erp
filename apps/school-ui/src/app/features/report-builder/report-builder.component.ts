@@ -2,6 +2,7 @@ import { Component, OnDestroy, OnInit, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Subscription } from 'rxjs';
+import { ActivatedRoute } from '@angular/router';
 import { ApiService } from '../../core/api.service';
 import { TenantContextService } from '../../core/tenant-context.service';
 import { ModuleBootstrapService } from '../../core/module-bootstrap.service';
@@ -43,6 +44,7 @@ export class ReportBuilderComponent implements OnInit, OnDestroy {
   private readonly api = inject(ApiService);
   private readonly tenantContext = inject(TenantContextService);
   private readonly modules = inject(ModuleBootstrapService);
+  private readonly route = inject(ActivatedRoute);
   private campusReadySub?: Subscription;
 
   loading = true;
@@ -96,7 +98,9 @@ export class ReportBuilderComponent implements OnInit, OnDestroy {
       this.templates = boot.templates ?? [];
       this.loading = false;
       if (this.featureEnabled && this.templates.length) {
-        this.selectTemplate(this.templates[0].templateKey);
+        const requested = this.route.snapshot.queryParamMap.get('template');
+        const match = this.templates.find((t) => t.templateKey === requested);
+        this.selectTemplate(match?.templateKey || this.templates[0].templateKey);
       }
     };
     const peeked = this.modules.peek(path);

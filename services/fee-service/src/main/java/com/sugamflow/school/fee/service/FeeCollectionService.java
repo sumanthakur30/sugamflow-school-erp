@@ -15,7 +15,9 @@ import com.sugamflow.school.fee.integration.StudentProfileClient;
 import com.sugamflow.school.fee.persistence.entity.FeeCollectionEntity;
 import com.sugamflow.school.fee.persistence.repo.FeeCollectionRepository;
 import com.sugamflow.school.fee.web.FeeException;
+import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.Locale;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.Comparator;
@@ -122,6 +124,38 @@ public class FeeCollectionService {
       result = repository.findByOrganizationIdOrderByUpdatedAtDesc(scope.organizationId(), pageable);
     }
     return PageResult.of(result.map(this::toDto).getContent(), q.page(), q.size(), result.getTotalElements());
+  }
+
+  /** Open fee collections with a positive amount — the clerk defaulter list. */
+  @Transactional(readOnly = true)
+  public List<Map<String, Object>> defaulters() {
+    TenantScope scope = TenantContext.require();
+    requireFeature(scope);
+    List<Map<String, Object>> rows = new ArrayList<>();
+    for (FeeCollectionEntity entity : loadCandidates(scope)) {
+      String status = String.valueOf(entity.getStatus()).toUpperCase(Locale.ROOT);
+      if (!status.equals("IN_PROGRESS") && !status.equals("INFO_REQUESTED")) {
+        continue;
+      }
+      Map<String, Object> answers = entity.getAnswers() == null ? Map.of() : entity.getAnswers();
+      BigDecimal amount = decimalOr(answers.get("amount"));
+      if (amount.compareTo(BigDecimal.ZERO) <= 0) {
+        continue;
+      }
+      Map<String, Object> dto = toDto(entity);
+      dto.put("admissionNo", answers.get("admissionNo"));
+      dto.put(
+          "studentName",
+          firstText(answers.get("studentName"), answers.get("fullName"), answers.get("name")));
+      dto.put("classSection", answers.get("classSection"));
+      dto.put("amount", amount);
+      dto.put("dueDate", answers.get("dueDate"));
+      dto.put("feeHead", answers.get("feeHead"));
+      rows.add(dto);
+    }
+    rows.sort(
+        (a, b) -> decimalOr(b.get("amount")).compareTo(decimalOr(a.get("amount"))));
+    return rows;
   }
 
   @Transactional(readOnly = true)
@@ -848,6 +882,37 @@ public class FeeCollectionService {
       out.add(slim);
     }
     return out;
+  }
+
+  private static BigDecimal decimalOr(Object value) {
+    if (value instanceof BigDecimal decimal) {
+      return decimal;
+    }
+    if (value instanceof Number number) {
+      return BigDecimal.valueOf(number.doubleValue());
+    }
+    if (value == null) {
+      return BigDecimal.ZERO;
+    }
+    try {
+      String raw = String.valueOf(value).trim();
+      return raw.isEmpty() ? BigDecimal.ZERO : new BigDecimal(raw);
+    } catch (NumberFormatException ex) {
+      return BigDecimal.ZERO;
+    }
+  }
+
+  private static String firstText(Object... values) {
+    for (Object value : values) {
+      if (value == null) {
+        continue;
+      }
+      String text = String.valueOf(value).trim();
+      if (!text.isEmpty() && !"null".equalsIgnoreCase(text)) {
+        return text;
+      }
+    }
+    return "";
   }
 
   private static String stringOr(Object value, String fallback) {

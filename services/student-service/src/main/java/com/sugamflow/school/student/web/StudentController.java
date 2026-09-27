@@ -154,6 +154,17 @@ public class StudentController {
     return ApiResponse.ok(service.bulkSoftDelete(withClientMeta(body, request)));
   }
 
+  @PostMapping("/students/bulk-status")
+  public ApiResponse<Map<String, Object>> bulkStatus(
+      @RequestBody Map<String, Object> body, HttpServletRequest request) {
+    return ApiResponse.ok(service.bulkChangeStatus(withClientMeta(body, request)));
+  }
+
+  @PostMapping("/households")
+  public ApiResponse<Map<String, Object>> linkHousehold(@RequestBody Map<String, Object> body) {
+    return ApiResponse.ok(service.linkHousehold(body));
+  }
+
   @PostMapping("/students/bulk-restore")
   public ApiResponse<Map<String, Object>> bulkRestore(
       @RequestBody Map<String, Object> body, HttpServletRequest request) {
