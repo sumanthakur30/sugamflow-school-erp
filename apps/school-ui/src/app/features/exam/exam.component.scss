@@ -25,6 +25,17 @@
   border: 1px solid color-mix(in srgb, var(--sf-primary) 18%, transparent);
 }
 
+.field-error {
+  display: block;
+  margin-top: 0.25rem;
+  color: #b91c1c;
+  font-size: 0.82rem;
+}
+
+select[aria-invalid='true'] {
+  border-color: #b91c1c;
+}
+
 .linkish {
   display: inline;
   margin-left: 0.35rem;

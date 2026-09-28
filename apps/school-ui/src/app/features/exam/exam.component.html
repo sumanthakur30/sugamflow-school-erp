@@ -69,6 +69,27 @@
                     [disabled]="submitting"
                     readonly
                   />
+                } @else if (field.key === 'subject' || field.key === 'examName') {
+                  <select
+                    [ngModel]="answers[field.key]"
+                    (ngModelChange)="onChoice(field.key, $event)"
+                    [name]="field.key"
+                    [required]="field.mandatory"
+                    [disabled]="submitting || !catalogReady"
+                    [attr.aria-required]="field.mandatory"
+                    [attr.aria-invalid]="fieldInvalid(field)"
+                  >
+                    <option value="">{{ choicePlaceholder(field.key) }}</option>
+                    @for (option of choiceOptions(field.key); track option) {
+                      <option [value]="option">{{ option }}</option>
+                    }
+                  </select>
+                  @if (field.key === 'subject' && subjectHint) {
+                    <span class="form-hint">{{ subjectHint }}</span>
+                  }
+                  @if (fieldInvalid(field)) {
+                    <span class="field-error">{{ field.label }} is required</span>
+                  }
                 } @else {
                   <input
                     [(ngModel)]="answers[field.key]"
