@@ -663,6 +663,27 @@ export class StudentDirectoryComponent implements OnInit, OnDestroy {
     });
   }
 
+  exportUdise(): void {
+    const qs = new URLSearchParams();
+    const filters = this.filterParams();
+    for (const [k, v] of Object.entries(filters)) {
+      if (v !== null && v !== undefined && v !== '') {
+        qs.set(k, String(v));
+      }
+    }
+    this.api.getBlob(`/api/student/directory/export-udise.csv?${qs.toString()}`).subscribe({
+      next: (blob) => {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'udise-students.csv';
+        a.click();
+        URL.revokeObjectURL(url);
+      },
+      error: (err) => (this.error = err?.error?.message ?? 'UDISE+ export failed'),
+    });
+  }
+
   exportExcel(): void {
     const qs = new URLSearchParams();
     const filters = this.filterParams();
