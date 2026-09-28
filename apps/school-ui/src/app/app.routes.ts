@@ -191,6 +191,13 @@ export const routes: Routes = [
           ),
       },
       {
+        path: 'admin/leads',
+        canActivate: [featureGuard],
+        data: { feature: 'FEATURE_ADMISSION' },
+        loadComponent: () =>
+          import('./features/leads/leads.component').then((m) => m.LeadsComponent),
+      },
+      {
         path: 'admin/admission',
         canActivate: [featureGuard],
         data: { feature: 'FEATURE_ADMISSION' },

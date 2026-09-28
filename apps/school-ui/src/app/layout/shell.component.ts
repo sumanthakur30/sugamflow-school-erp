@@ -71,6 +71,7 @@ export class ShellComponent implements OnInit {
       label: 'Students',
       icon: 'users',
       items: [
+        { path: '/admin/leads', label: 'Leads / Inquiry', feature: 'FEATURE_ADMISSION' },
         { path: '/admin/admission', label: 'Admission', feature: 'FEATURE_ADMISSION' },
         {
           path: '/admin/student-directory',
@@ -495,20 +496,25 @@ export class ShellComponent implements OnInit {
   goNav(path: string, event?: Event): void {
     event?.preventDefault();
     event?.stopPropagation();
-    this.closeTopMenu();
-    this.closeMobileNav();
     const target = path || '/';
     const clean = target.split('?')[0];
     const current = this.router.url.split('?')[0];
     const hasQuery = this.router.url.includes('?') || target.includes('?');
     if (current === clean && !hasQuery) {
+      this.closeTopMenu();
+      this.closeMobileNav();
       // Same list URL with stuck in-memory form/detail — force remount.
       void this.router.navigateByUrl('/', { skipLocationChange: true }).then(() => {
         void this.router.navigateByUrl(clean);
       });
       return;
     }
-    void this.router.navigateByUrl(target);
+    // Navigate before the flyout is removed. Closing first was destroying the
+    // link during the click, so the page never changed.
+    void this.router.navigateByUrl(target).then(() => {
+      this.closeTopMenu();
+      this.closeMobileNav();
+    });
   }
 
   groupHome(group: NavGroup): string {
