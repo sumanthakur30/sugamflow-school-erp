@@ -1,4 +1,4 @@
-import { Component, EventEmitter, Input, Output } from '@angular/core';
+import { Component, EventEmitter, Input, OnDestroy, Output } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import {
@@ -15,7 +15,7 @@ import {
   templateUrl: './list-toolbar.component.html',
   styleUrls: ['./list-toolbar.component.scss'],
 })
-export class ListToolbarComponent {
+export class ListToolbarComponent implements OnDestroy {
   readonly pageSizes = DEFAULT_PAGE_SIZES;
 
   @Input() searchPlaceholder = 'Search…';
@@ -46,6 +46,10 @@ export class ListToolbarComponent {
   @Input() compactOnMobile = true;
   /** Mobile drawer open state for status/sort/page-size. */
   @Input() extrasOpen = false;
+  /** Filter as the user types and hide the Search / Clear buttons. */
+  @Input() live = false;
+
+  private liveTimer?: ReturnType<typeof setTimeout>;
 
   @Output() qChange = new EventEmitter<string>();
   @Output() sortByChange = new EventEmitter<string>();
@@ -81,9 +85,22 @@ export class ListToolbarComponent {
     return n;
   }
 
+  ngOnDestroy(): void {
+    if (this.liveTimer) {
+      clearTimeout(this.liveTimer);
+    }
+  }
+
   onQInput(value: string): void {
     this.q = value;
     this.qChange.emit(value);
+    if (!this.live) {
+      return;
+    }
+    if (this.liveTimer) {
+      clearTimeout(this.liveTimer);
+    }
+    this.liveTimer = setTimeout(() => this.search.emit(), 300);
   }
 
   onSortBy(value: string): void {

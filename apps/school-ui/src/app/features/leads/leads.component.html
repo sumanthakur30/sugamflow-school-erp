@@ -1,0 +1,197 @@
+<div class="page">
+  <header class="page-head toolbar">
+    <div>
+      <h2>Leads/Inquiry</h2>
+      <p>Create and manage leads and inquiries, then track follow-ups and assign them to staff.</p>
+    </div>
+    <div class="icon-row">
+      <button type="button" title="Add lead" (click)="openCreate()">Add lead</button>
+      <button type="button" class="icon-btn secondary" title="Import CSV or Excel" (click)="pickImport(fileInput)">↓</button>
+      <button type="button" class="icon-btn secondary" title="Export Excel" (click)="exportExcel()">X</button>
+      <button type="button" class="icon-btn secondary" title="Export PDF" (click)="exportPdf()">P</button>
+      <button type="button" class="icon-btn secondary" title="Filters" (click)="filtersOpen = !filtersOpen">☰</button>
+      <input #fileInput class="file" type="file" accept=".csv,.xlsx,text/csv" (change)="importFile($event)" />
+      <div class="total-badge">Total Leads: {{ total }}</div>
+    </div>
+  </header>
+
+  <input
+    class="search"
+    type="search"
+    [ngModel]="q"
+    (ngModelChange)="onSearch($event)"
+    placeholder="Search student by name, father name, admission no or mobile no."
+  />
+
+  @if (error) {
+    <p class="error panel" role="alert">{{ error }}</p>
+  }
+  @if (statusMsg) {
+    <p class="status panel" role="status">{{ statusMsg }}</p>
+  }
+
+  <div class="pills" role="toolbar" aria-label="Lead status">
+    @for (item of statuses; track item.key) {
+      <button
+        type="button"
+        class="pill"
+        [ngClass]="item.tone"
+        [class.active]="status === item.key"
+        (click)="toggleStatus(item.key)"
+      >
+        {{ item.label }} ({{ count(item.key) }})
+      </button>
+    }
+  </div>
+
+  @if (filtersOpen) {
+    <div class="filters panel">
+      <label>
+        Applied for
+        <input [(ngModel)]="classAppliedFor" placeholder="Nursery" />
+      </label>
+      <label>
+        Assigned to
+        <input [(ngModel)]="assignedTo" placeholder="Staff name" />
+      </label>
+      <label>
+        Scheduled from
+        <input type="datetime-local" [(ngModel)]="scheduledFrom" />
+      </label>
+      <label>
+        Scheduled to
+        <input type="datetime-local" [(ngModel)]="scheduledTo" />
+      </label>
+      <div class="actions">
+        <button type="button" (click)="applyFilters()">Apply</button>
+      </div>
+    </div>
+  }
+
+  <div class="panel table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Student</th>
+          <th>Contact</th>
+          <th>Address</th>
+          <th>Applied For</th>
+          <th>Created By</th>
+          <th>Scheduled At</th>
+          <th>Status</th>
+          <th>Remark</th>
+        </tr>
+      </thead>
+      <tbody>
+        @if (loading) {
+          @for (row of [1, 2, 3, 4, 5]; track row) {
+            <tr>
+              <td colspan="9"><div class="sk"></div><div class="sk"></div></td>
+            </tr>
+          }
+        } @else if (items.length === 0) {
+          <tr>
+            <td colspan="9">
+              No leads match this view.
+              <button type="button" class="secondary tiny" (click)="loadExample()">Load sample leads</button>
+            </td>
+          </tr>
+        } @else {
+          @for (lead of items; track lead.id; let i = $index) {
+            <tr>
+              <td>{{ page * 20 + i + 1 }}</td>
+              <td>
+                <div class="stack">
+                  <button type="button" class="name" (click)="openEdit(lead)">{{ lead.studentName }}</button>
+                  <span class="muted">Father Name: {{ lead.fatherName || '—' }}</span>
+                  <span class="muted">Mother Name: {{ lead.motherName || '—' }}</span>
+                </div>
+              </td>
+              <td>
+                <div class="stack">
+                  <span>
+                    Mobile No.: {{ lead.phone }}
+                    @if (whatsapp(lead.phone)) {
+                      <a class="wa" [href]="whatsapp(lead.phone)" target="_blank" rel="noopener">WA</a>
+                    }
+                  </span>
+                  <span class="muted">F. Mobile No.: {{ lead.fatherPhone || '—' }}</span>
+                  <span class="muted">M. Mobile No.: {{ lead.motherPhone || '—' }}</span>
+                </div>
+              </td>
+              <td>{{ lead.address || '—' }}</td>
+              <td>{{ lead.classAppliedFor || '—' }}</td>
+              <td>
+                <div class="stack">
+                  <span>{{ lead.createdBy || '—' }}</span>
+                  <span class="muted">{{ formatWhen(lead.createdAt) }}</span>
+                </div>
+              </td>
+              <td>{{ formatWhen(lead.scheduledAt) || '—' }}</td>
+              <td>
+                <select [ngModel]="lead.status" (ngModelChange)="changeStatus(lead, $event)">
+                  @for (item of statuses; track item.key) {
+                    <option [value]="item.key">{{ item.label }}</option>
+                  }
+                </select>
+                <div><span class="pill" [ngClass]="tone(lead.status)">{{ label(lead.status) }}</span></div>
+              </td>
+              <td>
+                <div class="stack">
+                  <span>{{ lead.remark || '—' }}</span>
+                  @if (lead.assignedTo) {
+                    <span class="muted">Assigned to {{ lead.assignedTo }}</span>
+                  }
+                </div>
+              </td>
+            </tr>
+          }
+        }
+      </tbody>
+    </table>
+    @if (!loading && totalPages > 1) {
+      <div class="pager">
+        <button type="button" class="secondary" (click)="prev()" [disabled]="page === 0">Previous</button>
+        <span>Page {{ page + 1 }} of {{ totalPages }}</span>
+        <button type="button" class="secondary" (click)="next()" [disabled]="page + 1 >= totalPages">Next</button>
+      </div>
+    }
+  </div>
+
+  <button type="button" class="fab" title="Add lead" (click)="openCreate()">+</button>
+
+  @if (formOpen) {
+    <div class="modal-back" (click)="closeForm()">
+      <form class="modal" (click)="$event.stopPropagation()" (ngSubmit)="save()">
+        <h3>{{ editingId ? 'Edit lead' : 'Add lead' }}</h3>
+        <div class="grid two">
+          <label>Student name *<input [(ngModel)]="form.studentName" name="studentName" required /></label>
+          <label>Mobile *<input [(ngModel)]="form.phone" name="phone" required /></label>
+          <label>Father name<input [(ngModel)]="form.fatherName" name="fatherName" /></label>
+          <label>Father mobile<input [(ngModel)]="form.fatherPhone" name="fatherPhone" /></label>
+          <label>Mother name<input [(ngModel)]="form.motherName" name="motherName" /></label>
+          <label>Mother mobile<input [(ngModel)]="form.motherPhone" name="motherPhone" /></label>
+          <label>Address<input [(ngModel)]="form.address" name="address" /></label>
+          <label>Applied for<input [(ngModel)]="form.classAppliedFor" name="classAppliedFor" placeholder="Nursery" /></label>
+          <label>Admission no<input [(ngModel)]="form.admissionNo" name="admissionNo" /></label>
+          <label>Scheduled at<input type="datetime-local" [(ngModel)]="form.scheduledAt" name="scheduledAt" /></label>
+          <label>
+            Status
+            <select [(ngModel)]="form.status" name="status">
+              @for (item of statuses; track item.key) {
+                <option [value]="item.key">{{ item.label }}</option>
+              }
+            </select>
+          </label>
+          <label>Assign to<input [(ngModel)]="form.assignedTo" name="assignedTo" /></label>
+          <label>Remark<textarea [(ngModel)]="form.remark" name="remark" rows="3"></textarea></label>
+        </div>
+        <div class="actions">
+          <button type="submit" [disabled]="saving">{{ saving ? 'Saving…' : 'Save' }}</button>
+          <button type="button" class="secondary" (click)="closeForm()" [disabled]="saving">Cancel</button>
+        </div>
+      </form>
+    </div>
+  }
+</div>

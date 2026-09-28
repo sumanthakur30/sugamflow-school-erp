@@ -2,11 +2,18 @@
   class="list-toolbar"
   [class.compact-mobile]="compactOnMobile"
   [class.extras-open]="extrasOpen"
+  [class.live]="live"
 >
   <div class="toolbar-row toolbar-primary">
     @if (showSearch) {
-      <label class="search-field">
+      <label class="search-field" [class.with-icon]="live">
         <span class="sr-only">Search</span>
+        @if (live) {
+          <svg class="search-icon" viewBox="0 0 24 24" aria-hidden="true">
+            <circle cx="11" cy="11" r="7" fill="none" stroke="currentColor" stroke-width="2" />
+            <path d="M20 20l-3.5-3.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+          </svg>
+        }
         <input
           [ngModel]="q"
           (ngModelChange)="onQInput($event)"
@@ -14,9 +21,11 @@
           (keyup.enter)="submitSearch()"
         />
       </label>
-      <button type="button" class="search-btn" (click)="submitSearch()" [disabled]="searching">
-        {{ searching ? 'Searching…' : 'Search' }}
-      </button>
+      @if (!live) {
+        <button type="button" class="search-btn" (click)="submitSearch()" [disabled]="searching">
+          {{ searching ? 'Searching…' : 'Search' }}
+        </button>
+      }
     }
 
     @if (compactOnMobile && hasExtras) {
@@ -37,7 +46,7 @@
     <div class="toolbar-inline-extras">
       @if (showStatus) {
         <label class="compact">
-          {{ statusLabel }}
+          <span class="filter-caption">{{ statusLabel }}</span>
           <select [ngModel]="status" (ngModelChange)="onStatus($event)">
             <option value="">ALL</option>
             @for (opt of statusOptions!; track opt.value) {
@@ -49,7 +58,7 @@
 
       @if (showSort) {
         <label class="compact">
-          Sort by
+          <span class="filter-caption">Sort by</span>
           <select [ngModel]="sortBy" (ngModelChange)="onSortBy($event)">
             @for (opt of sortOptions; track opt.key) {
               <option [value]="opt.key">{{ opt.label }}</option>
@@ -68,7 +77,7 @@
 
       @if (showPageSize) {
         <label class="compact">
-          Page size
+          <span class="filter-caption">Page size</span>
           <select [ngModel]="pageSize" (ngModelChange)="onPageSize($event)">
             @for (n of pageSizes; track n) {
               <option [ngValue]="n">{{ n }}</option>
@@ -84,21 +93,23 @@
       </button>
     }
 
-    <button
-      type="button"
-      class="secondary clear-btn"
-      (click)="clearAll()"
-      [disabled]="!clearEnabled && !q && !status"
-    >
-      Clear
-    </button>
+    @if (!live) {
+      <button
+        type="button"
+        class="secondary clear-btn"
+        (click)="clearAll()"
+        [disabled]="!clearEnabled && !q && !status"
+      >
+        Clear
+      </button>
+    }
   </div>
 
   @if (compactOnMobile && hasExtras) {
     <div class="toolbar-row toolbar-drawer" [id]="extrasPanelId" role="region" aria-label="List filters">
       @if (showStatus) {
         <label class="compact">
-          {{ statusLabel }}
+          <span class="filter-caption">{{ statusLabel }}</span>
           <select [ngModel]="status" (ngModelChange)="onStatus($event)">
             <option value="">ALL</option>
             @for (opt of statusOptions!; track opt.value) {
@@ -110,7 +121,7 @@
 
       @if (showSort) {
         <label class="compact">
-          Sort by
+          <span class="filter-caption">Sort by</span>
           <select [ngModel]="sortBy" (ngModelChange)="onSortBy($event)">
             @for (opt of sortOptions; track opt.key) {
               <option [value]="opt.key">{{ opt.label }}</option>
@@ -129,7 +140,7 @@
 
       @if (showPageSize) {
         <label class="compact">
-          Page size
+          <span class="filter-caption">Page size</span>
           <select [ngModel]="pageSize" (ngModelChange)="onPageSize($event)">
             @for (n of pageSizes; track n) {
               <option [ngValue]="n">{{ n }}</option>
