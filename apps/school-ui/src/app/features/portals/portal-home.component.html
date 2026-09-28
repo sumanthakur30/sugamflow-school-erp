@@ -1,7 +1,7 @@
 <section class="page portal-home">
-  @if (!boot?.featureEnabled) {
+  @if (boot && boot.featureEnabled === false) {
     <p class="panel">This portal is not enabled for the current subscription plan.</p>
-  } @else {
+  } @else if (boot?.featureEnabled) {
     <div class="page-head">
       <div class="title-row">
         <h2>{{ boot?.title }}</h2>
