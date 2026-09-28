@@ -406,7 +406,7 @@ public class StudentDirectoryService {
     return s;
   }
 
-  private record DirectoryQuery(
+  record DirectoryQuery(
       String branch,
       String session,
       String status,

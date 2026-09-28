@@ -1,0 +1,56 @@
+<section class="page">
+  <div class="page-head">
+    <div>
+      <h2>UDISE+ export</h2>
+      <p>
+        Choose the columns for the government student file. Download it from Student Directory.
+        CSV and Excel on that page stay unchanged.
+      </p>
+    </div>
+    <a class="secondary" routerLink="/admin/student-directory">Back to directory</a>
+  </div>
+
+  @if (error) {
+    <p class="error panel" role="alert">{{ error }}</p>
+  }
+  @if (statusMsg) {
+    <p class="status panel" role="status">{{ statusMsg }}</p>
+  }
+
+  @if (loading) {
+    <p class="panel">Loading columns…</p>
+  } @else {
+    <section class="panel">
+      <p>
+        @if (usingDefaults) {
+          These are the official-style columns. Save only if this school needs a different set.
+        } @else {
+          This school is using a saved column set.
+        }
+        A column with no value on the student record is left blank.
+      </p>
+      <label class="chip">
+        <input type="checkbox" [checked]="allSelected" (change)="toggleAll($any($event.target).checked)" />
+        Select all
+      </label>
+      <div class="chip-list" style="margin-top: 0.8rem">
+        @for (column of columns; track column.key) {
+          <label class="chip">
+            <input
+              type="checkbox"
+              [checked]="column.selected"
+              (change)="toggle(column, $any($event.target).checked)"
+            />
+            {{ column.label }}
+          </label>
+        }
+      </div>
+      <div class="head-actions" style="margin-top: 1rem">
+        <button type="button" (click)="save()" [disabled]="saving">{{ saving ? 'Saving…' : 'Save' }}</button>
+        <button type="button" class="secondary" (click)="useOfficial()" [disabled]="saving">
+          Use official columns
+        </button>
+      </div>
+    </section>
+  }
+</section>

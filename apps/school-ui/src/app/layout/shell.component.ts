@@ -78,6 +78,11 @@ export class ShellComponent implements OnInit {
           label: 'Student Directory',
           feature: 'FEATURE_STUDENT_MASTER',
         },
+        {
+          path: '/admin/udise-export',
+          label: 'UDISE+ export',
+          feature: 'FEATURE_STUDENT_MASTER',
+        },
         { path: '/admin/students', label: 'Student Master', feature: 'FEATURE_STUDENT_MASTER' },
         { path: '/admin/leave', label: 'Leave', feature: 'FEATURE_STUDENT_MASTER' },
         { path: '/admin/app-users', label: 'App users', feature: 'FEATURE_STUDENT_MASTER' },
