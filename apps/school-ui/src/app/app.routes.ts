@@ -340,6 +340,13 @@ export const routes: Routes = [
           ),
       },
       {
+        path: 'admin/udise-export',
+        canActivate: [featureGuard],
+        data: { feature: 'FEATURE_STUDENT_MASTER' },
+        loadComponent: () =>
+          import('./features/directory/udise-export.component').then((m) => m.UdiseExportComponent),
+      },
+      {
         path: 'admin/students/:id/360',
         canActivate: [featureGuard],
         data: { feature: 'FEATURE_STUDENT_MASTER' },
