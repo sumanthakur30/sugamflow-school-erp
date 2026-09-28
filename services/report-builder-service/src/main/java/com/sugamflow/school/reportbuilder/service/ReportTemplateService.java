@@ -541,6 +541,9 @@ public class ReportTemplateService {
                   "id_card".equals(key)
                       && (!payload.contains("photoBase64") || !payload.contains("penNumber"));
               if (hasQr && !needsPhoto) {
+                if ("id_card".equals(key) && !payload.contains("photoDirectUrl")) {
+                  rewriteIdCardPhotoBind(e);
+                }
                 return;
               }
               e.setPayload(canonical);
@@ -557,6 +560,44 @@ public class ReportTemplateService {
             });
   }
 
+  @SuppressWarnings("unchecked")
+  private void rewriteIdCardPhotoBind(ReportTemplateEntity entity) {
+    Map<String, Object> payload = entity.getPayload();
+    if (payload == null) {
+      return;
+    }
+    Object raw = payload.get("elements");
+    if (!(raw instanceof List<?> list)) {
+      return;
+    }
+    List<Object> elements = new ArrayList<>();
+    boolean changed = false;
+    for (Object item : list) {
+      if (!(item instanceof Map<?, ?> source)) {
+        elements.add(item);
+        continue;
+      }
+      Map<String, Object> el = new LinkedHashMap<>((Map<String, Object>) source);
+      String text = String.valueOf(el.getOrDefault("text", ""));
+      String bind = String.valueOf(el.getOrDefault("bind", ""));
+      if (text.contains("student.photoBase64") || "student.photoBase64".equals(bind)) {
+        el.put("text", "{{student.photoDirectUrl}}");
+        el.put("bind", "student.photoDirectUrl");
+        el.putIfAbsent("objectFit", "cover");
+        changed = true;
+      }
+      elements.add(el);
+    }
+    if (!changed) {
+      return;
+    }
+    Map<String, Object> copy = new LinkedHashMap<>(payload);
+    copy.put("elements", elements);
+    entity.setPayload(copy);
+    entity.setUpdatedAt(Instant.now());
+    repo.save(entity);
+  }
+
   private Map<String, Object> idCardTemplate() {
     Map<String, Object> t = new LinkedHashMap<>();
     t.put("templateKey", "id_card");
@@ -567,7 +608,7 @@ public class ReportTemplateService {
         List.of(
             element("heading", "STUDENT IDENTITY CARD", 40, 48, 18, 420, 28),
             element("box", "", 40, 90, 11, 520, 220),
-            element("image", "{{student.photoBase64}}", 400, 110, 11, 120, 140),
+            element("image", "{{student.photoDirectUrl}}", 400, 110, 11, 120, 140),
             element("text", "Name: {{student.name}}", 60, 110, 12, 300, 24),
             element("text", "Admission No: {{student.admissionNo}}", 60, 140, 11, 300, 24),
             element("text", "Class: {{student.classSection}}", 60, 170, 11, 300, 24),

@@ -124,8 +124,8 @@ public class ReportPdfRenderService {
   }
 
   /**
-   * Renders an image from a bound data field. Accepts raw base64, {@code data:image/...;base64,...},
-   * or empty (draws a placeholder box). Template text/bind typically {@code {{student.photoBase64}}}.
+   * Renders an image from a bound field. Accepts raw base64, {@code data:image/...;base64,...},
+   * {@code {{student.photoDirectUrl}}}, or the element fallback image. Empty draws a placeholder.
    */
   private void drawImage(
       PdfContentByte cb,
@@ -135,26 +135,144 @@ public class ReportPdfRenderService {
       float y,
       float w,
       float h) {
-    String raw =
-        el.containsKey("text")
-            ? String.valueOf(el.get("text"))
-            : bindValue(data, String.valueOf(el.getOrDefault("bind", "student.photoBase64")));
-    if ((raw == null || raw.isBlank()) && el.get("bind") != null) {
-      raw = "{{" + el.get("bind") + "}}";
-    }
-    String payload = substitute(raw, data);
-    byte[] bytes = decodeImageBytes(payload);
+    byte[] bytes = decodeImageBytes(resolveImagePayload(el, data));
     if (bytes == null || bytes.length == 0) {
       drawBox(cb, x, y, w, h, true);
+      strokeImageBorder(cb, el, x, y, w, h);
       return;
     }
     try {
       Image image = Image.getInstance(bytes);
-      image.setAbsolutePosition(x, y);
-      image.scaleAbsolute(w, h);
-      cb.addImage(image);
+      String fit = String.valueOf(el.getOrDefault("objectFit", "cover")).toLowerCase();
+      placeFittedImage(cb, image, x, y, w, h, fit, floatOr(el.get("borderRadius"), 0f));
+      strokeImageBorder(cb, el, x, y, w, h);
     } catch (Exception ex) {
       drawBox(cb, x, y, w, h, true);
+      strokeImageBorder(cb, el, x, y, w, h);
+    }
+  }
+
+  private static String resolveImagePayload(Map<String, Object> el, Map<String, Object> data) {
+    String raw =
+        el.containsKey("text")
+            ? String.valueOf(el.get("text"))
+            : bindValue(data, String.valueOf(el.getOrDefault("bind", "student.photoDirectUrl")));
+    if ((raw == null || raw.isBlank()) && el.get("bind") != null) {
+      raw = "{{" + el.get("bind") + "}}";
+    }
+    String payload = substitute(raw, data);
+    if (usableImage(payload)) {
+      return payload;
+    }
+    String direct = bindValue(data, "student.photoDirectUrl");
+    if (usableImage(direct)) {
+      return direct;
+    }
+    String base64 = bindValue(data, "student.photoBase64");
+    if (usableImage(base64)) {
+      return base64;
+    }
+    Object fallback = el.get("fallbackSrc");
+    if (fallback != null && usableImage(String.valueOf(fallback))) {
+      return String.valueOf(fallback);
+    }
+    return payload;
+  }
+
+  private static boolean usableImage(String payload) {
+    if (payload == null || payload.isBlank() || payload.contains("{{")) {
+      return false;
+    }
+    String trimmed = payload.trim();
+    if (trimmed.startsWith("/")) {
+      return false;
+    }
+    return true;
+  }
+
+  private static void placeFittedImage(
+      PdfContentByte cb,
+      Image image,
+      float x,
+      float y,
+      float w,
+      float h,
+      String fit,
+      float radius)
+      throws DocumentException {
+    float iw = image.getWidth();
+    float ih = image.getHeight();
+    float scale = 1f;
+    if (iw > 0f && ih > 0f) {
+      float sx = w / iw;
+      float sy = h / ih;
+      scale = "contain".equals(fit) ? Math.min(sx, sy) : Math.max(sx, sy);
+    }
+    float sw = Math.max(1f, iw * scale);
+    float sh = Math.max(1f, ih * scale);
+    float dx = x + (w - sw) / 2f;
+    float dy = y + (h - sh) / 2f;
+    cb.saveState();
+    float r = Math.max(0f, Math.min(radius, Math.min(w, h) / 2f));
+    if (r > 0f) {
+      cb.roundRectangle(x, y, w, h, r);
+    } else {
+      cb.rectangle(x, y, w, h);
+    }
+    cb.clip();
+    cb.newPath();
+    image.scaleAbsolute(sw, sh);
+    image.setAbsolutePosition(dx, dy);
+    cb.addImage(image);
+    cb.restoreState();
+  }
+
+  private static void strokeImageBorder(
+      PdfContentByte cb, Map<String, Object> el, float x, float y, float w, float h) {
+    float width = floatOr(el.get("borderWidth"), 0f);
+    if (width <= 0f) {
+      return;
+    }
+    cb.saveState();
+    cb.setLineWidth(width);
+    cb.setColorStroke(colorOr(el.get("borderColor"), Color.DARK_GRAY));
+    float radius = floatOr(el.get("borderRadius"), 0f);
+    float r = Math.max(0f, Math.min(radius, Math.min(w, h) / 2f));
+    if (r > 0f) {
+      cb.roundRectangle(x, y, w, h, r);
+    } else {
+      cb.rectangle(x, y, w, h);
+    }
+    cb.stroke();
+    cb.restoreState();
+  }
+
+  private static Color colorOr(Object value, Color fallback) {
+    if (value == null) {
+      return fallback;
+    }
+    String raw = String.valueOf(value).trim();
+    if (!raw.startsWith("#")) {
+      return fallback;
+    }
+    String hex = raw.substring(1);
+    if (hex.length() == 3) {
+      hex =
+          ""
+              + hex.charAt(0)
+              + hex.charAt(0)
+              + hex.charAt(1)
+              + hex.charAt(1)
+              + hex.charAt(2)
+              + hex.charAt(2);
+    }
+    if (hex.length() != 6) {
+      return fallback;
+    }
+    try {
+      return new Color(Integer.parseInt(hex, 16));
+    } catch (NumberFormatException ex) {
+      return fallback;
     }
   }
 
