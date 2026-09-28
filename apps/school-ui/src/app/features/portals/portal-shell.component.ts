@@ -44,6 +44,13 @@ export class PortalShellComponent implements OnInit {
     this.error = '';
     this.api.get<any>(`/api/config/portals/${this.portalKey}/bootstrap`).subscribe({
       next: (boot) => {
+        if (!boot) {
+          this.loading = false;
+          this.featureEnabled = false;
+          this.error = 'Portal bootstrap failed';
+          this.portalCtx.clear();
+          return;
+        }
         this.featureEnabled = !!boot.featureEnabled;
         this.loading = false;
         if (!this.featureEnabled) {
@@ -59,12 +66,11 @@ export class PortalShellComponent implements OnInit {
       },
       error: (err) => {
         this.loading = false;
-        this.error = err?.error?.message ?? 'Portal bootstrap failed';
-        const msg = String(this.error).toUpperCase();
-        // Do NOT imply plan feature is off on transport/server errors
-        this.featureEnabled = !(
-          msg.includes('FEATURE_DISABLED') || msg.includes('NOT ENABLED FOR THIS PLAN')
-        );
+        const body = err?.error;
+        this.error =
+          body?.message || body?.detail || err?.message || 'Portal bootstrap failed';
+        this.featureEnabled = false;
+        this.portalCtx.clear();
       },
     });
   }
