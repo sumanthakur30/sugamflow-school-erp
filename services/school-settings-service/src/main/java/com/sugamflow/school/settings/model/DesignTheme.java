@@ -39,16 +39,17 @@ public class DesignTheme {
             "reportFooter", ""));
     t.colors.putAll(
         Map.ofEntries(
-            Map.entry("primary", "#0B6E4F"),
-            Map.entry("secondary", "#084C61"),
-            Map.entry("accent", "#E9B44C"),
-            Map.entry("menu", "#0B3D2E"),
-            Map.entry("button", "#0B6E4F"),
-            Map.entry("text", "#1A1A1A"),
-            Map.entry("warning", "#D97706"),
-            Map.entry("success", "#15803D"),
-            Map.entry("error", "#B91C1C"),
-            Map.entry("surface", "#F3F7F5"),
+            Map.entry("primary", "#176B45"),
+            Map.entry("secondary", "#16382C"),
+            Map.entry("accent", "#176B45"),
+            Map.entry("menu", "#16382C"),
+            Map.entry("button", "#176B45"),
+            Map.entry("text", "#26352E"),
+            Map.entry("warning", "#92400E"),
+            Map.entry("success", "#166534"),
+            Map.entry("error", "#991B1B"),
+            Map.entry("info", "#1D4ED8"),
+            Map.entry("surface", "#F4F7F5"),
             Map.entry("panel", "#FFFFFF")));
     t.typography.putAll(
         Map.of(

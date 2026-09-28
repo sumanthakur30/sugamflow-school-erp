@@ -2,6 +2,48 @@
   max-width: 1280px;
 }
 
+.admission-page .page-head h2 {
+  margin: 0;
+  font-size: 1.65rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: #0f172a;
+}
+
+.admission-page .page-head p {
+  margin: 0.25rem 0 0;
+  color: #64748b;
+}
+
+.admission-page .head-actions {
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.admission-page .head-actions button {
+  border-radius: 0.5rem;
+  min-height: 2.4rem;
+  padding: 0.45rem 0.9rem;
+  font-weight: 600;
+}
+
+.admission-page .head-actions button.primary {
+  background: #0f5132;
+  border: 1px solid #0f5132;
+  color: #fff;
+}
+
+.admission-page .head-actions button.primary:hover:not(:disabled) {
+  background: #0c4128;
+}
+
+.admission-page .inbox-panel {
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.75rem;
+  box-shadow: 0 1px 2px rgb(15 23 42 / 4%);
+}
+
 .list-head {
   display: flex;
   justify-content: space-between;
@@ -414,13 +456,10 @@ label.invalid select {
 .inbox-table th,
 .inbox-table td {
   text-align: left;
-  padding: 0.7rem 0.75rem;
-  border-bottom: 1px solid color-mix(in srgb, var(--sf-menu) 14%, transparent);
+  padding: 0.875rem 1rem;
+  border-bottom: 1px solid #e2e8f0;
   vertical-align: middle;
 }
-
-/* Do NOT restyle thead here — shared sortable-table.scss owns the dark header.
-   Previous light+opacity override made the Actions label look faint. */
 
 .inbox-table tbody td {
   background: #fff;
@@ -494,7 +533,7 @@ label.invalid select {
 }
 
 .inbox-row:hover td {
-  background: color-mix(in srgb, var(--sf-primary) 6%, #fff);
+  background: rgb(248 250 252 / 80%);
 }
 
 .inbox-row.selected td {
@@ -506,14 +545,14 @@ label.invalid select {
 }
 
 .cell-primary {
-  font-weight: 700;
+  font-weight: 500;
   color: #0f172a;
   line-height: 1.25;
 }
 
 .cell-sub {
-  margin-top: 0.2rem;
-  font-size: 0.78rem;
+  margin-top: 0.15rem;
+  font-size: 0.75rem;
   color: #64748b;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -534,46 +573,32 @@ label.invalid select {
   white-space: normal !important;
 }
 
-.badge {
-  display: inline-flex;
-  align-items: center;
-  padding: 0.2rem 0.55rem;
-  border-radius: 999px;
-  font-size: 0.72rem;
-  font-weight: 700;
-  letter-spacing: 0.02em;
-  background: color-mix(in srgb, var(--sf-menu) 12%, #fff);
-  color: #334155;
-}
-
-.badge-ok {
-  background: color-mix(in srgb, #15803d 16%, #fff);
-  color: #166534;
-}
-
-.badge-bad {
-  background: color-mix(in srgb, #b91c1c 14%, #fff);
-  color: #991b1b;
-}
-
-.badge-progress {
-  background: color-mix(in srgb, #c2410c 14%, #fff);
-  color: #9a3412;
-}
-
-.badge-warn {
-  background: color-mix(in srgb, #ca8a04 16%, #fff);
-  color: #854d0e;
-}
-
 .step-chip {
   display: inline-flex;
-  padding: 0.18rem 0.5rem;
-  border-radius: calc(var(--sf-radius) - 2px);
-  background: color-mix(in srgb, var(--sf-primary) 8%, #fff);
-  border: 1px solid color-mix(in srgb, var(--sf-primary) 18%, transparent);
-  font-size: 0.8rem;
+  padding: 0.15rem 0.55rem;
+  border-radius: 999px;
+  background: #f8fafc;
+  color: #334155;
+  box-shadow: inset 0 0 0 1px rgb(100 116 139 / 18%);
+  font-size: 0.75rem;
   font-weight: 600;
+}
+
+.row-action {
+  border: 0;
+  background: transparent;
+  color: #334155;
+  border-radius: 0.4rem;
+  padding: 0.3rem 0.55rem;
+  min-height: 0;
+  font-size: 0.85rem;
+  font-weight: 600;
+  box-shadow: none;
+}
+
+.row-action:hover:not(:disabled) {
+  background: #f1f5f9;
+  color: #0f5132;
 }
 
 .detail-panel {

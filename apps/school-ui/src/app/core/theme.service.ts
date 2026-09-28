@@ -139,27 +139,50 @@ export class ThemeService {
     return this.apply(fallback);
   }
 
+  /**
+   * Tenant colors may tint primary actions. Sidebar, page background, table
+   * headers, and status text stay on the platform palette.
+   */
   private writeCssVars(theme: DesignTheme): void {
     const root = document.documentElement;
     const colors = theme.colors ?? {};
+    const button = this.readableButtonColor(colors['button'] || colors['primary']);
+    root.style.setProperty('--sf-primary', button);
+    root.style.setProperty('--sf-button', button);
+    root.style.setProperty(
+      '--sf-primary-hover',
+      button.toLowerCase() === '#176b45' ? '#125638' : this.mixHex(button, '#000000', 0.18),
+    );
+
+    const skipped = new Set([
+      'primary',
+      'button',
+      'menu',
+      'accent',
+      'surface',
+      'panel',
+      'text',
+      'warning',
+      'success',
+      'error',
+      'info',
+    ]);
     for (const [key, value] of Object.entries(colors)) {
-      if (value) {
+      if (value && !skipped.has(key)) {
         root.style.setProperty(`--sf-${key}`, String(value));
       }
     }
-    if (!colors['surface'] && colors['primary']) {
-      root.style.setProperty('--sf-surface', this.mixHex(String(colors['primary']), '#ffffff', 0.92));
-    }
-    if (!colors['panel']) {
-      root.style.setProperty('--sf-panel', '#ffffff');
-    }
+    this.lockChrome(root);
 
     const typography = theme.typography ?? {};
     if (typography['borderRadius']) {
       root.style.setProperty('--sf-radius', String(typography['borderRadius']));
     }
     if (typography['fontFamily']) {
-      root.style.setProperty('--sf-font', `${typography['fontFamily']}, 'Segoe UI', sans-serif`);
+      const family = String(typography['fontFamily']);
+      const stack = `${family}, 'Segoe UI', sans-serif`;
+      root.style.setProperty('--sf-font', stack);
+      root.style.setProperty('--sf-display', stack);
     }
     if (typography['fontSize']) {
       root.style.setProperty('--sf-font-size', String(typography['fontSize']));
@@ -174,10 +197,56 @@ export class ThemeService {
       root.style.removeProperty('--sf-login-bg-image');
     }
 
-    const primary = colors['primary'] ?? '#0B6E4F';
-    const accent = colors['accent'] ?? '#E9B44C';
-    root.style.setProperty('--sf-bg-glow-a', this.hexToRgba(String(accent), 0.18));
-    root.style.setProperty('--sf-bg-glow-b', this.hexToRgba(String(primary), 0.16));
+    root.style.removeProperty('--sf-bg-glow-a');
+    root.style.removeProperty('--sf-bg-glow-b');
+  }
+
+  /** Re-assert chrome after any saved theme so a brown menu cannot repaint the shell. */
+  private lockChrome(root: HTMLElement): void {
+    const locked: Record<string, string> = {
+      '--sf-page-bg': '#F4F7F5',
+      '--sf-header-bg': '#FFFFFF',
+      '--sf-nav': '#16382C',
+      '--sf-table-head': '#E8EFEB',
+      '--sf-border': '#DCE4DF',
+      '--sf-text-muted': '#64736A',
+      '--sf-menu': '#16382C',
+      '--sf-surface': '#F4F7F5',
+      '--sf-panel': '#FFFFFF',
+      '--sf-text': '#26352E',
+      '--sf-accent': '#176B45',
+      '--sf-warning': '#92400E',
+      '--sf-success': '#166534',
+      '--sf-error': '#991B1B',
+      '--sf-info': '#1D4ED8',
+    };
+    for (const [name, value] of Object.entries(locked)) {
+      root.style.setProperty(name, value);
+    }
+  }
+
+  /** White button labels need at least WCAG AA contrast. Light brand colors fall back. */
+  private readableButtonColor(hex: string | undefined): string {
+    const fallback = '#176B45';
+    const normalized = (hex || '').trim();
+    if (!/^#?[0-9a-fA-F]{6}$/.test(normalized)) {
+      return fallback;
+    }
+    const value = normalized.startsWith('#') ? normalized : `#${normalized}`;
+    return this.contrastWithWhite(value) >= 4.5 ? value : fallback;
+  }
+
+  private contrastWithWhite(hex: string): number {
+    return 1.05 / (this.relativeLuminance(hex) + 0.05);
+  }
+
+  private relativeLuminance(hex: string): number {
+    const n = hex.replace('#', '');
+    const channel = (index: number) => {
+      const c = parseInt(n.slice(index, index + 2), 16) / 255;
+      return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+    };
+    return 0.2126 * channel(0) + 0.7152 * channel(2) + 0.0722 * channel(4);
   }
 
   private writeBrandingDom(theme: DesignTheme): void {
@@ -223,16 +292,17 @@ export class ThemeService {
         footer: 'Powered by SugamFlow',
       },
       colors: {
-        primary: '#0B6E4F',
-        secondary: '#084C61',
-        accent: '#E9B44C',
-        menu: '#0B3D2E',
-        button: '#0B6E4F',
-        text: '#1A1A1A',
-        warning: '#D97706',
-        success: '#15803D',
-        error: '#B91C1C',
-        surface: '#F3F7F5',
+        primary: '#176B45',
+        secondary: '#16382C',
+        accent: '#176B45',
+        menu: '#16382C',
+        button: '#176B45',
+        text: '#26352E',
+        warning: '#92400E',
+        success: '#166534',
+        error: '#991B1B',
+        info: '#1D4ED8',
+        surface: '#F4F7F5',
         panel: '#FFFFFF',
       },
       typography: {
@@ -242,17 +312,6 @@ export class ThemeService {
       },
       loginScreen: {},
     };
-  }
-
-  private hexToRgba(hex: string, alpha: number): string {
-    const n = hex.replace('#', '');
-    if (n.length !== 6) {
-      return `rgba(11, 110, 79, ${alpha})`;
-    }
-    const r = parseInt(n.slice(0, 2), 16);
-    const g = parseInt(n.slice(2, 4), 16);
-    const b = parseInt(n.slice(4, 6), 16);
-    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
   }
 
   private mixHex(hex: string, withHex: string, amount: number): string {

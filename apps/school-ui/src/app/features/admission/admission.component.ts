@@ -941,6 +941,17 @@ export class AdmissionComponent implements OnInit, OnDestroy {
     });
   }
 
+  formatListDate(raw: unknown): string {
+    if (!raw) return '—';
+    const d = new Date(String(raw));
+    if (Number.isNaN(d.getTime())) return String(raw);
+    return d.toLocaleDateString('en-GB', {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+    });
+  }
+
   fieldInvalid(key: string): boolean {
     return !!this.fieldErrors[key];
   }
