@@ -8,4 +8,8 @@ public record DocumentVaultSummaryResponse(
     long expiringCount,
     long expiredCount,
     List<String> missingRecommendedTypes,
-    List<ComplianceDocumentResponse> expiringSoon) {}
+    List<ComplianceDocumentResponse> expiringSoon,
+    long approvedCount,
+    long pendingCount,
+    long draftCount,
+    long storageUsedBytes) {}

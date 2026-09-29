@@ -4,6 +4,7 @@ import { RouterLink } from '@angular/router';
 import {
   ComplianceApiService,
   ComplianceDashboard,
+  ComplianceDocument,
 } from './compliance-api.service';
 
 @Component({
@@ -80,6 +81,37 @@ import {
           <a class="panel" routerLink="/admin/compliance/platform-templates">Platform Templates</a>
         </div>
 
+        <div class="panel" style="margin-bottom: 1rem">
+          <h3 style="margin-top: 0; font-size: 1.1rem">Required documents</h3>
+          <p class="muted">These rows use the Documents Vault. Upload once, then approve there.</p>
+          <table class="data">
+            <thead>
+              <tr>
+                <th>Requirement</th>
+                <th>Document</th>
+                <th>Status</th>
+                <th>Expiry</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (row of requirementRows; track row.type) {
+                <tr>
+                  <td>{{ row.type }}</td>
+                  <td>{{ row.doc?.title || 'Missing' }}</td>
+                  <td>{{ row.doc?.status || 'Missing' }}</td>
+                  <td>{{ row.doc?.expiresOn || '—' }}</td>
+                  <td>
+                    <a class="btn" [routerLink]="['/admin/compliance/documents']" [queryParams]="{ docType: row.type }">
+                      {{ row.doc ? 'Open' : 'Upload document' }}
+                    </a>
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+
         <div class="panel">
           <h3 style="margin-top: 0; font-size: 1.1rem">Pending submissions</h3>
           @if (!dash.recentCampaigns?.length) {
@@ -115,9 +147,23 @@ import {
 })
 export class ComplianceDashboardComponent implements OnInit {
   private readonly api = inject(ComplianceApiService);
+  private readonly requiredTypes = [
+    'AFFILIATION_LETTER',
+    'RECOGNITION',
+    'FIRE_NOC',
+    'BUILDING_SAFETY',
+  ];
   loading = true;
   error = '';
   dash: ComplianceDashboard | null = null;
+  vaultDocs: ComplianceDocument[] = [];
+
+  get requirementRows() {
+    return this.requiredTypes.map((type) => ({
+      type,
+      doc: this.vaultDocs.find((d) => d.docType === type),
+    }));
+  }
 
   ngOnInit(): void {
     this.reload();
@@ -126,6 +172,10 @@ export class ComplianceDashboardComponent implements OnInit {
   reload(): void {
     this.loading = true;
     this.error = '';
+    this.api.listDocuments().subscribe({
+      next: (rows) => (this.vaultDocs = rows || []),
+      error: () => (this.vaultDocs = []),
+    });
     this.api.dashboard().subscribe({
       next: (d) => {
         this.dash = d;
