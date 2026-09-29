@@ -66,7 +66,7 @@ public class ComplianceProperties {
 
   public static class Documents {
     private String storageDir = "./data/compliance-documents";
-    private long maxFileBytes = 15_000_000L;
+    private long maxFileBytes = 26_214_400L;
     private String allowedContentTypes =
         "application/pdf,image/jpeg,image/png,image/webp,application/msword,"
             + "application/vnd.openxmlformats-officedocument.wordprocessingml.document,"

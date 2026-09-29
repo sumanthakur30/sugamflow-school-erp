@@ -66,6 +66,57 @@ public class ComplianceDocumentEntity {
   @Column(columnDefinition = "TEXT")
   private String notes;
 
+  @Column(name = "public_code", nullable = false, length = 40)
+  private String publicCode;
+
+  @Column(name = "category_code", length = 80)
+  private String categoryCode;
+
+  @Column(name = "compliance_area", length = 80)
+  private String complianceArea;
+
+  @Column(name = "folder_id")
+  private Long folderId;
+
+  @Column(name = "academic_session_id", length = 100)
+  private String academicSessionId;
+
+  @Column(nullable = false, length = 40)
+  private String visibility = "SCHOOL";
+
+  @Column(name = "workflow_status", nullable = false, length = 40)
+  private String workflowStatus = "DRAFT";
+
+  @Column(name = "version_no", nullable = false)
+  private int versionNo = 1;
+
+  @Column(length = 500)
+  private String tags;
+
+  @Column(columnDefinition = "TEXT")
+  private String description;
+
+  @Column(name = "checksum_sha256", length = 64)
+  private String checksumSha256;
+
+  @Column(name = "uploaded_by", length = 100)
+  private String uploadedBy;
+
+  @Column(name = "updated_by", length = 100)
+  private String updatedBy;
+
+  @Column(name = "rejection_reason", columnDefinition = "TEXT")
+  private String rejectionReason;
+
+  @Column(name = "related_entity", length = 80)
+  private String relatedEntity;
+
+  @Column(name = "related_entity_id", length = 100)
+  private String relatedEntityId;
+
+  @Column(name = "retention_years")
+  private Integer retentionYears;
+
   @Column(nullable = false)
   private boolean active = true;
 
@@ -225,6 +276,142 @@ public class ComplianceDocumentEntity {
 
   public void setActive(boolean active) {
     this.active = active;
+  }
+
+  public String getPublicCode() {
+    return publicCode;
+  }
+
+  public void setPublicCode(String publicCode) {
+    this.publicCode = publicCode;
+  }
+
+  public String getCategoryCode() {
+    return categoryCode;
+  }
+
+  public void setCategoryCode(String categoryCode) {
+    this.categoryCode = categoryCode;
+  }
+
+  public String getComplianceArea() {
+    return complianceArea;
+  }
+
+  public void setComplianceArea(String complianceArea) {
+    this.complianceArea = complianceArea;
+  }
+
+  public Long getFolderId() {
+    return folderId;
+  }
+
+  public void setFolderId(Long folderId) {
+    this.folderId = folderId;
+  }
+
+  public String getAcademicSessionId() {
+    return academicSessionId;
+  }
+
+  public void setAcademicSessionId(String academicSessionId) {
+    this.academicSessionId = academicSessionId;
+  }
+
+  public String getVisibility() {
+    return visibility;
+  }
+
+  public void setVisibility(String visibility) {
+    this.visibility = visibility;
+  }
+
+  public String getWorkflowStatus() {
+    return workflowStatus;
+  }
+
+  public void setWorkflowStatus(String workflowStatus) {
+    this.workflowStatus = workflowStatus;
+  }
+
+  public int getVersionNo() {
+    return versionNo;
+  }
+
+  public void setVersionNo(int versionNo) {
+    this.versionNo = versionNo;
+  }
+
+  public String getTags() {
+    return tags;
+  }
+
+  public void setTags(String tags) {
+    this.tags = tags;
+  }
+
+  public String getDescription() {
+    return description;
+  }
+
+  public void setDescription(String description) {
+    this.description = description;
+  }
+
+  public String getChecksumSha256() {
+    return checksumSha256;
+  }
+
+  public void setChecksumSha256(String checksumSha256) {
+    this.checksumSha256 = checksumSha256;
+  }
+
+  public String getUploadedBy() {
+    return uploadedBy;
+  }
+
+  public void setUploadedBy(String uploadedBy) {
+    this.uploadedBy = uploadedBy;
+  }
+
+  public String getUpdatedBy() {
+    return updatedBy;
+  }
+
+  public void setUpdatedBy(String updatedBy) {
+    this.updatedBy = updatedBy;
+  }
+
+  public String getRejectionReason() {
+    return rejectionReason;
+  }
+
+  public void setRejectionReason(String rejectionReason) {
+    this.rejectionReason = rejectionReason;
+  }
+
+  public String getRelatedEntity() {
+    return relatedEntity;
+  }
+
+  public void setRelatedEntity(String relatedEntity) {
+    this.relatedEntity = relatedEntity;
+  }
+
+  public String getRelatedEntityId() {
+    return relatedEntityId;
+  }
+
+  public void setRelatedEntityId(String relatedEntityId) {
+    this.relatedEntityId = relatedEntityId;
+  }
+
+  public Integer getRetentionYears() {
+    return retentionYears;
+  }
+
+  public void setRetentionYears(Integer retentionYears) {
+    this.retentionYears = retentionYears;
   }
 
   public Instant getCreatedAt() {
