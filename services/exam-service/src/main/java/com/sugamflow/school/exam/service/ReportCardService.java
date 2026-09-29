@@ -37,18 +37,21 @@ public class ReportCardService {
   private final AcademicClient academic;
   private final StudentDirectoryClient directory;
   private final StudentAccessClient studentAccess;
+  private final GradingSupport grading;
 
   public ReportCardService(
       ExamDefinitionRepository definitions,
       ExamMarkRepository marks,
       AcademicClient academic,
       StudentDirectoryClient directory,
-      StudentAccessClient studentAccess) {
+      StudentAccessClient studentAccess,
+      GradingSupport grading) {
     this.definitions = definitions;
     this.marks = marks;
     this.academic = academic;
     this.directory = directory;
     this.studentAccess = studentAccess;
+    this.grading = grading;
   }
 
   /** Staff view: full section report card grid for a term. */
@@ -218,7 +221,7 @@ public class ReportCardService {
         sr.put("name", subjectNames.getOrDefault(subjectId, "Subject"));
         sr.put("marksObtained", obtained);
         sr.put("maxMarks", hasMark ? max : null);
-        sr.put("grade", hasMark ? gradeBand(percentage(obtained, max)) : null);
+        sr.put("grade", hasMark ? gradeBand(scope, percentage(obtained, max)) : null);
         subjectRows.add(sr);
         if (hasMark) {
           totalObtained = totalObtained.add(obtained);
@@ -238,8 +241,8 @@ public class ReportCardService {
       student.put("totalObtained", attempted > 0 ? totalObtained : null);
       student.put("totalMax", attempted > 0 ? totalMax : null);
       student.put("percentage", attempted > 0 ? pct : null);
-      student.put("overallGrade", attempted > 0 ? gradeBand(pct) : null);
-      student.put("result", attempted > 0 ? (pct.compareTo(new BigDecimal("33")) >= 0 ? "PASS" : "FAIL") : null);
+      student.put("overallGrade", attempted > 0 ? gradeBand(scope, pct) : null);
+      student.put("result", attempted > 0 ? resultLabel(scope, pct) : null);
       students.add(student);
     }
 
@@ -313,19 +316,22 @@ public class ReportCardService {
     return obtained.multiply(new BigDecimal("100")).divide(max, 2, RoundingMode.HALF_UP);
   }
 
-  private static String gradeBand(BigDecimal pct) {
-    if (pct == null) {
-      return null;
+  private String gradeBand(TenantScope scope, BigDecimal pct) {
+    Object grade = assess(scope, pct).get("grade");
+    return grade == null ? null : String.valueOf(grade);
+  }
+
+  private String resultLabel(TenantScope scope, BigDecimal pct) {
+    return Boolean.TRUE.equals(assess(scope, pct).get("pass")) ? "PASS" : "FAIL";
+  }
+
+  private Map<String, Object> assess(TenantScope scope, BigDecimal pct) {
+    List<Map<String, Object>> bands =
+        grading == null ? GradingSupport.defaultBands() : grading.bandsFor(scope);
+    if (bands == null || bands.isEmpty()) {
+      bands = GradingSupport.defaultBands();
     }
-    double p = pct.doubleValue();
-    if (p >= 90) return "A+";
-    if (p >= 80) return "A";
-    if (p >= 70) return "B+";
-    if (p >= 60) return "B";
-    if (p >= 50) return "C";
-    if (p >= 40) return "D";
-    if (p >= 33) return "E";
-    return "F";
+    return GradingSupport.apply(pct, bands);
   }
 
   private void requireSectionAccess(TenantScope scope, UUID sectionId) {

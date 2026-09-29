@@ -2,6 +2,32 @@
   max-width: 1280px;
 }
 
+.mode-tabs {
+  display: inline-flex;
+  gap: 0.35rem;
+  padding: 0.35rem;
+  margin-bottom: 1rem;
+  border-radius: 0.65rem;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+}
+
+.mode-tab {
+  border: 0;
+  background: transparent;
+  padding: 0.5rem 0.95rem;
+  border-radius: 0.5rem;
+  font-weight: 700;
+  color: #475569;
+  cursor: pointer;
+}
+
+.mode-tab.active {
+  background: #fff;
+  color: var(--sf-primary, #0b6e4f);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
+}
+
 .status {
   color: #166534;
   background: #f0fdf4;

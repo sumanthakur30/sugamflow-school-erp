@@ -25,6 +25,7 @@ import {
   clearStudentLookupAnswers,
   filterNonIdentityFields,
 } from '../../shared/student-lookup';
+import { ExamBulkComponent } from './exam-bulk.component';
 
 @Component({
   selector: 'sf-exam',
@@ -35,6 +36,7 @@ import {
     ListToolbarComponent,
     ListPagerComponent,
     StudentLookupComponent,
+    ExamBulkComponent,
   ],
   templateUrl: './exam.component.html',
   styleUrls: [
@@ -67,8 +69,11 @@ export class ExamComponent implements OnInit, OnDestroy {
   records: any[] = [];
   selectedId: string | null = null;
   selected: any = null;
-  /** List-first: form/detail driven by ?new=1 / ?id= */
+  /** List-first: form/detail driven by ?new=1 / ?id= / ?bulk=1 */
   formOpen = false;
+  bulkOpen = false;
+  /** Class progress and one-student workflow are separate lists. */
+  listTab: 'class' | 'student' = 'class';
   actionComment = '';
   submitting = false;
   private submitLocked = false;
@@ -137,6 +142,13 @@ export class ExamComponent implements OnInit, OnDestroy {
     });
   }
 
+  openBulk(): void {
+    void this.router.navigate([], {
+      relativeTo: this.route,
+      queryParams: { bulk: '1' },
+    });
+  }
+
   closeForm(): void {
     if (this.submitting) return;
     void this.router.navigate([], { relativeTo: this.route, queryParams: {} });
@@ -148,7 +160,19 @@ export class ExamComponent implements OnInit, OnDestroy {
   }
 
   private syncFromRoute(params: import('@angular/router').ParamMap): void {
+    if (params.get('bulk') === '1') {
+      this.bulkOpen = true;
+      this.formOpen = false;
+      this.selected = null;
+      this.selectedId = null;
+      this.listTab = 'class';
+      return;
+    }
+    this.bulkOpen = false;
     const { mode, id } = parseListViewParams(params);
+    if (mode === 'new' || mode === 'detail') {
+      this.listTab = 'student';
+    }
     if (mode === 'new') {
       this.formOpen = true;
       this.selected = null;
