@@ -36,6 +36,7 @@ class ReportCardServiceTest {
   @Mock private AcademicClient academic;
   @Mock private StudentDirectoryClient directory;
   @Mock private StudentAccessClient studentAccess;
+  @Mock private GradingSupport grading;
   @InjectMocks private ReportCardService service;
 
   @AfterEach

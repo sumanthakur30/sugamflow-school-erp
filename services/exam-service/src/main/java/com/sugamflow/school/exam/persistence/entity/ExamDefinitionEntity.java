@@ -6,7 +6,13 @@ import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
 import java.util.UUID;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 @Entity
 @Table(name = "exam_definition")
@@ -37,6 +43,16 @@ public class ExamDefinitionEntity {
 
   @Column(name = "max_marks", nullable = false, precision = 10, scale = 2)
   private BigDecimal maxMarks;
+
+  @Column(name = "passing_marks", precision = 10, scale = 2)
+  private BigDecimal passingMarks;
+
+  @Column(name = "exam_date")
+  private LocalDate examDate;
+
+  @JdbcTypeCode(SqlTypes.JSON)
+  @Column(nullable = false, columnDefinition = "jsonb")
+  private List<Map<String, Object>> components = new ArrayList<>();
 
   @Column(nullable = false, length = 32)
   private String status = "DRAFT";
@@ -74,6 +90,14 @@ public class ExamDefinitionEntity {
   public void setSectionId(UUID sectionId) { this.sectionId = sectionId; }
   public BigDecimal getMaxMarks() { return maxMarks; }
   public void setMaxMarks(BigDecimal maxMarks) { this.maxMarks = maxMarks; }
+  public BigDecimal getPassingMarks() { return passingMarks; }
+  public void setPassingMarks(BigDecimal passingMarks) { this.passingMarks = passingMarks; }
+  public LocalDate getExamDate() { return examDate; }
+  public void setExamDate(LocalDate examDate) { this.examDate = examDate; }
+  public List<Map<String, Object>> getComponents() { return components; }
+  public void setComponents(List<Map<String, Object>> components) {
+    this.components = components == null ? new ArrayList<>() : components;
+  }
   public String getStatus() { return status; }
   public void setStatus(String status) { this.status = status; }
   public String getCreatedBy() { return createdBy; }

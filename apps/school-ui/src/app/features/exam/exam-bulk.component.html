@@ -1,0 +1,352 @@
+@if (view === 'home') {
+  <section class="marks-home">
+    @if (loading) {
+      <p class="panel">Loading marks progress…</p>
+    } @else {
+      <div class="stat-row">
+        <div class="stat"><span>Pending</span><strong>{{ homeCounts.pending }}</strong></div>
+        <div class="stat"><span>Drafts</span><strong>{{ homeCounts.drafts }}</strong></div>
+        <div class="stat"><span>Submitted</span><strong>{{ homeCounts.submitted }}</strong></div>
+        <div class="stat"><span>Correction requests</span><strong>{{ homeCounts.corrections }}</strong></div>
+      </div>
+      @if (error) {
+        <p class="error panel" role="alert">{{ error }}</p>
+      }
+      <div class="table-wrap panel">
+        <table class="marks-table">
+          <thead>
+            <tr>
+              <th>Exam</th>
+              <th>Class</th>
+              <th>Section</th>
+              <th>Subject</th>
+              <th>Teacher</th>
+              <th>Progress</th>
+              <th>Status</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (row of board; track row.id) {
+              <tr>
+                <td>{{ row.name }}</td>
+                <td>{{ row.className || '—' }}</td>
+                <td>{{ row.sectionLabel || '—' }}</td>
+                <td>{{ row.subjectName || '—' }}</td>
+                <td>{{ row.teacherName || '—' }}</td>
+                <td>{{ row.completed ?? 0 }} / {{ row.total ?? 0 }} · {{ row.progressPercent ?? 0 }}%</td>
+                <td><span class="badge">{{ row.status }}</span></td>
+                <td><button type="button" class="secondary tiny" (click)="openEntry(row.id)">Open</button></td>
+              </tr>
+            } @empty {
+              <tr><td colspan="8">No class marks yet. Enter marks for a class to start.</td></tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    }
+  </section>
+} @else {
+  <div class="bulk-page" [class.is-busy]="busy">
+    <p class="crumb">
+      <button type="button" class="crumb-link" (click)="backToList()">Exam Marks</button>
+      / Class entry
+    </p>
+    <header class="page-head">
+      <div>
+        <h2>Class marks entry</h2>
+        <p>Select the exam, class, section and subject. Every student in that section loads together.</p>
+      </div>
+      <button type="button" class="secondary" (click)="quickEntry = !quickEntry">
+        {{ quickEntry ? 'Full columns' : 'Quick entry' }}
+      </button>
+    </header>
+
+    @if (error) {
+      <p class="error panel" role="alert">{{ error }}</p>
+    }
+    @if (status) {
+      <p class="status panel" role="status">{{ status }}</p>
+    }
+    @if (loading) {
+      <p class="panel">Loading classes…</p>
+    } @else {
+      <section class="panel selector-grid">
+        <label>Exam
+          <select [(ngModel)]="examDefinitionId" (ngModelChange)="onExamChange()" name="exam">
+            <option value="">Select exam</option>
+            @for (exam of examOptions; track exam.id) {
+              <option [value]="exam.id">{{ exam.name }} · {{ exam.status }}</option>
+            }
+          </select>
+        </label>
+        <label>Class
+          <select [(ngModel)]="classId" (ngModelChange)="onClassChange()" name="classId">
+            @for (row of classOptions; track row.id) {
+              <option [value]="row.id">{{ row.name }}</option>
+            }
+          </select>
+        </label>
+        <label>Section
+          <select [(ngModel)]="sectionId" (ngModelChange)="onSectionChange()" name="sectionId">
+            @for (row of sectionOptions; track row.id) {
+              <option [value]="row.id">{{ row.studentLabel || row.name }}</option>
+            }
+          </select>
+        </label>
+        <label>Subject
+          <select [(ngModel)]="subjectId" (ngModelChange)="onSubjectChange()" name="subjectId">
+            @for (row of subjectOptions; track row.id) {
+              <option [value]="row.id">{{ row.name }}</option>
+            }
+          </select>
+        </label>
+        <label>Maximum marks
+          <input [value]="gradebook?.exam?.maxMarks ?? ''" readonly />
+        </label>
+        <label>Passing marks
+          <input [value]="gradebook?.exam?.passingMarks ?? ''" readonly />
+        </label>
+        <label>Exam date
+          <input [value]="gradebook?.exam?.examDate ?? ''" readonly />
+        </label>
+      </section>
+
+      @if (!examDefinitionId) {
+        <section class="panel">
+          <p>No exam is set up for this class and subject.</p>
+          <button type="button" class="secondary" (click)="createOpen = !createOpen">New exam</button>
+          @if (createOpen) {
+            <div class="grid three create-grid">
+              <label>Name <input [(ngModel)]="createDraft.name" name="newName" placeholder="Unit Test 1" /></label>
+              <label>Term <input [(ngModel)]="createDraft.termKey" name="newTerm" /></label>
+              <label>Maximum <input type="number" [(ngModel)]="createDraft.maxMarks" name="newMax" min="1" /></label>
+              <label>Passing <input type="number" [(ngModel)]="createDraft.passingMarks" name="newPass" min="0" /></label>
+              <label>Date <input type="date" [(ngModel)]="createDraft.examDate" name="newDate" /></label>
+            </div>
+            <button type="button" (click)="createExam()" [disabled]="busy">Create exam</button>
+          }
+        </section>
+      }
+
+      @if (gradebook) {
+        <section class="panel progress-panel">
+          <div>
+            <strong>{{ counts.completed }} / {{ counts.total }} students completed</strong>
+            <div class="bar" aria-hidden="true"><span [style.width.%]="counts.percent"></span></div>
+          </div>
+          <p>
+            {{ counts.total }} students · {{ counts.entered }} entered · {{ counts.pending }} pending ·
+            {{ counts.absent }} absent · {{ counts.exempted }} exempted
+            @if (summary.average != null) {
+              · Average {{ summary.average }} · High {{ summary.highest }} · Low {{ summary.lowest }}
+            }
+          </p>
+          @if (readOnly) {
+            <p class="lock-note">Status: {{ gradebook.exam.status }}. Marks are read-only.</p>
+          }
+        </section>
+
+        <section class="panel toolbar">
+          <input class="search" [(ngModel)]="query" name="studentQ" placeholder="Search student…" />
+          <div class="filters">
+            @for (f of filters; track f.value) {
+              <button type="button" class="secondary tiny" [class.active]="filter === f.value" (click)="filter = f.value">
+                {{ f.label }}
+              </button>
+            }
+          </div>
+          <div class="actions">
+            <button type="button" class="secondary tiny" (click)="askFill()" [disabled]="readOnly">Fill all</button>
+            <button type="button" class="secondary tiny" (click)="askClear()" [disabled]="readOnly">Clear all</button>
+            <button type="button" class="secondary tiny" (click)="dialog = 'status'" [disabled]="readOnly">Set status</button>
+            <button type="button" class="secondary tiny" (click)="exportTemplate()">Export template</button>
+            <label class="file-btn secondary tiny">
+              Import Excel
+              <input type="file" accept=".csv,text/csv" (change)="onImportFile($event)" hidden [disabled]="readOnly" />
+            </label>
+          </div>
+        </section>
+
+        <div class="table-wrap panel">
+          <table class="marks-table" [class.quick]="quickEntry">
+            <thead>
+              <tr>
+                <th>S.No.</th>
+                <th class="col-extra"><button type="button" class="heading-sort" (click)="sort('rollNo')">Roll no</button></th>
+                <th><button type="button" class="heading-sort" (click)="sort('studentName')">Student</button></th>
+                <th class="col-extra col-quiet"><button type="button" class="heading-sort" (click)="sort('admissionNo')">Admission no</button></th>
+                <th><button type="button" class="heading-sort" (click)="sort('marks')">Marks</button></th>
+                <th><button type="button" class="heading-sort" (click)="sort('entryStatus')">Status</button></th>
+                <th class="col-extra col-quiet">Remarks</th>
+                <th class="col-extra col-quiet">Grade</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (row of visibleRows; track row.studentId || row.admissionNo; let i = $index) {
+                <tr [class.left]="row.leftSection">
+                  <td>{{ i + 1 }}</td>
+                  <td class="col-extra">{{ row.rollNo || '—' }}</td>
+                  <td>
+                    <button type="button" class="linkish" (click)="showHistory(row)">{{ row.studentName }}</button>
+                    @if (row.leftSection) { <span class="muted"> left section</span> }
+                    <button type="button" class="linkish mobile-only" (click)="row.open = !row.open">Details</button>
+                    @if (row.open) {
+                      <div class="row-detail">{{ row.rollNo || '—' }} · {{ row.admissionNo || '—' }} · {{ row.remarks || 'No remarks' }}</div>
+                    }
+                  </td>
+                  <td class="col-extra col-quiet">{{ row.admissionNo || '—' }}</td>
+                  <td>
+                    <input
+                      class="mark-input"
+                      [id]="'mark-' + (row.studentId || row.admissionNo)"
+                      [(ngModel)]="row.marks"
+                      [name]="'m' + (row.studentId || row.admissionNo)"
+                      [disabled]="marksDisabled(row)"
+                      (keydown)="onMarksKey($event, row)"
+                      (paste)="onPaste($event, row)"
+                      inputmode="decimal"
+                    />
+                    @if (markError(row)) {
+                      <span class="field-error">{{ markError(row) }}</span>
+                    }
+                  </td>
+                  <td>
+                    <select [(ngModel)]="row.entryStatus" (ngModelChange)="onStatus(row)" [name]="'s' + (row.studentId || row.admissionNo)" [disabled]="readOnly">
+                      @for (st of statuses; track st.value) {
+                        <option [value]="st.value">{{ st.label }}</option>
+                      }
+                    </select>
+                  </td>
+                  <td class="col-extra col-quiet">
+                    <input [(ngModel)]="row.remarks" [name]="'r' + (row.studentId || row.admissionNo)" [disabled]="readOnly" />
+                  </td>
+                  <td class="col-extra col-quiet">{{ row.grade || '—' }}</td>
+                </tr>
+              } @empty {
+                <tr><td colspan="8">No students in this section.</td></tr>
+              }
+            </tbody>
+          </table>
+        </div>
+
+        @if (history.length) {
+          <section class="panel">
+            <h3>Changes · {{ historyFor }}</h3>
+            <ul class="history">
+              @for (h of history; track h.changedAt) {
+                <li>{{ h.previousMarks ?? '—' }} → {{ h.newMarks ?? '—' }} · {{ h.changedBy }} · {{ h.changedAt }} @if (h.reason) { · {{ h.reason }} }</li>
+              }
+            </ul>
+          </section>
+        }
+
+        <div class="form-actions actions">
+          @if (!readOnly) {
+            <button type="button" class="secondary" (click)="saveDraft()" [disabled]="busy">Save draft</button>
+            <button type="button" (click)="askSubmit()" [disabled]="busy">Submit marks</button>
+          } @else {
+            <button type="button" class="secondary" (click)="dialog = 'correction'" [disabled]="busy">Request correction</button>
+            @if (canUnlock) {
+              <button type="button" (click)="unlock()" [disabled]="busy">Unlock</button>
+            }
+          }
+        </div>
+      }
+    }
+
+    @if (dialog) {
+      <div class="dialog-back" (click)="dialog = ''">
+        <div class="dialog panel" (click)="$event.stopPropagation()">
+          @if (dialog === 'fill') {
+            <h3>Fill all</h3>
+            @if (!fillOverwrite) {
+              <label>Marks <input type="number" [(ngModel)]="fillValue" name="fillValue" /></label>
+              <div class="actions">
+                <button type="button" class="secondary" (click)="dialog = ''">Cancel</button>
+                <button type="button" (click)="applyFill()">Apply</button>
+              </div>
+            } @else {
+              <p>Some students already have marks. Do you want to overwrite them?</p>
+              <div class="actions">
+                <button type="button" class="secondary" (click)="dialog = ''">Cancel</button>
+                <button type="button" (click)="applyFill()">Overwrite</button>
+              </div>
+            }
+          }
+          @if (dialog === 'clear') {
+            <h3>Clear all</h3>
+            <p>This clears marks, status and remarks in the grid. Save draft to keep the change.</p>
+            <div class="actions">
+              <button type="button" class="secondary" (click)="dialog = ''">Cancel</button>
+              <button type="button" (click)="applyClear()">Clear</button>
+            </div>
+          }
+          @if (dialog === 'status') {
+            <h3>Set status</h3>
+            <label>Status
+              <select [(ngModel)]="statusValue" name="bulkStatus">
+                @for (st of statuses; track st.value) {
+                  @if (st.value) { <option [value]="st.value">{{ st.label }}</option> }
+                }
+              </select>
+            </label>
+            <div class="actions">
+              <button type="button" class="secondary" (click)="dialog = ''">Cancel</button>
+              <button type="button" (click)="applyStatus()">Apply to visible rows</button>
+            </div>
+          }
+          @if (dialog === 'submit') {
+            <h3>Submit marks</h3>
+            <p>
+              Class section {{ gradebook?.sectionLabel }} · {{ gradebook?.exam?.name }} ·
+              Maximum {{ maxMarks }}
+            </p>
+            <p>
+              Students {{ counts.total }} · Entered {{ counts.entered }} · Absent {{ counts.absent }} ·
+              Not appeared {{ counts.notAppeared }} · Pending {{ counts.pending }}
+            </p>
+            @if (counts.pending > 0) {
+              <p>{{ counts.pending }} students are still pending.</p>
+            }
+            <div class="actions">
+              <button type="button" class="secondary" (click)="dialog = ''">Cancel</button>
+              @if (counts.pending > 0) {
+                <button type="button" class="secondary" (click)="reviewPending()">Review pending students</button>
+              }
+              @if (counts.pending === 0) {
+                <button type="button" (click)="confirmSubmit(false)">Submit marks</button>
+              } @else if (allowIncomplete) {
+                <button type="button" (click)="confirmSubmit(true)">Submit anyway</button>
+              }
+            </div>
+          }
+          @if (dialog === 'correction') {
+            <h3>Request correction</h3>
+            <label>Reason <input [(ngModel)]="correctionReason" name="reason" /></label>
+            <div class="actions">
+              <button type="button" class="secondary" (click)="dialog = ''">Cancel</button>
+              <button type="button" (click)="requestCorrection()" [disabled]="!correctionReason.trim()">Send request</button>
+            </div>
+          }
+          @if (dialog === 'import' && importPreview) {
+            <h3>Import preview</h3>
+            <p>Total rows: {{ importPreview.total }} · Valid: {{ importPreview.valid.length }} · Errors: {{ importPreview.errors.length }}</p>
+            @if (importPreview.errors.length) {
+              <ul class="history">
+                @for (issue of importPreview.errors; track $index) {
+                  <li>@if (issue.row) { Row {{ issue.row }} — }{{ issue.message }}</li>
+                }
+              </ul>
+            }
+            <div class="actions">
+              <button type="button" class="secondary" (click)="dialog = ''">Cancel</button>
+              <button type="button" class="secondary" (click)="dialog = ''">Fix errors</button>
+              <button type="button" (click)="importValid()" [disabled]="!importPreview.valid.length">Import valid records</button>
+            </div>
+          }
+        </div>
+      </div>
+    }
+  </div>
+}

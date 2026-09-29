@@ -57,6 +57,37 @@ public class GradebookController {
     return ApiResponse.ok(service.lock(id));
   }
 
+  @GetMapping("/entry-board")
+  public ApiResponse<List<Map<String, Object>>> entryBoard() {
+    return ApiResponse.ok(service.entryBoard());
+  }
+
+  @PostMapping("/definitions/{id}/submit")
+  public ApiResponse<Map<String, Object>> submit(
+      @PathVariable("id") UUID id, @RequestBody(required = false) Map<String, Object> body) {
+    return ApiResponse.ok(service.submit(id, body == null ? Map.of() : body));
+  }
+
+  @PostMapping("/definitions/{id}/correction-request")
+  public ApiResponse<Map<String, Object>> correction(
+      @PathVariable("id") UUID id, @RequestBody Map<String, Object> body) {
+    return ApiResponse.ok(service.requestCorrection(id, body));
+  }
+
+  @PostMapping("/definitions/{id}/unlock")
+  public ApiResponse<Map<String, Object>> unlock(
+      @PathVariable("id") UUID id, @RequestBody(required = false) Map<String, Object> body) {
+    return ApiResponse.ok(service.unlock(id, body == null ? Map.of() : body));
+  }
+
+  @GetMapping("/marks/history")
+  public ApiResponse<List<Map<String, Object>>> history(
+      @RequestParam("examDefinitionId") UUID examDefinitionId,
+      @RequestParam(name = "studentId", required = false) UUID studentId,
+      @RequestParam(name = "admissionNo", required = false) String admissionNo) {
+    return ApiResponse.ok(service.history(examDefinitionId, studentId, admissionNo));
+  }
+
   @GetMapping("/marks/published")
   public ApiResponse<List<Map<String, Object>>> publishedMarks() {
     return ApiResponse.ok(service.publishedMarks());

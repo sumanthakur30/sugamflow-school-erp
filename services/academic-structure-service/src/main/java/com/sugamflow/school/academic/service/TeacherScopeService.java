@@ -41,12 +41,16 @@ public class TeacherScopeService {
     out.put("teacherUsername", teacher);
 
     Set<String> sectionIds = new LinkedHashSet<>();
+    Set<String> classTeacherSectionIds = new LinkedHashSet<>();
     Set<String> studentLabels = new LinkedHashSet<>();
     Set<String> sectionCodes = new LinkedHashSet<>();
     Set<String> sectionNames = new LinkedHashSet<>();
+    List<Map<String, Object>> assignmentRows = new java.util.ArrayList<>();
 
     if (teacher == null || teacher.isBlank()) {
       out.put("sectionIds", sectionIds);
+      out.put("classTeacherSectionIds", classTeacherSectionIds);
+      out.put("assignments", assignmentRows);
       out.put("studentLabels", studentLabels);
       out.put("sectionCodes", sectionCodes);
       out.put("sectionNames", sectionNames);
@@ -58,6 +62,10 @@ public class TeacherScopeService {
         assignments.findByOrganizationIdAndTeacherUsername(scope.organizationId(), teacher)) {
       if (a.getSectionId() != null) {
         matchedSectionIds.add(a.getSectionId());
+        Map<String, Object> row = new LinkedHashMap<>();
+        row.put("sectionId", a.getSectionId().toString());
+        row.put("subjectId", a.getSubjectId() == null ? null : a.getSubjectId().toString());
+        assignmentRows.add(row);
       }
     }
 
@@ -69,6 +77,9 @@ public class TeacherScopeService {
               && s.getClassTeacherUsername().equalsIgnoreCase(teacher);
       if (isClassTeacher || matchedSectionIds.contains(s.getId())) {
         sectionIds.add(s.getId().toString());
+        if (isClassTeacher) {
+          classTeacherSectionIds.add(s.getId().toString());
+        }
         addIfPresent(studentLabels, s.getStudentLabel());
         addIfPresent(sectionCodes, s.getCode());
         addIfPresent(sectionNames, s.getName());
@@ -76,6 +87,8 @@ public class TeacherScopeService {
     }
 
     out.put("sectionIds", sectionIds);
+    out.put("classTeacherSectionIds", classTeacherSectionIds);
+    out.put("assignments", assignmentRows);
     out.put("studentLabels", studentLabels);
     out.put("sectionCodes", sectionCodes);
     out.put("sectionNames", sectionNames);

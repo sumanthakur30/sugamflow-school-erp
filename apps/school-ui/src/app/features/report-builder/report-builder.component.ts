@@ -19,7 +19,15 @@ export interface ReportElement {
   fontSize?: number;
   align?: string;
   bold?: boolean;
+  objectFit?: 'cover' | 'contain' | string;
+  fallbackSrc?: string;
+  borderWidth?: number;
+  borderColor?: string;
+  borderRadius?: number;
 }
+
+const SAMPLE_PHOTO_DATA_URL =
+  'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAADAAAABACAYAAABcIPRGAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsMAAA7DAcdvqGQAAAFQSURBVGhD7dQxDsIwDEZhDssRuAVHZGXmCqAMldBrVduJG6eNh29Bavy/hdvr/fme2Y0/nE0GRMuAaBkQLQPo/niK+E0LtwCO1OAbNVwCOMyCb1k1B3BQDb5p0RTAIS34tlZ1AAd44A2NOQN42BNvSTLAG29J5gvgQW+8JzEHFDzqibckGeCNtyRzBhQ87IE3NOYNKDigBd/WagooOKQG37RoDig4yIJvWbkEFBymwTdquAUsOHILv2nhHtBbBkTLgGgZEM0lgP/zFnzLqjqAQzzwhoY5gEePwJt71AE80gM3bFEF8OGeuIXEAD4YgZvUAXwoEreJAXxgBNx43QB+OBJuzYDeuHUVwA9Gw72rgNEjuDUDeuPWzYBRI7jx2gGjRXCbKmCUCG4yBURHcAupAgo+3AM3bFEHLHjkCLy5xxyw4FEPvKFRHfCPQyz4ltUP8fzWUNoQNcsAAAAASUVORK5CYII=';
 
 export interface ReportTemplate {
   templateKey: string;
@@ -94,6 +102,7 @@ export class ReportBuilderComponent implements OnInit, OnDestroy {
       this.featureEnabled = !!boot.featureEnabled;
       this.elementTypes = boot.elementTypes ?? [];
       this.samplePreviewData = boot.samplePreviewData ?? {};
+      this.ensureSamplePhoto();
       this.formats = boot.exportFormats ?? [];
       this.templates = boot.templates ?? [];
       this.loading = false;
@@ -197,9 +206,15 @@ export class ReportBuilderComponent implements OnInit, OnDestroy {
             : type === 'field'
               ? '{{student.name}}'
               : type === 'image'
-                ? '[Image]'
+                ? '{{student.photoDirectUrl}}'
                 : '',
-      bind: type === 'field' ? 'student.name' : undefined,
+      bind:
+        type === 'field'
+          ? 'student.name'
+          : type === 'image'
+            ? 'student.photoDirectUrl'
+            : undefined,
+      objectFit: type === 'image' ? 'cover' : undefined,
     };
     this.draft.elements = [...this.draft.elements, el];
     this.selectedId = el.id;
@@ -356,16 +371,53 @@ export class ReportBuilderComponent implements OnInit, OnDestroy {
   }
 
   displayLabel(el: ReportElement): string {
-    if (el.type === 'line') {
+    if (el.type === 'line' || el.type === 'box' || el.type === 'image') {
       return '';
-    }
-    if (el.type === 'box') {
-      return '';
-    }
-    if (el.type === 'image') {
-      return el.text || '[Image]';
     }
     return el.text || (el.bind ? `{{${el.bind}}}` : el.type);
+  }
+
+  imageSrc(el: ReportElement): string {
+    const raw = el.text?.trim() || (el.bind ? `{{${el.bind}}}` : '');
+    const resolved = this.resolvePlaceholders(raw);
+    if (this.isDrawableImage(resolved)) {
+      return resolved;
+    }
+    if (el.fallbackSrc && this.isDrawableImage(el.fallbackSrc)) {
+      return el.fallbackSrc;
+    }
+    return SAMPLE_PHOTO_DATA_URL;
+  }
+
+  onFallbackSelected(ev: Event): void {
+    const input = ev.target as HTMLInputElement;
+    const file = input.files?.[0];
+    const selected = this.selected;
+    if (!file || !selected) {
+      return;
+    }
+    if (!file.type.startsWith('image/')) {
+      this.error = 'Fallback must be an image file';
+      input.value = '';
+      return;
+    }
+    if (file.size > 200_000) {
+      this.error = 'Fallback image must be under 200 KB';
+      input.value = '';
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      selected.fallbackSrc = String(reader.result || '');
+      this.error = '';
+    };
+    reader.readAsDataURL(file);
+  }
+
+  clearFallback(): void {
+    if (this.selected) {
+      this.selected.fallbackSrc = '';
+    }
   }
 
   private openPdf(res: { contentBase64?: string; fileName?: string }): void {
@@ -388,7 +440,74 @@ export class ReportBuilderComponent implements OnInit, OnDestroy {
     return {
       ...t,
       layout: { ...(t.layout ?? { width: 794, height: 1123 }) },
-      elements: (t.elements ?? []).map((e) => ({ ...e })),
+      elements: (t.elements ?? []).map((e) => this.normalizeImageElement({ ...e })),
     };
+  }
+
+  private normalizeImageElement(el: ReportElement): ReportElement {
+    if (el.type !== 'image') {
+      return el;
+    }
+    const text = el.text ?? '';
+    const bind = el.bind ?? '';
+    if (text.includes('student.photoBase64') || bind === 'student.photoBase64') {
+      el.text = '{{student.photoDirectUrl}}';
+      el.bind = 'student.photoDirectUrl';
+    } else if (text.includes('student.photoDirectUrl') && !el.bind) {
+      el.bind = 'student.photoDirectUrl';
+    }
+    el.objectFit = el.objectFit || 'cover';
+    if (el.borderWidth == null) {
+      el.borderWidth = 1;
+    }
+    if (!el.borderColor) {
+      el.borderColor = '#94a3b8';
+    }
+    if (el.borderRadius == null) {
+      el.borderRadius = 0;
+    }
+    return el;
+  }
+
+  private ensureSamplePhoto(): void {
+    const student = {
+      ...((this.samplePreviewData['student'] as Record<string, unknown>) ?? {}),
+    };
+    const current = String(student['photoDirectUrl'] ?? '');
+    if (!current || current.includes('{{')) {
+      student['photoDirectUrl'] = SAMPLE_PHOTO_DATA_URL;
+    }
+    this.samplePreviewData = { ...this.samplePreviewData, student };
+  }
+
+  private resolvePlaceholders(template: string): string {
+    return template.replace(/\{\{([^}]+)\}\}/g, (_match, path: string) => {
+      const value = this.bindValue(path.trim());
+      return value ?? '';
+    });
+  }
+
+  private bindValue(path: string): string {
+    let cur: unknown = this.samplePreviewData;
+    for (const part of path.split('.')) {
+      if (!cur || typeof cur !== 'object') {
+        return '';
+      }
+      cur = (cur as Record<string, unknown>)[part];
+      if (cur == null) {
+        return '';
+      }
+    }
+    return String(cur);
+  }
+
+  private isDrawableImage(value: string): boolean {
+    const trimmed = value.trim();
+    return (
+      trimmed.startsWith('data:image/') ||
+      trimmed.startsWith('blob:') ||
+      trimmed.startsWith('http://') ||
+      trimmed.startsWith('https://')
+    );
   }
 }
