@@ -1,6 +1,7 @@
 import { Component, OnInit, inject } from '@angular/core';
 import { ActivatedRoute } from '@angular/router';
 import { NgIf } from '@angular/common';
+import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
 import { WebsiteApiService } from '../core/website-api.service';
 import { SeoService } from '../core/seo.service';
 
@@ -15,7 +16,7 @@ import { SeoService } from '../core/seo.service';
       <p class="summary" *ngIf="p['summary']">{{ p['summary'] }}</p>
     </section>
     <article *ngIf="page as p; else loading">
-      <div class="body" [innerHTML]="p['bodyHtml']"></div>
+      <div class="body" [innerHTML]="trusted(p['bodyHtml'])"></div>
     </article>
     <ng-template #loading><p class="loading">Loading…</p></ng-template>
   `,
@@ -73,11 +74,15 @@ export class CmsPageComponent implements OnInit {
   private readonly route = inject(ActivatedRoute);
   private readonly api = inject(WebsiteApiService);
   private readonly seo = inject(SeoService);
+  private readonly sanitizer = inject(DomSanitizer);
   page: Record<string, unknown> | null = null;
+  private lastScrolledFragment: string | null = null;
+  private scrollTimer: ReturnType<typeof setTimeout> | null = null;
 
   ngOnInit(): void {
     this.route.paramMap.subscribe((params) => {
       const slug = params.get('slug') || '';
+      this.lastScrolledFragment = null;
       this.api.resolve().subscribe(() => {
         this.api.getPage(slug).subscribe({
           next: (p) => {
@@ -86,10 +91,28 @@ export class CmsPageComponent implements OnInit {
               title: String(p['seoTitle'] || p['title'] || 'Page'),
               description: String(p['seoDescription'] || p['summary'] || ''),
             });
+            this.scrollTo(this.route.snapshot.fragment);
           },
           error: () => (this.page = { title: 'Not found', bodyHtml: '<p>Page not found.</p>' }),
         });
       });
     });
+    this.route.fragment.subscribe((id) => this.scrollTo(id));
+  }
+
+  trusted(html: unknown): SafeHtml {
+    const raw = String(html || '').replace(/<script[\s\S]*?>[\s\S]*?<\/script>/gi, '');
+    return this.sanitizer.bypassSecurityTrustHtml(raw);
+  }
+
+  private scrollTo(id: string | null): void {
+    if (!id || id === this.lastScrolledFragment) return;
+    if (this.scrollTimer) clearTimeout(this.scrollTimer);
+    this.scrollTimer = setTimeout(() => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      this.lastScrolledFragment = id;
+      el.scrollIntoView({ behavior: 'auto', block: 'start' });
+    }, 60);
   }
 }

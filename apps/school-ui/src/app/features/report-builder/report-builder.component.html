@@ -109,13 +109,21 @@
                   [style.top.px]="el.y"
                   [style.width.px]="el.width"
                   [style.height.px]="el.height"
+                  [class.el-image]="el.type === 'image'"
                   [style.fontSize.px]="el.fontSize || 11"
                   [style.fontWeight]="el.bold || el.type === 'heading' ? '700' : '500'"
                   [style.textAlign]="el.align || 'left'"
+                  [style.--photo-bw.px]="el.type === 'image' ? (el.borderWidth ?? 1) : null"
+                  [style.--photo-bc]="el.type === 'image' ? el.borderColor || '#94a3b8' : null"
+                  [style.--photo-br.px]="el.type === 'image' ? el.borderRadius || 0 : null"
                   (click)="selectElement(el, $event)"
                   (pointerdown)="onElementPointerDown(el, $event)"
                 >
-                  {{ displayLabel(el) }}
+                  @if (el.type === 'image') {
+                    <img class="photo" [src]="imageSrc(el)" [style.object-fit]="el.objectFit || 'cover'" alt="" />
+                  } @else {
+                    {{ displayLabel(el) }}
+                  }
                 </div>
               }
             </div>
@@ -175,6 +183,37 @@
               <span>Bold</span>
               <input type="checkbox" [(ngModel)]="selected.bold" name="bold" />
             </label>
+            @if (selected.type === 'image') {
+              <label>
+                Fit
+                <select [(ngModel)]="selected.objectFit" name="objectFit">
+                  <option value="cover">Cover</option>
+                  <option value="contain">Contain</option>
+                </select>
+              </label>
+              <label>
+                Fallback image
+                <input type="file" accept="image/jpeg,image/png,image/webp" (change)="onFallbackSelected($event)" />
+              </label>
+              @if (selected.fallbackSrc) {
+                <button type="button" class="secondary" (click)="clearFallback()">Clear fallback</button>
+              }
+              <p class="muted">Shown when the student has no photo. Upload the real photo on the student profile.</p>
+              <div class="grid two">
+                <label>
+                  Border width
+                  <input type="number" min="0" [(ngModel)]="selected.borderWidth" name="borderWidth" />
+                </label>
+                <label>
+                  Radius
+                  <input type="number" min="0" [(ngModel)]="selected.borderRadius" name="borderRadius" />
+                </label>
+              </div>
+              <label>
+                Border color
+                <input type="color" [(ngModel)]="selected.borderColor" name="borderColor" />
+              </label>
+            }
           </div>
           <div class="actions">
             <button type="button" class="secondary" (click)="bringForward()">Forward</button>

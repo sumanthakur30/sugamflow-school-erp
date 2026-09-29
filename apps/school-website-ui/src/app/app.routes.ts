@@ -11,6 +11,7 @@ import { AdmissionApplyPageComponent } from './pages/admission-apply-page.compon
 import { BlogListPageComponent } from './pages/blog-list-page.component';
 import { BlogDetailPageComponent } from './pages/blog-detail-page.component';
 import { ContactPageComponent } from './pages/contact-page.component';
+import { ResourcesPageComponent } from './pages/resources-page.component';
 import { AlumniListPageComponent } from './pages/alumni-list-page.component';
 import { AlumniDetailPageComponent } from './pages/alumni-detail-page.component';
 
@@ -27,6 +28,9 @@ export const routes: Routes = [
       { path: 'blog/:slug', component: BlogDetailPageComponent },
       { path: 'alumni', component: AlumniListPageComponent },
       { path: 'alumni/:slug', component: AlumniDetailPageComponent },
+      { path: 'notices', component: NewsListPageComponent },
+      { path: 'admissions', redirectTo: 'admission', pathMatch: 'full' },
+      { path: 'resources', component: ResourcesPageComponent },
       { path: 'news', component: NewsListPageComponent },
       { path: 'news/:slug', component: NewsDetailPageComponent },
       { path: 'gallery', component: GalleryPageComponent },

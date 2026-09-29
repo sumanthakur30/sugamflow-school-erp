@@ -11,4 +11,8 @@ public record NewsResponse(
     String bodyHtml,
     String coverImageUrl,
     Instant publishedAt,
-    String status) {}
+    String status,
+    String category,
+    Integer priority,
+    String audience,
+    Instant expiresAt) {}

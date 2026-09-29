@@ -8,6 +8,10 @@ import java.util.UUID;
 /** Palette + normalization for drag-drop report designer elements (metadata-driven). */
 public final class ReportElementCatalog {
 
+  /** Designer sample portrait so {{student.photoDirectUrl}} previews before a student photo exists. */
+  public static final String SAMPLE_PHOTO_DATA_URL =
+      "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAADAAAABACAYAAABcIPRGAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsMAAA7DAcdvqGQAAAFQSURBVGhD7dQxDsIwDEZhDssRuAVHZGXmCqAMldBrVduJG6eNh29Bavy/hdvr/fme2Y0/nE0GRMuAaBkQLQPo/niK+E0LtwCO1OAbNVwCOMyCb1k1B3BQDb5p0RTAIS34tlZ1AAd44A2NOQN42BNvSTLAG29J5gvgQW+8JzEHFDzqibckGeCNtyRzBhQ87IE3NOYNKDigBd/WagooOKQG37RoDig4yIJvWbkEFBymwTdquAUsOHILv2nhHtBbBkTLgGgZEM0lgP/zFnzLqjqAQzzwhoY5gEePwJt71AE80gM3bFEF8OGeuIXEAD4YgZvUAXwoEreJAXxgBNx43QB+OBJuzYDeuHUVwA9Gw72rgNEjuDUDeuPWzYBRI7jx2gGjRXCbKmCUCG4yBURHcAupAgo+3AM3bFEHLHjkCLy5xxyw4FEPvKFRHfCPQyz4ltUP8fzWUNoQNcsAAAAASUVORK5CYII=";
+
   private ReportElementCatalog() {}
 
   public static final List<Map<String, Object>> ELEMENT_TYPES =
@@ -56,7 +60,11 @@ public final class ReportElementCatalog {
       }
       case "line" -> el.put("text", "");
       case "box" -> el.put("text", "");
-      case "image" -> el.put("text", "[Image]");
+      case "image" -> {
+        el.put("text", "{{student.photoDirectUrl}}");
+        el.put("bind", "student.photoDirectUrl");
+        el.put("objectFit", "cover");
+      }
       case "qr" -> {
         el.put("bind", "context.verifyUrl");
         el.put("text", "{{context.verifyUrl}}");
@@ -94,6 +102,20 @@ public final class ReportElementCatalog {
       }
       if (!el.containsKey("text") && el.containsKey("bind")) {
         el.put("text", "{{" + el.get("bind") + "}}");
+      }
+      if ("image".equals(type)) {
+        String text = String.valueOf(el.getOrDefault("text", ""));
+        String bind = String.valueOf(el.getOrDefault("bind", ""));
+        if (text.contains("student.photoBase64") || "student.photoBase64".equals(bind)) {
+          el.put("text", "{{student.photoDirectUrl}}");
+          el.put("bind", "student.photoDirectUrl");
+        } else if (text.contains("student.photoDirectUrl")
+            && (bind.isBlank() || "null".equals(bind))) {
+          el.put("bind", "student.photoDirectUrl");
+        }
+        if (!el.containsKey("objectFit") || String.valueOf(el.get("objectFit")).isBlank()) {
+          el.put("objectFit", "cover");
+        }
       }
       out.add(el);
     }
@@ -142,6 +164,8 @@ public final class ReportElementCatalog {
     student.put("penNumber", "PEN1234567");
     student.put("apaarId", "APAAR-998877");
     student.put("photoBase64", "");
+    student.put("photoDirectUrl", SAMPLE_PHOTO_DATA_URL);
+    student.put("photoContentUrl", "");
     Map<String, Object> application = new LinkedHashMap<>();
     application.put("fullName", "Priya Nair");
     application.put("classApplied", "Grade 8");

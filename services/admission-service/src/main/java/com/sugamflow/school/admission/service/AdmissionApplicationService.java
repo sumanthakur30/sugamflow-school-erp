@@ -338,6 +338,32 @@ public class AdmissionApplicationService {
     return toDto(repository.save(entity));
   }
 
+  /** Public field list for the school's configured admission form. No workflow or internal ids. */
+  public Map<String, Object> publicFormSchema(String organizationId, String branchId) {
+    if (organizationId == null || organizationId.isBlank()) {
+      throw new AdmissionException("VALIDATION", "organizationId is required");
+    }
+    TenantScope scope =
+        new TenantScope(
+            organizationId.trim(),
+            branchId == null || branchId.isBlank() ? "main" : branchId.trim(),
+            "2025-26",
+            "website-public",
+            "PUBLIC");
+    TenantContext.set(scope);
+    try {
+      Map<String, Object> module = engines.getModuleSettings(scope, MODULE_ADMISSION);
+      String formKey = resolveFormKey(module);
+      Map<String, Object> form = engines.getForm(scope, formKey);
+      Map<String, Object> out = new LinkedHashMap<>();
+      out.put("formKey", formKey);
+      out.put("sections", sanitizeFormSections(form));
+      return out;
+    } finally {
+      TenantContext.clear();
+    }
+  }
+
   /**
    * Public website admission inquiry. Tenant comes from organizationId (already resolved by website
    * host mapping); does not trust client for anything beyond the applicant fields.
@@ -397,6 +423,7 @@ public class AdmissionApplicationService {
       } else {
         answers.put("age", "0");
       }
+      mergePublicAnswers(body.get("answers"), answers);
 
       Map<String, Object> module = engines.getModuleSettings(scope, MODULE_ADMISSION);
       String formKey = resolveFormKey(module);
@@ -943,6 +970,79 @@ public class AdmissionApplicationService {
     return repository
         .findByIdAndOrganizationId(id, org)
         .orElseThrow(() -> new AdmissionException("NOT_FOUND", "Application not found"));
+  }
+
+  @SuppressWarnings("unchecked")
+  private static void mergePublicAnswers(Object raw, Map<String, Object> answers) {
+    if (!(raw instanceof Map<?, ?> map)) {
+      return;
+    }
+    for (Map.Entry<?, ?> entry : map.entrySet()) {
+      if (entry.getKey() == null || entry.getValue() == null) {
+        continue;
+      }
+      String key = String.valueOf(entry.getKey()).trim();
+      if (key.isBlank()
+          || "organizationId".equals(key)
+          || "captchaToken".equals(key)
+          || "branchId".equals(key)) {
+        continue;
+      }
+      String text = String.valueOf(entry.getValue()).trim();
+      if (!text.isBlank()) {
+        answers.put(key, entry.getValue());
+      }
+    }
+  }
+
+  @SuppressWarnings("unchecked")
+  private static List<Map<String, Object>> sanitizeFormSections(Map<String, Object> form) {
+    if (form == null) {
+      return List.of();
+    }
+    Object sectionsObj = form.get("sections");
+    if (!(sectionsObj instanceof List<?> sections)) {
+      return List.of();
+    }
+    List<Map<String, Object>> safe = new ArrayList<>();
+    for (Object sectionObj : sections) {
+      if (!(sectionObj instanceof Map<?, ?> section)) {
+        continue;
+      }
+      Object fieldsObj = section.get("fields");
+      if (!(fieldsObj instanceof List<?> fields)) {
+        continue;
+      }
+      List<Map<String, Object>> safeFields = new ArrayList<>();
+      for (Object fieldObj : fields) {
+        if (!(fieldObj instanceof Map<?, ?> field)) {
+          continue;
+        }
+        Object key = field.get("key");
+        if (key == null || String.valueOf(key).isBlank()) {
+          continue;
+        }
+        Map<String, Object> row = new LinkedHashMap<>();
+        row.put("key", String.valueOf(key));
+        row.put("label", field.get("label") == null ? String.valueOf(key) : field.get("label"));
+        row.put("type", field.get("type") == null ? "TEXTBOX" : field.get("type"));
+        row.put("mandatory", Boolean.TRUE.equals(field.get("mandatory")));
+        if (field.get("placeholder") != null) {
+          row.put("placeholder", field.get("placeholder"));
+        }
+        if (field.get("options") instanceof List<?> options) {
+          row.put("options", options);
+        }
+        safeFields.add(row);
+      }
+      if (!safeFields.isEmpty()) {
+        Map<String, Object> sectionRow = new LinkedHashMap<>();
+        sectionRow.put("title", section.get("title"));
+        sectionRow.put("fields", safeFields);
+        safe.add(sectionRow);
+      }
+    }
+    return safe;
   }
 
   @SuppressWarnings("unchecked")

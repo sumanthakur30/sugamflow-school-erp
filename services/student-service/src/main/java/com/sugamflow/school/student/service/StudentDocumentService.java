@@ -96,9 +96,9 @@ public class StudentDocumentService {
             + token.substring(0, 6).toUpperCase(Locale.ROOT);
 
     Map<String, Object> studentDto = StudentRecordService.toIdentitySummary(studentAnswersDto(student));
-    String photoBase64 = resolveStudentPhotoBase64(scope.organizationId(), studentId, student);
+    StudentPhoto photo = resolveStudentPhoto(scope.organizationId(), studentId, student);
     Map<String, Object> studentPayload =
-        buildIdCardStudentPayload(scope, student, studentDto, photoBase64, type);
+        buildIdCardStudentPayload(scope, student, studentDto, photo, type);
     Map<String, Object> data = new LinkedHashMap<>();
     data.put("student", studentPayload);
     data.put(
@@ -313,8 +313,12 @@ public class StudentDocumentService {
       TenantScope scope,
       StudentRecordEntity student,
       Map<String, Object> studentDto,
-      String photoBase64,
+      StudentPhoto photo,
       String documentType) {
+    String contentUrl =
+        photo.contentUrl().isBlank()
+            ? stringOr(studentDto.get("photoUrl"), "")
+            : photo.contentUrl();
     Map<String, Object> full = new LinkedHashMap<>();
     full.put("name", stringOr(studentDto.get("fullName"), "Student"));
     full.put("fullName", stringOr(studentDto.get("fullName"), "Student"));
@@ -324,8 +328,10 @@ public class StudentDocumentService {
     full.put("rollNo", stringOr(studentDto.get("rollNo"), ""));
     full.put("house", stringOr(studentDto.get("house"), ""));
     full.put("gender", stringOr(studentDto.get("gender"), ""));
-    full.put("photoUrl", stringOr(studentDto.get("photoUrl"), ""));
-    full.put("photoBase64", photoBase64 == null ? "" : photoBase64);
+    full.put("photoUrl", contentUrl);
+    full.put("photoContentUrl", contentUrl);
+    full.put("photoBase64", photo.base64());
+    full.put("photoDirectUrl", photo.dataUrl());
     full.put("penNumber", stringOr(studentDto.get("penNumber"), ""));
     full.put("apaarId", stringOr(studentDto.get("apaarId"), ""));
     full.put("samagraId", stringOr(studentDto.get("samagraId"), ""));
@@ -343,6 +349,8 @@ public class StudentDocumentService {
     allowed.add("admissionNo");
     allowed.add("photoBase64");
     allowed.add("photoUrl");
+    allowed.add("photoDirectUrl");
+    allowed.add("photoContentUrl");
     Map<String, Object> filtered = new LinkedHashMap<>();
     for (Map.Entry<String, Object> e : full.entrySet()) {
       filtered.put(e.getKey(), allowed.contains(e.getKey()) ? e.getValue() : "");
@@ -443,25 +451,47 @@ public class StudentDocumentService {
     return s.isEmpty() ? fallback : s;
   }
 
-  /** Prefer vault STUDENT_PHOTO bytes; fall back empty so PDF draws an image placeholder. */
-  private String resolveStudentPhotoBase64(String organizationId, UUID studentId, StudentRecordEntity student) {
+  /**
+   * Prefer vault STUDENT_PHOTO bytes. {@code photoDirectUrl} is a data URL so the ID card canvas
+   * and PDF can draw it without a second authenticated fetch.
+   */
+  private StudentPhoto resolveStudentPhoto(
+      String organizationId, UUID studentId, StudentRecordEntity student) {
     List<StudentAttachmentEntity> photos =
         attachments.findByOrganizationIdAndStudentIdAndAttachmentTypeOrderByCreatedAtDesc(
             organizationId, studentId, StudentAttachmentService.TYPE_STUDENT_PHOTO);
     if (!photos.isEmpty()) {
-      String b64 = photos.get(0).getContentBase64();
-      if (b64 != null && !b64.isBlank()) {
-        return b64.contains(",") ? b64.substring(b64.indexOf(',') + 1) : b64;
+      StudentAttachmentEntity photo = photos.get(0);
+      String b64 = stripBase64(photo.getContentBase64());
+      String mime = photo.getContentType();
+      if (mime == null || !mime.toLowerCase(Locale.ROOT).startsWith("image/")) {
+        mime = "image/jpeg";
       }
+      String dataUrl = b64.isBlank() ? "" : "data:" + mime + ";base64," + b64;
+      String contentUrl = "/api/student/attachments/" + photo.getId() + "/content";
+      return new StudentPhoto(b64, dataUrl, contentUrl);
     }
     Map<String, Object> answers = student.getAnswers() != null ? student.getAnswers() : Map.of();
-    Object raw = answers.get("photoBase64");
-    if (raw != null) {
-      String s = String.valueOf(raw).trim();
-      if (!s.isBlank()) {
-        return s.contains(",") ? s.substring(s.indexOf(',') + 1) : s;
-      }
+    String raw = stringOr(answers.get("photoBase64"), "");
+    String b64 = stripBase64(raw);
+    String dataUrl = "";
+    if (!b64.isBlank()) {
+      dataUrl = raw.startsWith("data:") ? raw : "data:image/jpeg;base64," + b64;
     }
-    return "";
+    return new StudentPhoto(b64, dataUrl, stringOr(answers.get("photoUrl"), ""));
   }
+
+  private static String stripBase64(String value) {
+    if (value == null || value.isBlank()) {
+      return "";
+    }
+    String trimmed = value.trim();
+    int comma = trimmed.indexOf(',');
+    if (trimmed.regionMatches(true, 0, "data:", 0, 5) && comma > 0) {
+      return trimmed.substring(comma + 1);
+    }
+    return trimmed;
+  }
+
+  private record StudentPhoto(String base64, String dataUrl, String contentUrl) {}
 }

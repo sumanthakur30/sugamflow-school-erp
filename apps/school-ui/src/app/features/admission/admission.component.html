@@ -436,8 +436,8 @@
       @if (featureEnabled && !loading) {
         <div class="head-actions">
           <button type="button" class="ghost" (click)="downloadRegister('PDF')">Print register</button>
-          <button type="button" class="ghost" (click)="downloadRegister('EXCEL')">Excel</button>
-          <button type="button" (click)="openForm()">+ New Application</button>
+          <button type="button" class="ghost" (click)="downloadRegister('EXCEL')">Export Excel</button>
+          <button type="button" class="primary" (click)="openForm()">+ New Application</button>
         </div>
       }
     </header>
@@ -462,6 +462,7 @@
       <section class="panel inbox-panel">
         <sf-list-toolbar
           searchPlaceholder="Search applicant, mobile, class, status…"
+          [live]="true"
           [(q)]="listQ"
           [(sortBy)]="sortBy"
           [(sortDir)]="sortDir"
@@ -562,12 +563,12 @@
                   <td>
                     <span class="step-chip">{{ app.currentStepName || '—' }}</span>
                   </td>
-                  <td class="muted-cell col-updated">{{ formatWhen(app.updatedAt || app.createdAt) }}</td>
+                  <td class="muted-cell col-updated">{{ formatListDate(app.updatedAt || app.createdAt) }}</td>
                   <td class="col-actions" (click)="$event.stopPropagation()">
                     <div class="action-btns">
-                      <button type="button" class="tiny secondary" (click)="openView(app)">Open</button>
+                      <button type="button" class="row-action" (click)="openView(app)">Open</button>
                       @if (canEditApp(app)) {
-                        <button type="button" class="tiny" (click)="openEdit(app, $event)">Edit</button>
+                        <button type="button" class="row-action" (click)="openEdit(app, $event)">Edit</button>
                       }
                     </div>
                   </td>
@@ -606,13 +607,13 @@
                 </div>
                 <div class="inbox-card-foot">
                   <span class="step-chip">{{ app.currentStepName || '—' }}</span>
-                  <span class="muted">{{ formatWhen(app.updatedAt || app.createdAt) }}</span>
+                  <span class="muted">{{ formatListDate(app.updatedAt || app.createdAt) }}</span>
                 </div>
               </button>
               <div class="inbox-card-actions">
-                <button type="button" class="tiny secondary" (click)="openView(app)">Open</button>
+                <button type="button" class="row-action" (click)="openView(app)">Open</button>
                 @if (canEditApp(app)) {
-                  <button type="button" class="tiny" (click)="openEdit(app, $event)">Edit</button>
+                  <button type="button" class="row-action" (click)="openEdit(app, $event)">Edit</button>
                 }
               </div>
             </div>

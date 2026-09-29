@@ -1,15 +1,316 @@
 <section class="page roster-page">
-  <div class="page-head">
-    <h2>{{ title }}</h2>
-    <p>{{ subtitle }}</p>
-  </div>
+  <header class="page-head roster-head">
+    <div>
+      <h2>{{ title }}</h2>
+      <p>{{ roster?.sectionLabel ? 'Mark attendance for ' + roster?.sectionLabel : subtitle }}</p>
+    </div>
+    @if (roster) {
+      <span class="session-chip" [class.is-locked]="locked()">{{ sessionLabel() }}</span>
+    }
+  </header>
 
   @if (error) {
-    <p class="error panel" role="alert">{{ error }}</p>
+    <p class="error panel feedback" role="alert">{{ error }}</p>
   }
   @if (status) {
-    <p class="status panel">{{ status }}</p>
+    <p class="status panel feedback" role="status" aria-live="polite">{{ status }}</p>
   }
+
+  @if (loading) {
+    <p class="panel">Loading attendance…</p>
+  } @else {
+    <section class="panel filter-bar" aria-label="Attendance context">
+      <label>
+        Class / Section
+        <select [(ngModel)]="sectionId" (ngModelChange)="loadRoster()" name="sectionId">
+          @for (section of sections; track section.id) {
+            <option [value]="section.id">{{ section.studentLabel || section.name }}</option>
+          }
+        </select>
+      </label>
+      <label>
+        Date
+        <input type="date" [(ngModel)]="date" (ngModelChange)="loadRoster()" name="date" />
+      </label>
+      <label>
+        Period (optional)
+        <select [(ngModel)]="periodId" (ngModelChange)="loadRoster()" name="periodId">
+          <option value="">Daily attendance</option>
+          @for (period of periods; track period.id) {
+            <option [value]="period.id">{{ period.label }}</option>
+          }
+        </select>
+      </label>
+    </section>
+
+    @if (roster) {
+      <section class="summary-strip" aria-label="Attendance summary">
+        <div class="summary-item total"><span>Total students</span><strong>{{ summary.total }}</strong></div>
+        <div class="summary-item present"><span>Present</span><strong>{{ summary.present }}</strong></div>
+        <div class="summary-item absent"><span>Absent</span><strong>{{ summary.absent }}</strong></div>
+        <div class="summary-item late"><span>Late</span><strong>{{ summary.late }}</strong></div>
+        <div class="summary-item leave"><span>Leave</span><strong>{{ summary.leave }}</strong></div>
+        <div class="summary-item unmarked">
+          <span>Not marked</span><strong>{{ summary.notMarked }}</strong>
+        </div>
+      </section>
+
+      @if (locked()) {
+        <p class="locked-note" role="status">This attendance session is locked and cannot be changed.</p>
+      } @else if (submitted() && !dirty) {
+        <p class="submitted-note" role="status">
+          Attendance is submitted. Change a mark only if a correction is needed, then submit again.
+        </p>
+      }
+
+      <section class="panel attendance-toolbar" aria-label="Attendance actions">
+        <div class="toolbar-group fast-action">
+          <button
+            type="button"
+            class="mark-all-button"
+            (click)="markAll('PRESENT')"
+            [disabled]="busy || locked() || !students.length"
+          >
+            <span aria-hidden="true">✓</span> Mark all present
+          </button>
+        </div>
+
+        <div class="toolbar-group bulk-actions">
+          <label class="master-selection">
+            <input
+              type="checkbox"
+              [checked]="allVisibleSelected()"
+              [indeterminate]="someVisibleSelected()"
+              [disabled]="busy || locked() || !visibleStudents.length"
+              (change)="toggleVisible($any($event.target).checked)"
+            />
+            <span>Select all</span>
+          </label>
+          <span class="selection-count" aria-live="polite">
+            {{ selectedKeys.size }} of {{ summary.total }} selected
+          </span>
+          <button
+            type="button"
+            class="secondary bulk-present"
+            (click)="applyBulkStatus('PRESENT')"
+            [disabled]="busy || locked() || !selectedKeys.size"
+          >
+            Mark present
+          </button>
+          <button
+            type="button"
+            class="secondary bulk-absent"
+            (click)="applyBulkStatus('ABSENT')"
+            [disabled]="busy || locked() || !selectedKeys.size"
+          >
+            Mark absent
+          </button>
+          <button
+            type="button"
+            class="secondary bulk-late"
+            (click)="applyBulkStatus('LATE')"
+            [disabled]="busy || locked() || !selectedKeys.size"
+          >
+            Mark late
+          </button>
+          <button
+            type="button"
+            class="secondary bulk-leave"
+            (click)="applyBulkStatus('LEAVE')"
+            [disabled]="busy || locked() || !selectedKeys.size"
+          >
+            Mark leave
+          </button>
+        </div>
+
+        <div class="toolbar-group save-actions">
+          <button
+            type="button"
+            class="secondary"
+            (click)="save(false)"
+            [disabled]="!canSaveDraft()"
+            [title]="submitted() ? 'Submitted attendance must be resubmitted after corrections' : 'Save current marks without submitting'"
+          >
+            Save draft
+          </button>
+          <button
+            type="button"
+            class="submit-button"
+            (click)="submit()"
+            [disabled]="!canSubmit()"
+            [title]="summary.notMarked ? 'Mark every student before submitting' : 'Submit final attendance'"
+          >
+            {{ busy ? 'Saving…' : 'Submit attendance' }}
+          </button>
+        </div>
+      </section>
+
+      <section class="list-tools" aria-label="Find students">
+        <label class="student-search">
+          <span class="visually-hidden">Search students</span>
+          <input
+            type="search"
+            [(ngModel)]="searchQuery"
+            (ngModelChange)="refreshView()"
+            name="studentSearch"
+            placeholder="Search student by name or admission number…"
+          />
+        </label>
+        <label class="status-filter">
+          <span>Status</span>
+          <select
+            [(ngModel)]="statusFilter"
+            (ngModelChange)="refreshView()"
+            name="statusFilter"
+          >
+            @for (filter of statusFilters; track filter.value) {
+              <option [value]="filter.value">{{ filter.label }}</option>
+            }
+          </select>
+        </label>
+        <span class="visible-count">{{ visibleStudents.length }} shown</span>
+        <div class="export-actions">
+          <button
+            type="button"
+            class="secondary tiny"
+            (click)="downloadRegister('PDF')"
+            [disabled]="busy || !sectionId"
+          >
+            Print PDF
+          </button>
+          <button
+            type="button"
+            class="secondary tiny"
+            (click)="downloadRegister('EXCEL')"
+            [disabled]="busy || !sectionId"
+          >
+            Excel
+          </button>
+        </div>
+      </section>
+
+      @if (!students.length) {
+        <p class="panel empty-state">
+          No students found for this section. Check that each student's class/section matches
+          <strong>{{ roster.sectionLabel }}</strong>.
+        </p>
+      } @else {
+        <div class="attendance-table-wrap">
+          <table class="attendance-table">
+            <thead>
+              <tr>
+                <th class="select-column">
+                  <input
+                    type="checkbox"
+                    aria-label="Select all visible students"
+                    [checked]="allVisibleSelected()"
+                    [indeterminate]="someVisibleSelected()"
+                    [disabled]="busy || locked() || !visibleStudents.length"
+                    (change)="toggleVisible($any($event.target).checked)"
+                  />
+                </th>
+                <th class="number-column">S.No.</th>
+                <th>Student</th>
+                <th class="admission-column">Admission / Roll No.</th>
+                <th class="status-column">Status</th>
+                <th class="remark-column">Remarks</th>
+              </tr>
+            </thead>
+            <tbody>
+              @if (!visibleStudents.length) {
+                <tr>
+                  <td colspan="6" class="empty-filter">
+                    No students match the current search and status filter.
+                  </td>
+                </tr>
+              }
+              @for (student of visibleStudents; track student.key) {
+                <tr [class.is-selected]="isSelected(student.key)">
+                  <td class="select-column" data-label="Select">
+                    <input
+                      type="checkbox"
+                      [attr.aria-label]="'Select ' + (student.studentName || student.admissionNo)"
+                      [checked]="isSelected(student.key)"
+                      [disabled]="busy || locked()"
+                      (change)="toggleStudent(student.key, $any($event.target).checked)"
+                    />
+                  </td>
+                  <td class="number-column" data-label="S.No.">{{ student.rosterIndex }}</td>
+                  <td class="student-column" data-label="Student">
+                    <div class="student-identity">
+                      <span class="student-avatar" aria-hidden="true">
+                        @if (student.photoUrl) {
+                          <img [src]="student.photoUrl" alt="" />
+                        } @else {
+                          {{ initials(student.studentName || student.admissionNo) }}
+                        }
+                      </span>
+                      <span>
+                        <strong>{{ student.studentName || student.admissionNo }}</strong>
+                        <small>{{ student.classSection || roster.sectionLabel }}</small>
+                      </span>
+                    </div>
+                  </td>
+                  <td class="admission-column" data-label="Admission / Roll No.">
+                    {{ student.admissionNo || '—' }}
+                  </td>
+                  <td class="status-column" data-label="Status">
+                    <div
+                      class="status-controls"
+                      role="group"
+                      [attr.aria-label]="'Attendance status for ' + (student.studentName || '')"
+                    >
+                      @for (option of markOptions; track option) {
+                        <button
+                          type="button"
+                          class="status-button"
+                          [class.active]="student.status === option"
+                          [class.present]="option === 'PRESENT'"
+                          [class.absent]="option === 'ABSENT'"
+                          [class.late]="option === 'LATE'"
+                          [class.leave]="option === 'LEAVE'"
+                          [attr.aria-pressed]="student.status === option"
+                          [disabled]="busy || locked()"
+                          (click)="setStudentStatus(student, option)"
+                        >
+                          <span class="status-short" aria-hidden="true">
+                            {{ option === 'PRESENT' ? 'P' : option === 'ABSENT' ? 'A' : option === 'LATE' ? 'L' : 'Lv' }}
+                          </span>
+                          <span class="status-long">{{ option === 'LEAVE' ? 'Leave' : (option | titlecase) }}</span>
+                        </button>
+                      }
+                    </div>
+                    @if (!student.status) {
+                      <span class="not-marked-label">Not marked</span>
+                    }
+                  </td>
+                  <td class="remark-column" data-label="Remarks">
+                    <input
+                      class="remark-input"
+                      type="text"
+                      [ngModel]="student.remarkText"
+                      (ngModelChange)="setRemark(student, $event)"
+                      [name]="'remark-' + student.key"
+                      placeholder="Add remark…"
+                      maxlength="250"
+                      [disabled]="busy || locked()"
+                    />
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+        <footer class="roster-footer">
+          <span>{{ selectedKeys.size }} of {{ summary.total }} students selected</span>
+          @if (selectedKeys.size) {
+            <button type="button" class="link-button" (click)="clearSelection()">Clear selection</button>
+          }
+        </footer>
+      }
+    }
+  }
+
   @if (parentAlerts) {
     <section class="panel alert-summary" aria-label="Parent alert delivery summary">
       <div class="alert-summary__head">
@@ -44,117 +345,5 @@
         </ul>
       }
     </section>
-  }
-
-  @if (loading) {
-    <p class="panel">Loading…</p>
-  } @else {
-    <div class="panel filters grid three">
-      <label>
-        Class / Section
-        <select [(ngModel)]="sectionId" (ngModelChange)="loadRoster()" name="sectionId">
-          @for (s of sections; track s.id) {
-            <option [value]="s.id">{{ s.studentLabel || s.name }}</option>
-          }
-        </select>
-      </label>
-      <label>
-        Date
-        <input type="date" [(ngModel)]="date" (ngModelChange)="loadRoster()" name="date" />
-      </label>
-      <label>
-        Period id (optional)
-        <input
-          type="text"
-          [(ngModel)]="periodId"
-          (change)="loadRoster()"
-          name="periodId"
-          placeholder="Leave blank for day roll"
-        />
-      </label>
-    </div>
-
-    @if (roster) {
-      <div class="panel meta-row">
-        <span>{{ roster.sectionLabel }}</span>
-        <span class="chip">{{ sessionLabel() }}</span>
-        <span class="muted">{{ (roster.students || []).length }} students</span>
-        @if ((roster.students || []).length) {
-          <span class="chip chip-ok">{{ presentCount() }} present</span>
-          <span class="chip chip-warn">{{ absentCount() }} not present</span>
-        }
-      </div>
-
-      <div class="actions panel">
-        <button type="button" class="secondary" (click)="markAll('PRESENT')" [disabled]="busy || locked()">
-          All present
-        </button>
-        <button type="button" class="secondary" (click)="markAll('ABSENT')" [disabled]="busy || locked()">
-          All absent
-        </button>
-        <button type="button" class="secondary" (click)="downloadRegister('PDF')" [disabled]="busy || !sectionId">
-          Print PDF
-        </button>
-        <button type="button" class="secondary" (click)="downloadRegister('EXCEL')" [disabled]="busy || !sectionId">
-          Excel
-        </button>
-        <button type="button" (click)="save(false)" [disabled]="busy || locked()">Save draft</button>
-        <button type="button" (click)="submit()" [disabled]="busy || locked()">Submit</button>
-      </div>
-
-      @if (!(roster.students || []).length) {
-        <p class="panel muted">
-          No students for this section. Ensure student <code>classSection</code> matches the section
-          <code>studentLabel</code>.
-        </p>
-      } @else {
-        <ul class="roster-list">
-          @for (s of roster.students; track s.studentId || s.admissionNo) {
-            <li class="panel roster-row">
-              <div class="roster-identity">
-                <div class="roster-avatar" aria-hidden="true">
-                  @if (s.photoUrl) {
-                    <img [src]="s.photoUrl" alt="" />
-                  } @else {
-                    <span>{{ initials(s.studentName || s.admissionNo) }}</span>
-                  }
-                </div>
-                <div>
-                  <strong>{{ s.studentName || s.admissionNo }}</strong>
-                  <p class="muted">{{ s.admissionNo }} · {{ s.classSection }}</p>
-                </div>
-              </div>
-              <div class="mark-pills" role="group" [attr.aria-label]="'Mark ' + (s.studentName || '')">
-                @for (opt of markOptions; track opt) {
-                  <button
-                    type="button"
-                    class="mark-pill"
-                    [class.active]="draft[s.studentId || s.admissionNo] === opt"
-                    [class.present]="opt === 'PRESENT'"
-                    [class.absent]="opt === 'ABSENT'"
-                    [class.late]="opt === 'LATE'"
-                    [class.leave]="opt === 'LEAVE'"
-                    [disabled]="busy || locked()"
-                    (click)="draft[s.studentId || s.admissionNo] = opt"
-                  >
-                    {{ opt === 'PRESENT' ? 'P' : opt === 'ABSENT' ? 'A' : opt === 'LATE' ? 'L' : 'Lv' }}
-                  </button>
-                }
-              </div>
-              <select
-                class="mark-select"
-                [(ngModel)]="draft[s.studentId || s.admissionNo]"
-                [name]="'mark-' + (s.studentId || s.admissionNo)"
-                [disabled]="busy || locked()"
-              >
-                @for (opt of markOptions; track opt) {
-                  <option [value]="opt">{{ opt }}</option>
-                }
-              </select>
-            </li>
-          }
-        </ul>
-      }
-    }
   }
 </section>

@@ -95,8 +95,11 @@ public class WebsitePublicController {
               .build()
               .get()
               .uri(
-                  cmsBaseUrl + "/api/cms/public/pages?organizationId={org}",
-                  site.organizationId())
+                  cmsBaseUrl
+                      + "/api/cms/public/pages?organizationId={org}&siteId={siteId}&includeLegacy={legacy}",
+                  site.organizationId(),
+                  site.siteId(),
+                  site.defaultSite())
               .header("X-Gateway-Verified", "true")
               .header("X-Tenant-Id", site.organizationId())
               .retrieve()
@@ -124,12 +127,35 @@ public class WebsitePublicController {
     return ApiResponse.ok(payload);
   }
 
+  @GetMapping(value = "/sitemap.xml", produces = MediaType.APPLICATION_XML_VALUE)
+  public String sitemapXml(@RequestParam("host") String host) {
+    WebsiteResolveResponse site = resolveService.resolveByHost(host);
+    Object urls = sitemap(host).data().get("urls");
+    StringBuilder xml = new StringBuilder();
+    xml.append("<?xml version=\"1.0\" encoding=\"UTF-8\"?>");
+    xml.append("<urlset xmlns=\"http://www.sitemaps.org/schemas/sitemap/0.9\">");
+    if (urls instanceof List<?> list) {
+      for (Object row : list) {
+        if (!(row instanceof Map<?, ?> item) || item.get("path") == null) {
+          continue;
+        }
+        String path = String.valueOf(item.get("path"));
+        xml.append("<url><loc>https://")
+            .append(escape(site.host()))
+            .append(escape(path))
+            .append("</loc></url>");
+      }
+    }
+    xml.append("</urlset>");
+    return xml.toString();
+  }
+
   @GetMapping(value = "/robots.txt", produces = MediaType.TEXT_PLAIN_VALUE)
   public String robots(@RequestParam("host") String host) {
     WebsiteResolveResponse site = resolveService.resolveByHost(host);
     return "User-agent: *\nAllow: /\nSitemap: https://"
         + site.host()
-        + "/api/website/public/sitemap?host="
+        + "/api/website/public/sitemap.xml?host="
         + site.host()
         + "\n";
   }

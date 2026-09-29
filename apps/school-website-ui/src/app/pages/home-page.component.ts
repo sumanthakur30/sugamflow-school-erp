@@ -3,6 +3,7 @@ import { NgFor, NgIf, NgStyle } from '@angular/common';
 import { RouterLink } from '@angular/router';
 import { WebsiteApiService, WebsiteResolve } from '../core/website-api.service';
 import { SeoService } from '../core/seo.service';
+import { PremiumHomeComponent } from './premium-home.component';
 
 type StatItem = { label: string; value: string };
 type QuickLink = { label: string; path: string };
@@ -10,8 +11,10 @@ type QuickLink = { label: string; path: string };
 @Component({
   selector: 'app-home-page',
   standalone: true,
-  imports: [NgFor, NgIf, NgStyle, RouterLink],
+  imports: [NgFor, NgIf, NgStyle, RouterLink, PremiumHomeComponent],
   template: `
+    <app-premium-home *ngIf="premium"></app-premium-home>
+    <ng-container *ngIf="!premium">
     <ng-container *ngFor="let section of sections">
       <section
         class="hero"
@@ -106,7 +109,11 @@ type QuickLink = { label: string; path: string };
         </div>
         <div class="gallery-row">
           <figure *ngFor="let g of gallery">
-            <img [src]="mediaUrl(g['imageUrl'] ?? g['url'])" [alt]="asText(g['title'], 'Campus')" />
+            <img
+              [src]="mediaUrl(g['imageUrl'] ?? g['url'])"
+              [alt]="asText(g['title'], 'Campus')"
+              loading="lazy"
+            />
             <figcaption>{{ asText(g['title']) }}</figcaption>
           </figure>
         </div>
@@ -124,6 +131,18 @@ type QuickLink = { label: string; path: string };
         </div>
       </section>
 
+      <section class="grid" *ngIf="isCardSection(section) && cardItems(section).length">
+        <div class="section-head">
+          <h2>{{ contentText(section, 'title', cardFallbackTitle(section)) }}</h2>
+        </div>
+        <div class="card-grid">
+          <article *ngFor="let item of cardItems(section)">
+            <h3>{{ item.title }}</h3>
+            <p *ngIf="item.body">{{ item.body }}</p>
+          </article>
+        </div>
+      </section>
+
       <section class="cta-band" *ngIf="section['type'] === 'ADMISSION_CTA'">
         <div>
           <h2>{{ admissionTitle }}</h2>
@@ -131,6 +150,7 @@ type QuickLink = { label: string; path: string };
         </div>
         <a routerLink="/admission/apply" class="primary">{{ admissionCta }}</a>
       </section>
+    </ng-container>
     </ng-container>
   `,
   styles: [
@@ -496,6 +516,7 @@ type QuickLink = { label: string; path: string };
 })
 export class HomePageComponent implements OnInit {
   private readonly api = inject(WebsiteApiService);
+  premium = false;
   private readonly seo = inject(SeoService);
   site: WebsiteResolve | null = this.api.site();
   sections: Array<Record<string, unknown>> = [];
@@ -523,6 +544,7 @@ export class HomePageComponent implements OnInit {
   ngOnInit(): void {
     this.api.resolve().subscribe((site) => {
       this.site = site;
+      this.premium = site.theme?.['skin'] === 'premium';
       const brand = this.api.brandContact(site);
       this.heroEyebrow = brand.tagline;
       this.sections = this.enabledSections(site.homepage || []);
@@ -556,10 +578,20 @@ export class HomePageComponent implements OnInit {
         | undefined;
       this.admissionTitle = cta?.content?.title || 'Admissions Open';
       this.admissionCta = cta?.content?.ctaLabel || 'Apply Now';
+      const description = site.seo?.['defaultDescription'] || undefined;
       this.seo.apply({
         title: site.seo?.['defaultTitle'] || site.displayName,
-        description: site.seo?.['defaultDescription'] || undefined,
+        description,
         imageUrl: this.mediaUrl(site.seo?.['ogImageUrl'] || undefined),
+        canonical: window.location.origin + '/',
+        jsonLd: this.seo.schoolJsonLd({
+          name: site.displayName,
+          url: window.location.origin + '/',
+          description,
+          email: brand.contactEmail || undefined,
+          telephone: brand.contactPhone || undefined,
+          address: [brand.address, brand.addressLine2].filter(Boolean).join(', ') || undefined,
+        }),
       });
 
       if (this.sections.some((s) => s['type'] === 'LATEST_NEWS' || s['type'] === 'ANNOUNCEMENTS')) {
@@ -576,6 +608,39 @@ export class HomePageComponent implements OnInit {
         });
       }
     });
+  }
+
+  isCardSection(section: Record<string, unknown>): boolean {
+    const type = String(section['type'] || '');
+    return (
+      type === 'FACILITIES' ||
+      type === 'WHY_CHOOSE' ||
+      type === 'ACADEMIC_PROGRAMS' ||
+      type === 'ACHIEVEMENTS'
+    );
+  }
+
+  cardFallbackTitle(section: Record<string, unknown>): string {
+    const type = String(section['type'] || '');
+    if (type === 'FACILITIES') return 'Facilities';
+    if (type === 'WHY_CHOOSE') return 'Why choose us';
+    if (type === 'ACADEMIC_PROGRAMS') return 'Academic programs';
+    return 'Achievements';
+  }
+
+  cardItems(section: Record<string, unknown>): Array<{ title: string; body: string }> {
+    const content = (section['content'] || {}) as Record<string, unknown>;
+    const raw = content['items'];
+    if (!Array.isArray(raw)) return [];
+    return raw
+      .map((row) => {
+        const item = (row || {}) as Record<string, unknown>;
+        return {
+          title: String(item['title'] || item['label'] || '').trim(),
+          body: String(item['body'] || item['text'] || '').trim(),
+        };
+      })
+      .filter((item) => item.title);
   }
 
   asText(value: unknown, fallback = ''): string {
@@ -723,7 +788,7 @@ export class HomePageComponent implements OnInit {
     return this.contentText(section, 'title', 'Campus life');
   }
 
-  private contentText(
+  contentText(
     section: Record<string, unknown>,
     key: string,
     fallback = ''

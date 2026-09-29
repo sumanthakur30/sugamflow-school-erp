@@ -16,6 +16,9 @@ public class CmsPage {
   @Column(name = "organization_id", nullable = false, length = 64)
   private String organizationId;
 
+  @Column(name = "site_id")
+  private UUID siteId;
+
   @Column(nullable = false, length = 128)
   private String slug;
 
@@ -50,6 +53,8 @@ public class CmsPage {
   public void setId(UUID id) { this.id = id; }
   public String getOrganizationId() { return organizationId; }
   public void setOrganizationId(String organizationId) { this.organizationId = organizationId; }
+  public UUID getSiteId() { return siteId; }
+  public void setSiteId(UUID siteId) { this.siteId = siteId; }
   public String getSlug() { return slug; }
   public void setSlug(String slug) { this.slug = slug; }
   public String getTitle() { return title; }

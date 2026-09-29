@@ -3,9 +3,12 @@ package com.sugamflow.school.cms.web;
 import com.sugamflow.school.cms.service.CmsAlumniService;
 import com.sugamflow.school.cms.service.CmsBlogService;
 import com.sugamflow.school.cms.service.CmsContentService;
+import com.sugamflow.school.cms.service.CmsDocumentService;
 import com.sugamflow.school.cms.service.CmsMediaService;
+import com.sugamflow.school.cms.service.CmsSiteScope;
 import com.sugamflow.school.cms.web.dto.AlumniResponse;
 import com.sugamflow.school.cms.web.dto.BlogPostResponse;
+import com.sugamflow.school.cms.web.dto.DocumentResponse;
 import com.sugamflow.school.cms.web.dto.EventResponse;
 import com.sugamflow.school.cms.web.dto.GalleryItemResponse;
 import com.sugamflow.school.cms.web.dto.NewsResponse;
@@ -31,52 +34,95 @@ public class CmsPublicController {
   private final CmsBlogService blogService;
   private final CmsAlumniService alumniService;
   private final CmsMediaService mediaService;
+  private final CmsDocumentService documentService;
 
   public CmsPublicController(
       CmsContentService contentService,
       CmsBlogService blogService,
       CmsAlumniService alumniService,
-      CmsMediaService mediaService) {
+      CmsMediaService mediaService,
+      CmsDocumentService documentService) {
     this.contentService = contentService;
     this.blogService = blogService;
     this.alumniService = alumniService;
     this.mediaService = mediaService;
+    this.documentService = documentService;
   }
 
   @GetMapping("/pages")
   public ApiResponse<List<PageResponse>> pages(
-      @RequestParam("organizationId") String organizationId) {
-    return ApiResponse.ok(contentService.listPublishedPages(organizationId));
+      @RequestParam("organizationId") String organizationId,
+      @RequestParam(value = "siteId", required = false) String siteId,
+      @RequestParam(value = "includeLegacy", required = false) Boolean includeLegacy,
+      @RequestParam(value = "limit", required = false) Integer limit,
+      @RequestParam(value = "offset", required = false) Integer offset) {
+    return ApiResponse.ok(
+        contentService.listPublishedPages(
+            organizationId, scope(siteId, includeLegacy), limit(limit, 100), offset(offset)));
   }
 
   @GetMapping("/pages/{slug}")
   public ApiResponse<PageResponse> page(
-      @RequestParam("organizationId") String organizationId, @PathVariable("slug") String slug) {
-    return ApiResponse.ok(contentService.getPublishedPage(organizationId, slug));
+      @RequestParam("organizationId") String organizationId,
+      @RequestParam(value = "siteId", required = false) String siteId,
+      @RequestParam(value = "includeLegacy", required = false) Boolean includeLegacy,
+      @PathVariable("slug") String slug) {
+    return ApiResponse.ok(contentService.getPublishedPage(organizationId, slug, scope(siteId, includeLegacy)));
   }
 
   @GetMapping("/news")
   public ApiResponse<List<NewsResponse>> news(
-      @RequestParam("organizationId") String organizationId) {
-    return ApiResponse.ok(contentService.listPublishedNews(organizationId));
+      @RequestParam("organizationId") String organizationId,
+      @RequestParam(value = "siteId", required = false) String siteId,
+      @RequestParam(value = "includeLegacy", required = false) Boolean includeLegacy,
+      @RequestParam(value = "limit", required = false) Integer limit,
+      @RequestParam(value = "offset", required = false) Integer offset) {
+    return ApiResponse.ok(
+        contentService.listPublishedNews(
+            organizationId, scope(siteId, includeLegacy), limit(limit, 20), offset(offset)));
   }
 
   @GetMapping("/news/{slug}")
   public ApiResponse<NewsResponse> newsItem(
-      @RequestParam("organizationId") String organizationId, @PathVariable("slug") String slug) {
-    return ApiResponse.ok(contentService.getPublishedNews(organizationId, slug));
+      @RequestParam("organizationId") String organizationId,
+      @RequestParam(value = "siteId", required = false) String siteId,
+      @RequestParam(value = "includeLegacy", required = false) Boolean includeLegacy,
+      @PathVariable("slug") String slug) {
+    return ApiResponse.ok(contentService.getPublishedNews(organizationId, slug, scope(siteId, includeLegacy)));
   }
 
   @GetMapping("/events")
   public ApiResponse<List<EventResponse>> events(
-      @RequestParam("organizationId") String organizationId) {
-    return ApiResponse.ok(contentService.listPublishedEvents(organizationId));
+      @RequestParam("organizationId") String organizationId,
+      @RequestParam(value = "siteId", required = false) String siteId,
+      @RequestParam(value = "includeLegacy", required = false) Boolean includeLegacy,
+      @RequestParam(value = "limit", required = false) Integer limit,
+      @RequestParam(value = "offset", required = false) Integer offset) {
+    return ApiResponse.ok(
+        contentService.listPublishedEvents(
+            organizationId, scope(siteId, includeLegacy), limit(limit, 20), offset(offset)));
   }
 
   @GetMapping("/gallery")
   public ApiResponse<List<GalleryItemResponse>> gallery(
-      @RequestParam("organizationId") String organizationId) {
-    return ApiResponse.ok(contentService.listPublishedGallery(organizationId));
+      @RequestParam("organizationId") String organizationId,
+      @RequestParam(value = "siteId", required = false) String siteId,
+      @RequestParam(value = "includeLegacy", required = false) Boolean includeLegacy,
+      @RequestParam(value = "limit", required = false) Integer limit,
+      @RequestParam(value = "offset", required = false) Integer offset) {
+    return ApiResponse.ok(
+        contentService.listPublishedGallery(
+            organizationId, scope(siteId, includeLegacy), limit(limit, 24), offset(offset)));
+  }
+
+  @GetMapping("/documents")
+  public ApiResponse<List<DocumentResponse>> documents(
+      @RequestParam("organizationId") String organizationId,
+      @RequestParam(value = "siteId", required = false) String siteId,
+      @RequestParam(value = "includeLegacy", required = false) Boolean includeLegacy,
+      @RequestParam(value = "limit", required = false) Integer limit) {
+    return ApiResponse.ok(
+        documentService.listPublished(organizationId, scope(siteId, includeLegacy), limit(limit, 50)));
   }
 
   @GetMapping("/blog")
@@ -116,5 +162,17 @@ public class CmsPublicController {
         .header(HttpHeaders.CACHE_CONTROL, "public, max-age=86400")
         .contentType(type)
         .body(resource);
+  }
+
+  private static CmsSiteScope scope(String siteId, Boolean includeLegacy) {
+    return CmsSiteScope.parse(siteId, includeLegacy);
+  }
+
+  private static int limit(Integer limit, int fallback) {
+    return limit == null ? fallback : limit;
+  }
+
+  private static int offset(Integer offset) {
+    return offset == null ? 0 : offset;
   }
 }

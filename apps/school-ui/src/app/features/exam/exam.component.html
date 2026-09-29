@@ -69,6 +69,27 @@
                     [disabled]="submitting"
                     readonly
                   />
+                } @else if (field.key === 'subject' || field.key === 'examName') {
+                  <select
+                    [ngModel]="answers[field.key]"
+                    (ngModelChange)="onChoice(field.key, $event)"
+                    [name]="field.key"
+                    [required]="field.mandatory"
+                    [disabled]="submitting || !catalogReady"
+                    [attr.aria-required]="field.mandatory"
+                    [attr.aria-invalid]="fieldInvalid(field)"
+                  >
+                    <option value="">{{ choicePlaceholder(field.key) }}</option>
+                    @for (option of choiceOptions(field.key); track option) {
+                      <option [value]="option">{{ option }}</option>
+                    }
+                  </select>
+                  @if (field.key === 'subject' && subjectHint) {
+                    <span class="form-hint">{{ subjectHint }}</span>
+                  }
+                  @if (fieldInvalid(field)) {
+                    <span class="field-error">{{ field.label }} is required</span>
+                  }
                 } @else {
                   <input
                     [(ngModel)]="answers[field.key]"
@@ -91,6 +112,8 @@
         </div>
       }
     </div>
+  } @else if (bulkOpen && featureEnabled && !loading) {
+    <sf-exam-bulk view="entry" />
   } @else if (selected && featureEnabled && !loading) {
     <div class="form-page detail-page" [class.is-busy]="submitting">
       <p class="crumb">
@@ -206,14 +229,15 @@
   } @else {
     <header class="page-head list-head">
       <div>
-        <h2>Exam Marks</h2>
-        <p>Search, review, and approve exam marks entries.</p>
-      </div>
-      @if (featureEnabled && !loading) {
-        <div class="head-actions">
-          <button type="button" (click)="openForm()">+ New Marks Entry</button>
+          <h2>Exam Marks</h2>
+          <p>Enter marks for a whole class, or look up one student.</p>
         </div>
-      }
+        @if (featureEnabled && !loading) {
+          <div class="head-actions">
+            <button type="button" (click)="openBulk()">+ Enter marks</button>
+            <button type="button" class="secondary" (click)="openForm()">Individual student</button>
+          </div>
+        }
     </header>
 
     @if (error) {
@@ -228,7 +252,33 @@
     } @else if (!featureEnabled && !error) {
       <p class="panel">Exam is not enabled for this plan (FEATURE_EXAM).</p>
     } @else {
-      <section class="panel inbox-panel">
+      <div class="panel mode-tabs" role="tablist" aria-label="Exam marks lists">
+        <button
+          type="button"
+          role="tab"
+          class="mode-tab"
+          [class.active]="listTab === 'class'"
+          [attr.aria-selected]="listTab === 'class'"
+          (click)="listTab = 'class'"
+        >
+          Class marks
+        </button>
+        <button
+          type="button"
+          role="tab"
+          class="mode-tab"
+          [class.active]="listTab === 'student'"
+          [attr.aria-selected]="listTab === 'student'"
+          (click)="listTab = 'student'"
+        >
+          Individual students
+        </button>
+      </div>
+
+      <div [hidden]="listTab !== 'class'">
+        <sf-exam-bulk view="home" />
+      </div>
+      <section class="panel inbox-panel" [hidden]="listTab !== 'student'">
         <sf-list-toolbar
           searchPlaceholder="Search student, subject, status…"
           [(q)]="listQ"

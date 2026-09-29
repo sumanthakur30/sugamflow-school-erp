@@ -2,8 +2,19 @@ import { Component, Input, OnInit, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ApiService } from '../../core/api.service';
-
-const MARK_OPTIONS = ['PRESENT', 'ABSENT', 'LATE', 'LEAVE'] as const;
+import {
+  ATTENDANCE_MARKS,
+  AttendanceBulkResponse,
+  AttendanceFilter,
+  AttendanceMark,
+  AttendanceMarkRequest,
+  AttendancePeriod,
+  AttendanceRoster,
+  AttendanceSection,
+  AttendanceStudentState,
+  AttendanceSummary,
+  ParentAlertSummary,
+} from './attendance-roster.models';
 
 /** Class/section roster — pick section once, mark the whole list. */
 @Component({
@@ -15,29 +26,46 @@ const MARK_OPTIONS = ['PRESENT', 'ABSENT', 'LATE', 'LEAVE'] as const;
 })
 export class AttendanceRosterComponent implements OnInit {
   private readonly api = inject(ApiService);
+  private rosterRequestId = 0;
 
   @Input() title = 'Class attendance';
   @Input() subtitle =
     'Pick a class/section once, then mark Present / Absent for the whole roster.';
 
-  readonly markOptions = MARK_OPTIONS;
+  readonly markOptions = ATTENDANCE_MARKS;
+  readonly statusFilters: Array<{ value: AttendanceFilter; label: string }> = [
+    { value: 'ALL', label: 'All statuses' },
+    { value: 'PRESENT', label: 'Present' },
+    { value: 'ABSENT', label: 'Absent' },
+    { value: 'LATE', label: 'Late' },
+    { value: 'LEAVE', label: 'Leave' },
+    { value: 'NOT_MARKED', label: 'Not marked' },
+  ];
 
   loading = true;
   busy = false;
   error = '';
   status = '';
 
-  sections: any[] = [];
+  sections: AttendanceSection[] = [];
+  periods: AttendancePeriod[] = [];
   sectionId = '';
-  date = new Date().toISOString().slice(0, 10);
+  date = this.todayLocal();
   periodId = '';
 
-  roster: any = null;
-  draft: Record<string, string> = {};
-  parentAlerts: any = null;
+  roster: AttendanceRoster | null = null;
+  students: AttendanceStudentState[] = [];
+  visibleStudents: AttendanceStudentState[] = [];
+  searchQuery = '';
+  statusFilter: AttendanceFilter = 'ALL';
+  selectedKeys = new Set<string>();
+  summary: AttendanceSummary = this.emptySummary();
+  dirty = false;
+  parentAlerts: ParentAlertSummary | null = null;
 
   ngOnInit(): void {
-    this.api.get<any[]>('/api/academic/sections').subscribe({
+    this.loadPeriods();
+    this.api.get<AttendanceSection[]>('/api/academic/sections').subscribe({
       next: (items) => {
         this.sections = items ?? [];
         if (this.sections.length && !this.sectionId) {
@@ -55,10 +83,30 @@ export class AttendanceRosterComponent implements OnInit {
     });
   }
 
+  private loadPeriods(): void {
+    this.api.get<AttendancePeriod[]>('/api/academic/timetable/periods').subscribe({
+      next: (items) => {
+        this.periods = (items ?? [])
+          .filter((period) => !period.breakPeriod)
+          .slice()
+          .sort(
+            (a, b) =>
+              Number(a.periodNo ?? Number.MAX_SAFE_INTEGER) -
+              Number(b.periodNo ?? Number.MAX_SAFE_INTEGER),
+          );
+      },
+      error: () => {
+        // Day attendance remains available if periods are not configured or cannot be loaded.
+        this.periods = [];
+      },
+    });
+  }
+
   loadRoster(preserveFeedback = false): void {
     if (!this.sectionId || !this.date) {
       return;
     }
+    const requestId = ++this.rosterRequestId;
     this.busy = true;
     this.error = '';
     if (!preserveFeedback) {
@@ -71,30 +119,138 @@ export class AttendanceRosterComponent implements OnInit {
     if (this.periodId) {
       path += `&periodId=${encodeURIComponent(this.periodId)}`;
     }
-    this.api.get<any>(path).subscribe({
+    this.api.get<AttendanceRoster>(path).subscribe({
       next: (data) => {
+        if (requestId !== this.rosterRequestId) return;
         this.roster = data;
-        this.draft = {};
-        for (const s of data?.students ?? []) {
-          const key = s.studentId || s.admissionNo;
-          if (key) {
-            this.draft[key] = s.markStatus || 'PRESENT';
-          }
-        }
+        this.students = (data?.students ?? []).map((student, index) => ({
+          ...student,
+          key:
+            student.studentId ||
+            student.admissionNo ||
+            `${student.studentName || 'student'}-${index}`,
+          rosterIndex: index + 1,
+          status: this.normalizeMark(student.markStatus),
+          remarkText: String(student.remark || ''),
+        }));
+        this.selectedKeys.clear();
+        this.searchQuery = '';
+        this.statusFilter = 'ALL';
+        this.dirty = false;
+        this.refreshView();
         this.busy = false;
       },
       error: (err) => {
+        if (requestId !== this.rosterRequestId) return;
         this.busy = false;
         this.roster = null;
+        this.students = [];
+        this.visibleStudents = [];
+        this.selectedKeys.clear();
+        this.summary = this.emptySummary();
         this.error = err?.error?.message ?? 'Failed to load roster';
       },
     });
   }
 
-  markAll(status: string): void {
-    for (const key of Object.keys(this.draft)) {
-      this.draft[key] = status;
+  refreshView(): void {
+    const query = this.searchQuery.trim().toLowerCase();
+    this.visibleStudents = this.students.filter((student) => {
+      const matchesQuery =
+        !query ||
+        String(student.studentName || '')
+          .toLowerCase()
+          .includes(query) ||
+        String(student.admissionNo || '')
+          .toLowerCase()
+          .includes(query);
+      const matchesStatus =
+        this.statusFilter === 'ALL' ||
+        (this.statusFilter === 'NOT_MARKED'
+          ? student.status === null
+          : student.status === this.statusFilter);
+      return matchesQuery && matchesStatus;
+    });
+    this.summary = this.students.reduce<AttendanceSummary>(
+      (counts, student) => {
+        if (student.status === 'PRESENT') counts.present++;
+        else if (student.status === 'ABSENT') counts.absent++;
+        else if (student.status === 'LATE') counts.late++;
+        else if (student.status === 'LEAVE') counts.leave++;
+        else counts.notMarked++;
+        return counts;
+      },
+      { ...this.emptySummary(), total: this.students.length },
+    );
+  }
+
+  markAll(status: AttendanceMark): void {
+    if (this.locked() || !this.students.length) return;
+    for (const student of this.students) {
+      student.status = status;
     }
+    this.selectedKeys.clear();
+    this.dirty = true;
+    this.refreshView();
+  }
+
+  setStudentStatus(student: AttendanceStudentState, status: AttendanceMark): void {
+    if (this.locked() || student.status === status) return;
+    student.status = status;
+    this.dirty = true;
+    this.refreshView();
+  }
+
+  setRemark(student: AttendanceStudentState, value: string): void {
+    if (this.locked()) return;
+    student.remarkText = value;
+    this.dirty = true;
+  }
+
+  toggleStudent(key: string, checked: boolean): void {
+    if (checked) this.selectedKeys.add(key);
+    else this.selectedKeys.delete(key);
+  }
+
+  toggleVisible(checked: boolean): void {
+    for (const student of this.visibleStudents) {
+      if (checked) this.selectedKeys.add(student.key);
+      else this.selectedKeys.delete(student.key);
+    }
+  }
+
+  applyBulkStatus(status: AttendanceMark): void {
+    if (this.locked() || !this.selectedKeys.size) return;
+    for (const student of this.students) {
+      if (this.selectedKeys.has(student.key)) {
+        student.status = status;
+      }
+    }
+    this.selectedKeys.clear();
+    this.dirty = true;
+    this.refreshView();
+  }
+
+  isSelected(key: string): boolean {
+    return this.selectedKeys.has(key);
+  }
+
+  allVisibleSelected(): boolean {
+    return (
+      this.visibleStudents.length > 0 &&
+      this.visibleStudents.every((student) => this.selectedKeys.has(student.key))
+    );
+  }
+
+  someVisibleSelected(): boolean {
+    const selectedVisible = this.visibleStudents.filter((student) =>
+      this.selectedKeys.has(student.key),
+    ).length;
+    return selectedVisible > 0 && selectedVisible < this.visibleStudents.length;
+  }
+
+  clearSelection(): void {
+    this.selectedKeys.clear();
   }
 
   downloadRegister(format: 'PDF' | 'EXCEL' | 'CSV' = 'PDF'): void {
@@ -141,10 +297,6 @@ export class AttendanceRosterComponent implements OnInit {
     URL.revokeObjectURL(url);
   }
 
-  presentCount(): number {
-    return Object.values(this.draft).filter((s) => s === 'PRESENT').length;
-  }
-
   initials(name: unknown): string {
     const parts = String(name || '')
       .trim()
@@ -155,30 +307,26 @@ export class AttendanceRosterComponent implements OnInit {
     return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
   }
 
-  absentCount(): number {
-    return Object.values(this.draft).filter(
-      (s) => s === 'ABSENT' || s === 'LATE' || s === 'LEAVE',
-    ).length;
-  }
-
   save(submit = false): void {
-    if (!this.roster) {
+    if (!this.roster || this.busy || this.locked()) {
       return;
     }
-    const marks = (this.roster.students ?? []).map((s: any) => {
-      const key = s.studentId || s.admissionNo;
-      return {
-        studentId: s.studentId,
-        admissionNo: s.admissionNo,
-        studentName: s.studentName,
-        status: this.draft[key] || 'PRESENT',
-      };
-    });
+    if (submit && this.summary.notMarked > 0) {
+      this.error = `Mark all ${this.summary.notMarked} remaining student${
+        this.summary.notMarked === 1 ? '' : 's'
+      } before submitting attendance.`;
+      return;
+    }
+    if (submit && this.submitted() && !this.dirty) {
+      this.status = 'Attendance is already submitted and has no new changes.';
+      return;
+    }
+    const marks = this.buildMarks();
     this.busy = true;
     this.error = '';
     this.status = '';
     this.api
-      .put<any>('/api/attendance/sessions/bulk', {
+      .put<AttendanceBulkResponse>('/api/attendance/sessions/bulk', {
         sectionId: this.sectionId,
         date: this.date,
         periodId: this.periodId || null,
@@ -191,7 +339,7 @@ export class AttendanceRosterComponent implements OnInit {
           this.parentAlerts = res?.parentAlerts ?? null;
           this.status = submit
             ? this.submittedMessage(res?.markCount, this.parentAlerts)
-            : `Saved draft (${res.markCount} marks)`;
+            : `Saved draft (${Number(res?.markCount || marks.length)} marks)`;
           this.loadRoster(true);
         },
         error: (err) => {
@@ -202,28 +350,9 @@ export class AttendanceRosterComponent implements OnInit {
   }
 
   submit(): void {
-    const sessionId = this.roster?.session?.id;
-    if (!sessionId) {
-      this.save(true);
-      return;
-    }
-    this.busy = true;
-    this.error = '';
-    this.api.post<any>(`/api/attendance/sessions/${sessionId}/submit`, {}).subscribe({
-      next: (res) => {
-        this.busy = false;
-        this.parentAlerts = res?.parentAlerts ?? null;
-        this.status = this.submittedMessage(
-          (this.roster?.students ?? []).length,
-          this.parentAlerts,
-        );
-        this.loadRoster(true);
-      },
-      error: (err) => {
-        this.busy = false;
-        this.error = err?.error?.message ?? 'Submit failed';
-      },
-    });
+    // Always persist the current roster and submit it in one request. The old submit-only
+    // endpoint could finalize a session while leaving unsaved client-side edits behind.
+    this.save(true);
   }
 
   sessionLabel(): string {
@@ -238,8 +367,39 @@ export class AttendanceRosterComponent implements OnInit {
     return String(this.roster?.session?.status || '').toUpperCase() === 'LOCKED';
   }
 
-  alertDeliveries(): any[] {
-    const rows: any[] = [];
+  submitted(): boolean {
+    return String(this.roster?.session?.status || '').toUpperCase() === 'SUBMITTED';
+  }
+
+  canSaveDraft(): boolean {
+    return !!this.roster && !this.busy && !this.locked() && !this.submitted() && this.dirty;
+  }
+
+  canSubmit(): boolean {
+    return (
+      !!this.roster &&
+      this.students.length > 0 &&
+      !this.busy &&
+      !this.locked() &&
+      this.summary.notMarked === 0 &&
+      (!this.submitted() || this.dirty)
+    );
+  }
+
+  alertDeliveries(): Array<{
+    studentName: string;
+    markStatus: string;
+    channel: string;
+    status: string;
+    error: string;
+  }> {
+    const rows: Array<{
+      studentName: string;
+      markStatus: string;
+      channel: string;
+      status: string;
+      error: string;
+    }> = [];
     for (const alert of this.parentAlerts?.alerts ?? []) {
       for (const delivery of alert?.delivery ?? []) {
         rows.push({
@@ -254,7 +414,41 @@ export class AttendanceRosterComponent implements OnInit {
     return rows;
   }
 
-  private submittedMessage(markCount: number, alerts: any): string {
+  private buildMarks(): AttendanceMarkRequest[] {
+    return this.students
+      .filter(
+        (student): student is AttendanceStudentState & { status: AttendanceMark } =>
+          student.status !== null,
+      )
+      .map((student) => ({
+        studentId: student.studentId,
+        admissionNo: student.admissionNo,
+        studentName: student.studentName,
+        status: student.status,
+        remark: student.remarkText.trim() || undefined,
+      }));
+  }
+
+  private normalizeMark(value: unknown): AttendanceMark | null {
+    const normalized = String(value || '').toUpperCase();
+    return this.markOptions.includes(normalized as AttendanceMark)
+      ? (normalized as AttendanceMark)
+      : null;
+  }
+
+  private emptySummary(): AttendanceSummary {
+    return { total: 0, present: 0, absent: 0, late: 0, leave: 0, notMarked: 0 };
+  }
+
+  private todayLocal(): string {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  }
+
+  private submittedMessage(markCount: number | undefined, alerts: ParentAlertSummary | null): string {
     const count = Number(markCount || 0);
     if (!alerts) {
       return `Submitted (${count} marks)`;

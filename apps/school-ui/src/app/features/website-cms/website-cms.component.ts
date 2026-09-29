@@ -192,7 +192,10 @@ export class WebsiteCmsComponent implements OnInit {
     { type: 'GALLERY', label: 'Gallery block', supported: true },
     { type: 'UPCOMING_EVENTS', label: 'Events', supported: true },
     { type: 'ADMISSION_CTA', label: 'Admission CTA', supported: true },
-    { type: 'FACILITIES', label: 'Facilities', supported: false },
+    { type: 'FACILITIES', label: 'Facilities', supported: true },
+    { type: 'WHY_CHOOSE', label: 'Why choose us', supported: true },
+    { type: 'ACADEMIC_PROGRAMS', label: 'Academic programs', supported: true },
+    { type: 'ACHIEVEMENTS', label: 'Achievements', supported: true },
     { type: 'TESTIMONIALS', label: 'Testimonials', supported: false },
     { type: 'FAQ', label: 'FAQ', supported: false },
     { type: 'CUSTOM_HTML', label: 'Custom HTML', supported: false },
@@ -201,12 +204,12 @@ export class WebsiteCmsComponent implements OnInit {
     { id: 'dashboard', label: 'Dashboard', group: 'Overview', ready: true },
     { id: 'builder', label: 'Website Builder', group: 'Overview', ready: true },
     { id: 'pages', label: 'Pages', group: 'Content', ready: true },
-    { id: 'navigation', label: 'Navigation', group: 'Content', ready: false },
+    { id: 'navigation', label: 'Navigation', group: 'Content', ready: true },
     { id: 'theme', label: 'Theme', group: 'Design', ready: true },
     { id: 'media', label: 'Media', group: 'Design', ready: true },
     { id: 'forms', label: 'Forms', group: 'Content', ready: false },
     { id: 'blogs', label: 'Blogs', group: 'Content', ready: false },
-    { id: 'events', label: 'Events', group: 'Content', ready: false },
+    { id: 'events', label: 'Events', group: 'Content', ready: true },
     { id: 'news', label: 'News', group: 'Content', ready: true },
     { id: 'gallery', label: 'Gallery', group: 'Content', ready: true },
     { id: 'alumni', label: 'Alumni', group: 'Content', ready: true },
@@ -214,7 +217,7 @@ export class WebsiteCmsComponent implements OnInit {
     { id: 'admissions', label: 'Admissions', group: 'ERP', ready: false },
     { id: 'staff', label: 'Staff', group: 'ERP', ready: false },
     { id: 'achievements', label: 'Achievements', group: 'Content', ready: false },
-    { id: 'downloads', label: 'Downloads', group: 'Content', ready: false },
+    { id: 'downloads', label: 'Downloads', group: 'Content', ready: true },
     { id: 'seo', label: 'SEO', group: 'Growth', ready: true },
     { id: 'analytics', label: 'Analytics', group: 'Growth', ready: true },
     { id: 'marketplace', label: 'Marketplace', group: 'Growth', ready: true },
@@ -337,6 +340,9 @@ export class WebsiteCmsComponent implements OnInit {
     if (tab === 'alumni') this.loadAlumni();
     if (tab === 'news') this.loadNews();
     if (tab === 'gallery') this.loadGallery();
+    if (tab === 'navigation') this.loadWebsiteBootstrap();
+    if (tab === 'events') this.loadEvents();
+    if (tab === 'downloads') this.loadDocuments();
     if (tab === 'marketplace') this.loadTemplates();
     if (tab === 'pages') this.reload();
   }
@@ -514,7 +520,7 @@ export class WebsiteCmsComponent implements OnInit {
     this.loading = true;
     this.error = '';
     this.http
-      .get<ApiResponse<PageRow[]>>(`${environment.apiBaseUrl}/api/cms/admin/pages`)
+      .get<ApiResponse<PageRow[]>>(this.withSite(`${environment.apiBaseUrl}/api/cms/admin/pages`))
       .subscribe({
         next: (res) => {
           this.pages = res.data || [];
@@ -574,6 +580,14 @@ export class WebsiteCmsComponent implements OnInit {
             mapEmbedUrl: theme['mapEmbedUrl'] || theme['googleMapsEmbedUrl'] || '',
             mapPhotoUrl: theme['mapPhotoUrl'] || theme['campusPhotoUrl'] || theme['mapImageUrl'] || '',
           };
+          this.activeSiteId = String(data['siteId'] || '');
+          this.activeSiteIsDefault = data['defaultSite'] !== false;
+          this.navItems = ((data['navigation'] as Array<Record<string, unknown>>) || []).map(
+            (item) => ({
+              label: String(item['label'] || ''),
+              path: String(item['path'] || ''),
+            })
+          );
           this.siteMeta = {
             organizationId: String(data['organizationId'] || ''),
             status: String(data['status'] || ''),
@@ -717,7 +731,7 @@ export class WebsiteCmsComponent implements OnInit {
 
   loadNews(): void {
     this.http
-      .get<ApiResponse<NewsRow[]>>(`${environment.apiBaseUrl}/api/cms/admin/news`)
+      .get<ApiResponse<NewsRow[]>>(this.withSite(`${environment.apiBaseUrl}/api/cms/admin/news`))
       .subscribe({
         next: (res) => (this.newsItems = res.data || []),
         error: (err) => (this.error = err?.error?.message || 'Failed to load news'),
@@ -734,7 +748,7 @@ export class WebsiteCmsComponent implements OnInit {
           body
         )
       : this.http.post<ApiResponse<NewsRow>>(
-          `${environment.apiBaseUrl}/api/cms/admin/news`,
+          this.withSite(`${environment.apiBaseUrl}/api/cms/admin/news`),
           body
         );
     req$.subscribe({
@@ -780,7 +794,7 @@ export class WebsiteCmsComponent implements OnInit {
 
   loadGallery(): void {
     this.http
-      .get<ApiResponse<GalleryRow[]>>(`${environment.apiBaseUrl}/api/cms/admin/gallery`)
+      .get<ApiResponse<GalleryRow[]>>(this.withSite(`${environment.apiBaseUrl}/api/cms/admin/gallery`))
       .subscribe({
         next: (res) => (this.galleryItems = res.data || []),
         error: (err) => (this.error = err?.error?.message || 'Failed to load gallery'),
@@ -797,7 +811,7 @@ export class WebsiteCmsComponent implements OnInit {
           body
         )
       : this.http.post<ApiResponse<GalleryRow>>(
-          `${environment.apiBaseUrl}/api/cms/admin/gallery`,
+          this.withSite(`${environment.apiBaseUrl}/api/cms/admin/gallery`),
           body
         );
     req$.subscribe({
@@ -971,7 +985,7 @@ export class WebsiteCmsComponent implements OnInit {
           body
         )
       : this.http.post<ApiResponse<PageRow>>(
-          `${environment.apiBaseUrl}/api/cms/admin/pages`,
+          this.withSite(`${environment.apiBaseUrl}/api/cms/admin/pages`),
           body
         );
     req$.subscribe({
@@ -1070,7 +1084,7 @@ export class WebsiteCmsComponent implements OnInit {
     }));
     this.http
       .put<ApiResponse<HomepageSection[]>>(
-        `${environment.apiBaseUrl}/api/website/admin/homepage`,
+        this.withSite(`${environment.apiBaseUrl}/api/website/admin/homepage`),
         payload
       )
       .subscribe({
@@ -1102,7 +1116,7 @@ export class WebsiteCmsComponent implements OnInit {
     this.error = '';
     this.http
       .put<ApiResponse<Record<string, string>>>(
-        `${environment.apiBaseUrl}/api/website/admin/seo`,
+        this.withSite(`${environment.apiBaseUrl}/api/website/admin/seo`),
         this.seo
       )
       .subscribe({
@@ -1163,7 +1177,7 @@ export class WebsiteCmsComponent implements OnInit {
     this.saving = true;
     this.error = '';
     this.http
-      .put(`${environment.apiBaseUrl}/api/website/admin/theme`, this.theme)
+      .put(this.withSite(`${environment.apiBaseUrl}/api/website/admin/theme`), this.theme)
       .subscribe({
         next: () => {
           this.saving = false;
@@ -1209,6 +1223,120 @@ export class WebsiteCmsComponent implements OnInit {
   isSoonModule(id: ModuleId): boolean {
     const m = this.navModules.find((x) => x.id === id);
     return !!m && !m.ready;
+  }
+
+  activeSiteId = '';
+  activeSiteIsDefault = true;
+  navItems: Array<{ label: string; path: string }> = [];
+  events: Array<Record<string, string>> = [];
+  documents: Array<Record<string, string>> = [];
+  eventDraft = { slug: '', title: '', summary: '', locationText: '', startsAt: '', endsAt: '' };
+  documentDraft = { title: '', category: 'GENERAL', summary: '', fileUrl: '', fileName: '' };
+
+  loadEvents(): void {
+    this.http
+      .get<ApiResponse<Array<Record<string, string>>>>(
+        this.withSite(`${environment.apiBaseUrl}/api/cms/admin/events`)
+      )
+      .subscribe({
+        next: (res) => (this.events = res.data || []),
+        error: (err) => (this.error = err?.error?.message || 'Failed to load events'),
+      });
+  }
+
+  saveEvent(): void {
+    this.saving = true;
+    this.http
+      .post(this.withSite(`${environment.apiBaseUrl}/api/cms/admin/events`), {
+        ...this.eventDraft,
+        startsAt: this.eventDraft.startsAt ? new Date(this.eventDraft.startsAt).toISOString() : null,
+        endsAt: this.eventDraft.endsAt ? new Date(this.eventDraft.endsAt).toISOString() : null,
+      })
+      .subscribe({
+        next: () => {
+          this.saving = false;
+          this.eventDraft = { slug: '', title: '', summary: '', locationText: '', startsAt: '', endsAt: '' };
+          this.loadEvents();
+        },
+        error: (err) => {
+          this.saving = false;
+          this.error = this.apiError(err, 'Failed to save event');
+        },
+      });
+  }
+
+  publishEvent(row: Record<string, string>): void {
+    this.http.post(`${environment.apiBaseUrl}/api/cms/admin/events/${row['id']}/publish`, {}).subscribe({
+      next: () => this.loadEvents(),
+    });
+  }
+
+  loadDocuments(): void {
+    this.http
+      .get<ApiResponse<Array<Record<string, string>>>>(
+        this.withSite(`${environment.apiBaseUrl}/api/cms/admin/documents`)
+      )
+      .subscribe({
+        next: (res) => (this.documents = res.data || []),
+        error: (err) => (this.error = err?.error?.message || 'Failed to load documents'),
+      });
+  }
+
+  saveDocument(): void {
+    this.saving = true;
+    this.http
+      .post(this.withSite(`${environment.apiBaseUrl}/api/cms/admin/documents`), this.documentDraft)
+      .subscribe({
+        next: () => {
+          this.saving = false;
+          this.documentDraft = { title: '', category: 'GENERAL', summary: '', fileUrl: '', fileName: '' };
+          this.loadDocuments();
+        },
+        error: (err) => {
+          this.saving = false;
+          this.error = this.apiError(err, 'Failed to save document');
+        },
+      });
+  }
+
+  publishDocument(row: Record<string, string>): void {
+    this.http
+      .post(`${environment.apiBaseUrl}/api/cms/admin/documents/${row['id']}/publish`, {})
+      .subscribe({ next: () => this.loadDocuments() });
+  }
+
+  saveNavigation(): void {
+    this.saving = true;
+    this.http
+      .put(
+        this.withSite(`${environment.apiBaseUrl}/api/website/admin/navigation`),
+        this.navItems.map((item, index) => ({
+          label: item.label,
+          path: item.path,
+          order: (index + 1) * 10,
+        }))
+      )
+      .subscribe({
+        next: () => {
+          this.saving = false;
+          this.mediaNotice = 'Navigation saved.';
+        },
+        error: (err) => {
+          this.saving = false;
+          this.error = this.apiError(err, 'Failed to save navigation');
+        },
+      });
+  }
+
+  addNavItem(): void {
+    this.navItems = [...this.navItems, { label: '', path: '/' }];
+  }
+
+  private withSite(url: string): string {
+    if (!this.activeSiteId) return url;
+    const legacy = this.activeSiteIsDefault ? 'true' : 'false';
+    const q = `siteId=${encodeURIComponent(this.activeSiteId)}&includeLegacy=${legacy}`;
+    return url + (url.includes('?') ? '&' : '?') + q;
   }
 
   private emptyDraft() {

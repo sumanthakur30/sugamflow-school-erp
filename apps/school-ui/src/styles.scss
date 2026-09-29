@@ -1,21 +1,27 @@
 :root {
-  --sf-primary: #0b6e4f;
-  --sf-secondary: #084c61;
-  --sf-accent: #e9b44c;
-  --sf-menu: #0b3d2e;
-  --sf-button: #0b6e4f;
-  --sf-text: #1a1a1a;
-  --sf-warning: #d97706;
-  --sf-success: #15803d;
-  --sf-error: #b91c1c;
-  --sf-surface: #f3f7f5;
+  --sf-primary: #176b45;
+  --sf-primary-hover: #125638;
+  --sf-secondary: #16382c;
+  --sf-accent: #176b45;
+  --sf-menu: #16382c;
+  --sf-nav: #16382c;
+  --sf-button: #176b45;
+  --sf-text: #26352e;
+  --sf-text-muted: #64736a;
+  --sf-warning: #92400e;
+  --sf-success: #166534;
+  --sf-error: #991b1b;
+  --sf-info: #1d4ed8;
+  --sf-surface: #f4f7f5;
+  --sf-page-bg: #f4f7f5;
+  --sf-header-bg: #ffffff;
   --sf-panel: #ffffff;
+  --sf-table-head: #e8efeb;
+  --sf-border: #dce4df;
   --sf-radius: 8px;
   --sf-font: 'Source Sans 3', 'Segoe UI', sans-serif;
-  --sf-display: 'Fraunces', Georgia, serif;
+  --sf-display: 'Source Sans 3', 'Segoe UI', sans-serif;
   --sf-font-size: 14px;
-  --sf-bg-glow-a: rgba(233, 180, 76, 0.18);
-  --sf-bg-glow-b: rgba(11, 110, 79, 0.16);
 }
 
 * {
@@ -30,10 +36,7 @@ body {
   font-family: var(--sf-font);
   font-size: var(--sf-font-size);
   color: var(--sf-text);
-  background:
-    radial-gradient(circle at 12% 18%, var(--sf-bg-glow-a), transparent 34%),
-    radial-gradient(circle at 88% 0%, var(--sf-bg-glow-b), transparent 40%),
-    linear-gradient(160deg, var(--sf-surface) 0%, #f7faf8 45%, color-mix(in srgb, var(--sf-surface) 80%, #dfece6) 100%);
+  background: var(--sf-page-bg);
 }
 
 a {
