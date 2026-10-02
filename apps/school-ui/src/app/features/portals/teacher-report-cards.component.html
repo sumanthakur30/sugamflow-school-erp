@@ -41,6 +41,12 @@
         <button type="button" class="secondary" (click)="downloadAdmitCards()" [disabled]="busy || !sectionId">
           Admit cards
         </button>
+        @if (missingPhotos > 0) {
+          <span class="muted">
+            {{ missingPhotos }} {{ missingPhotos === 1 ? 'student does' : 'students do' }} not have a photo.
+            <a routerLink="/admin/student-directory" [queryParams]="{ missingPhoto: '1' }">View students</a>
+          </span>
+        }
         <button type="button" class="secondary" (click)="downloadDateSheet()" [disabled]="busy || !sectionId">
           Date sheet
         </button>

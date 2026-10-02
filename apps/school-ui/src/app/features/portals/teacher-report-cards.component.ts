@@ -2,12 +2,13 @@ import { Component, OnInit, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ApiService } from '../../core/api.service';
+import { RouterLink } from '@angular/router';
 import { ReportCardInsightsComponent } from '../../shared/report-card-insights/report-card-insights.component';
 
 @Component({
   selector: 'sf-teacher-report-cards',
   standalone: true,
-  imports: [CommonModule, FormsModule, ReportCardInsightsComponent],
+  imports: [CommonModule, FormsModule, RouterLink, ReportCardInsightsComponent],
   templateUrl: './teacher-report-cards.component.html',
   styleUrls: ['../../shared/admin-page.scss', './teacher-report-cards.component.scss'],
 })
@@ -28,6 +29,7 @@ export class TeacherReportCardsComponent implements OnInit {
   insights: Record<string, any> = {};
   insightLoading = new Set<string>();
   expandedInsightKey = '';
+  missingPhotos = 0;
 
   ngOnInit(): void {
     this.api.get<any[]>('/api/academic/sections').subscribe({
@@ -152,12 +154,23 @@ export class TeacherReportCardsComponent implements OnInit {
   downloadAdmitCards(): void {
     if (!this.sectionId) return;
     const term = this.termKey.trim();
-    const path =
-      `/api/exam/admit-cards/pdf?sectionId=${encodeURIComponent(this.sectionId)}` +
+    const query =
+      `sectionId=${encodeURIComponent(this.sectionId)}` +
       (term ? `&termKey=${encodeURIComponent(term)}` : '');
     this.busy = true;
     this.error = '';
-    this.api.getBlob(path).subscribe({
+    this.missingPhotos = 0;
+    this.api.get<any>(`/api/exam/admit-cards?${query}`).subscribe({
+      next: (pack) => {
+        this.missingPhotos = Number(pack?.missingPhotoCount || 0);
+        this.fetchAdmitPdf(query, term);
+      },
+      error: () => this.fetchAdmitPdf(query, term),
+    });
+  }
+
+  private fetchAdmitPdf(query: string, term: string): void {
+    this.api.getBlob(`/api/exam/admit-cards/pdf?${query}`).subscribe({
       next: (blob) => {
         this.busy = false;
         this.saveBlob(blob, `admit-cards-${term || 'class'}.pdf`);

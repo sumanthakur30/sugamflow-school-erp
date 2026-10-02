@@ -206,6 +206,7 @@ export class StudentsComponent implements OnInit, OnDestroy {
   ngOnDestroy(): void {
     this.routeSub?.unsubscribe();
     this.campusReadySub?.unsubscribe();
+    this.revokePhotoUrls();
   }
 
   @HostListener('document:keydown.escape')
@@ -255,6 +256,7 @@ export class StudentsComponent implements OnInit, OnDestroy {
         this.resetGuardianDraft();
         this.loadDocuments();
         this.loadAttachments();
+        this.refreshPhotoViews();
         if (this.showAudit) {
           this.loadAudit();
         }
@@ -715,11 +717,21 @@ export class StudentsComponent implements OnInit, OnDestroy {
     return `********${digits.slice(-4)}`;
   }
 
+  photoView: Record<string, 'none' | 'loading' | 'ready' | 'error'> = {};
+  photoSrc: Record<string, string> = {};
+  private photoObjectUrls: string[] = [];
+  private photoLoadGen = 0;
+
   studentPhotoUrl(): string {
-    const answers = this.selected?.answers ?? {};
-    const url = String(answers.photoUrl || answers.photo || '').trim();
-    if (url.startsWith('/api/')) return url;
-    return this.attachmentUrl('STUDENT_PHOTO');
+    return this.rawPhotoRef('STUDENT_PHOTO');
+  }
+
+  photoState(type: string): 'none' | 'loading' | 'ready' | 'error' {
+    return this.photoView[type] || 'none';
+  }
+
+  photoObject(type: string): string {
+    return this.photoSrc[type] || '';
   }
 
   attachmentFor(type: string): any | null {
@@ -740,10 +752,12 @@ export class StudentsComponent implements OnInit, OnDestroy {
       next: (rows) => {
         this.attachments = rows ?? [];
         this.attachmentsLoading = false;
+        this.refreshPhotoViews();
       },
       error: () => {
         this.attachments = [];
         this.attachmentsLoading = false;
+        this.refreshPhotoViews();
       },
     });
   }
@@ -753,25 +767,35 @@ export class StudentsComponent implements OnInit, OnDestroy {
     const file = input.files?.[0];
     input.value = '';
     if (!file || !this.selected?.id) return;
-    const maxKb = this.photoAttachmentTypes.has(type)
-      ? this.identity.maxPhotoKb
-      : this.identity.maxDocumentKb;
-    if (file.size > maxKb * 1024) {
-      this.error = `File exceeds ${maxKb} KB limit`;
+    const photo = this.photoAttachmentTypes.has(type);
+    if (photo && !this.isAllowedPhotoFile(file)) {
+      this.error = 'Photo must be JPG, JPEG, PNG, or WEBP';
       return;
     }
-    const reader = new FileReader();
-    reader.onload = () => {
-      const dataUrl = String(reader.result || '');
-      const contentBase64 = dataUrl.includes(',') ? dataUrl.split(',')[1] : dataUrl;
-      this.uploadAttachment({
-        type,
-        fileName: file.name,
-        contentType: file.type || 'application/octet-stream',
-        contentBase64,
+    const maxKb = photo ? this.identity.maxPhotoKb : this.identity.maxDocumentKb;
+    const prepared = photo ? this.preparePhoto(file) : Promise.resolve(file);
+    prepared
+      .then((ready) => {
+        if (ready.size > maxKb * 1024) {
+          this.error = `File exceeds ${maxKb} KB limit`;
+          return;
+        }
+        const reader = new FileReader();
+        reader.onload = () => {
+          const dataUrl = String(reader.result || '');
+          const contentBase64 = dataUrl.includes(',') ? dataUrl.split(',')[1] : dataUrl;
+          this.uploadAttachment({
+            type,
+            fileName: ready.name,
+            contentType: ready.type || file.type || 'application/octet-stream',
+            contentBase64,
+          });
+        };
+        reader.readAsDataURL(ready);
+      })
+      .catch(() => {
+        this.error = 'Photo must be a valid JPG, JPEG, PNG, or WEBP image';
       });
-    };
-    reader.readAsDataURL(file);
   }
 
   onDocumentSelected(ev: Event): void {
@@ -797,7 +821,12 @@ export class StudentsComponent implements OnInit, OnDestroy {
   }
 
   removeAttachment(att: any): void {
-    if (!att?.id || !confirm(`Remove ${att.fileName || att.attachmentType}?`)) return;
+    if (!att?.id) return;
+    const studentPhoto = att.attachmentType === 'STUDENT_PHOTO';
+    const message = studentPhoto
+      ? "Remove this student's photo?"
+      : `Remove ${att.fileName || att.attachmentType}?`;
+    if (!confirm(message)) return;
     this.api.delete(`/api/student/attachments/${att.id}`).subscribe({
       next: () => {
         this.statusMsg = 'Attachment removed';
@@ -805,6 +834,153 @@ export class StudentsComponent implements OnInit, OnDestroy {
         if (this.selected?.id) this.loadDetail(this.selected.id);
       },
       error: (err) => (this.error = err?.error?.message ?? 'Remove failed'),
+    });
+  }
+
+  openAttachment(att: { contentUrl?: string }): void {
+    const path = this.apiPath(String(att?.contentUrl || ''));
+    if (!path) {
+      this.error = 'Could not open this file';
+      return;
+    }
+    this.api.getBlob(path).subscribe({
+      next: (blob) => {
+        const url = URL.createObjectURL(blob);
+        window.open(url, '_blank');
+        setTimeout(() => URL.revokeObjectURL(url), 60_000);
+      },
+      error: () => (this.error = 'Could not open this file'),
+    });
+  }
+
+  private refreshPhotoViews(): void {
+    const gen = ++this.photoLoadGen;
+    this.revokePhotoUrls();
+    const view: Record<string, 'none' | 'loading' | 'ready' | 'error'> = {};
+    const src: Record<string, string> = {};
+    for (const type of this.photoAttachmentTypes) {
+      const raw = this.rawPhotoRef(type);
+      if (!raw) {
+        view[type] = 'none';
+        continue;
+      }
+      if (raw.startsWith('data:image/')) {
+        view[type] = 'ready';
+        src[type] = raw;
+        continue;
+      }
+      const path = this.apiPath(raw);
+      if (!path) {
+        view[type] = 'error';
+        continue;
+      }
+      view[type] = 'loading';
+      this.api.getBlob(path).subscribe({
+        next: (blob) => {
+          if (gen !== this.photoLoadGen) return;
+          if (!blob.type.startsWith('image/')) {
+            this.photoView = { ...this.photoView, [type]: 'error' };
+            return;
+          }
+          const url = URL.createObjectURL(blob);
+          this.photoObjectUrls.push(url);
+          this.photoSrc = { ...this.photoSrc, [type]: url };
+          this.photoView = { ...this.photoView, [type]: 'ready' };
+        },
+        error: () => {
+          if (gen !== this.photoLoadGen) return;
+          this.photoView = { ...this.photoView, [type]: 'error' };
+        },
+      });
+    }
+    this.photoView = view;
+    this.photoSrc = src;
+  }
+
+  private rawPhotoRef(type: string): string {
+    if (type === 'STUDENT_PHOTO') {
+      const answers = this.selected?.answers ?? {};
+      const fromAnswers = String(answers.photoUrl || answers.photo || '').trim();
+      if (
+        fromAnswers.startsWith('/api/') ||
+        fromAnswers.startsWith('data:image/') ||
+        fromAnswers.startsWith('http')
+      ) {
+        return fromAnswers;
+      }
+    }
+    return String(this.attachmentUrl(type) || '').trim();
+  }
+
+  private apiPath(raw: string): string {
+    const value = raw.trim();
+    if (value.startsWith('/api/')) return value;
+    if (value.startsWith('http://') || value.startsWith('https://')) {
+      try {
+        const url = new URL(value);
+        return `${url.pathname}${url.search}`;
+      } catch {
+        return '';
+      }
+    }
+    return '';
+  }
+
+  private revokePhotoUrls(): void {
+    for (const url of this.photoObjectUrls) {
+      URL.revokeObjectURL(url);
+    }
+    this.photoObjectUrls = [];
+  }
+
+  private isAllowedPhotoFile(file: File): boolean {
+    const type = (file.type || '').toLowerCase();
+    if (type === 'image/jpeg' || type === 'image/jpg' || type === 'image/png' || type === 'image/webp') {
+      return true;
+    }
+    return /\.(jpe?g|png|webp)$/i.test(file.name);
+  }
+
+  private preparePhoto(file: File): Promise<File> {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      const url = URL.createObjectURL(file);
+      img.onload = () => {
+        URL.revokeObjectURL(url);
+        const maxSide = 1200;
+        const tooWide = img.width > maxSide || img.height > maxSide;
+        if (!tooWide && file.size <= 350_000 && file.type !== 'image/png') {
+          resolve(file);
+          return;
+        }
+        const scale = Math.min(1, maxSide / Math.max(img.width, img.height, 1));
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.max(1, Math.round(img.width * scale));
+        canvas.height = Math.max(1, Math.round(img.height * scale));
+        const ctx = canvas.getContext('2d');
+        if (!ctx) {
+          resolve(file);
+          return;
+        }
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        canvas.toBlob(
+          (blob) => {
+            if (!blob) {
+              resolve(file);
+              return;
+            }
+            const name = file.name.replace(/\.\w+$/, '') + '.jpg';
+            resolve(new File([blob], name, { type: 'image/jpeg' }));
+          },
+          'image/jpeg',
+          0.86,
+        );
+      };
+      img.onerror = () => {
+        URL.revokeObjectURL(url);
+        reject(new Error('invalid image'));
+      };
+      img.src = url;
     });
   }
 

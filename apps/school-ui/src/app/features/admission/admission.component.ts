@@ -837,6 +837,73 @@ export class AdmissionComponent implements OnInit, OnDestroy {
     return this.formatAnswer(app?.answers?.[key]);
   }
 
+  imagePreview(key: string): string {
+    return this.imagePreviewFrom({ answers: this.answers }, key);
+  }
+
+  imagePreviewFrom(app: any, key: string): string {
+    const value = String(app?.answers?.[key] ?? '');
+    return value.startsWith('data:image/') ? value : '';
+  }
+
+  imageHelp(field: FormField): string {
+    const key = field.key.toLowerCase();
+    if (key === 'photo' || key === 'studentphoto' || field.label.toLowerCase().includes('photo')) {
+      return "Upload a recent passport-size photograph. This photo will be used for the student's ID Card, Admit Card and other school documents.";
+    }
+    return 'JPG, JPEG, PNG, or WebP. Maximum 512 KB.';
+  }
+
+  onImageSelected(field: FormField, ev: Event): void {
+    const input = ev.target as HTMLInputElement;
+    const file = input.files?.[0];
+    input.value = '';
+    if (!file) return;
+    const type = (file.type || '').toLowerCase();
+    const namedOk = /\.(jpe?g|png|webp)$/i.test(file.name);
+    if (!['image/jpeg', 'image/jpg', 'image/png', 'image/webp'].includes(type) && !namedOk) {
+      this.fieldErrors = { ...this.fieldErrors, [field.key]: 'Use JPG, JPEG, PNG, or WebP' };
+      return;
+    }
+    if (file.size > 512 * 1024) {
+      this.fieldErrors = { ...this.fieldErrors, [field.key]: 'Photo must be 512 KB or smaller' };
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = String(reader.result || '');
+      const img = new Image();
+      img.onload = () => {
+        if (img.width < 120 || img.height < 120 || img.width > 2400 || img.height > 2400) {
+          this.fieldErrors = {
+            ...this.fieldErrors,
+            [field.key]: 'Photo must be between 120 and 2400 pixels on each side',
+          };
+          this.cdr.markForCheck();
+          return;
+        }
+        this.answers[field.key] = dataUrl;
+        const next = { ...this.fieldErrors };
+        delete next[field.key];
+        this.fieldErrors = next;
+        this.cdr.markForCheck();
+      };
+      img.onerror = () => {
+        this.fieldErrors = { ...this.fieldErrors, [field.key]: 'Could not read that image' };
+        this.cdr.markForCheck();
+      };
+      img.src = dataUrl;
+    };
+    reader.readAsDataURL(file);
+  }
+
+  clearImage(field: FormField): void {
+    this.answers[field.key] = '';
+    const next = { ...this.fieldErrors };
+    delete next[field.key];
+    this.fieldErrors = next;
+  }
+
   /** Normalize class labels for the list (Grade 10-B, Grade 9, IV, …). */
   formatClass(app: any): string {
     const fromPartsGrade = this.formatAnswer(app?.answers?.classGrade ?? app?.answers?.grade);
@@ -893,7 +960,9 @@ export class AdmissionComponent implements OnInit, OnDestroy {
     if (v === true) return 'Yes';
     if (v === false) return 'No';
     if (v == null || String(v).trim() === '') return '—';
-    return String(v);
+    const text = String(v);
+    if (text.startsWith('data:image/')) return 'Photo uploaded';
+    return text;
   }
 
   applicantName(app: any): string {
@@ -1089,6 +1158,13 @@ export class AdmissionComponent implements OnInit, OnDestroy {
       const raw = this.answers[f.key];
       if (f.type === 'CHECKBOX') {
         if (f.mandatory && !raw) {
+          errors[f.key] = `${f.label} is required`;
+        }
+        continue;
+      }
+      if (f.type === 'IMAGE') {
+        const preview = raw == null ? '' : String(raw).trim();
+        if (f.mandatory && !preview.startsWith('data:image/')) {
           errors[f.key] = `${f.label} is required`;
         }
         continue;

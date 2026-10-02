@@ -299,12 +299,7 @@ public class StudentDirectoryService {
     row.put("apaarId", firstNonBlank(stringVal(answers, "apaarId"), stringVal(answers, "apaarNumber")));
     row.put("samagraId", stringVal(answers, "samagraId"));
     row.put("schoolStudentId", stringVal(answers, "schoolStudentId"));
-    row.put(
-        "photoUrl",
-        firstNonBlank(
-            stringVal(answers, "photoUrl"),
-            stringVal(answers, "photo"),
-            stringVal(answers, "studentPhoto")));
+    row.put("photoUrl", StudentRecordService.displayPhotoUrl(answers));
     row.put("parentName", parentName(answers));
     row.put("fatherName", stringVal(answers, "fatherName"));
     row.put("rte", truthy(answers.get("rte")) || "RTE".equalsIgnoreCase(stringVal(answers, "category")));

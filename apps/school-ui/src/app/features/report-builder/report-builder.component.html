@@ -80,7 +80,84 @@
           <button type="button" class="secondary" (click)="renderSaved()" [disabled]="busy || !selectedKey">
             Render saved
           </button>
+          @if (documentSubject === 'student') {
+            <button type="button" class="secondary" (click)="openBulk()" [disabled]="busy || !selectedKey">
+              Generate for Students
+            </button>
+          }
         </div>
+
+        @if (documentSubject !== 'none') {
+          <div class="preview-bar">
+            <div class="preview-search">
+              <label>
+                {{ documentSubject === 'employee' ? 'Preview employee' : 'Preview student' }}
+                <input
+                  type="search"
+                  name="personQuery"
+                  [(ngModel)]="personQuery"
+                  (ngModelChange)="onPersonQuery()"
+                  [placeholder]="
+                    documentSubject === 'employee'
+                      ? 'Search employee by name or employee number'
+                      : 'Search student by name, admission no., PEN, APAAR, or student ID'
+                  "
+                  autocomplete="off"
+                />
+              </label>
+              <label>
+                Class
+                <select name="filterClass" [(ngModel)]="filterClassId" (ngModelChange)="onClassFilterChange()">
+                  <option value="">All</option>
+                  @for (klass of classes; track klass.id) {
+                    <option [value]="klass.id">{{ klass.name }}</option>
+                  }
+                </select>
+              </label>
+              <label>
+                Section
+                <select name="filterSection" [(ngModel)]="filterSectionId" (ngModelChange)="onPersonQuery()">
+                  <option value="">All</option>
+                  @for (section of sectionChoices; track section.id) {
+                    <option [value]="section.id">{{ section.name || section.studentLabel }}</option>
+                  }
+                </select>
+              </label>
+            </div>
+            @if (searchOpen) {
+              <div class="search-results" role="listbox">
+                @if (searchBusy) {
+                  <p class="muted">Searching…</p>
+                } @else if (!searchHits.length) {
+                  <p class="muted">No matches.</p>
+                } @else {
+                  @for (hit of searchHits; track hit.id) {
+                    <button type="button" class="search-hit" (click)="selectPerson(hit)">
+                      <strong>{{ hit.fullName || 'Record' }}</strong>
+                      @if (documentSubject === 'employee') {
+                        <span>Employee No: {{ hit.employeeNo || '—' }}</span>
+                        <span>{{ hit.designation || hit.department || 'Staff' }}</span>
+                      } @else {
+                        <span>Admission No: {{ hit.admissionNo || '—' }}</span>
+                        <span>Class: {{ hit.classSection || '—' }}</span>
+                        <span>Father: {{ hit.fatherName || hit.parentName || '—' }}</span>
+                      }
+                    </button>
+                  }
+                }
+              </div>
+            }
+            @if (previewLabel) {
+              <p class="preview-selected">
+                <span>Selected: {{ previewLabel }}</span>
+                <button type="button" class="secondary" (click)="clearPreviewPerson()">Clear</button>
+              </p>
+            }
+            @if (photoWarning) {
+              <p class="photo-warning">{{ photoWarning }}</p>
+            }
+          </div>
+        }
 
         @if (draft) {
           <div
@@ -120,7 +197,11 @@
                   (pointerdown)="onElementPointerDown(el, $event)"
                 >
                   @if (el.type === 'image') {
-                    <img class="photo" [src]="imageSrc(el)" [style.object-fit]="el.objectFit || 'cover'" alt="" />
+                    @if (imageSrc(el)) {
+                      <img class="photo" [src]="imageSrc(el)" [style.object-fit]="el.objectFit || 'cover'" alt="" />
+                    } @else {
+                      <div class="photo-fallback">Photo</div>
+                    }
                   } @else {
                     {{ displayLabel(el) }}
                   }
@@ -223,5 +304,86 @@
         }
       </aside>
     </div>
+
+    @if (bulkOpen) {
+      <div class="bulk-backdrop" (click)="closeBulk()">
+        <div class="bulk-dialog panel" (click)="$event.stopPropagation()" role="dialog" aria-label="Generate for students">
+          <h3>Generate {{ draft?.name || 'documents' }}</h3>
+          <p class="muted">Uses the saved template. Student values are filled per page and are not written into the template.</p>
+          <div class="bulk-filters">
+            <label>
+              Academic session
+              <select name="bulkSession" [(ngModel)]="bulkSessionId" (ngModelChange)="loadBulkStudents()">
+                <option value="">Current session</option>
+                @for (session of sessions; track session.id) {
+                  <option [value]="session.id">{{ session.label }}</option>
+                }
+              </select>
+            </label>
+            <label>
+              Class
+              <select name="bulkClass" [(ngModel)]="bulkClassId" (ngModelChange)="onBulkClassChange()">
+                <option value="">Select</option>
+                @for (klass of classes; track klass.id) {
+                  <option [value]="klass.id">{{ klass.name }}</option>
+                }
+              </select>
+            </label>
+            <label>
+              Section
+              <select name="bulkSection" [(ngModel)]="bulkSectionId" (ngModelChange)="loadBulkStudents()">
+                <option value="">Entire class</option>
+                @for (section of bulkSectionChoices; track section.id) {
+                  <option [value]="section.id">{{ section.name || section.studentLabel }}</option>
+                }
+              </select>
+            </label>
+          </div>
+          <p>Selected: {{ bulkSelectedCount }}</p>
+          @if (bulkWarnings.length) {
+            <div class="photo-warning">
+              @for (note of bulkWarnings; track note) {
+                <div>{{ note }}</div>
+              }
+              <button type="button" class="secondary" (click)="toggleMissingView()">
+                {{ bulkMissingOnly ? 'Show all students' : 'View Missing Data' }}
+              </button>
+              <label class="confirm-missing">
+                <input type="checkbox" [(ngModel)]="bulkAllowIncomplete" name="allowIncomplete" />
+                Continue with incomplete student data
+              </label>
+            </div>
+          }
+          <div class="bulk-actions">
+            <button type="button" class="secondary" (click)="selectAllBulk(true)">Select All</button>
+            <button type="button" class="secondary" (click)="selectAllBulk(false)">Clear All</button>
+          </div>
+          <div class="bulk-list">
+            @for (student of visibleBulkStudents; track student.id) {
+              <label>
+                <input type="checkbox" [(ngModel)]="student.selected" [name]="'bulk-' + student.id" />
+                <span>
+                  {{ student.name }} · {{ student.admissionNo || 'No admission no.' }} · {{ student.classSection || '—' }}
+                  @if (student.missingPhoto || student.missingAdmission || student.missingPen) {
+                    <span class="muted">
+                      {{ student.missingPhoto ? ' · no photo' : '' }}
+                      {{ student.missingAdmission ? ' · no admission no.' : '' }}
+                      {{ student.missingPen ? ' · no PEN' : '' }}
+                    </span>
+                  }
+                </span>
+              </label>
+            }
+          </div>
+          @if (bulkNote) {
+            <p class="muted">{{ bulkNote }}</p>
+          }
+          <div class="bulk-actions">
+            <button type="button" (click)="generateBulk()" [disabled]="busy || !bulkSelectedCount">Generate PDF</button>
+            <button type="button" class="secondary" (click)="closeBulk()">Close</button>
+          </div>
+        </div>
+      </div>
+    }
   }
 </section>
