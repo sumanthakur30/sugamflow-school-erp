@@ -310,6 +310,71 @@ public class AttendanceRosterService {
     return transition(sessionId, "LOCKED");
   }
 
+  /** Students the absent or low-attendance rules still match, from the last 30 days of marks. */
+  @Transactional(readOnly = true)
+  public List<Map<String, Object>> exceptions() {
+    TenantScope scope = TenantContext.require();
+    Instant since = Instant.now().minus(java.time.Duration.ofDays(30));
+    Map<String, int[]> tally = new LinkedHashMap<>();
+    Map<String, AttendanceMarkEntity> latest = new LinkedHashMap<>();
+    for (AttendanceMarkEntity mark :
+        marks.findTop2000ByOrganizationIdAndMarkedAtAfterOrderByMarkedAtDesc(
+            scope.organizationId(), since)) {
+      String key =
+          mark.getStudentId() != null ? mark.getStudentId().toString() : mark.getAdmissionNo();
+      if (key == null || key.isBlank()) {
+        continue;
+      }
+      int[] box = tally.computeIfAbsent(key, ignored -> new int[2]);
+      String status = mark.getStatus() == null ? "" : mark.getStatus().toUpperCase(Locale.ROOT);
+      if ("PRESENT".equals(status) || "LATE".equals(status)) {
+        box[0] += 2;
+      } else if ("HALF_DAY".equals(status)) {
+        box[0] += 1;
+      }
+      if (!"LEAVE".equals(status)) {
+        box[1] += 2;
+      }
+      latest.putIfAbsent(key, mark);
+    }
+    List<Map<String, Object>> rows = new ArrayList<>();
+    for (Map.Entry<String, int[]> entry : tally.entrySet()) {
+      if (rows.size() >= 25) {
+        break;
+      }
+      int[] box = entry.getValue();
+      if (box[1] <= 0) {
+        continue;
+      }
+      int percent = (int) Math.round((100.0 * box[0]) / box[1]);
+      AttendanceMarkEntity mark = latest.get(entry.getKey());
+      String status = mark.getStatus() == null ? "" : mark.getStatus().toUpperCase(Locale.ROOT);
+      if (!"ABSENT".equals(status) && percent >= 75) {
+        continue;
+      }
+      Map<String, Object> attendance = new LinkedHashMap<>();
+      attendance.put("percent", percent);
+      attendance.put("status", status);
+      boolean matched;
+      try {
+        List<String> actions = engines.evaluateRules(scope, Map.of("attendance", attendance));
+        matched = actions.contains("NOTIFY_ABSENT") || actions.contains("BLOCK_EXAM");
+      } catch (RuntimeException ex) {
+        matched = "ABSENT".equals(status) || percent < 75;
+      }
+      if (!matched) {
+        continue;
+      }
+      Map<String, Object> row = new LinkedHashMap<>();
+      row.put("studentName", mark.getStudentName());
+      row.put("admissionNo", mark.getAdmissionNo());
+      row.put("status", status);
+      row.put("percent", percent);
+      rows.add(row);
+    }
+    return rows;
+  }
+
   @Transactional(readOnly = true)
   public List<Map<String, Object>> sessionAlerts(UUID sessionId) {
     TenantScope scope = TenantContext.require();

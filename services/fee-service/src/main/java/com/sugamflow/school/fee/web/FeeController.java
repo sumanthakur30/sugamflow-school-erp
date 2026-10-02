@@ -46,6 +46,11 @@ public class FeeController {
     return ApiResponse.ok(service.defaulters());
   }
 
+  @GetMapping("/exceptions")
+  public ApiResponse<List<Map<String, Object>>> exceptions() {
+    return ApiResponse.ok(service.exceptions());
+  }
+
   @GetMapping("/collections")
   public ApiResponse<PageResult<Map<String, Object>>> list(
       @RequestParam(required = false) Integer page, @RequestParam(required = false) Integer size) {

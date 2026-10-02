@@ -1,6 +1,7 @@
 package com.sugamflow.school.attendance.persistence.repo;
 
 import com.sugamflow.school.attendance.persistence.entity.AttendanceMarkEntity;
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -19,4 +20,7 @@ public interface AttendanceMarkRepository extends JpaRepository<AttendanceMarkEn
 
   List<AttendanceMarkEntity> findByOrganizationIdAndAdmissionNoOrderByMarkedAtDesc(
       String organizationId, String admissionNo);
+
+  List<AttendanceMarkEntity> findTop2000ByOrganizationIdAndMarkedAtAfterOrderByMarkedAtDesc(
+      String organizationId, Instant markedAt);
 }

@@ -79,6 +79,38 @@
       </section>
     </div>
 
+    @if (exceptionGroups.length) {
+      <section class="panel exception-panel" aria-label="Exceptions">
+        <div class="section-head">
+          <div>
+            <h3>Exceptions</h3>
+            <p>Absent students, fee risk, and documents that are about to expire.</p>
+          </div>
+        </div>
+        <div class="exception-grid">
+          @for (group of exceptionGroups; track group.title) {
+            <div>
+              <h4>{{ group.title }}</h4>
+              @if (!group.rows.length) {
+                <p class="muted">None right now.</p>
+              } @else {
+                <ul class="activity-list">
+                  @for (item of group.rows; track item.label + item.value) {
+                    <li>
+                      <a [routerLink]="item.route">
+                        <span>{{ item.label }}</span>
+                        <strong>{{ item.value }}</strong>
+                      </a>
+                    </li>
+                  }
+                </ul>
+              }
+            </div>
+          }
+        </div>
+      </section>
+    }
+
     @if (unavailable && !refreshing) {
       <p class="availability-note">
         {{ unavailable }} optional data source{{ unavailable === 1 ? '' : 's' }} unavailable; available
