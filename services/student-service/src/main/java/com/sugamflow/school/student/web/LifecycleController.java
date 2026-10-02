@@ -134,6 +134,11 @@ public class LifecycleController {
     return ApiResponse.ok(wrap(() -> service.changeSection(body)));
   }
 
+  @PostMapping("/campus-transfer")
+  public ApiResponse<Map<String, Object>> campusTransfer(@RequestBody Map<String, Object> body) {
+    return ApiResponse.ok(wrap(() -> service.transferCampus(body)));
+  }
+
   @GetMapping("/events/{eventId}/document")
   public ResponseEntity<byte[]> eventDocument(@PathVariable("eventId") UUID eventId) {
     byte[] pdf = wrap(() -> service.eventDocumentPdf(eventId));

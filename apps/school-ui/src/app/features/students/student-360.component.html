@@ -145,6 +145,35 @@
             Save APAAR status
           </button>
         </div>
+        <h4>Campus</h4>
+        <p class="muted">
+          Move this student to another campus. The same student record stays in place.
+        </p>
+        <p>Now on {{ currentCampusName() }}</p>
+        @if (campusesLoaded && otherCampuses().length === 0) {
+          <p class="muted">This organisation has no other campus to move to.</p>
+        } @else {
+          <div class="grid two">
+            <label>
+              Move to
+              <select [(ngModel)]="targetBranchId" name="targetBranchId">
+                @for (campus of otherCampuses(); track campus.branchKey) {
+                  <option [value]="campus.branchKey">{{ campus.name }}</option>
+                }
+              </select>
+            </label>
+          </div>
+        }
+        <div class="actions">
+          <button
+            type="button"
+            class="primary-btn"
+            (click)="transferCampus()"
+            [disabled]="transferring || !targetBranchId"
+          >
+            Move campus
+          </button>
+        </div>
       </div>
     }
 
