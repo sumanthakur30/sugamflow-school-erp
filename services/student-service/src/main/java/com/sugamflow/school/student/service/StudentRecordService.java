@@ -402,7 +402,7 @@ public class StudentRecordService {
     out.put("schoolStudentId", stringVal(answers, "schoolStudentId"));
     String aadhaarRaw =
         firstNonBlank(stringVal(answers, "aadhaar"), stringVal(answers, "aadhaarNumber"));
-    out.put("aadhaar", aadhaarRaw);
+    out.put("aadhaar", maskAadhaar(aadhaarRaw));
     out.put("aadhaarMasked", maskAadhaar(aadhaarRaw));
     return out;
   }

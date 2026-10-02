@@ -30,7 +30,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class AttendanceRosterService {
 
   private static final Set<String> MARK_STATUSES =
-      Set.of("PRESENT", "ABSENT", "LATE", "LEAVE");
+      Set.of("PRESENT", "ABSENT", "LATE", "LEAVE", "HALF_DAY");
 
   private final AttendanceSessionRepository sessions;
   private final AttendanceMarkRepository marks;
@@ -327,7 +327,7 @@ public class AttendanceRosterService {
     String status = asString(mark.get("status"));
     if (status == null || !MARK_STATUSES.contains(status.toUpperCase(Locale.ROOT))) {
       throw new AttendanceException(
-          "VALIDATION", "status must be one of PRESENT, ABSENT, LATE, LEAVE");
+          "VALIDATION", "status must be one of PRESENT, ABSENT, LATE, LEAVE, HALF_DAY");
     }
     status = status.toUpperCase(Locale.ROOT);
     UUID studentId = parseUuid(mark.get("studentId"));

@@ -2,8 +2,10 @@ package com.sugamflow.school.student.web;
 
 import com.sugamflow.school.common.api.ApiResponse;
 import com.sugamflow.school.common.api.PageResult;
+import com.sugamflow.school.student.directory.SensitiveExportAuditService;
 import com.sugamflow.school.student.directory.StudentDirectoryService;
 import com.sugamflow.school.student.directory.UdiseExportService;
+import java.util.List;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import org.springframework.http.HttpHeaders;
@@ -22,10 +24,15 @@ public class StudentDirectoryController {
 
   private final StudentDirectoryService service;
   private final UdiseExportService udise;
+  private final SensitiveExportAuditService exportAudit;
 
-  public StudentDirectoryController(StudentDirectoryService service, UdiseExportService udise) {
+  public StudentDirectoryController(
+      StudentDirectoryService service,
+      UdiseExportService udise,
+      SensitiveExportAuditService exportAudit) {
     this.service = service;
     this.udise = udise;
+    this.exportAudit = exportAudit;
   }
 
   @GetMapping("/bootstrap")
@@ -70,6 +77,11 @@ public class StudentDirectoryController {
   @PutMapping("/udise-setting")
   public ApiResponse<Map<String, Object>> saveUdiseSetting(@RequestBody Map<String, Object> body) {
     return ApiResponse.ok(udise.save(body != null ? body : Map.of()));
+  }
+
+  @GetMapping("/export-audit")
+  public ApiResponse<List<Map<String, Object>>> exportAudit() {
+    return ApiResponse.ok(exportAudit.recent());
   }
 
   @GetMapping(value = "/export-udise.csv", produces = "text/csv")

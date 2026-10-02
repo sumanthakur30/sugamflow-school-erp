@@ -711,11 +711,8 @@ export class StudentsComponent implements OnInit, OnDestroy {
 
   displayAadhaar(raw: unknown): string {
     const digits = String(raw ?? '').replace(/\D/g, '');
-    if (!digits) return '—';
-    if (this.identity.maskAadhaar && digits.length >= 4) {
-      return `********${digits.slice(-4)}`;
-    }
-    return digits;
+    if (digits.length < 4) return digits ? '****' : '—';
+    return `********${digits.slice(-4)}`;
   }
 
   studentPhotoUrl(): string {

@@ -38,6 +38,14 @@ export const routes: Routes = [
     component: LoginComponent,
   },
   {
+    path: 'modules-unavailable',
+    canActivate: [authGuard],
+    loadComponent: () =>
+      import('./features/entitlements/modules-unavailable.component').then(
+        (m) => m.ModulesUnavailableComponent,
+      ),
+  },
+  {
     path: 'onboarding/set-password',
     loadComponent: () =>
       import('./features/onboarding/set-password.component').then((m) => m.SetPasswordComponent),

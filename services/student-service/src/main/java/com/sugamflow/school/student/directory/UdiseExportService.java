@@ -31,13 +31,16 @@ public class UdiseExportService {
   private final UdiseExportSettingRepository settings;
   private final ConfigEngineClient engines;
   private final RelationshipAccessService relationshipAccess;
+  private final SensitiveExportAuditService exportAudit;
 
   public UdiseExportService(
       StudentRecordRepository students,
       UdiseExportSettingRepository settings,
       ConfigEngineClient engines,
-      RelationshipAccessService relationshipAccess) {
+      RelationshipAccessService relationshipAccess,
+      SensitiveExportAuditService exportAudit) {
     this.students = students;
+    this.exportAudit = exportAudit;
     this.settings = settings;
     this.engines = engines;
     this.relationshipAccess = relationshipAccess;
@@ -89,6 +92,7 @@ public class UdiseExportService {
     StringBuilder sb = new StringBuilder();
     sb.append('\uFEFF');
     sb.append(UdiseColumns.header(keys)).append('\n');
+    int written = 0;
 
     for (int pageNo = 0; pageNo < MAX_PAGES; pageNo++) {
       Page<StudentRecordEntity> page =
@@ -127,11 +131,13 @@ public class UdiseExportService {
           sb.append(UdiseColumns.csv(UdiseColumns.cell(student.getAdmissionNo(), answers, keys.get(i))));
         }
         sb.append('\n');
+        written++;
       }
       if (!page.hasNext()) {
         break;
       }
     }
+    exportAudit.record("UDISE_CSV", keys.contains("aadhaar"), written);
     return sb.toString().getBytes(StandardCharsets.UTF_8);
   }
 

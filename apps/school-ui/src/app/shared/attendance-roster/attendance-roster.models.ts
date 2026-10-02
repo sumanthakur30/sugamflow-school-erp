@@ -1,4 +1,4 @@
-export const ATTENDANCE_MARKS = ['PRESENT', 'ABSENT', 'LATE', 'LEAVE'] as const;
+export const ATTENDANCE_MARKS = ['PRESENT', 'ABSENT', 'LATE', 'LEAVE', 'HALF_DAY'] as const;
 
 export type AttendanceMark = (typeof ATTENDANCE_MARKS)[number];
 export type AttendanceFilter = 'ALL' | AttendanceMark | 'NOT_MARKED';
@@ -55,6 +55,7 @@ export interface AttendanceSummary {
   absent: number;
   late: number;
   leave: number;
+  halfDay: number;
   notMarked: number;
 }
 

@@ -69,7 +69,10 @@ public class FeeDueReminderService {
     LocalDate asOf = parseDate(body == null ? null : body.get("asOf"), LocalDate.now());
     String onlyAdmission = body == null ? null : str(body.get("admissionNo"));
     int minPendingDays = intOr(settings.get("dueReminderMinPendingDays"), 1);
-    List<String> channels = channels(settings);
+    List<String> channels = requestedChannel(body);
+    if (channels == null) {
+      channels = channels(settings);
+    }
 
     int reminded = 0;
     int skipped = 0;
@@ -364,6 +367,18 @@ public class FeeDueReminderService {
     }
     if ("SMS".equals(channel) || "WHATSAPP".equals(channel)) {
       return str(guardian.get("mobile"));
+    }
+    return null;
+  }
+
+  private static List<String> requestedChannel(Map<String, Object> body) {
+    String requested = body == null ? null : str(body.get("channel"));
+    if (requested == null) {
+      return null;
+    }
+    String channel = requested.trim().toUpperCase(Locale.ROOT);
+    if (channel.equals("WHATSAPP") || channel.equals("SMS") || channel.equals("EMAIL") || channel.equals("IN_APP")) {
+      return List.of(channel);
     }
     return null;
   }

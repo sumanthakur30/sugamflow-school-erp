@@ -7,10 +7,14 @@ import com.sugamflow.school.common.api.PageResult;
 import com.sugamflow.school.payroll.config.PayrollProperties;
 import com.sugamflow.school.payroll.integration.ConfigEngineClient;
 import com.sugamflow.school.payroll.integration.NotificationDeliveryClient;
+import com.sugamflow.school.payroll.integration.StaffAttendanceClient;
 import com.sugamflow.school.payroll.persistence.entity.PayrollRecordEntity;
 import com.sugamflow.school.payroll.persistence.repo.PayrollRecordRepository;
 import com.sugamflow.school.payroll.web.PayrollException;
 import java.time.Instant;
+import java.time.YearMonth;
+import java.time.ZoneId;
+import java.util.Locale;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
@@ -44,18 +48,21 @@ public class PayrollRecordService {
   private final NotificationDeliveryClient notificationDelivery;
   private final PayrollProperties properties;
   private final PayrollOpsService opsService;
+  private final StaffAttendanceClient staffAttendance;
 
   public PayrollRecordService(
       PayrollRecordRepository repository,
       ConfigEngineClient engines,
       NotificationDeliveryClient notificationDelivery,
       PayrollProperties properties,
-      PayrollOpsService opsService) {
+      PayrollOpsService opsService,
+      StaffAttendanceClient staffAttendance) {
     this.repository = repository;
     this.engines = engines;
     this.notificationDelivery = notificationDelivery;
     this.properties = properties;
     this.opsService = opsService;
+    this.staffAttendance = staffAttendance;
   }
 
   @Transactional(readOnly = true)
@@ -513,6 +520,7 @@ public class PayrollRecordService {
 
   private Map<String, Object> markPaid(
       PayrollRecordEntity entity, TenantScope scope, String comment) {
+    requireSubmittedStaffAttendance(scope, entity);
     String status = entity.getStatus() == null ? "" : entity.getStatus().trim().toUpperCase();
     if (!"APPROVED".equals(status)) {
       throw new PayrollException("NOT_PAYABLE", "Only APPROVED runs can be marked PAID.");
@@ -580,6 +588,7 @@ public class PayrollRecordService {
       TenantScope scope,
       Map<String, Object> workflow,
       String comment) {
+    requireSubmittedStaffAttendance(scope, entity);
     List<WorkflowStep> steps = steps(workflow);
     WorkflowStep current =
         steps.stream()
@@ -856,6 +865,54 @@ public class PayrollRecordService {
 
   private WorkflowStep firstStep(Map<String, Object> workflow) {
     return steps(workflow).get(0);
+  }
+
+  private void requireSubmittedStaffAttendance(TenantScope scope, PayrollRecordEntity entity) {
+    String yearMonth = payrollMonth(entity);
+    if (!staffAttendance.isMonthSubmitted(scope, yearMonth)) {
+      throw new PayrollException(
+          "ATTENDANCE_REQUIRED",
+          "Submit staff attendance for " + yearMonth + " before this payslip can be finalized");
+    }
+  }
+
+  private static String payrollMonth(PayrollRecordEntity entity) {
+    Map<String, Object> answers = entity.getAnswers() == null ? Map.of() : entity.getAnswers();
+    String name = String.valueOf(answers.getOrDefault("month", "")).trim();
+    String year = String.valueOf(answers.getOrDefault("year", "")).trim();
+    int month = monthNumber(name);
+    int yearNumber = yearNumber(year);
+    if (month > 0 && yearNumber > 0) {
+      return YearMonth.of(yearNumber, month).toString();
+    }
+    Instant created = entity.getCreatedAt() == null ? Instant.now() : entity.getCreatedAt();
+    return YearMonth.from(created.atZone(ZoneId.of("Asia/Kolkata"))).toString();
+  }
+
+  private static int monthNumber(String name) {
+    return switch (name.toLowerCase(Locale.ROOT)) {
+      case "january", "jan" -> 1;
+      case "february", "feb" -> 2;
+      case "march", "mar" -> 3;
+      case "april", "apr" -> 4;
+      case "may" -> 5;
+      case "june", "jun" -> 6;
+      case "july", "jul" -> 7;
+      case "august", "aug" -> 8;
+      case "september", "sep", "sept" -> 9;
+      case "october", "oct" -> 10;
+      case "november", "nov" -> 11;
+      case "december", "dec" -> 12;
+      default -> 0;
+    };
+  }
+
+  private static int yearNumber(String year) {
+    try {
+      return Integer.parseInt(year);
+    } catch (NumberFormatException ex) {
+      return 0;
+    }
   }
 
   private Map<String, Object> recordNotification(
