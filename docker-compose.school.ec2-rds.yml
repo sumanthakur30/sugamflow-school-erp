@@ -311,6 +311,7 @@ services:
       PAYROLL_WORKFLOWS_URL: http://workflow-service:8184
       PAYROLL_PUBLIC_API_URL: http://gateway-service:9090
       PAYROLL_NOTIF_DELIVERY_URL: http://notification-service:8087
+      PAYROLL_ATTENDANCE_URL: http://attendance-service:8192
 
   attendance-service:
     <<: *jvm-service
