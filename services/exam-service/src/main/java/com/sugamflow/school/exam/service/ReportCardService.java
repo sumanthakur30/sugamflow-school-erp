@@ -5,6 +5,7 @@ import com.sugamflow.school.common.security.PersonaRoles;
 import com.sugamflow.school.common.tenant.TenantContext;
 import com.sugamflow.school.common.tenant.TenantScope;
 import com.sugamflow.school.exam.integration.AcademicClient;
+import com.sugamflow.school.exam.integration.AttendanceSummaryClient;
 import com.sugamflow.school.exam.integration.StudentAccessClient;
 import com.sugamflow.school.exam.integration.StudentDirectoryClient;
 import com.sugamflow.school.exam.persistence.entity.ExamDefinitionEntity;
@@ -15,6 +16,7 @@ import com.sugamflow.school.exam.web.ExamException;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -38,6 +40,7 @@ public class ReportCardService {
   private final StudentDirectoryClient directory;
   private final StudentAccessClient studentAccess;
   private final GradingSupport grading;
+  private final AttendanceSummaryClient attendance;
 
   public ReportCardService(
       ExamDefinitionRepository definitions,
@@ -45,13 +48,15 @@ public class ReportCardService {
       AcademicClient academic,
       StudentDirectoryClient directory,
       StudentAccessClient studentAccess,
-      GradingSupport grading) {
+      GradingSupport grading,
+      AttendanceSummaryClient attendance) {
     this.definitions = definitions;
     this.marks = marks;
     this.academic = academic;
     this.directory = directory;
     this.studentAccess = studentAccess;
     this.grading = grading;
+    this.attendance = attendance;
   }
 
   /** Staff view: full section report card grid for a term. */
@@ -196,9 +201,6 @@ public class ReportCardService {
       String admission = asString(row.get("admissionNo"));
       String studentName =
           firstNonBlank(asString(row.get("fullName")), asString(row.get("studentName")), admission);
-      if (onlyStudentKey != null && !matchesStudent(onlyStudentKey, studentId, admission)) {
-        continue;
-      }
 
       List<Map<String, Object>> subjectRows = new ArrayList<>();
       BigDecimal totalObtained = BigDecimal.ZERO;
@@ -246,6 +248,15 @@ public class ReportCardService {
       students.add(student);
     }
 
+    attachAttendance(scope, sectionId, students);
+    assignSectionRank(students);
+    if (onlyStudentKey != null) {
+      students.removeIf(
+          s ->
+              !matchesStudent(
+                  onlyStudentKey, parseUuid(s.get("studentId")), asString(s.get("admissionNo"))));
+    }
+
     Map<String, Object> result = new LinkedHashMap<>();
     result.put("sectionId", sectionId.toString());
     result.put("sectionLabel", label);
@@ -254,6 +265,55 @@ public class ReportCardService {
     result.put("subjects", subjectColumns);
     result.put("students", students);
     return result;
+  }
+
+  private void attachAttendance(
+      TenantScope scope, UUID sectionId, List<Map<String, Object>> students) {
+    Map<String, Map<String, Object>> byStudent = attendance.byStudent(scope, sectionId);
+    for (Map<String, Object> student : students) {
+      Map<String, Object> row = null;
+      String id = asString(student.get("studentId"));
+      String admission = asString(student.get("admissionNo"));
+      if (id != null) {
+        row = byStudent.get(id.toLowerCase(Locale.ROOT));
+      }
+      if (row == null && admission != null) {
+        row = byStudent.get(admission.toLowerCase(Locale.ROOT));
+      }
+      if (row == null) {
+        student.put("attendancePercent", null);
+        student.put("presentDays", null);
+        student.put("workingDays", null);
+        continue;
+      }
+      student.put("attendancePercent", row.get("percentage"));
+      student.put("presentDays", row.get("presentDays"));
+      student.put("workingDays", row.get("workingDays"));
+    }
+  }
+
+  /** Competition rank: ties share a place and the next place is skipped. */
+  private static void assignSectionRank(List<Map<String, Object>> students) {
+    List<Map<String, Object>> ranked =
+        students.stream()
+            .filter(s -> s.get("percentage") instanceof BigDecimal)
+            .sorted(
+                Comparator.comparing(
+                        (Map<String, Object> s) -> (BigDecimal) s.get("percentage"))
+                    .reversed())
+            .toList();
+    int place = 0;
+    int seen = 0;
+    BigDecimal previous = null;
+    for (Map<String, Object> student : ranked) {
+      seen++;
+      BigDecimal pct = (BigDecimal) student.get("percentage");
+      if (previous == null || pct.compareTo(previous) != 0) {
+        place = seen;
+        previous = pct;
+      }
+      student.put("rank", place);
+    }
   }
 
   private Map<String, String> subjectNames(TenantScope scope) {

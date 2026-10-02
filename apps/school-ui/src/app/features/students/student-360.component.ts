@@ -26,6 +26,10 @@ export class Student360Component implements OnInit {
   tab = 'profile';
   data: any = null;
   studentId = '';
+  remarkBody = '';
+  messageBody = '';
+  messageChannel = 'DESK';
+  savingNote = false;
 
   ngOnInit(): void {
     this.route.paramMap.subscribe((pm) => {
@@ -54,6 +58,47 @@ export class Student360Component implements OnInit {
 
   setTab(t: string): void {
     this.tab = t;
+  }
+
+  addRemark(): void {
+    const body = this.remarkBody.trim();
+    if (!body || !this.studentId) return;
+    this.savingNote = true;
+    this.api.post(`/api/student/students/${this.studentId}/remarks`, { body }).subscribe({
+      next: () => {
+        this.remarkBody = '';
+        this.savingNote = false;
+        this.load();
+        this.tab = 'remarks';
+      },
+      error: (err) => {
+        this.savingNote = false;
+        this.error = err?.error?.message ?? 'Could not save the remark';
+      },
+    });
+  }
+
+  addMessage(): void {
+    const body = this.messageBody.trim();
+    if (!body || !this.studentId) return;
+    this.savingNote = true;
+    this.api
+      .post(`/api/student/students/${this.studentId}/messages`, {
+        body,
+        channel: this.messageChannel,
+      })
+      .subscribe({
+        next: () => {
+          this.messageBody = '';
+          this.savingNote = false;
+          this.load();
+          this.tab = 'communication';
+        },
+        error: (err) => {
+          this.savingNote = false;
+          this.error = err?.error?.message ?? 'Could not log the message';
+        },
+      });
   }
 
   houseName(): string {

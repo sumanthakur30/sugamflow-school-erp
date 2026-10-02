@@ -56,6 +56,16 @@
         Add {{ catalogLabel | lowercase }}
         <input [(ngModel)]="draft.catalogKey" name="catalogKey" />
       </label>
+      @if (kind === 'LEAVE') {
+        <label>
+          Days
+          <input type="number" min="1" [(ngModel)]="draft.days" name="days" />
+        </label>
+        <label>
+          Yearly quota
+          <input type="number" min="1" [(ngModel)]="draft.yearlyQuota" name="yearlyQuota" />
+        </label>
+      }
       <div class="filter-apply">
         <button type="submit" class="secondary">Add</button>
       </div>
@@ -64,7 +74,7 @@
       <p>
         Settings:
         @for (item of catalog; track item.id) {
-          <span class="chip">{{ item.title }}</span>
+          <span class="chip">{{ item.title }}{{ item.yearlyQuota != null ? ' · ' + item.yearlyQuota + '/yr' : '' }}</span>
         }
       </p>
     }
@@ -93,7 +103,12 @@
               <td>{{ row.subjectRef }}</td>
               <td>{{ row.subjectType }}</td>
               <td>{{ row.title }}</td>
-              <td>{{ row.status }}</td>
+              <td>
+                {{ row.status }}
+                @if (kind === 'LEAVE' && row.remainingDays != null) {
+                  <span class="muted"> · {{ row.remainingDays }} left</span>
+                }
+              </td>
               <td>{{ row.note }}</td>
               <td>
                 @if (kind === 'LEAVE' && row.status === 'PENDING') {

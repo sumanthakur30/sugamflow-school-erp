@@ -18,5 +18,11 @@ public interface TimetableSlotRepository extends JpaRepository<TimetableSlotEnti
 
   Optional<TimetableSlotEntity> findByIdAndOrganizationId(UUID id, String organizationId);
 
+  List<TimetableSlotEntity> findByOrganizationIdAndDayOfWeekAndPeriodId(
+      String organizationId, int dayOfWeek, UUID periodId);
+
+  List<TimetableSlotEntity> findByOrganizationIdAndDayOfWeekAndPeriodIdAndTeacherUsername(
+      String organizationId, int dayOfWeek, UUID periodId, String teacherUsername);
+
   void deleteByOrganizationIdAndSectionId(String organizationId, UUID sectionId);
 }

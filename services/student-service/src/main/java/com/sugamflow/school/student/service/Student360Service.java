@@ -5,7 +5,10 @@ import com.sugamflow.school.common.tenant.TenantContext;
 import com.sugamflow.school.common.tenant.TenantScope;
 import com.sugamflow.school.student.integration.ConfigEngineClient;
 import com.sugamflow.school.student.integration.DomainSnapshotClient;
+import com.sugamflow.school.student.persistence.entity.StudentDeskNoteEntity;
+import com.sugamflow.school.student.persistence.repo.StudentDeskNoteRepository;
 import com.sugamflow.school.student.web.StudentException;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -28,18 +31,24 @@ public class Student360Service {
   private final RelationshipAccessService relationshipAccess;
   private final ConfigEngineClient engines;
   private final DomainSnapshotClient snapshots;
+  private final StudentDocumentService documents;
+  private final StudentDeskNoteRepository notes;
 
   public Student360Service(
       StudentRecordService records,
       LifecycleService lifecycle,
       RelationshipAccessService relationshipAccess,
       ConfigEngineClient engines,
-      DomainSnapshotClient snapshots) {
+      DomainSnapshotClient snapshots,
+      StudentDocumentService documents,
+      StudentDeskNoteRepository notes) {
     this.records = records;
     this.lifecycle = lifecycle;
     this.relationshipAccess = relationshipAccess;
     this.engines = engines;
     this.snapshots = snapshots;
+    this.documents = documents;
+    this.notes = notes;
   }
 
   @Transactional(readOnly = true)
@@ -82,11 +91,17 @@ public class Student360Service {
     out.put("ops", snapshots.campusOps(scope, admissionNo));
     out.put("attendance", snapshots.recentAttendance(scope, id, admissionNo));
     out.put("exams", snapshots.publishedMarks(scope, id, admissionNo));
+    out.put("documents", documents.listForStudent(id));
+    out.put("remarks", notesOf(scope, id, "REMARK"));
+    out.put("communication", notesOf(scope, id, "MESSAGE"));
     out.put(
         "tabs",
         List.of(
             "profile",
             "guardians",
+            "documents",
+            "remarks",
+            "communication",
             "ops",
             "fees",
             "library",
@@ -94,6 +109,56 @@ public class Student360Service {
             "exams",
             "lifecycle"));
     return out;
+  }
+
+  @Transactional
+  public Map<String, Object> addRemark(UUID studentId, Map<String, Object> body) {
+    return addNote(studentId, "REMARK", body);
+  }
+
+  @Transactional
+  public Map<String, Object> addMessage(UUID studentId, Map<String, Object> body) {
+    return addNote(studentId, "MESSAGE", body);
+  }
+
+  private Map<String, Object> addNote(UUID studentId, String kind, Map<String, Object> body) {
+    TenantScope scope = TenantContext.require();
+    records.get(studentId);
+    String text = body == null ? null : string(body.get("body"));
+    if (text == null || text.isBlank()) {
+      throw new StudentException("VALIDATION", "A note is required.");
+    }
+    StudentDeskNoteEntity row = new StudentDeskNoteEntity();
+    row.setId(UUID.randomUUID());
+    row.setOrganizationId(scope.organizationId());
+    row.setBranchId(scope.branchId());
+    row.setStudentId(studentId);
+    row.setKind(kind);
+    row.setChannel(firstNonBlank(string(body.get("channel")), "MESSAGE".equals(kind) ? "DESK" : null));
+    row.setBody(text.trim());
+    row.setCreatedBy(scope.userId());
+    row.setCreatedAt(Instant.now());
+    return noteDto(notes.save(row));
+  }
+
+  private List<Map<String, Object>> notesOf(TenantScope scope, UUID studentId, String kind) {
+    return notes
+        .findByOrganizationIdAndStudentIdAndKindOrderByCreatedAtDesc(
+            scope.organizationId(), studentId, kind)
+        .stream()
+        .map(Student360Service::noteDto)
+        .toList();
+  }
+
+  private static Map<String, Object> noteDto(StudentDeskNoteEntity row) {
+    Map<String, Object> dto = new LinkedHashMap<>();
+    dto.put("id", row.getId());
+    dto.put("kind", row.getKind());
+    dto.put("channel", row.getChannel());
+    dto.put("body", row.getBody());
+    dto.put("createdBy", row.getCreatedBy());
+    dto.put("createdAt", row.getCreatedAt());
+    return dto;
   }
 
   private static Map<String, Object> summary(Map<String, Object> student) {

@@ -35,6 +35,8 @@ export class CampusDeskComponent implements OnInit, OnDestroy {
     title: '',
     note: '',
     catalogKey: '',
+    days: 1,
+    yearlyQuota: 12,
   };
 
   ngOnInit(): void {
@@ -102,7 +104,10 @@ export class CampusDeskComponent implements OnInit, OnDestroy {
         subjectName: this.draft.subjectName.trim(),
         title: this.draft.title.trim() || this.draft.catalogKey || this.title,
         note: this.draft.note.trim(),
-        payload: { catalogKey: this.draft.catalogKey },
+        payload: {
+          catalogKey: this.draft.catalogKey,
+          days: Number(this.draft.days) > 0 ? Number(this.draft.days) : 1,
+        },
       })
       .subscribe({
         next: () => {
@@ -129,6 +134,10 @@ export class CampusDeskComponent implements OnInit, OnDestroy {
         title: label,
         subjectType: 'SETTING',
         subjectName: label,
+        payload:
+          this.kind === 'LEAVE'
+            ? { yearlyQuota: Number(this.draft.yearlyQuota) > 0 ? Number(this.draft.yearlyQuota) : 12 }
+            : {},
       })
       .subscribe({
         next: () => {

@@ -49,6 +49,7 @@ public class ExamProperties {
     private String publicApiBaseUrl = "http://localhost:9090";
     private String studentBaseUrl = "http://localhost:8191";
     private String academicBaseUrl = "http://localhost:8199";
+    private String attendanceBaseUrl = "http://localhost:8192";
 
     public String getFormsBaseUrl() {
       return formsBaseUrl;
@@ -136,6 +137,14 @@ public class ExamProperties {
 
     public void setAcademicBaseUrl(String academicBaseUrl) {
       this.academicBaseUrl = academicBaseUrl;
+    }
+
+    public String getAttendanceBaseUrl() {
+      return attendanceBaseUrl;
+    }
+
+    public void setAttendanceBaseUrl(String attendanceBaseUrl) {
+      this.attendanceBaseUrl = attendanceBaseUrl;
     }
   }
 }

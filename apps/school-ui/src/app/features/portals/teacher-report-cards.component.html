@@ -38,6 +38,9 @@
         <span>{{ report.sectionLabel }}</span>
         <span class="chip">{{ report.termKey }}</span>
         <span class="muted">{{ (report.students || []).length }} students · {{ (report.subjects || []).length }} subjects</span>
+        <button type="button" class="secondary" (click)="downloadAdmitCards()" [disabled]="busy || !sectionId">
+          Admit cards
+        </button>
       </div>
 
       @if (!(report.subjects || []).length) {
@@ -57,6 +60,8 @@
                 }
                 <th>Total</th>
                 <th>%</th>
+                <th>Rank</th>
+                <th>Attendance</th>
                 <th>Grade</th>
                 <th>Result</th>
                 <th></th>
@@ -76,6 +81,8 @@
                     {{ st.totalObtained != null ? st.totalObtained + '/' + st.totalMax : '–' }}
                   </td>
                   <td class="num">{{ st.percentage != null ? st.percentage + '%' : '–' }}</td>
+                  <td class="num">{{ st.rank || '–' }}</td>
+                  <td class="num">{{ attendanceCell(st) }}</td>
                   <td class="num">{{ st.overallGrade || '–' }}</td>
                   <td>
                     <span class="badge" [class.fail]="st.result === 'FAIL'">{{ st.result || '–' }}</span>
@@ -142,6 +149,8 @@
                     {{ st.totalObtained != null ? st.totalObtained + '/' + st.totalMax : '–' }}
                   </span>
                   <span class="chip">{{ st.percentage != null ? st.percentage + '%' : '–' }}</span>
+                  <span class="chip">Rank {{ st.rank || '–' }}</span>
+                  <span class="chip">{{ attendanceCell(st) }}</span>
                   <span class="chip">Grade {{ st.overallGrade || '–' }}</span>
                 </div>
                 <div class="row-actions">

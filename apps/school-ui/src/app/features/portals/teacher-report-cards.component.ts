@@ -124,6 +124,31 @@ export class TeacherReportCardsComponent implements OnInit {
     });
   }
 
+  attendanceCell(student: any): string {
+    if (student?.attendancePercent == null) return '–';
+    return `${student.attendancePercent}%`;
+  }
+
+  downloadAdmitCards(): void {
+    if (!this.sectionId) return;
+    const term = this.termKey.trim();
+    const path =
+      `/api/exam/admit-cards/pdf?sectionId=${encodeURIComponent(this.sectionId)}` +
+      (term ? `&termKey=${encodeURIComponent(term)}` : '');
+    this.busy = true;
+    this.error = '';
+    this.api.getBlob(path).subscribe({
+      next: (blob) => {
+        this.busy = false;
+        this.saveBlob(blob, `admit-cards-${term || 'class'}.pdf`);
+      },
+      error: () => {
+        this.busy = false;
+        this.error = 'Could not download admit cards';
+      },
+    });
+  }
+
   downloadPdf(student: any): void {
     const key = student.studentId
       ? `studentId=${encodeURIComponent(student.studentId)}`

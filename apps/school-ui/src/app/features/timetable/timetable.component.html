@@ -465,6 +465,38 @@
                                 }
                               </select>
                             </label>
+                            @if (cell(d.value, p.id).id) {
+                              <label class="cell-field">
+                                <span class="cell-field-label">Substitute date</span>
+                                <input
+                                  type="date"
+                                  [(ngModel)]="cell(d.value, p.id).substituteDate"
+                                  [name]="'subdate-' + d.value + '-' + p.id"
+                                  [disabled]="!canManage || busy"
+                                />
+                              </label>
+                              <label class="cell-field">
+                                <span class="cell-field-label">Covering teacher</span>
+                                <select
+                                  [(ngModel)]="cell(d.value, p.id).substituteTeacher"
+                                  [name]="'subtch-' + d.value + '-' + p.id"
+                                  [disabled]="!canManage || busy"
+                                >
+                                  <option value="">Select cover…</option>
+                                  @for (teacher of teacherOptions(d.value, p.id); track teacher.username) {
+                                    <option [value]="teacher.username">{{ teacher.label }}</option>
+                                  }
+                                </select>
+                              </label>
+                              <button
+                                type="button"
+                                class="tiny secondary"
+                                (click)="saveSubstitute(d.value, p.id)"
+                                [disabled]="!canManage || busy"
+                              >
+                                Set substitute
+                              </button>
+                            }
                             <label class="cell-field">
                               <span class="cell-field-label">Room</span>
                               <input
