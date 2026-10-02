@@ -282,9 +282,19 @@
       <section class="panel staff-form-card">
         <div class="staff-form-intro">
           <div>
-            <h3>{{ editingId ? 'Edit employee information' : 'Employee information' }}</h3>
+            <h3>
+              @if (viewingId) {
+                Staff profile
+              } @else if (editingId) {
+                Edit employee information
+              } @else {
+                Employee information
+              }
+            </h3>
             <p class="muted">
-              @if (editingId) {
+              @if (viewingId) {
+                Review this employee's details. Employee number {{ draft['employeeNo'] || '—' }}.
+              } @else if (editingId) {
                 Update the fields below and save. Employee number stays the same.
               } @else {
                 Fields marked required are needed to create the staff record.
@@ -292,6 +302,7 @@
             </p>
           </div>
         </div>
+        <fieldset class="staff-form-fields" [disabled]="!!viewingId">
         <div class="grid three">
           <label>
             <span class="field-title">Full name <span class="required">*</span></span>
@@ -390,7 +401,7 @@
             </span>
             <span class="field-hint">Type DD/MM/YYYY or pick from the calendar</span>
           </label>
-          @if (editingId) {
+          @if (editingId || viewingId) {
             <label>
               Status
               <select [(ngModel)]="draft['status']" name="statusDraft">
@@ -402,19 +413,25 @@
             </label>
           }
         </div>
+        </fieldset>
         <div class="actions staff-form-actions">
-          <button type="button" (click)="saveStaff()" [disabled]="saving">
-            @if (saving) {
-              Saving…
-            } @else if (editingId) {
-              Save changes
-            } @else {
-              Create staff member
-            }
-          </button>
-          <button type="button" class="secondary" (click)="cancelCreate()" [disabled]="saving">
-            Cancel
-          </button>
+          @if (viewingId) {
+            <button type="button" (click)="beginEditFromProfile()">Edit staff</button>
+            <button type="button" class="secondary" (click)="cancelCreate()">Close</button>
+          } @else {
+            <button type="button" (click)="saveStaff()" [disabled]="saving">
+              @if (saving) {
+                Saving…
+              } @else if (editingId) {
+                Save changes
+              } @else {
+                Create staff member
+              }
+            </button>
+            <button type="button" class="secondary" (click)="cancelCreate()" [disabled]="saving">
+              Cancel
+            </button>
+          }
         </div>
       </section>
     }
@@ -478,30 +495,17 @@
                 <td class="col-actions">
                   <button
                     type="button"
-                    class="row-action"
-                    (click)="startEdit(row)"
-                    [disabled]="saving || deletingId === row.id"
+                    class="row-menu-btn linkish"
+                    [class.is-open]="openMenuId === row.id"
+                    [attr.aria-expanded]="openMenuId === row.id"
+                    [attr.aria-controls]="openMenuId === row.id ? 'staff-menu-' + row.id : null"
+                    aria-haspopup="menu"
+                    [attr.aria-label]="'Actions for ' + staffLabel(row)"
+                    [disabled]="saving || deletingId === row.id || statusBusyId === row.id"
+                    (click)="toggleRowMenu($event, row)"
+                    (keydown)="onRowMenuButtonKeydown($event, row)"
                   >
-                    Edit
-                  </button>
-                  @if (canInviteLogin) {
-                    <button
-                      type="button"
-                      class="row-action"
-                      (click)="startInviteFromRow(row)"
-                      [disabled]="saving || deletingId === row.id"
-                      title="Create a login invite for this person"
-                    >
-                      Invite login
-                    </button>
-                  }
-                  <button
-                    type="button"
-                    class="row-action row-action--danger"
-                    (click)="deleteStaff(row)"
-                    [disabled]="saving || deletingId === row.id"
-                  >
-                    {{ deletingId === row.id ? 'Deleting…' : 'Delete' }}
+                    <span class="kebab" aria-hidden="true"><span></span><span></span><span></span></span>
                   </button>
                 </td>
               </tr>
@@ -515,5 +519,73 @@
       </div>
       </section>
     }
+  }
+
+  @if (openMenuRow) {
+    <div
+      #rowMenu
+      class="staff-row-menu"
+      role="menu"
+      [id]="'staff-menu-' + openMenuId"
+      [attr.aria-label]="'Actions for ' + staffLabel(openMenuRow)"
+      [style.top.px]="menuTop"
+      [style.left.px]="menuLeft"
+      (click)="$event.stopPropagation()"
+      (keydown)="onMenuKeydown($event)"
+    >
+      <button type="button" role="menuitem" class="staff-row-menu__item staff-row-menu__item--primary linkish" (click)="startEdit(openMenuRow)">
+        Edit Staff
+      </button>
+      <button type="button" role="menuitem" class="staff-row-menu__item linkish" (click)="viewStaff(openMenuRow)">
+        View Staff Profile
+      </button>
+      @if (canInviteLogin) {
+        <button type="button" role="menuitem" class="staff-row-menu__item linkish" (click)="startInviteFromRow(openMenuRow)">
+          Invite / Manage Login
+        </button>
+      }
+      <button
+        type="button"
+        role="menuitem"
+        class="staff-row-menu__item linkish"
+        [disabled]="statusBusyId === openMenuRow.id"
+        (click)="toggleStaffStatus(openMenuRow)"
+      >
+        {{ isInactiveStaff(openMenuRow) ? 'Activate' : 'Deactivate' }}
+      </button>
+      <div class="staff-row-menu__sep" role="separator"></div>
+      <button
+        type="button"
+        role="menuitem"
+        class="staff-row-menu__item staff-row-menu__item--danger linkish"
+        [disabled]="deletingId === openMenuRow.id"
+        (click)="askDelete(openMenuRow)"
+      >
+        Delete Staff
+      </button>
+    </div>
+  }
+
+  @if (pendingDelete) {
+    <div class="staff-confirm-backdrop" (click)="cancelDelete()">
+      <div
+        #deleteDialog
+        class="staff-confirm"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="staff-delete-title"
+        (click)="$event.stopPropagation()"
+        (keydown)="onDeleteKeydown($event)"
+      >
+        <h3 id="staff-delete-title">Delete staff member</h3>
+        <p>Delete {{ pendingDelete.name }}? They will be removed from the staff list.</p>
+        <div class="staff-confirm__actions">
+          <button type="button" class="secondary" data-cancel (click)="cancelDelete()">Cancel</button>
+          <button type="button" class="danger" (click)="confirmDelete()" [disabled]="!!deletingId">
+            {{ deletingId ? 'Deleting…' : 'Delete' }}
+          </button>
+        </div>
+      </div>
+    </div>
   }
 </div>
