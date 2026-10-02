@@ -38,6 +38,7 @@ public class AdmitCardController {
       @RequestParam("sectionId") UUID sectionId,
       @RequestParam(name = "termKey", required = false) String termKey) {
     Map<String, Object> pack = service.pack(sectionId, termKey);
+    service.attachPhotoBytes(pack);
     byte[] bytes = pdf.render(pack, TenantContext.require().organizationId());
     String fileName = "admit-cards-" + safe(String.valueOf(pack.get("sectionLabel"))) + ".pdf";
     return ResponseEntity.ok()

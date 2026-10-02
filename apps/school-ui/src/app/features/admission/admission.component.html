@@ -203,6 +203,38 @@
                           [disabled]="submitting"
                           (ngModelChange)="onAnswerChange(field)"
                         ></textarea>
+                      } @else if (field.type === 'IMAGE') {
+                        <div class="photo-field">
+                          @if (imagePreview(field.key)) {
+                            <img
+                              class="student-photo"
+                              [src]="imagePreview(field.key)"
+                              [alt]="field.label"
+                            />
+                          } @else {
+                            <div class="photo-placeholder">Photo preview</div>
+                          }
+                          <span class="file-btn">
+                            {{ imagePreview(field.key) ? 'Replace photo' : 'Upload photo' }}
+                            <input
+                              type="file"
+                              accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp"
+                              [disabled]="submitting"
+                              (change)="onImageSelected(field, $event)"
+                            />
+                          </span>
+                          @if (imagePreview(field.key)) {
+                            <button
+                              type="button"
+                              class="secondary tiny"
+                              [disabled]="submitting"
+                              (click)="clearImage(field)"
+                            >
+                              Remove photo
+                            </button>
+                          }
+                          <span class="muted">{{ imageHelp(field) }}</span>
+                        </div>
                       } @else {
                         <input
                           [(ngModel)]="answers[field.key]"
@@ -315,6 +347,12 @@
                         >
                           {{ selected.answers?.documentsComplete ? 'Complete' : 'Incomplete' }}
                         </span>
+                      } @else if (imagePreviewFrom(selected, field.key)) {
+                        <img
+                          class="student-photo"
+                          [src]="imagePreviewFrom(selected, field.key)"
+                          [alt]="field.label"
+                        />
                       } @else {
                         {{ answer(selected, field.key) }}
                       }

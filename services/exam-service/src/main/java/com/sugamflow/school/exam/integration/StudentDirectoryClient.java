@@ -6,6 +6,7 @@ import com.sugamflow.school.exam.config.ExamProperties;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.List;
 import java.util.Map;
 import org.slf4j.Logger;
@@ -41,6 +42,44 @@ public class StudentDirectoryClient {
             + "&classSection="
             + URLEncoder.encode(classSection.trim(), StandardCharsets.UTF_8);
     return pageItems(scope, url);
+  }
+
+  /** Bytes for a student-vault photo URL. Returns null when the student has no photo. */
+  public byte[] fetchPhoto(TenantScope scope, String photoUrl) {
+    if (photoUrl == null || photoUrl.isBlank()) {
+      return null;
+    }
+    String value = photoUrl.trim();
+    if (value.startsWith("data:image")) {
+      int comma = value.indexOf(',');
+      if (comma < 0 || comma >= value.length() - 1) {
+        return null;
+      }
+      try {
+        return Base64.getDecoder().decode(value.substring(comma + 1));
+      } catch (IllegalArgumentException ex) {
+        return null;
+      }
+    }
+    if (!value.startsWith("/api/") && !value.startsWith("http://") && !value.startsWith("https://")) {
+      return null;
+    }
+    String url =
+        value.startsWith("http")
+            ? value
+            : properties.getIntegrations().getStudentBaseUrl() + value;
+    try {
+      return restClientBuilder
+          .build()
+          .get()
+          .uri(url)
+          .headers(h -> TenantHeaders.apply(h, scope))
+          .retrieve()
+          .body(byte[].class);
+    } catch (Exception ex) {
+      log.warn("Student photo fetch failed: {}", ex.getMessage());
+      return null;
+    }
   }
 
   /** Relationship-filtered student list (parents see linked children only). */

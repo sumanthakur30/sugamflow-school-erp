@@ -149,6 +149,10 @@ public class ReportTemplateService {
       throw new IllegalArgumentException(
           "Unsupported format: " + format + " (provide data.columns + data.rows for EXCEL/CSV)");
     }
+    List<Map<String, Object>> records = recordPages(body);
+    if (records != null) {
+      return pdfRenderService.renderMany(template, records);
+    }
     return pdfRenderService.render(template, data);
   }
 
@@ -156,12 +160,37 @@ public class ReportTemplateService {
   public Map<String, Object> previewLayout(Map<String, Object> body) {
     requireFeature();
     Map<String, Object> template = normalizeTemplate(body != null ? body : Map.of());
+    template.remove("records");
+    template.remove("data");
+    template.remove("format");
+    List<Map<String, Object>> records = recordPages(body);
+    if (records != null) {
+      return pdfRenderService.renderMany(template, records);
+    }
     @SuppressWarnings("unchecked")
     Map<String, Object> data =
         body != null && body.get("data") instanceof Map<?, ?> m
             ? (Map<String, Object>) m
             : ReportElementCatalog.samplePreviewData();
     return pdfRenderService.render(template, data);
+  }
+
+  /** Runtime pages. Empty when the caller did not send a records list. Capped so one request cannot load the whole school. */
+  @SuppressWarnings("unchecked")
+  private List<Map<String, Object>> recordPages(Map<String, Object> body) {
+    if (body == null || !(body.get("records") instanceof List<?> list) || list.isEmpty()) {
+      return null;
+    }
+    List<Map<String, Object>> pages = new ArrayList<>();
+    for (Object item : list) {
+      if (item instanceof Map<?, ?> map) {
+        pages.add(new LinkedHashMap<>((Map<String, Object>) map));
+      }
+      if (pages.size() >= 80) {
+        break;
+      }
+    }
+    return pages.isEmpty() ? null : pages;
   }
 
   private void requireFeature() {

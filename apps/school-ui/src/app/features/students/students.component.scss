@@ -647,6 +647,10 @@
   font-weight: 700;
   color: var(--sf-primary);
   text-decoration: none;
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
 
   &:hover {
     text-decoration: underline;
@@ -823,6 +827,10 @@ button:disabled {
   font-size: 0.85rem;
   font-weight: 700;
   color: var(--sf-primary);
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
 }
 
 button.tiny.secondary {

@@ -40,8 +40,14 @@ public class ReportPdfRenderService {
   private static final float PAGE_H = PageSize.A4.getHeight();
 
   public Map<String, Object> render(Map<String, Object> template, Map<String, Object> data) {
+    return renderMany(template, List.of(data != null ? data : Map.of()));
+  }
+
+  /** One page per data context. The template is rendered again for each record and is not modified. */
+  public Map<String, Object> renderMany(Map<String, Object> template, List<Map<String, Object>> pages) {
     String templateKey = String.valueOf(template.getOrDefault("templateKey", "report"));
-    byte[] pdf = toPdf(template, data != null ? data : Map.of());
+    List<Map<String, Object>> safe = pages == null || pages.isEmpty() ? List.of(Map.of()) : pages;
+    byte[] pdf = toPdf(template, safe);
     String base64 = java.util.Base64.getEncoder().encodeToString(pdf);
     Map<String, Object> out = new LinkedHashMap<>();
     out.put("templateKey", templateKey);
@@ -49,16 +55,33 @@ public class ReportPdfRenderService {
     out.put("fileName", templateKey + ".pdf");
     out.put("contentBase64", base64);
     out.put("byteLength", pdf.length);
+    out.put("pageCount", safe.size());
     return out;
   }
 
-  private byte[] toPdf(Map<String, Object> template, Map<String, Object> data) {
+  private byte[] toPdf(Map<String, Object> template, List<Map<String, Object>> pages) {
     ByteArrayOutputStream baos = new ByteArrayOutputStream();
     Document document = new Document(PageSize.A4, 0, 0, 0, 0);
     try {
       PdfWriter writer = PdfWriter.getInstance(document, baos);
       document.open();
       PdfContentByte cb = writer.getDirectContent();
+      boolean first = true;
+      for (Map<String, Object> data : pages) {
+        if (!first) {
+          document.newPage();
+        }
+        first = false;
+        drawPage(cb, template, data != null ? data : Map.of());
+      }
+      document.close();
+      return baos.toByteArray();
+    } catch (DocumentException ex) {
+      throw new IllegalStateException("PDF render failed: " + ex.getMessage(), ex);
+    }
+  }
+
+  private void drawPage(PdfContentByte cb, Map<String, Object> template, Map<String, Object> data) {
 
       float layoutW = floatOr(layout(template).get("width"), 794f);
       float layoutH = floatOr(layout(template).get("height"), 1123f);
@@ -87,11 +110,6 @@ public class ReportPdfRenderService {
           default -> drawText(cb, el, data, x, yPdf - h * 0.25f, w, h, scaleY);
         }
       }
-      document.close();
-      return baos.toByteArray();
-    } catch (DocumentException ex) {
-      throw new IllegalStateException("PDF render failed: " + ex.getMessage(), ex);
-    }
   }
 
   private void drawLine(PdfContentByte cb, float x, float y, float w) {

@@ -857,3 +857,47 @@ textarea {
   resize: vertical;
   min-height: 4.5rem;
 }
+
+.photo-field {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.5rem;
+}
+
+.student-photo {
+  width: 120px;
+  height: 150px;
+  object-fit: cover;
+  border-radius: 8px;
+  border: 1px solid #dbe3ea;
+  background: #f8fafc;
+}
+
+.photo-placeholder {
+  width: 120px;
+  height: 150px;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  border: 1px dashed #cbd5e1;
+  color: #94a3b8;
+  background: #f8fafc;
+  font-size: 0.85rem;
+}
+
+.file-btn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  overflow: hidden;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.file-btn input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}

@@ -1,7 +1,7 @@
 import { Component, OnDestroy, OnInit, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { Subscription } from 'rxjs';
+import { Subscription, catchError, firstValueFrom, map, of, timeout } from 'rxjs';
 import { ActivatedRoute } from '@angular/router';
 import { ApiService } from '../../core/api.service';
 import { TenantContextService } from '../../core/tenant-context.service';
@@ -41,6 +41,50 @@ export interface ReportTemplate {
   schedule?: unknown;
 }
 
+interface PersonHit {
+  id: string;
+  fullName?: string;
+  admissionNo?: string;
+  classSection?: string;
+  fatherName?: string;
+  parentName?: string;
+  penNumber?: string;
+  photoUrl?: string;
+  employeeNo?: string;
+  designation?: string;
+  department?: string;
+}
+
+interface ClassOption {
+  id: string;
+  name: string;
+}
+
+interface SectionOption {
+  id: string;
+  classId: string;
+  name: string;
+  studentLabel: string;
+}
+
+interface SessionOption {
+  id: string;
+  label: string;
+}
+
+interface BulkStudent {
+  id: string;
+  name: string;
+  admissionNo: string;
+  classSection: string;
+  penNumber: string;
+  photoUrl: string;
+  selected: boolean;
+  missingPhoto: boolean;
+  missingAdmission: boolean;
+  missingPen: boolean;
+}
+
 @Component({
   selector: 'sf-report-builder',
   standalone: true,
@@ -77,6 +121,29 @@ export class ReportBuilderComponent implements OnInit, OnDestroy {
   selectedId: string | null = null;
   canvasScale = 0.72;
 
+  /** Runtime preview only. Never written back onto template elements. */
+  previewContext: Record<string, unknown> | null = null;
+  previewLabel = '';
+  photoWarning = '';
+  personQuery = '';
+  searchHits: PersonHit[] = [];
+  searchOpen = false;
+  searchBusy = false;
+  filterClassId = '';
+  filterSectionId = '';
+  classes: ClassOption[] = [];
+  sections: SectionOption[] = [];
+  sessions: SessionOption[] = [];
+
+  bulkOpen = false;
+  bulkSessionId = '';
+  bulkClassId = '';
+  bulkSectionId = '';
+  bulkStudents: BulkStudent[] = [];
+  bulkMissingOnly = false;
+  bulkAllowIncomplete = false;
+  bulkNote = '';
+
   private dragPaletteType: string | null = null;
   private moveState: {
     id: string;
@@ -85,6 +152,8 @@ export class ReportBuilderComponent implements OnInit, OnDestroy {
     origX: number;
     origY: number;
   } | null = null;
+  private searchTimer?: ReturnType<typeof setTimeout>;
+  private searchSub?: Subscription;
 
   ngOnInit(): void {
     this.campusReadySub = this.tenantContext.whenCampusReady().subscribe(() => this.bootstrap());
@@ -92,6 +161,10 @@ export class ReportBuilderComponent implements OnInit, OnDestroy {
 
   ngOnDestroy(): void {
     this.campusReadySub?.unsubscribe();
+    this.searchSub?.unsubscribe();
+    if (this.searchTimer) {
+      clearTimeout(this.searchTimer);
+    }
   }
 
   bootstrap(): void {
@@ -106,6 +179,9 @@ export class ReportBuilderComponent implements OnInit, OnDestroy {
       this.formats = boot.exportFormats ?? [];
       this.templates = boot.templates ?? [];
       this.loading = false;
+      if (this.featureEnabled) {
+        this.loadCatalogs();
+      }
       if (this.featureEnabled && this.templates.length) {
         const requested = this.route.snapshot.queryParamMap.get('template');
         const match = this.templates.find((t) => t.templateKey === requested);
@@ -136,6 +212,7 @@ export class ReportBuilderComponent implements OnInit, OnDestroy {
     this.selectedKey = key;
     this.selectedId = null;
     this.status = '';
+    this.clearPreviewPerson();
     this.api.get<ReportTemplate>(`/api/reports/templates/${key}`).subscribe({
       next: (t) => {
         this.draft = this.cloneTemplate(t);
@@ -326,19 +403,25 @@ export class ReportBuilderComponent implements OnInit, OnDestroy {
     if (!this.draft) {
       return;
     }
+    const data = this.runtimeData();
+    if (!data) {
+      return;
+    }
     this.busy = true;
     this.error = '';
     this.api
       .post<any>('/api/reports/preview', {
         ...this.draft,
-        data: this.samplePreviewData,
+        data,
         format: 'PDF',
       })
       .subscribe({
         next: (res) => {
           this.busy = false;
           this.openPdf(res);
-          this.status = 'Preview PDF opened';
+          this.status = this.previewLabel
+            ? `Preview PDF opened for ${this.previewLabel}`
+            : 'Preview PDF opened';
         },
         error: (err) => {
           this.busy = false;
@@ -351,17 +434,23 @@ export class ReportBuilderComponent implements OnInit, OnDestroy {
     if (!this.selectedKey) {
       return;
     }
+    const data = this.runtimeData();
+    if (!data) {
+      return;
+    }
     this.busy = true;
     this.api
       .post<any>(`/api/reports/templates/${this.selectedKey}/render`, {
         format: 'PDF',
-        data: this.samplePreviewData,
+        data,
       })
       .subscribe({
         next: (res) => {
           this.busy = false;
           this.openPdf(res);
-          this.status = 'Rendered saved template';
+          this.status = this.previewLabel
+            ? `Rendered saved template for ${this.previewLabel}`
+            : 'Rendered saved template';
         },
         error: (err) => {
           this.busy = false;
@@ -374,7 +463,11 @@ export class ReportBuilderComponent implements OnInit, OnDestroy {
     if (el.type === 'line' || el.type === 'box' || el.type === 'image') {
       return '';
     }
-    return el.text || (el.bind ? `{{${el.bind}}}` : el.type);
+    const raw = el.text || (el.bind ? `{{${el.bind}}}` : el.type);
+    if (!this.previewContext) {
+      return raw;
+    }
+    return this.resolvePlaceholders(raw);
   }
 
   imageSrc(el: ReportElement): string {
@@ -385,6 +478,9 @@ export class ReportBuilderComponent implements OnInit, OnDestroy {
     }
     if (el.fallbackSrc && this.isDrawableImage(el.fallbackSrc)) {
       return el.fallbackSrc;
+    }
+    if (this.previewContext) {
+      return '';
     }
     return SAMPLE_PHOTO_DATA_URL;
   }
@@ -488,7 +584,7 @@ export class ReportBuilderComponent implements OnInit, OnDestroy {
   }
 
   private bindValue(path: string): string {
-    let cur: unknown = this.samplePreviewData;
+    let cur: unknown = this.previewContext ?? this.samplePreviewData;
     for (const part of path.split('.')) {
       if (!cur || typeof cur !== 'object') {
         return '';
@@ -509,5 +605,512 @@ export class ReportBuilderComponent implements OnInit, OnDestroy {
       trimmed.startsWith('http://') ||
       trimmed.startsWith('https://')
     );
+  }
+
+  get documentSubject(): 'student' | 'employee' | 'none' {
+    if (this.selectedKey === 'salary_slip' || this.selectedKey === 'offer_letter') {
+      return 'employee';
+    }
+    const blob = (this.draft?.elements ?? []).map((el) => `${el.text || ''} ${el.bind || ''}`).join('\n');
+    if (/\bstudent\./.test(blob)) {
+      return 'student';
+    }
+    if (/\b(?:employee|staff)\./.test(blob)) {
+      return 'employee';
+    }
+    return 'none';
+  }
+
+  get sectionChoices(): SectionOption[] {
+    if (!this.filterClassId) {
+      return this.sections;
+    }
+    return this.sections.filter((section) => section.classId === this.filterClassId);
+  }
+
+  get bulkSectionChoices(): SectionOption[] {
+    if (!this.bulkClassId) {
+      return this.sections;
+    }
+    return this.sections.filter((section) => section.classId === this.bulkClassId);
+  }
+
+  get visibleBulkStudents(): BulkStudent[] {
+    if (!this.bulkMissingOnly) {
+      return this.bulkStudents;
+    }
+    return this.bulkStudents.filter(
+      (student) => student.missingPhoto || student.missingAdmission || student.missingPen,
+    );
+  }
+
+  get bulkSelectedCount(): number {
+    return this.bulkStudents.filter((student) => student.selected).length;
+  }
+
+  get bulkWarnings(): string[] {
+    const selected = this.bulkStudents.filter((student) => student.selected);
+    const notes: string[] = [];
+    const photos = selected.filter((student) => student.missingPhoto).length;
+    const admissions = selected.filter((student) => student.missingAdmission).length;
+    const pens = selected.filter((student) => student.missingPen).length;
+    if (photos) {
+      notes.push(`${photos} student${photos === 1 ? '' : 's'} have no photo`);
+    }
+    if (admissions) {
+      notes.push(`${admissions} student${admissions === 1 ? '' : 's'} have missing Admission Number`);
+    }
+    if (pens) {
+      notes.push(`${pens} student${pens === 1 ? '' : 's'} have missing PEN`);
+    }
+    return notes;
+  }
+
+  onPersonQuery(): void {
+    if (this.searchTimer) {
+      clearTimeout(this.searchTimer);
+    }
+    const term = this.personQuery.trim();
+    if (term.length < 2) {
+      this.searchHits = [];
+      this.searchOpen = false;
+      return;
+    }
+    this.searchTimer = setTimeout(() => this.runPersonSearch(term), 300);
+  }
+
+  onClassFilterChange(): void {
+    if (this.filterSectionId && !this.sectionChoices.some((section) => section.id === this.filterSectionId)) {
+      this.filterSectionId = '';
+    }
+    this.onPersonQuery();
+  }
+
+  async selectPerson(hit: PersonHit): Promise<void> {
+    this.searchOpen = false;
+    this.searchHits = [];
+    this.busy = true;
+    this.error = '';
+    this.photoWarning = '';
+    try {
+      if (this.documentSubject === 'employee') {
+        const person = {
+          id: hit.id,
+          name: hit.fullName || '',
+          fullName: hit.fullName || '',
+          employeeNo: hit.employeeNo || hit.admissionNo || '',
+          designation: hit.designation || '',
+          department: hit.department || '',
+        };
+        this.previewContext = {
+          ...this.samplePreviewData,
+          employee: person,
+          staff: person,
+          student: {
+            ...person,
+            admissionNo: person.employeeNo,
+            classSection: person.designation,
+          },
+        };
+        this.previewLabel = [person.fullName, person.employeeNo, person.designation].filter(Boolean).join(' · ');
+        this.personQuery = person.fullName;
+        this.photoWarning = '';
+      } else {
+        const loaded = await this.loadStudentContext(hit.id);
+        this.previewContext = loaded.data;
+        this.previewLabel = loaded.label;
+        this.personQuery = this.text((loaded.data['student'] as Record<string, unknown>)?.['name']);
+        this.photoWarning = loaded.photoMissing ? 'Student photo is not available.' : '';
+      }
+    } catch (err: any) {
+      this.previewContext = null;
+      this.previewLabel = '';
+      this.error = err?.error?.message ?? 'Could not load this record';
+    } finally {
+      this.busy = false;
+    }
+  }
+
+  clearPreviewPerson(): void {
+    this.previewContext = null;
+    this.previewLabel = '';
+    this.photoWarning = '';
+    this.personQuery = '';
+    this.searchHits = [];
+    this.searchOpen = false;
+  }
+
+  openBulk(): void {
+    this.bulkOpen = true;
+    this.bulkNote = '';
+    this.bulkAllowIncomplete = false;
+    this.bulkMissingOnly = false;
+    this.bulkClassId = this.filterClassId;
+    this.bulkSectionId = this.filterSectionId;
+    if (!this.bulkStudents.length && (this.bulkClassId || this.bulkSectionId)) {
+      void this.loadBulkStudents();
+    }
+  }
+
+  closeBulk(): void {
+    this.bulkOpen = false;
+  }
+
+  onBulkClassChange(): void {
+    if (this.bulkSectionId && !this.bulkSectionChoices.some((section) => section.id === this.bulkSectionId)) {
+      this.bulkSectionId = '';
+    }
+    this.bulkAllowIncomplete = false;
+    void this.loadBulkStudents();
+  }
+
+  selectAllBulk(selected: boolean): void {
+    for (const student of this.visibleBulkStudents) {
+      student.selected = selected;
+    }
+    this.bulkAllowIncomplete = false;
+  }
+
+  toggleMissingView(): void {
+    this.bulkMissingOnly = !this.bulkMissingOnly;
+  }
+
+  async generateBulk(): Promise<void> {
+    const chosen = this.bulkStudents.filter((student) => student.selected);
+    if (!this.selectedKey || !chosen.length) {
+      this.bulkNote = 'Select at least one student.';
+      return;
+    }
+    if (this.bulkWarnings.length && !this.bulkAllowIncomplete) {
+      this.bulkNote = 'Review the missing data, then confirm to continue.';
+      return;
+    }
+    if (chosen.length > 80) {
+      this.bulkNote = 'Generate at most 80 students at a time. Narrow the class or section.';
+      return;
+    }
+    this.busy = true;
+    this.bulkNote = `Preparing ${chosen.length} pages…`;
+    this.error = '';
+    try {
+      const records: Record<string, unknown>[] = [];
+      for (const student of chosen) {
+        const loaded = await this.loadStudentContext(student.id);
+        records.push(loaded.data);
+      }
+      const res = await firstValueFrom(
+        this.api.post<any>(`/api/reports/templates/${this.selectedKey}/render`, {
+          format: 'PDF',
+          records,
+        }),
+      );
+      this.openPdf(res);
+      this.status = `Generated ${records.length} pages from the saved template`;
+      this.bulkNote = '';
+      this.bulkOpen = false;
+    } catch (err: any) {
+      this.bulkNote = err?.error?.message ?? 'Bulk generation failed';
+    } finally {
+      this.busy = false;
+    }
+  }
+
+  private runtimeData(): Record<string, unknown> | null {
+    if (this.documentSubject === 'none') {
+      return this.samplePreviewData;
+    }
+    if (!this.previewContext) {
+      this.error =
+        this.documentSubject === 'employee'
+          ? 'Please select an employee to preview this document.'
+          : 'Please select a student to preview this document.';
+      return null;
+    }
+    return this.previewContext;
+  }
+
+  private runPersonSearch(term: string): void {
+    this.searchSub?.unsubscribe();
+    this.searchBusy = true;
+    this.searchOpen = true;
+    const classSection = this.selectedSectionLabel(this.filterSectionId);
+    if (this.documentSubject === 'employee') {
+      this.searchSub = this.api
+        .getPage<PersonHit>('/api/staff/directory/staff', 0, 8, { q: term })
+        .pipe(
+          timeout(4000),
+          map((page) => page.items ?? []),
+          catchError(() => of([] as PersonHit[])),
+        )
+        .subscribe((items) => {
+          this.searchHits = items;
+          this.searchBusy = false;
+        });
+      return;
+    }
+    this.searchSub = this.api
+      .getPage<PersonHit>('/api/student/directory/students', 0, 8, {
+        q: term,
+        status: 'ACTIVE',
+        classSection: classSection || undefined,
+        includeDeleted: 'false',
+      })
+      .pipe(
+        timeout(4000),
+        map((page) => this.filterHits(page.items ?? [])),
+        catchError(() =>
+          this.api
+            .getPage<PersonHit>('/api/student/students/search', 0, 8, {
+              q: term,
+              classSection: classSection || undefined,
+            })
+            .pipe(
+              timeout(4000),
+              map((page) => this.filterHits(page.items ?? [])),
+              catchError(() => of([] as PersonHit[])),
+            ),
+        ),
+      )
+      .subscribe((items) => {
+        this.searchHits = items;
+        this.searchBusy = false;
+      });
+  }
+
+  private filterHits(items: PersonHit[]): PersonHit[] {
+    const labels = this.classFilterLabels();
+    if (!labels.length) {
+      return items;
+    }
+    return items.filter((item) => labels.includes(String(item.classSection || '').trim()));
+  }
+
+  private classFilterLabels(): string[] {
+    if (this.filterSectionId) {
+      const label = this.selectedSectionLabel(this.filterSectionId);
+      return label ? [label] : [];
+    }
+    if (!this.filterClassId) {
+      return [];
+    }
+    return this.sections
+      .filter((section) => section.classId === this.filterClassId)
+      .map((section) => section.studentLabel || section.name)
+      .filter(Boolean);
+  }
+
+  async loadBulkStudents(): Promise<void> {
+    const labels = this.bulkClassLabels();
+    if (!labels.length) {
+      this.bulkStudents = [];
+      this.bulkNote = 'Select a class or section.';
+      return;
+    }
+    this.bulkNote = 'Loading students…';
+    const merged = new Map<string, PersonHit>();
+    for (const label of labels) {
+      const page = await firstValueFrom(
+        this.api
+          .getPage<PersonHit>('/api/student/directory/students', 0, 80, {
+            classSection: label,
+            status: 'ACTIVE',
+            academicSessionId: this.bulkSessionId || undefined,
+            includeDeleted: 'false',
+          })
+          .pipe(
+            timeout(8000),
+            catchError(() =>
+              of({
+                items: [] as PersonHit[],
+                page: 0,
+                size: 0,
+                totalElements: 0,
+                totalPages: 0,
+                hasNext: false,
+              }),
+            ),
+          ),
+      );
+      for (const item of page.items ?? []) {
+        if (item.id) {
+          merged.set(item.id, item);
+        }
+      }
+      if (merged.size >= 80) {
+        break;
+      }
+    }
+    this.bulkStudents = [...merged.values()].slice(0, 80).map((item) => this.toBulkStudent(item));
+    this.bulkNote = this.bulkStudents.length
+      ? `${this.bulkStudents.length} students loaded. The saved template is not changed.`
+      : 'No students in this class or section.';
+  }
+
+  private bulkClassLabels(): string[] {
+    if (this.bulkSectionId) {
+      const label = this.selectedSectionLabel(this.bulkSectionId);
+      return label ? [label] : [];
+    }
+    if (!this.bulkClassId) {
+      return [];
+    }
+    const labels = this.sections
+      .filter((section) => section.classId === this.bulkClassId)
+      .map((section) => section.studentLabel || section.name)
+      .filter(Boolean);
+    if (labels.length) {
+      return labels;
+    }
+    const klass = this.classes.find((item) => item.id === this.bulkClassId);
+    return klass?.name ? [klass.name] : [];
+  }
+
+  private toBulkStudent(item: PersonHit): BulkStudent {
+    const photo = String(item.photoUrl || '');
+    const admission = String(item.admissionNo || '').trim();
+    const pen = String(item.penNumber || '').trim();
+    return {
+      id: item.id,
+      name: item.fullName || 'Student',
+      admissionNo: admission,
+      classSection: item.classSection || '',
+      penNumber: pen,
+      photoUrl: photo,
+      selected: true,
+      missingPhoto: !photo.startsWith('/api/') && !photo.startsWith('data:image/') && !photo.startsWith('http'),
+      missingAdmission: !admission,
+      missingPen: !pen,
+    };
+  }
+
+  private selectedSectionLabel(sectionId: string): string {
+    const section = this.sections.find((item) => item.id === sectionId);
+    return section ? section.studentLabel || section.name : '';
+  }
+
+  private async loadStudentContext(id: string): Promise<{
+    data: Record<string, unknown>;
+    label: string;
+    photoMissing: boolean;
+  }> {
+    const student = await firstValueFrom(this.api.get<any>(`/api/student/students/${id}`));
+    const answers = (student?.answers ?? {}) as Record<string, unknown>;
+    const name = this.text(answers['fullName'] || answers['studentName']);
+    const admissionNo = this.text(student?.admissionNo || answers['admissionNo']);
+    const classSection = this.text(answers['classSection'] || answers['classApplied']);
+    const fatherName = this.text(answers['fatherName'] || answers['parentName']);
+    let photoDirectUrl = '';
+    try {
+      photoDirectUrl = await this.photoDataUrl(this.text(answers['photoUrl']));
+      if (!photoDirectUrl) {
+        photoDirectUrl = await this.photoDataUrl(this.text(answers['photo']));
+      }
+    } catch {
+      photoDirectUrl = '';
+    }
+    const studentMap: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(answers)) {
+      if (typeof value === 'string' && (value.startsWith('data:') || value === 'on-file')) {
+        continue;
+      }
+      studentMap[key] = value;
+    }
+    studentMap['id'] = student?.id || id;
+    studentMap['name'] = name;
+    studentMap['fullName'] = name;
+    studentMap['studentName'] = name;
+    studentMap['admissionNo'] = admissionNo;
+    studentMap['classSection'] = classSection;
+    studentMap['classApplied'] = this.text(answers['classApplied'] || classSection);
+    studentMap['fatherName'] = fatherName;
+    studentMap['penNumber'] = this.text(answers['penNumber'] || answers['pen']);
+    studentMap['apaarId'] = this.text(answers['apaarId'] || answers['apaarNumber']);
+    studentMap['schoolStudentId'] = this.text(answers['schoolStudentId']);
+    studentMap['photoDirectUrl'] = photoDirectUrl;
+    studentMap['photoBase64'] = photoDirectUrl;
+    studentMap['photoUrl'] = photoDirectUrl;
+    return {
+      data: { ...this.samplePreviewData, student: studentMap },
+      label: [name, admissionNo, classSection].filter(Boolean).join(' · '),
+      photoMissing: !photoDirectUrl,
+    };
+  }
+
+  private async photoDataUrl(raw: string): Promise<string> {
+    const value = raw.trim();
+    if (!value || value === 'on-file') {
+      return '';
+    }
+    if (value.startsWith('data:image/')) {
+      return value;
+    }
+    let path = value;
+    if (value.startsWith('http://') || value.startsWith('https://')) {
+      try {
+        const url = new URL(value);
+        path = `${url.pathname}${url.search}`;
+      } catch {
+        return '';
+      }
+    }
+    if (!path.startsWith('/api/')) {
+      return '';
+    }
+    const blob = await firstValueFrom(this.api.getBlob(path));
+    if (!blob.type.startsWith('image/')) {
+      return '';
+    }
+    return await this.blobToDataUrl(blob);
+  }
+
+  private blobToDataUrl(blob: Blob): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result || ''));
+      reader.onerror = () => reject(reader.error);
+      reader.readAsDataURL(blob);
+    });
+  }
+
+  private loadCatalogs(): void {
+    this.api.get<any[]>('/api/academic/classes').subscribe({
+      next: (rows) => {
+        this.classes = (rows ?? []).map((row) => ({
+          id: String(row.id),
+          name: String(row.name || row.label || 'Class'),
+        }));
+      },
+      error: () => {
+        this.classes = [];
+      },
+    });
+    this.api.get<any[]>('/api/academic/sections').subscribe({
+      next: (rows) => {
+        this.sections = (rows ?? []).map((row) => ({
+          id: String(row.id),
+          classId: String(row.classId || ''),
+          name: String(row.name || ''),
+          studentLabel: String(row.studentLabel || row.name || ''),
+        }));
+      },
+      error: () => {
+        this.sections = [];
+      },
+    });
+    this.api.get<any[]>('/api/student/lifecycle/sessions').subscribe({
+      next: (rows) => {
+        this.sessions = (rows ?? []).map((row) => ({
+          id: String(row.academicSessionId || row.definitionKey || row.id || ''),
+          label: String(row.name || row.label || row.definitionKey || 'Session'),
+        }));
+      },
+      error: () => {
+        this.sessions = [];
+      },
+    });
+  }
+
+  private text(value: unknown): string {
+    return value == null ? '' : String(value).trim();
   }
 }

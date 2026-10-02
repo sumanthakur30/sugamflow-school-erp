@@ -21,12 +21,25 @@ export class FormBuilderComponent implements OnInit {
   busy = false;
   status = '';
   error = '';
+  /** Reload after save must not wipe the success message. */
+  private preserveStatus = false;
 
   ngOnInit(): void {
     this.reload();
     this.api.get<string[]>('/api/forms/field-types').subscribe({
       next: (t) => (this.fieldTypes = t ?? []),
-      error: () => (this.fieldTypes = ['TEXTBOX', 'NUMBER', 'CHECKBOX', 'EMAIL', 'DROPDOWN']),
+      error: () =>
+        (this.fieldTypes = [
+          'TEXTBOX',
+          'TEXTAREA',
+          'DROPDOWN',
+          'CHECKBOX',
+          'DATE',
+          'EMAIL',
+          'PHONE',
+          'NUMBER',
+          'IMAGE',
+        ]),
     });
   }
 
@@ -39,7 +52,8 @@ export class FormBuilderComponent implements OnInit {
         } else if (this.selectedKey) {
           const still = this.forms.find((x) => x.formKey === this.selectedKey);
           if (still) {
-            this.select(this.selectedKey);
+            this.select(this.selectedKey, this.preserveStatus);
+            this.preserveStatus = false;
           }
         }
       },
@@ -47,10 +61,12 @@ export class FormBuilderComponent implements OnInit {
     });
   }
 
-  select(formKey: string): void {
+  select(formKey: string, preserveStatus = false): void {
     this.isNew = false;
     this.error = '';
-    this.status = '';
+    if (!preserveStatus) {
+      this.status = '';
+    }
     this.selectedKey = formKey;
     this.api.get<any>(`/api/forms/${encodeURIComponent(formKey)}`).subscribe({
       next: (form) => (this.draft = this.clone(form)),
@@ -137,6 +153,11 @@ export class FormBuilderComponent implements OnInit {
       this.error = 'title is required';
       return;
     }
+    const typeError = this.normalizeFieldTypes();
+    if (typeError) {
+      this.error = typeError;
+      return;
+    }
     this.busy = true;
     this.error = '';
     const body = this.clone(this.draft);
@@ -151,6 +172,7 @@ export class FormBuilderComponent implements OnInit {
         this.selectedKey = saved.formKey || key;
         this.draft = this.clone(saved);
         this.status = `Saved ${this.selectedKey}`;
+        this.preserveStatus = true;
         this.reload();
       },
       error: (err) => {
@@ -162,5 +184,19 @@ export class FormBuilderComponent implements OnInit {
 
   private clone<T>(v: T): T {
     return JSON.parse(JSON.stringify(v ?? null));
+  }
+
+  /** Persist the catalog type exactly, including IMAGE. */
+  private normalizeFieldTypes(): string | null {
+    for (const section of this.draft?.sections ?? []) {
+      for (const field of section.fields ?? []) {
+        const type = String(field.type ?? '').trim().toUpperCase();
+        if (!type) {
+          return `${field.label || field.key || 'A field'} needs a type`;
+        }
+        field.type = type;
+      }
+    }
+    return null;
   }
 }
