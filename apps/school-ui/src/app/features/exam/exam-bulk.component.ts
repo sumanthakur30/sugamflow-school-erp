@@ -334,6 +334,29 @@ export class ExamBulkComponent implements OnInit {
     this.loadGradebook();
   }
 
+  downloadDateSheet(): void {
+    if (!this.sectionId) return;
+    this.busy = true;
+    this.error = '';
+    this.api.getBlob(`/api/exam/date-sheets/pdf?sectionId=${encodeURIComponent(this.sectionId)}`).subscribe({
+      next: (blob) => {
+        this.busy = false;
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'date-sheet.pdf';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      },
+      error: () => {
+        this.busy = false;
+        this.error = 'Could not download the date sheet';
+      },
+    });
+  }
+
   createExam(): void {
     if (!this.sectionId || !this.subjectId || !this.createDraft.name.trim()) {
       this.error = 'Class, section, subject and exam name are required';

@@ -41,6 +41,9 @@
         <button type="button" class="secondary" (click)="downloadAdmitCards()" [disabled]="busy || !sectionId">
           Admit cards
         </button>
+        <button type="button" class="secondary" (click)="downloadDateSheet()" [disabled]="busy || !sectionId">
+          Date sheet
+        </button>
       </div>
 
       @if (!(report.subjects || []).length) {

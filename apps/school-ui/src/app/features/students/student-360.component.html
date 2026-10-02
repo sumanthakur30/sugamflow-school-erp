@@ -121,6 +121,30 @@
             </div>
           }
         </dl>
+        <h4>APAAR</h4>
+        <p class="muted">
+          Record consent only. The APAAR ID is created on the government portal, not here.
+        </p>
+        <div class="grid two">
+          <label>
+            Consent
+            <select [(ngModel)]="apaarConsent" name="apaarConsent">
+              <option value="PENDING">Pending</option>
+              <option value="CONSENTED">Consented</option>
+              <option value="REFUSED">Refused</option>
+              <option value="NOGEN">Will not generate</option>
+            </select>
+          </label>
+          <label>
+            APAAR ID, if already issued
+            <input [(ngModel)]="apaarId" name="apaarId" placeholder="Optional" />
+          </label>
+        </div>
+        <div class="actions">
+          <button type="button" class="primary-btn" (click)="saveApaar()" [disabled]="savingApaar">
+            Save APAAR status
+          </button>
+        </div>
       </div>
     }
 
