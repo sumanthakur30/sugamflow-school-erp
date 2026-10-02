@@ -68,7 +68,7 @@ import { ComplianceApiService, DisclosurePackage } from './compliance-api.servic
       }
 
       @if (pack) {
-        @if (pack.warnings?.length) {
+        @if (pack.warnings.length) {
           <div class="panel" style="margin-bottom: 1rem">
             <h3 style="margin-top: 0; font-size: 1.1rem">Warnings</h3>
             <ul>

@@ -1,7 +1,7 @@
 import { Component, OnDestroy, OnInit, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { Router, RouterLink } from '@angular/router';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { Subscription } from 'rxjs';
 import { ApiService, PageResult } from '../../core/api.service';
 import { AuthSessionService } from '../../core/auth-session.service';
@@ -30,6 +30,7 @@ import { ListSortOption, pageMeta, sortRows } from '../../shared/list-toolbar/li
 })
 export class StaffDirectoryComponent implements OnInit, OnDestroy {
   private readonly api = inject(ApiService);
+  private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
   private readonly auth = inject(AuthSessionService);
   private readonly accountInvite = inject(AccountInviteService);
@@ -62,7 +63,7 @@ export class StaffDirectoryComponent implements OnInit, OnDestroy {
   gender = '';
   staffGroup = '';
   joinedWithinDays: number | null = null;
-  activeSummary: 'all' | 'active' | 'teachers' | 'nonTeaching' | 'new' = 'all';
+  activeSummary: 'all' | 'active' | 'inactive' | 'teachers' | 'nonTeaching' | 'new' = 'all';
   showAdvancedFilters = false;
   sortBy = 'updatedAt';
   sortDir: 'ASC' | 'DESC' = 'DESC';
@@ -179,6 +180,15 @@ export class StaffDirectoryComponent implements OnInit, OnDestroy {
   }
 
   ngOnInit(): void {
+    const status = (this.route.snapshot.queryParamMap.get('status') || '').trim();
+    if (status) {
+      this.status = status.toUpperCase();
+      if (this.status === 'INACTIVE') {
+        this.activeSummary = 'inactive';
+      } else if (this.status === 'ACTIVE') {
+        this.activeSummary = 'active';
+      }
+    }
     const path = this.router.url.split('?')[0];
     this.showCreate = path.endsWith('/staff-directory/add');
     this.showInvite = path.endsWith('/staff-directory/invite');
@@ -345,7 +355,7 @@ export class StaffDirectoryComponent implements OnInit, OnDestroy {
     this.search(0);
   }
 
-  applySummaryFilter(kind: 'all' | 'active' | 'teachers' | 'nonTeaching' | 'new'): void {
+  applySummaryFilter(kind: 'all' | 'active' | 'inactive' | 'teachers' | 'nonTeaching' | 'new'): void {
     this.q = '';
     this.department = '';
     this.designation = '';
@@ -356,6 +366,8 @@ export class StaffDirectoryComponent implements OnInit, OnDestroy {
     this.joinedWithinDays = null;
     if (kind === 'active') {
       this.status = 'ACTIVE';
+    } else if (kind === 'inactive') {
+      this.status = 'INACTIVE';
     } else if (kind === 'teachers') {
       this.status = '';
       this.staffGroup = 'TEACHER';
