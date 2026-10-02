@@ -70,6 +70,11 @@ public class ConfigEngineClient {
     return body != null ? body : Map.of();
   }
 
+  public Map<String, Object> getWorkflow(TenantScope scope, String workflowKey) {
+    return get(
+        properties.getIntegrations().getWorkflowsBaseUrl() + "/api/workflows/" + workflowKey, scope);
+  }
+
   public Map<String, Object> getForm(TenantScope scope, String formKey) {
     return get(properties.getIntegrations().getFormsBaseUrl() + "/api/forms/" + formKey, scope);
   }

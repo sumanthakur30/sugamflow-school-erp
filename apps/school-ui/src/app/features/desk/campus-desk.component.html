@@ -105,6 +105,9 @@
               <td>{{ row.title }}</td>
               <td>
                 {{ row.status }}
+                @if (kind === 'LEAVE' && row.stepName) {
+                  <span class="muted"> · {{ row.stepName }}</span>
+                }
                 @if (kind === 'LEAVE' && row.remainingDays != null) {
                   <span class="muted"> · {{ row.remainingDays }} left</span>
                 }

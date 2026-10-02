@@ -1,7 +1,7 @@
 import { CommonModule } from '@angular/common';
 import { ChangeDetectorRef, Component, OnDestroy, OnInit, inject } from '@angular/core';
 import { RouterLink } from '@angular/router';
-import { Observable, Subscription, catchError, of, switchMap, timer, timeout } from 'rxjs';
+import { Observable, Subscription, catchError, forkJoin, of, switchMap, timer, timeout } from 'rxjs';
 import { ApiService, PageResult } from '../../core/api.service';
 import { AuthSessionService } from '../../core/auth-session.service';
 import { TenantContextService } from '../../core/tenant-context.service';
@@ -74,6 +74,7 @@ export class RoleDashboardComponent implements OnInit, OnDestroy {
   metrics: Metric[] = [];
   actions: Action[] = [];
   activity: ActivityItem[] = [];
+  exceptionGroups: { title: string; rows: ActivityItem[] }[] = [];
   unavailable = 0;
 
   private wantsFinance = false;
@@ -152,6 +153,7 @@ export class RoleDashboardComponent implements OnInit, OnDestroy {
     );
     this.track(generation, orgAtStart, 'attendance', this.safePage('/api/attendance/records'));
     this.track(generation, orgAtStart, 'fees', this.safePage('/api/fee/collections'));
+    this.loadExceptions();
 
     if (this.wantsTeacher) {
       this.track(generation, orgAtStart, 'teacherScope', this.safeGet('/api/academic/teacher-scope'));
@@ -322,6 +324,53 @@ export class RoleDashboardComponent implements OnInit, OnDestroy {
       switchMap((first) =>
         first != null ? of(first) : timer(900).pipe(switchMap(() => once())),
       ),
+    );
+  }
+
+  private loadExceptions(): void {
+    if (!this.isLeadershipRole() && !this.isFinanceRole()) {
+      this.exceptionGroups = [];
+      return;
+    }
+    const generation = this.loadGeneration;
+    this.requestSub.add(
+      forkJoin({
+        fees: this.api.get<any[]>('/api/fee/exceptions').pipe(catchError(() => of([]))),
+        attendance: this.api
+          .get<any[]>('/api/attendance/exceptions')
+          .pipe(catchError(() => of([]))),
+        documents: this.api
+          .get<any[]>('/api/student/documents/expiring')
+          .pipe(catchError(() => of([]))),
+      }).subscribe((result) => {
+        if (generation !== this.loadGeneration) {
+          return;
+        }
+        const fees = (result.fees || []).slice(0, 8).map((row) => ({
+          label: row.studentName || row.admissionNo || 'Fee due',
+          value: row.amount != null ? `Due ${row.amount}` : 'Fee due',
+          route: '/admin/fee',
+        }));
+        const attendance = (result.attendance || []).slice(0, 8).map((row) => ({
+          label: row.studentName || row.admissionNo || 'Student',
+          value: row.percent != null ? `${row.status} · ${row.percent}%` : String(row.status || 'Absent'),
+          route: '/admin/attendance',
+        }));
+        const documents = (result.documents || []).slice(0, 8).map((row) => ({
+          label: row.studentName || row.admissionNo || row.documentType || 'Document',
+          value:
+            row.daysToExpiry != null
+              ? `${row.documentType} · ${row.daysToExpiry} days`
+              : String(row.documentType || 'Expiring'),
+          route: '/admin/students',
+        }));
+        this.exceptionGroups = [
+          { title: 'Low attendance', rows: attendance },
+          { title: 'Fee risk', rows: fees },
+          { title: 'Expiring documents', rows: documents },
+        ];
+        this.cdr.detectChanges();
+      }),
     );
   }
 

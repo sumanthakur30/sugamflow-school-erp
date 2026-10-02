@@ -158,6 +158,49 @@ public class FeeCollectionService {
     return rows;
   }
 
+  /** Defaulters the fee-due rule still matches. */
+  @Transactional(readOnly = true)
+  public List<Map<String, Object>> exceptions() {
+    TenantScope scope = TenantContext.require();
+    List<Map<String, Object>> rows = new ArrayList<>();
+    for (Map<String, Object> row : defaulters()) {
+      if (rows.size() >= 25) {
+        break;
+      }
+      Map<String, Object> fees = new LinkedHashMap<>();
+      fees.put("dueAmount", decimalOr(row.get("amount")));
+      fees.put("pendingDays", pendingDays(row.get("dueDate")));
+      Map<String, Object> context = new LinkedHashMap<>();
+      context.put("fees", fees);
+      context.put("payment", Map.of("pendingDays", fees.get("pendingDays")));
+      boolean matched;
+      try {
+        matched = engines.evaluateRules(scope, context).contains(ACTION_NOTIFY);
+      } catch (RuntimeException ex) {
+        matched = decimalOr(row.get("amount")).compareTo(BigDecimal.ZERO) > 0;
+      }
+      if (matched) {
+        rows.add(row);
+      }
+    }
+    return rows;
+  }
+
+  private static int pendingDays(Object dueDate) {
+    if (dueDate == null) {
+      return 0;
+    }
+    try {
+      java.time.LocalDate due = java.time.LocalDate.parse(String.valueOf(dueDate).substring(0, 10));
+      long days =
+          java.time.temporal.ChronoUnit.DAYS.between(
+              due, java.time.LocalDate.now(java.time.ZoneId.of("Asia/Kolkata")));
+      return (int) Math.max(0, days);
+    } catch (RuntimeException ex) {
+      return 0;
+    }
+  }
+
   @Transactional(readOnly = true)
   public Map<String, Object> get(UUID id) {
     TenantScope scope = TenantContext.require();

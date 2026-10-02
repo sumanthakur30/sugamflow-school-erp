@@ -25,6 +25,11 @@ public class StudentDocumentController {
     this.service = service;
   }
 
+  @GetMapping("/documents/expiring")
+  public ApiResponse<List<Map<String, Object>>> expiring() {
+    return ApiResponse.ok(service.expiring());
+  }
+
   @GetMapping("/students/{id}/documents")
   public ApiResponse<List<Map<String, Object>>> list(@PathVariable("id") UUID id) {
     return ApiResponse.ok(service.listForStudent(id));
