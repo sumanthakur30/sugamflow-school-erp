@@ -18,6 +18,8 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -27,6 +29,8 @@ import org.springframework.transaction.annotation.Transactional;
  */
 @Service
 public class StudentAttachmentService {
+
+  private static final Logger log = LoggerFactory.getLogger(StudentAttachmentService.class);
 
   public static final String TYPE_STUDENT_PHOTO = "STUDENT_PHOTO";
   public static final String TYPE_FATHER_PHOTO = "FATHER_PHOTO";
@@ -47,9 +51,6 @@ public class StudentAttachmentService {
           "MEDICAL_CERTIFICATE",
           "PASSPORT_PHOTO",
           "OTHER");
-
-  private static final Set<String> IMAGE_MIME =
-      Set.of("image/jpeg", "image/jpg", "image/png", "image/webp");
 
   private final StudentAttachmentRepository attachments;
   private final StudentRecordRepository students;
@@ -129,13 +130,12 @@ public class StudentAttachmentService {
           "VALIDATION", "File exceeds maximum size of " + maxKb + " KB");
     }
     if (photo) {
-      if (!IMAGE_MIME.contains(contentType) && !looksLikeImageName(fileName)) {
+      String detected = detectImageMime(bytes);
+      if (detected == null) {
         throw new StudentException(
-            "VALIDATION", "Photo must be JPG, JPEG, PNG, or WEBP");
+            "VALIDATION", "Photo must be a valid JPG, JPEG, PNG, or WEBP image");
       }
-      if ("image/jpg".equals(contentType)) {
-        contentType = "image/jpeg";
-      }
+      contentType = detected;
       // Replace previous photo of same type (single active photo)
       attachments.deleteByOrganizationIdAndStudentIdAndAttachmentType(
           scope.organizationId(), studentId, type);
@@ -167,6 +167,13 @@ public class StudentAttachmentService {
               : new LinkedHashMap<>();
       answers.put("photoUrl", "/api/student/attachments/" + saved.getId() + "/content");
       answers.put("studentPhoto", saved.getId().toString());
+      Object rawPhoto = answers.get("photo");
+      if (rawPhoto != null) {
+        String raw = String.valueOf(rawPhoto).trim();
+        if (raw.startsWith("data:") || "on-file".equals(raw)) {
+          answers.remove("photo");
+        }
+      }
       student.setAnswers(answers);
       student.setUpdatedAt(Instant.now());
       students.save(student);
@@ -211,9 +218,35 @@ public class StudentAttachmentService {
             .orElseThrow(() -> new StudentException("NOT_FOUND", "Attachment not found"));
     StudentRecordEntity student = requireStudent(entity.getStudentId(), scope.organizationId());
     requireBranch(scope, student);
+    String stored = entity.getContentBase64();
+    if (stored == null || stored.isBlank()) {
+      log.warn(
+          "Attachment content missing attachmentId={} studentId={} tenantId={} type={}",
+          attachmentId,
+          entity.getStudentId(),
+          scope.organizationId(),
+          entity.getAttachmentType());
+      throw new StudentException("NOT_FOUND", "Attachment content is missing");
+    }
     try {
-      return Base64.getDecoder().decode(entity.getContentBase64());
+      byte[] bytes = Base64.getDecoder().decode(stored);
+      if (bytes.length == 0) {
+        log.warn(
+            "Attachment content empty attachmentId={} studentId={} tenantId={} type={}",
+            attachmentId,
+            entity.getStudentId(),
+            scope.organizationId(),
+            entity.getAttachmentType());
+        throw new StudentException("NOT_FOUND", "Attachment content is missing");
+      }
+      return bytes;
     } catch (IllegalArgumentException ex) {
+      log.warn(
+          "Attachment content corrupt attachmentId={} studentId={} tenantId={} type={}",
+          attachmentId,
+          entity.getStudentId(),
+          scope.organizationId(),
+          entity.getAttachmentType());
       throw new StudentException("VALIDATION", "Corrupt attachment content");
     }
   }
@@ -254,9 +287,32 @@ public class StudentAttachmentService {
             + "INCOME_CERTIFICATE, CASTE_CERTIFICATE, MEDICAL_CERTIFICATE, PASSPORT_PHOTO, OTHER");
   }
 
-  private boolean looksLikeImageName(String name) {
-    String n = name == null ? "" : name.toLowerCase(Locale.ROOT);
-    return n.endsWith(".jpg") || n.endsWith(".jpeg") || n.endsWith(".png") || n.endsWith(".webp");
+  private static String detectImageMime(byte[] bytes) {
+    if (bytes.length >= 3
+        && (bytes[0] & 0xFF) == 0xFF
+        && (bytes[1] & 0xFF) == 0xD8
+        && (bytes[2] & 0xFF) == 0xFF) {
+      return "image/jpeg";
+    }
+    if (bytes.length >= 8
+        && (bytes[0] & 0xFF) == 0x89
+        && bytes[1] == 0x50
+        && bytes[2] == 0x4E
+        && bytes[3] == 0x47) {
+      return "image/png";
+    }
+    if (bytes.length >= 12
+        && bytes[0] == 'R'
+        && bytes[1] == 'I'
+        && bytes[2] == 'F'
+        && bytes[3] == 'F'
+        && bytes[8] == 'W'
+        && bytes[9] == 'E'
+        && bytes[10] == 'B'
+        && bytes[11] == 'P') {
+      return "image/webp";
+    }
+    return null;
   }
 
   private StudentRecordEntity requireStudent(UUID id, String org) {

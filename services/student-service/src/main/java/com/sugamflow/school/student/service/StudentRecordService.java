@@ -67,6 +67,7 @@ public class StudentRecordService {
   private final StudentProperties properties;
   private final RelationshipAccessService relationshipAccess;
   private final DomainSnapshotClient domainSnapshots;
+  private final StudentAttachmentService attachments;
 
   public StudentRecordService(
       StudentRecordRepository repository,
@@ -74,13 +75,15 @@ public class StudentRecordService {
       ConfigEngineClient engines,
       StudentProperties properties,
       RelationshipAccessService relationshipAccess,
-      DomainSnapshotClient domainSnapshots) {
+      DomainSnapshotClient domainSnapshots,
+      StudentAttachmentService attachments) {
     this.repository = repository;
     this.fieldAuditRepository = fieldAuditRepository;
     this.engines = engines;
     this.properties = properties;
     this.relationshipAccess = relationshipAccess;
     this.domainSnapshots = domainSnapshots;
+    this.attachments = attachments;
   }
 
   @Transactional(readOnly = true)
@@ -417,13 +420,7 @@ public class StudentRecordService {
     out.put("guardianName", guardianName(answers));
     out.put("mobile", stringVal(answers, "mobile"));
     out.put("email", stringVal(answers, "email"));
-    out.put(
-        "photoUrl",
-        firstNonBlank(
-            stringVal(answers, "photoUrl"),
-            stringVal(answers, "photo"),
-            stringVal(answers, "studentPhoto"),
-            ""));
+    out.put("photoUrl", displayPhotoUrl(answers));
     out.put("status", studentDto.get("status"));
     out.put("branchId", studentDto.get("branchId"));
     out.put("academicSessionId", studentDto.get("academicSessionId"));
@@ -594,10 +591,17 @@ public class StudentRecordService {
     requireModuleEnabled(scope);
 
     UUID applicationId = parseUuid(body.get("applicationId"), "applicationId");
+    @SuppressWarnings("unchecked")
+    Map<String, Object> sourceAnswers =
+        body.get("answers") instanceof Map<?, ?> m
+            ? new LinkedHashMap<>((Map<String, Object>) m)
+            : new LinkedHashMap<>();
     var existing =
         repository.findByOrganizationIdAndSourceApplicationIdAndDeletedAtIsNull(scope.organizationId(), applicationId);
     if (existing.isPresent()) {
-      return toDto(existing.get());
+      StudentRecordEntity row = existing.get();
+      promoteAdmissionPhoto(row, sourceAnswers);
+      return toDto(repository.findById(row.getId()).orElse(row));
     }
 
     Map<String, Object> module = engines.getModuleSettings(scope, MODULE_STUDENT);
@@ -612,12 +616,6 @@ public class StudentRecordService {
     }
 
     @SuppressWarnings("unchecked")
-    Map<String, Object> sourceAnswers =
-        body.get("answers") instanceof Map<?, ?> m
-            ? new LinkedHashMap<>((Map<String, Object>) m)
-            : new LinkedHashMap<>();
-
-    @SuppressWarnings("unchecked")
     Map<String, Object> fieldMap =
         body.get("fieldMap") instanceof Map<?, ?> m
             ? new LinkedHashMap<>((Map<String, Object>) m)
@@ -626,6 +624,7 @@ public class StudentRecordService {
                 : Map.of());
 
     Map<String, Object> answers = mapAnswers(form, sourceAnswers, fieldMap);
+    stripEmbeddedImages(answers);
     boolean generateNo =
         admissionSettings.get("generateAdmissionNo") == null
             || Boolean.TRUE.equals(admissionSettings.get("generateAdmissionNo"));
@@ -672,7 +671,9 @@ public class StudentRecordService {
     history.add(event);
     entity.setHistory(history);
 
-    return toDto(repository.save(entity));
+    StudentRecordEntity saved = repository.save(entity);
+    promoteAdmissionPhoto(saved, sourceAnswers);
+    return toDto(repository.findById(saved.getId()).orElse(saved));
   }
 
   /**
@@ -1854,6 +1855,108 @@ public class StudentRecordService {
     } catch (NumberFormatException ex) {
       return d;
     }
+  }
+
+  /**
+   * Copy the admission photograph into the student photo vault. The vault attachment is the
+   * current photo; the data URL is not kept on the student record.
+   */
+  private void promoteAdmissionPhoto(StudentRecordEntity student, Map<String, Object> source) {
+    if (student == null || student.getId() == null || hasVaultPhoto(student)) {
+      return;
+    }
+    String dataUrl = embeddedPhoto(source);
+    if (dataUrl == null) {
+      return;
+    }
+    int comma = dataUrl.indexOf(',');
+    if (comma < 0 || comma >= dataUrl.length() - 1) {
+      return;
+    }
+    String meta = dataUrl.substring("data:".length(), comma);
+    String contentType = meta.split(";", 2)[0].trim().toLowerCase(Locale.ROOT);
+    if (contentType.isBlank()) {
+      contentType = "image/jpeg";
+    }
+    String ext =
+        contentType.contains("png") ? "png" : contentType.contains("webp") ? "webp" : "jpg";
+    Map<String, Object> body = new LinkedHashMap<>();
+    body.put("type", StudentAttachmentService.TYPE_STUDENT_PHOTO);
+    body.put("fileName", "student-photo." + ext);
+    body.put("contentType", contentType);
+    body.put("contentBase64", dataUrl.substring(comma + 1));
+    try {
+      attachments.upload(student.getId(), body);
+    } catch (RuntimeException ignored) {
+      // Enrollment stands. Staff can upload the photo on the student profile.
+    }
+  }
+
+  private static boolean hasVaultPhoto(StudentRecordEntity student) {
+    Map<String, Object> answers = student.getAnswers();
+    if (answers == null) {
+      return false;
+    }
+    String url = stringVal(answers, "photoUrl");
+    return url.startsWith("/api/student/attachments/");
+  }
+
+  private static String embeddedPhoto(Map<String, Object> source) {
+    if (source == null) {
+      return null;
+    }
+    for (String key : List.of("photo", "studentPhoto")) {
+      String value = stringVal(source, key);
+      if (value.startsWith("data:image/")) {
+        return value;
+      }
+    }
+    return null;
+  }
+
+  /** Drop inline image payloads so the student row stores the vault reference only. */
+  private static void stripEmbeddedImages(Map<String, Object> answers) {
+    if (answers == null || answers.isEmpty()) {
+      return;
+    }
+    for (String key : new ArrayList<>(answers.keySet())) {
+      String value = stringVal(answers, key);
+      if (!value.startsWith("data:")) {
+        continue;
+      }
+      if ("photo".equals(key) || "studentPhoto".equals(key)) {
+        answers.put(key, "on-file");
+      } else {
+        answers.remove(key);
+      }
+    }
+  }
+
+  /** URL the directory, ID card, and admit card can render. Never a raw file path. */
+  public static String displayPhotoUrl(Map<String, Object> answers) {
+    if (answers == null) {
+      return "";
+    }
+    String url = stringVal(answers, "photoUrl");
+    if (isRenderablePhoto(url)) {
+      return url;
+    }
+    String embedded = stringVal(answers, "photo");
+    if (isRenderablePhoto(embedded)) {
+      return embedded;
+    }
+    String attachmentId = stringVal(answers, "studentPhoto");
+    if (attachmentId.matches("(?i)[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")) {
+      return "/api/student/attachments/" + attachmentId + "/content";
+    }
+    return "";
+  }
+
+  private static boolean isRenderablePhoto(String value) {
+    return value.startsWith("/api/")
+        || value.startsWith("http://")
+        || value.startsWith("https://")
+        || value.startsWith("data:image/");
   }
 
   private Map<String, Object> mapAnswers(

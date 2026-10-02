@@ -113,6 +113,12 @@
                     [name]="'fid' + si + '_' + fi"
                   />
                 </label>
+                @if (field.type === 'IMAGE') {
+                  <p class="muted">
+                    The uploaded photo is stored on the student record and reused on ID cards, admit
+                    cards, and reports. Report Designer still binds {{ '{{student.photoDirectUrl}}' }}.
+                  </p>
+                }
                 <div class="actions" style="margin-top: 0">
                   <button type="button" class="secondary" (click)="moveField(si, fi, -1)">↑</button>
                   <button type="button" class="secondary" (click)="moveField(si, fi, 1)">↓</button>

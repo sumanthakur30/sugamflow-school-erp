@@ -4,8 +4,11 @@ import com.lowagie.text.Document;
 import com.lowagie.text.Element;
 import com.lowagie.text.Font;
 import com.lowagie.text.FontFactory;
+import com.lowagie.text.Image;
 import com.lowagie.text.PageSize;
 import com.lowagie.text.Paragraph;
+import com.lowagie.text.Phrase;
+import com.lowagie.text.pdf.PdfPCell;
 import com.lowagie.text.pdf.PdfPTable;
 import com.lowagie.text.pdf.PdfWriter;
 import com.sugamflow.school.exam.web.ExamException;
@@ -60,6 +63,7 @@ public class AdmitCardPdfService {
         sub.setAlignment(Element.ALIGN_CENTER);
         sub.setSpacingAfter(16f);
         doc.add(sub);
+        addStudentPhoto(doc, student);
         doc.add(new Paragraph("Student: " + nz(str(student.get("studentName")), "-"), body));
         doc.add(new Paragraph("Admission: " + nz(str(student.get("admissionNo")), "-"), body));
         Paragraph klass =
@@ -94,6 +98,33 @@ public class AdmitCardPdfService {
     } catch (Exception ex) {
       throw new ExamException("PDF_ERROR", "Failed to render admit card PDF: " + ex.getMessage());
     }
+  }
+
+  private static void addStudentPhoto(Document doc, Map<String, Object> student) throws Exception {
+    byte[] bytes = student.get("photoBytes") instanceof byte[] raw ? raw : null;
+    if (bytes != null && bytes.length > 0) {
+      try {
+        Image image = Image.getInstance(bytes);
+        image.scaleToFit(72f, 90f);
+        image.setSpacingAfter(10f);
+        doc.add(image);
+        return;
+      } catch (Exception ignored) {
+        // Fall through to the placeholder when the bytes are not a readable image.
+      }
+    }
+    PdfPTable box = new PdfPTable(1);
+    box.setTotalWidth(72f);
+    box.setLockedWidth(true);
+    box.setHorizontalAlignment(Element.ALIGN_LEFT);
+    box.setSpacingAfter(10f);
+    PdfPCell cell = new PdfPCell(new Phrase("Photo", FontFactory.getFont(FontFactory.HELVETICA, 9, Color.GRAY)));
+    cell.setFixedHeight(90f);
+    cell.setHorizontalAlignment(Element.ALIGN_CENTER);
+    cell.setVerticalAlignment(Element.ALIGN_MIDDLE);
+    cell.setBorderColor(Color.LIGHT_GRAY);
+    box.addCell(cell);
+    doc.add(box);
   }
 
   private static String str(Object v) {

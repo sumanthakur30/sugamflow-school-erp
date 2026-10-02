@@ -60,6 +60,8 @@ export class StudentDirectoryComponent implements OnInit, OnDestroy {
   hostel = false;
   /** Trash mode — elevated roles; lists soft-deleted students only. */
   trashMode = false;
+  /** Students who still need a photo before ID cards or admit cards are printed. */
+  missingPhotoOnly = false;
   selectedIds = new Set<string>();
   showAdvancedFilters = false;
   bulkBusy = false;
@@ -103,6 +105,7 @@ export class StudentDirectoryComponent implements OnInit, OnDestroy {
     if (status) {
       this.status = status.toUpperCase();
     }
+    this.missingPhotoOnly = this.route.snapshot.queryParamMap.get('missingPhoto') === '1';
     this.campusReadySub = this.tenantContext.whenCampusReady().subscribe(() => this.reload());
   }
 
@@ -243,8 +246,9 @@ export class StudentDirectoryComponent implements OnInit, OnDestroy {
   search(page = 0): void {
     this.searching = true;
     this.error = '';
+    const size = this.missingPhotoOnly ? 200 : this.page.size || 50;
     this.api
-      .getPage<any>('/api/student/directory/students', page, this.page.size || 50, {
+      .getPage<any>('/api/student/directory/students', page, size, {
         ...this.filterParams(),
         sort: this.sortBy,
         dir: this.sortDir,
@@ -258,12 +262,18 @@ export class StudentDirectoryComponent implements OnInit, OnDestroy {
       )
       .subscribe({
         next: (p) => {
+          let items = sortRows(p.items || [], this.sortBy, this.sortDir, (row, key) => {
+            if (key === 'fullName') return row.fullName || row.studentName;
+            return row?.[key];
+          });
+          if (this.missingPhotoOnly) {
+            items = items.filter((row) => !this.hasStudentPhoto(row));
+          }
           this.page = {
             ...p,
-            items: sortRows(p.items || [], this.sortBy, this.sortDir, (row, key) => {
-              if (key === 'fullName') return row.fullName || row.studentName;
-              return row?.[key];
-            }),
+            items,
+            totalElements: this.missingPhotoOnly ? items.length : p.totalElements,
+            hasNext: this.missingPhotoOnly ? false : p.hasNext,
           };
           this.rebuildClassSectionOptions();
           this.selectedIds.clear();
@@ -494,6 +504,16 @@ export class StudentDirectoryComponent implements OnInit, OnDestroy {
       }
     }
     this.search(0);
+  }
+
+  toggleMissingPhotos(): void {
+    this.missingPhotoOnly = !this.missingPhotoOnly;
+    this.search(0);
+  }
+
+  hasStudentPhoto(row: any): boolean {
+    const url = String(row?.photoUrl ?? '');
+    return url.startsWith('/api/') || url.startsWith('http') || url.startsWith('data:image/');
   }
 
   toggleTrash(): void {

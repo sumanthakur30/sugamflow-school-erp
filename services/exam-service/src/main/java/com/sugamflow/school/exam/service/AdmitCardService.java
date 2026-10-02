@@ -96,10 +96,20 @@ public class AdmitCardService {
           "studentName",
           first(str(row.get("fullName")), str(row.get("studentName")), str(row.get("admissionNo"))));
       student.put("classSection", first(str(row.get("classSection")), label));
+      String photoUrl = str(row.get("photoUrl"));
+      boolean hasPhoto = isPhotoReference(photoUrl);
+      student.put("photoUrl", hasPhoto ? photoUrl : null);
+      student.put("hasPhoto", hasPhoto);
       students.add(student);
     }
     if (students.isEmpty()) {
       throw new ExamException("NOT_FOUND", "No students on this class roster");
+    }
+    int missingPhotos = 0;
+    for (Map<String, Object> student : students) {
+      if (!Boolean.TRUE.equals(student.get("hasPhoto"))) {
+        missingPhotos++;
+      }
     }
 
     Map<String, Object> pack = new LinkedHashMap<>();
@@ -108,7 +118,41 @@ public class AdmitCardService {
     pack.put("termKey", term);
     pack.put("papers", papers);
     pack.put("students", students);
+    pack.put("missingPhotoCount", missingPhotos);
     return pack;
+  }
+
+  /** Load vault bytes for the PDF only. The JSON pack stays a reference, not the file. */
+  public void attachPhotoBytes(Map<String, Object> pack) {
+    if (pack == null) {
+      return;
+    }
+    Object rows = pack.get("students");
+    if (!(rows instanceof List<?> students)) {
+      return;
+    }
+    TenantScope scope = TenantContext.require();
+    for (Object row : students) {
+      if (!(row instanceof Map<?, ?> raw)) {
+        continue;
+      }
+      @SuppressWarnings("unchecked")
+      Map<String, Object> student = (Map<String, Object>) raw;
+      byte[] bytes = directory.fetchPhoto(scope, str(student.get("photoUrl")));
+      if (bytes != null && bytes.length > 0) {
+        student.put("photoBytes", bytes);
+      }
+    }
+  }
+
+  private static boolean isPhotoReference(String photoUrl) {
+    if (photoUrl == null) {
+      return false;
+    }
+    return photoUrl.startsWith("/api/")
+        || photoUrl.startsWith("http://")
+        || photoUrl.startsWith("https://")
+        || photoUrl.startsWith("data:image/");
   }
 
   private static String str(Object v) {

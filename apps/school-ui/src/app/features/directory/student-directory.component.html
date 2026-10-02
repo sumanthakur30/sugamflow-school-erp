@@ -6,6 +6,14 @@
     </div>
     <div class="head-actions">
       <a class="head-link" routerLink="/admin/students">Student master</a>
+      <button
+        type="button"
+        class="secondary"
+        [class.active-toggle]="missingPhotoOnly"
+        (click)="toggleMissingPhotos()"
+      >
+        {{ missingPhotoOnly ? 'Show all students' : 'Missing photos' }}
+      </button>
       <a class="head-link" routerLink="/admin/lifecycle">Lifecycle / TC</a>
       <button
         type="button"
@@ -27,6 +35,13 @@
   }
   @if (statusMsg) {
     <p class="status panel" role="status" aria-live="polite">{{ statusMsg }}</p>
+  }
+  @if (missingPhotoOnly) {
+    <p class="status panel" role="status">
+      {{ page.totalElements || 0 }}
+      {{ (page.totalElements || 0) === 1 ? 'student does' : 'students do' }} not have a photo. Open the
+      profile to upload or replace it. This is the photo used on ID cards, admit cards, and reports.
+    </p>
   }
 
   @if (loading) {
@@ -315,7 +330,7 @@
             @if (!page.items.length) {
               <tr>
                 <td [attr.colspan]="displayColumns.length + 2" class="muted empty-row">
-                  {{ trashMode ? 'Trash is empty.' : 'No students match filters.' }}
+                  {{ trashMode ? 'Trash is empty.' : missingPhotoOnly ? 'Every student on this page has a photo.' : 'No students match filters.' }}
                 </td>
               </tr>
             }
@@ -385,7 +400,9 @@
                 }
                 <td class="col-actions">
                   <div class="row-actions">
-                    <a [routerLink]="['/admin/students']" [queryParams]="{ id: row.id }">Profile</a>
+                    <a [routerLink]="['/admin/students']" [queryParams]="{ id: row.id }">
+                      {{ missingPhotoOnly ? (hasStudentPhoto(row) ? 'Replace' : 'Upload') : 'Profile' }}
+                    </a>
                     @if (!trashMode) {
                       <a
                         class="action-primary"
