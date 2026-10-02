@@ -311,6 +311,39 @@ public class StudentRecordService {
     return PageResult.of(result.map(this::toDto).getContent(), q.page(), q.size(), result.getTotalElements());
   }
 
+  @Transactional
+  public Map<String, Object> recordApaarConsent(UUID id, Map<String, Object> body) {
+    TenantScope scope = TenantContext.require();
+    requireFeature(scope);
+    StudentRecordEntity student = requireStudent(id, scope.organizationId());
+    String status =
+        stringOr(body == null ? null : body.get("apaarConsent"), "")
+            .trim()
+            .toUpperCase(Locale.ROOT);
+    if (!java.util.List.of("PENDING", "CONSENTED", "REFUSED", "NOGEN").contains(status)) {
+      throw new StudentException(
+          "VALIDATION", "APAAR consent must be PENDING, CONSENTED, REFUSED, or NOGEN");
+    }
+    String apaarId = stringOr(body == null ? null : body.get("apaarId"), "");
+    Map<String, Object> answers = new LinkedHashMap<>();
+    if (student.getAnswers() != null) {
+      answers.putAll(student.getAnswers());
+    }
+    answers.put("apaarConsent", status);
+    answers.put("apaarConsentAt", Instant.now().toString());
+    if (!apaarId.isBlank()) {
+      answers.put("apaarId", apaarId.trim().toUpperCase(Locale.ROOT));
+    }
+    student.setAnswers(answers);
+    student.setUpdatedAt(Instant.now());
+    repository.save(student);
+    Map<String, Object> out = new LinkedHashMap<>();
+    out.put("studentId", student.getId().toString());
+    out.put("apaarConsent", status);
+    out.put("apaarId", answers.get("apaarId"));
+    return out;
+  }
+
   @Transactional(readOnly = true)
   public Map<String, Object> get(UUID id) {
     TenantScope scope = TenantContext.require();

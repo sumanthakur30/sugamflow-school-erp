@@ -129,6 +129,26 @@ export class TeacherReportCardsComponent implements OnInit {
     return `${student.attendancePercent}%`;
   }
 
+  downloadDateSheet(): void {
+    if (!this.sectionId) return;
+    const term = this.termKey.trim();
+    const path =
+      `/api/exam/date-sheets/pdf?sectionId=${encodeURIComponent(this.sectionId)}` +
+      (term ? `&termKey=${encodeURIComponent(term)}` : '');
+    this.busy = true;
+    this.error = '';
+    this.api.getBlob(path).subscribe({
+      next: (blob) => {
+        this.busy = false;
+        this.saveBlob(blob, `date-sheet-${term || 'class'}.pdf`);
+      },
+      error: () => {
+        this.busy = false;
+        this.error = 'Could not download the date sheet';
+      },
+    });
+  }
+
   downloadAdmitCards(): void {
     if (!this.sectionId) return;
     const term = this.termKey.trim();

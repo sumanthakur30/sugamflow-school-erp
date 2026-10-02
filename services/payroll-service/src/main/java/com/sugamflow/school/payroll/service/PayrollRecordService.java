@@ -120,6 +120,41 @@ public class PayrollRecordService {
     return toDto(requireRecord(id, scope.organizationId()));
   }
 
+  /** Stamp the first issue time and return the amounts for the payslip PDF. */
+  @Transactional
+  public Map<String, Object> issuePayslip(UUID id) {
+    TenantScope scope = TenantContext.require();
+    requireFeature(scope);
+    PayrollRecordEntity entity = requireRecord(id, scope.organizationId());
+    String status = entity.getStatus() == null ? "" : entity.getStatus().trim().toUpperCase();
+    if (!"APPROVED".equals(status)) {
+      throw new PayrollException(
+          "NOT_APPROVED", "Issue a payslip only after the payroll run is approved");
+    }
+    Map<String, Object> answers = new LinkedHashMap<>();
+    if (entity.getAnswers() != null) {
+      answers.putAll(entity.getAnswers());
+    }
+    if (stringOr(answers.get("payslipIssuedAt"), "").isBlank()) {
+      answers.put("payslipIssuedAt", Instant.now().toString());
+      answers.put("payslipIssuedBy", scope.userId());
+      entity.setAnswers(answers);
+      entity.setUpdatedAt(Instant.now());
+      entity
+          .getHistory()
+          .add(
+              event(
+                  "PAYSLIP_ISSUED",
+                  scope.userId(),
+                  scope.roleCode(),
+                  "Payslip issued",
+                  entity.getCurrentStepSequence(),
+                  entity.getCurrentStepName()));
+      repository.save(entity);
+    }
+    return answers;
+  }
+
   @Transactional
   public Map<String, Object> submit(Map<String, Object> body) {
     TenantScope scope = TenantContext.require();

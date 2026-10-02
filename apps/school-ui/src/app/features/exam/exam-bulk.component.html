@@ -110,6 +110,11 @@
         <label>Exam date
           <input [value]="gradebook?.exam?.examDate ?? ''" readonly />
         </label>
+        <div class="actions">
+          <button type="button" class="secondary" (click)="downloadDateSheet()" [disabled]="busy || !sectionId">
+            Date sheet
+          </button>
+        </div>
       </section>
 
       @if (!examDefinitionId) {
