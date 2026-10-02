@@ -125,6 +125,11 @@ export class StaffDirectoryComponent implements OnInit, OnDestroy {
   menuTop = 0;
   menuLeft = 0;
   pendingDelete: { id: string; name: string } | null = null;
+  pendingCampus: { id: string; name: string } | null = null;
+  campusOptions: Array<{ branchKey: string; name: string }> = [];
+  campusesLoaded = false;
+  targetBranchId = '';
+  campusBusy = false;
   private menuAnchor: HTMLElement | null = null;
   private readonly onAnyScroll = (): void => {
     if (this.openMenuId && this.menuAnchor) {
@@ -704,6 +709,57 @@ export class StaffDirectoryComponent implements OnInit, OnDestroy {
       }
       dialog?.querySelector<HTMLButtonElement>('[data-cancel]')?.focus();
     });
+  }
+
+  startCampusTransfer(row: any): void {
+    this.closeRowMenu(false);
+    this.pendingCampus = { id: row.id, name: this.staffLabel(row) };
+    this.targetBranchId = '';
+    this.campusBusy = false;
+    this.campusesLoaded = false;
+    this.campusOptions = [];
+    const current = String(row.branchId || this.auth.getBranchId() || '');
+    this.api.get<any>('/api/config/branches/bootstrap').subscribe({
+      next: (boot) => {
+        this.campusOptions = (boot?.branches ?? [])
+          .map((b: any) => ({
+            branchKey: String(b.branchKey || ''),
+            name: String(b.name || b.branchKey || ''),
+          }))
+          .filter((b: { branchKey: string }) => b.branchKey && b.branchKey !== current);
+        this.targetBranchId = this.campusOptions[0]?.branchKey || '';
+        this.campusesLoaded = true;
+      },
+      error: () => {
+        this.campusesLoaded = true;
+      },
+    });
+  }
+
+  cancelCampusTransfer(): void {
+    this.pendingCampus = null;
+    this.campusBusy = false;
+  }
+
+  confirmCampusTransfer(): void {
+    if (!this.pendingCampus || !this.targetBranchId) return;
+    this.campusBusy = true;
+    this.error = '';
+    this.api
+      .post(`/api/staff/staff/${this.pendingCampus.id}/campus-transfer`, {
+        targetBranchId: this.targetBranchId,
+      })
+      .subscribe({
+        next: () => {
+          this.pendingCampus = null;
+          this.campusBusy = false;
+          this.search(this.page.page);
+        },
+        error: (err) => {
+          this.campusBusy = false;
+          this.error = err?.error?.message ?? 'Could not move this staff member';
+        },
+      });
   }
 
   cancelDelete(): void {

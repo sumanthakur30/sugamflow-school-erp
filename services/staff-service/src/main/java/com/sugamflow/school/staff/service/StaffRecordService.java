@@ -153,6 +153,29 @@ public class StaffRecordService {
     return toDto(repository.save(entity));
   }
 
+  /** Move one staff record to another campus without creating a second person. */
+  @Transactional
+  public Map<String, Object> transferCampus(UUID id, Map<String, Object> body) {
+    TenantScope scope = TenantContext.require();
+    requireFeature(scope);
+    StaffRecordEntity entity = requireStaff(id, scope.organizationId());
+    String target = stringOr(body == null ? null : body.get("targetBranchId"), "");
+    if (target.isBlank()) {
+      throw new StaffException("VALIDATION", "targetBranchId is required");
+    }
+    String from = stringOr(entity.getBranchId(), "");
+    if (target.equals(from)) {
+      throw new StaffException("VALIDATION", "This staff member is already on that campus");
+    }
+    entity.setBranchId(target);
+    entity.setUpdatedAt(Instant.now());
+    if (entity.getHistory() == null) {
+      entity.setHistory(new ArrayList<>());
+    }
+    entity.getHistory().add(event(scope, "CAMPUS_TRANSFER", "Moved from " + from + " to " + target));
+    return toDto(repository.save(entity));
+  }
+
   @Transactional
   public Map<String, Object> update(UUID id, Map<String, Object> body) {
     TenantScope scope = TenantContext.require();

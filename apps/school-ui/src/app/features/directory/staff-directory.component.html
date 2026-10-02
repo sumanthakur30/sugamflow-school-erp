@@ -539,6 +539,9 @@
       <button type="button" role="menuitem" class="staff-row-menu__item linkish" (click)="viewStaff(openMenuRow)">
         View Staff Profile
       </button>
+      <button type="button" role="menuitem" class="staff-row-menu__item linkish" (click)="startCampusTransfer(openMenuRow)">
+        Move campus
+      </button>
       @if (canInviteLogin) {
         <button type="button" role="menuitem" class="staff-row-menu__item linkish" (click)="startInviteFromRow(openMenuRow)">
           Invite / Manage Login
@@ -563,6 +566,39 @@
       >
         Delete Staff
       </button>
+    </div>
+  }
+
+  @if (pendingCampus) {
+    <div class="staff-confirm-backdrop" (click)="cancelCampusTransfer()">
+      <div
+        class="staff-confirm"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="staff-campus-title"
+        (click)="$event.stopPropagation()"
+      >
+        <h3 id="staff-campus-title">Move {{ pendingCampus.name }}</h3>
+        <p>The same staff record moves to the other campus.</p>
+        @if (campusesLoaded && campusOptions.length === 0) {
+          <p>This organisation has no other campus to move to.</p>
+        } @else {
+          <label>
+            Campus
+            <select [(ngModel)]="targetBranchId" name="staffTargetBranch">
+              @for (campus of campusOptions; track campus.branchKey) {
+                <option [value]="campus.branchKey">{{ campus.name }}</option>
+              }
+            </select>
+          </label>
+        }
+        <div class="staff-confirm__actions">
+          <button type="button" class="secondary" (click)="cancelCampusTransfer()">Cancel</button>
+          <button type="button" class="primary-btn" (click)="confirmCampusTransfer()" [disabled]="campusBusy || !targetBranchId">
+            {{ campusBusy ? 'Moving…' : 'Move campus' }}
+          </button>
+        </div>
+      </div>
     </div>
   }
 
