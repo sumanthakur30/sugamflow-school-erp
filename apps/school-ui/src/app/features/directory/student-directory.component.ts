@@ -1,7 +1,7 @@
 import { Component, OnDestroy, OnInit, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { RouterLink } from '@angular/router';
+import { ActivatedRoute, RouterLink } from '@angular/router';
 import { Subscription, catchError, finalize, map, timeout } from 'rxjs';
 import { ApiService, PageResult } from '../../core/api.service';
 import { TenantContextService } from '../../core/tenant-context.service';
@@ -29,6 +29,7 @@ import {
 })
 export class StudentDirectoryComponent implements OnInit, OnDestroy {
   private readonly api = inject(ApiService);
+  private readonly route = inject(ActivatedRoute);
   private readonly tenantContext = inject(TenantContextService);
   private readonly modules = inject(ModuleBootstrapService);
   private campusReadySub?: Subscription;
@@ -98,6 +99,10 @@ export class StudentDirectoryComponent implements OnInit, OnDestroy {
   ];
 
   ngOnInit(): void {
+    const status = (this.route.snapshot.queryParamMap.get('status') || '').trim();
+    if (status) {
+      this.status = status.toUpperCase();
+    }
     this.campusReadySub = this.tenantContext.whenCampusReady().subscribe(() => this.reload());
   }
 
@@ -467,7 +472,7 @@ export class StudentDirectoryComponent implements OnInit, OnDestroy {
     this.search(0);
   }
 
-  applySummaryFilter(kind: 'all' | 'active' | 'tc' | 'new' | 'trash'): void {
+  applySummaryFilter(kind: 'all' | 'active' | 'inactive' | 'tc' | 'new' | 'trash'): void {
     this.q = '';
     this.classSection = '';
     this.gender = '';
@@ -480,6 +485,8 @@ export class StudentDirectoryComponent implements OnInit, OnDestroy {
       this.trashMode = false;
       if (kind === 'active') {
         this.status = 'ACTIVE';
+      } else if (kind === 'inactive') {
+        this.status = 'INACTIVE';
       } else if (kind === 'tc') {
         this.status = 'TC_ISSUED';
       } else {

@@ -44,7 +44,7 @@ import {
           </div>
           <div class="panel">
             <div class="field-title">Missing recommended</div>
-            @if (!summary.missingRecommendedCategories?.length) {
+            @if (!summary.missingRecommendedCategories.length) {
               <p class="muted">All recommended categories present.</p>
             } @else {
               <p>{{ summary.missingRecommendedCategories.join(', ') }}</p>
