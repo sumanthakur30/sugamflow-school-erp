@@ -84,13 +84,16 @@ button {
   padding: 0.55rem 0.95rem;
   min-height: 2.25rem;
   background: var(--sf-button, #176b45);
-  color: #fff;
+  color: var(--sf-on-button, #fff);
   cursor: pointer;
   font-weight: 600;
 }
 
-button:not(.secondary):not(.danger):not(.linkish):not(.danger-link):not(.danger-item):not(.editor-row):not(.heading-sort):hover:not(:disabled) {
+/* Filled actions keep a light label on the brand fill, including hover.
+   A later rule that changes only the text color must not leave a dark label on this fill. */
+button:not(.secondary):not(.danger):not(.linkish):not(.danger-link):not(.danger-item):not(.editor-row):not(.heading-sort):not([class*='--secondary']):hover:not(:disabled) {
   background: var(--sf-primary-hover, #125638);
+  color: var(--sf-on-button, #fff);
 }
 
 button:disabled {
@@ -98,14 +101,19 @@ button:disabled {
   cursor: not-allowed;
 }
 
-button.secondary {
-  background: #fff;
+button.secondary,
+button[class*='--secondary'],
+a[class*='--secondary'] {
+  background: var(--sf-panel, #fff);
   color: var(--sf-text, #26352e);
   border: 1px solid var(--sf-border, #dce4df);
 }
 
-button.secondary:hover:not(:disabled) {
+button.secondary:hover:not(:disabled),
+button[class*='--secondary']:hover:not(:disabled),
+a[class*='--secondary']:hover {
   background: var(--sf-table-head, #e8efeb);
+  color: var(--sf-text, #26352e);
 }
 
 button.tiny {
