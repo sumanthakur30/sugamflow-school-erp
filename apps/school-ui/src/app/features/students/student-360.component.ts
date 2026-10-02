@@ -33,12 +33,17 @@ export class Student360Component implements OnInit {
   apaarConsent = 'PENDING';
   apaarId = '';
   savingApaar = false;
+  campuses: Array<{ branchKey: string; name: string }> = [];
+  campusesLoaded = false;
+  targetBranchId = '';
+  transferring = false;
 
   ngOnInit(): void {
     this.route.paramMap.subscribe((pm) => {
       this.studentId = pm.get('id') || '';
       if (this.studentId) {
         this.load();
+        this.loadCampuses();
       }
     });
   }
@@ -52,6 +57,7 @@ export class Student360Component implements OnInit {
         const answers = d?.student?.answers ?? {};
         this.apaarConsent = answers.apaarConsent || 'PENDING';
         this.apaarId = answers.apaarId || '';
+        this.syncCampusTarget();
         this.portalUsername = this.admissionNo() || this.portalUsername;
         this.loading = false;
       },
@@ -64,6 +70,64 @@ export class Student360Component implements OnInit {
 
   setTab(t: string): void {
     this.tab = t;
+  }
+
+  loadCampuses(): void {
+    this.campusesLoaded = false;
+    this.api.get<any>('/api/config/branches/bootstrap').subscribe({
+      next: (boot) => {
+        this.campuses = (boot?.branches ?? [])
+          .map((b: any) => ({
+            branchKey: String(b.branchKey || ''),
+            name: String(b.name || b.branchKey || ''),
+          }))
+          .filter((b: { branchKey: string }) => !!b.branchKey);
+        this.campusesLoaded = true;
+        this.syncCampusTarget();
+      },
+      error: () => {
+        this.campusesLoaded = true;
+      },
+    });
+  }
+
+  private syncCampusTarget(): void {
+    const current = String(this.data?.student?.branchId || this.auth.getBranchId() || '');
+    if (!this.targetBranchId || this.targetBranchId === current) {
+      this.targetBranchId = this.campuses.find((b) => b.branchKey !== current)?.branchKey || '';
+    }
+  }
+
+  currentCampusName(): string {
+    const key = String(this.data?.student?.branchId || '');
+    const match = this.campuses.find((b) => b.branchKey === key);
+    return match?.name || key || 'This campus';
+  }
+
+  otherCampuses(): Array<{ branchKey: string; name: string }> {
+    const key = String(this.data?.student?.branchId || '');
+    return this.campuses.filter((b) => b.branchKey !== key);
+  }
+
+  transferCampus(): void {
+    if (!this.studentId || !this.targetBranchId) return;
+    this.transferring = true;
+    this.error = '';
+    this.api
+      .post('/api/student/lifecycle/campus-transfer', {
+        studentId: this.studentId,
+        targetBranchId: this.targetBranchId,
+      })
+      .subscribe({
+        next: () => {
+          this.transferring = false;
+          this.load();
+        },
+        error: (err) => {
+          this.transferring = false;
+          this.error = err?.error?.message ?? 'Could not move the student to that campus';
+        },
+      });
   }
 
   saveApaar(): void {
