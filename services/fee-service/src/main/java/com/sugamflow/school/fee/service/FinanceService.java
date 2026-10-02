@@ -440,6 +440,7 @@ public class FinanceService {
                 stringOr(studentAnswers.get("classSection"), stringOr(profile.get("classSection"), "")));
       }
     }
+    applyBedAndRoute(scope, studentRef, studentAnswers);
 
     Map<String, Object> headIndex = headIndex(scope);
     List<Map<String, Object>> lines = new ArrayList<>();
@@ -464,6 +465,7 @@ public class FinanceService {
       BigDecimal hostelFee =
           firstPositive(
               toDecimal(body.get("hostelMonthlyFee")),
+              toDecimal(studentAnswers.get("hostelMonthlyFee")),
               truthy(studentAnswers.get("hostel"))
                   ? toDecimal(settings.get("defaultHostelMonthlyFee"))
                   : BigDecimal.ZERO);
@@ -480,6 +482,7 @@ public class FinanceService {
       BigDecimal transportFare =
           firstPositive(
               toDecimal(body.get("transportFare")),
+              toDecimal(studentAnswers.get("transportFare")),
               truthy(studentAnswers.get("transport"))
                   ? toDecimal(settings.get("defaultTransportFare"))
                   : BigDecimal.ZERO);
@@ -1115,6 +1118,33 @@ public class FinanceService {
     if (a != null && a.compareTo(BigDecimal.ZERO) > 0) return a;
     if (b != null && b.compareTo(BigDecimal.ZERO) > 0) return b;
     return BigDecimal.ZERO;
+  }
+
+  private static BigDecimal firstPositive(BigDecimal a, BigDecimal b, BigDecimal c) {
+    return firstPositive(a, firstPositive(b, c));
+  }
+
+  @SuppressWarnings("unchecked")
+  private void applyBedAndRoute(
+      TenantScope scope, String studentRef, Map<String, Object> studentAnswers) {
+    if (studentRef == null || studentRef.isBlank()) {
+      return;
+    }
+    Map<String, Object> ops = studentProfiles.opsByAdmissionNo(scope, studentRef);
+    if (ops.get("bed") instanceof Map<?, ?> bed && !bed.isEmpty() && bed.get("releasedAt") == null) {
+      studentAnswers.put("hostel", true);
+      if (bed.get("monthlyFee") != null) {
+        studentAnswers.put("hostelMonthlyFee", bed.get("monthlyFee"));
+      }
+    }
+    if (ops.get("route") instanceof Map<?, ?> route
+        && !route.isEmpty()
+        && !"ENDED".equalsIgnoreCase(String.valueOf(route.get("status")))) {
+      studentAnswers.put("transport", true);
+      if (route.get("fareAmount") != null) {
+        studentAnswers.put("transportFare", route.get("fareAmount"));
+      }
+    }
   }
 
   private static boolean truthy(Object v) {

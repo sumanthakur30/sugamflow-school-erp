@@ -6,6 +6,7 @@ import com.sugamflow.school.student.persistence.entity.CampusDeskItemEntity;
 import com.sugamflow.school.student.persistence.repo.CampusDeskItemRepository;
 import com.sugamflow.school.student.web.StudentException;
 import java.time.Instant;
+import java.time.ZoneId;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -91,6 +92,9 @@ public class CampusDeskService {
     if (note != null) {
       entity.setNote(note);
     }
+    if ("LEAVE".equals(entity.getKind()) && "APPROVED".equals(entity.getStatus())) {
+      applyLeaveBalance(scope, entity);
+    }
     entity.setUpdatedAt(Instant.now());
     return toDto(repository.save(entity));
   }
@@ -136,6 +140,106 @@ public class CampusDeskService {
     return text.isEmpty() ? fallback : text;
   }
 
+  private void applyLeaveBalance(TenantScope scope, CampusDeskItemEntity entity) {
+    int requested = requestedDays(entity);
+    int remaining = remainingDays(scope, entity, true);
+    if (requested > remaining) {
+      throw new StudentException(
+          "LEAVE_BALANCE",
+          "Only " + remaining + " day(s) remain for this leave type");
+    }
+    Map<String, Object> payload =
+        entity.getPayload() == null ? new LinkedHashMap<>() : new LinkedHashMap<>(entity.getPayload());
+    payload.put("days", requested);
+    payload.put("remainingDays", remaining - requested);
+    entity.setPayload(payload);
+  }
+
+  private int remainingDays(TenantScope scope, CampusDeskItemEntity entity, boolean excludeSelf) {
+    return Math.max(0, quotaFor(scope, entity) - usedDays(scope, entity, excludeSelf));
+  }
+
+  private int quotaFor(TenantScope scope, CampusDeskItemEntity leave) {
+    String type = leaveType(leave);
+    return repository.findByOrganizationIdAndKindOrderByCreatedAtDesc(scope.organizationId(), "LEAVE_TYPE")
+        .stream()
+        .filter(item -> sameCampus(scope, item))
+        .filter(item -> type.equalsIgnoreCase(item.getTitle()))
+        .map(CampusDeskService::yearlyQuota)
+        .findFirst()
+        .orElse(12);
+  }
+
+  private int usedDays(TenantScope scope, CampusDeskItemEntity leave, boolean excludeSelf) {
+    String type = leaveType(leave);
+    String person = personKey(leave);
+    int year = leave.getCreatedAt() == null
+        ? Instant.now().atZone(ZoneId.of("Asia/Kolkata")).getYear()
+        : leave.getCreatedAt().atZone(ZoneId.of("Asia/Kolkata")).getYear();
+    int used = 0;
+    for (CampusDeskItemEntity item :
+        repository.findByOrganizationIdAndKindOrderByCreatedAtDesc(scope.organizationId(), "LEAVE")) {
+      if (!sameCampus(scope, item) || !"APPROVED".equalsIgnoreCase(item.getStatus())) {
+        continue;
+      }
+      if (excludeSelf && item.getId().equals(leave.getId())) {
+        continue;
+      }
+      if (!type.equalsIgnoreCase(leaveType(item)) || !person.equalsIgnoreCase(personKey(item))) {
+        continue;
+      }
+      int itemYear = item.getCreatedAt().atZone(ZoneId.of("Asia/Kolkata")).getYear();
+      if (itemYear == year) {
+        used += requestedDays(item);
+      }
+    }
+    return used;
+  }
+
+  private static int yearlyQuota(CampusDeskItemEntity type) {
+    Object raw = type.getPayload() == null ? null : type.getPayload().get("yearlyQuota");
+    if (raw instanceof Number number) {
+      return Math.max(0, number.intValue());
+    }
+    if (raw != null) {
+      try {
+        return Math.max(0, Integer.parseInt(String.valueOf(raw).trim()));
+      } catch (NumberFormatException ignored) {
+        return 12;
+      }
+    }
+    return 12;
+  }
+
+  private static int requestedDays(CampusDeskItemEntity leave) {
+    Object raw = leave.getPayload() == null ? null : leave.getPayload().get("days");
+    if (raw instanceof Number number && number.intValue() > 0) {
+      return number.intValue();
+    }
+    if (raw != null) {
+      try {
+        int parsed = Integer.parseInt(String.valueOf(raw).trim());
+        if (parsed > 0) {
+          return parsed;
+        }
+      } catch (NumberFormatException ignored) {
+        return 1;
+      }
+    }
+    return 1;
+  }
+
+  private static String leaveType(CampusDeskItemEntity leave) {
+    Object key = leave.getPayload() == null ? null : leave.getPayload().get("catalogKey");
+    String fromPayload = text(key, null);
+    return fromPayload != null ? fromPayload : text(leave.getTitle(), "LEAVE");
+  }
+
+  private static String personKey(CampusDeskItemEntity leave) {
+    String ref = text(leave.getSubjectRef(), null);
+    return ref != null ? ref : text(leave.getSubjectName(), "");
+  }
+
   private static String blankToNull(String value) {
     return value == null || value.isBlank() ? null : value;
   }
@@ -151,6 +255,13 @@ public class CampusDeskService {
     row.put("title", entity.getTitle());
     row.put("note", entity.getNote());
     row.put("payload", entity.getPayload());
+    if ("LEAVE".equals(entity.getKind())) {
+      row.put("requestedDays", requestedDays(entity));
+      row.put("remainingDays", remainingDays(TenantContext.require(), entity, false));
+    }
+    if ("LEAVE_TYPE".equals(entity.getKind())) {
+      row.put("yearlyQuota", yearlyQuota(entity));
+    }
     row.put("createdBy", entity.getCreatedBy());
     row.put("createdAt", entity.getCreatedAt().toString());
     row.put("updatedAt", entity.getUpdatedAt().toString());

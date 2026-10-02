@@ -31,3 +31,17 @@ label {
 .actions {
   margin-top: 0.5rem;
 }
+
+@media (max-width: 640px) {
+  .hw-head {
+    flex-direction: column;
+  }
+
+  label input,
+  label select,
+  label textarea,
+  .actions button {
+    width: 100%;
+    min-height: 2.75rem;
+  }
+}

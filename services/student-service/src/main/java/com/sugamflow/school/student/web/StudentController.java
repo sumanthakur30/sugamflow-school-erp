@@ -91,6 +91,18 @@ public class StudentController {
     return ApiResponse.ok(student360.profile(id));
   }
 
+  @PostMapping("/students/{id}/remarks")
+  public ApiResponse<Map<String, Object>> addRemark(
+      @PathVariable("id") UUID id, @RequestBody Map<String, Object> body) {
+    return ApiResponse.ok(student360.addRemark(id, body));
+  }
+
+  @PostMapping("/students/{id}/messages")
+  public ApiResponse<Map<String, Object>> addMessage(
+      @PathVariable("id") UUID id, @RequestBody Map<String, Object> body) {
+    return ApiResponse.ok(student360.addMessage(id, body));
+  }
+
   @GetMapping("/students/{id}/audit")
   public ApiResponse<PageResult<Map<String, Object>>> audit(
       @PathVariable("id") UUID id,

@@ -7,6 +7,7 @@ import com.sugamflow.school.common.api.PageResult;
 import com.sugamflow.school.payroll.config.PayrollProperties;
 import com.sugamflow.school.payroll.integration.ConfigEngineClient;
 import com.sugamflow.school.payroll.integration.NotificationDeliveryClient;
+import com.sugamflow.school.payroll.integration.ApprovedLeaveClient;
 import com.sugamflow.school.payroll.integration.StaffAttendanceClient;
 import com.sugamflow.school.payroll.persistence.entity.PayrollRecordEntity;
 import com.sugamflow.school.payroll.persistence.repo.PayrollRecordRepository;
@@ -49,6 +50,7 @@ public class PayrollRecordService {
   private final PayrollProperties properties;
   private final PayrollOpsService opsService;
   private final StaffAttendanceClient staffAttendance;
+  private final ApprovedLeaveClient approvedLeave;
 
   public PayrollRecordService(
       PayrollRecordRepository repository,
@@ -56,13 +58,15 @@ public class PayrollRecordService {
       NotificationDeliveryClient notificationDelivery,
       PayrollProperties properties,
       PayrollOpsService opsService,
-      StaffAttendanceClient staffAttendance) {
+      StaffAttendanceClient staffAttendance,
+      ApprovedLeaveClient approvedLeave) {
     this.repository = repository;
     this.engines = engines;
     this.notificationDelivery = notificationDelivery;
     this.properties = properties;
     this.opsService = opsService;
     this.staffAttendance = staffAttendance;
+    this.approvedLeave = approvedLeave;
   }
 
   @Transactional(readOnly = true)
@@ -874,6 +878,14 @@ public class PayrollRecordService {
           "ATTENDANCE_REQUIRED",
           "Submit staff attendance for " + yearMonth + " before this payslip can be finalized");
     }
+    Map<String, Object> answers =
+        entity.getAnswers() == null ? new LinkedHashMap<>() : new LinkedHashMap<>(entity.getAnswers());
+    String employeeId = String.valueOf(answers.getOrDefault("employeeId", "")).trim();
+    String employeeName = String.valueOf(answers.getOrDefault("employeeName", "")).trim();
+    answers.put(
+        "approvedLeaveDays",
+        approvedLeave.approvedDays(scope, yearMonth, employeeId, employeeName));
+    entity.setAnswers(answers);
   }
 
   private static String payrollMonth(PayrollRecordEntity entity) {

@@ -7,7 +7,7 @@
     </p>
     <h2>{{ data?.summary?.displayName || 'Student 360' }}</h2>
     <p>
-      Unified profile — demographics, guardians, campus ops, fees, library, attendance, exams, and lifecycle.
+      Unified desk — profile, documents, remarks, communication, fees, attendance, exams, and lifecycle.
     </p>
   </div>
 
@@ -258,6 +258,72 @@
           </ul>
         }
       </div>
+    }
+
+    @if (tab === 'documents') {
+      <ul class="record-list">
+        @for (d of data.documents || []; track d.id) {
+          <li class="panel">
+            <strong>{{ d.fileName || d.documentType || 'Document' }}</strong>
+            <p class="muted">{{ d.documentType }} · {{ d.issuedAt }}</p>
+            @if (d.downloadPath) {
+              <a [href]="d.downloadPath" target="_blank" rel="noopener">Download</a>
+            }
+          </li>
+        } @empty {
+          <li class="panel muted">No documents on file.</li>
+        }
+      </ul>
+    }
+
+    @if (tab === 'remarks') {
+      <form class="panel desk-form" (ngSubmit)="addRemark()">
+        <label>
+          Staff remark
+          <textarea name="remark" rows="3" [(ngModel)]="remarkBody" required></textarea>
+        </label>
+        <button type="submit" [disabled]="savingNote">Save remark</button>
+      </form>
+      <ul class="record-list">
+        @for (n of data.remarks || []; track n.id) {
+          <li class="panel">
+            <p>{{ n.body }}</p>
+            <p class="muted">{{ n.createdBy }} · {{ n.createdAt }}</p>
+          </li>
+        } @empty {
+          <li class="panel muted">No remarks yet.</li>
+        }
+      </ul>
+    }
+
+    @if (tab === 'communication') {
+      <form class="panel desk-form" (ngSubmit)="addMessage()">
+        <label>
+          Channel
+          <select name="channel" [(ngModel)]="messageChannel">
+            <option value="DESK">Desk</option>
+            <option value="SMS">SMS</option>
+            <option value="EMAIL">Email</option>
+            <option value="WHATSAPP">WhatsApp</option>
+          </select>
+        </label>
+        <label>
+          Message
+          <textarea name="message" rows="3" [(ngModel)]="messageBody" required></textarea>
+        </label>
+        <button type="submit" [disabled]="savingNote">Log message</button>
+      </form>
+      <ul class="record-list">
+        @for (n of data.communication || []; track n.id) {
+          <li class="panel">
+            <strong>{{ n.channel || 'DESK' }}</strong>
+            <p>{{ n.body }}</p>
+            <p class="muted">{{ n.createdBy }} · {{ n.createdAt }}</p>
+          </li>
+        } @empty {
+          <li class="panel muted">No messages logged.</li>
+        }
+      </ul>
     }
 
     @if (tab === 'lifecycle') {

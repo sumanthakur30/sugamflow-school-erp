@@ -349,9 +349,8 @@
                         <div class="student-identity-text">
                           <a
                             class="student-name"
-                            [routerLink]="['/admin/students']"
-                            [queryParams]="{ id: row.id }"
-                            [title]="'Open profile for ' + displayName(row)"
+                            [routerLink]="['/admin/students', row.id, '360']"
+                            [title]="'Open Student 360 for ' + displayName(row)"
                           >
                             {{ displayName(row) }}
                           </a>
