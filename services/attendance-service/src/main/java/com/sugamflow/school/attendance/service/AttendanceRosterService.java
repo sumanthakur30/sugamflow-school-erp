@@ -120,6 +120,74 @@ public class AttendanceRosterService {
     return result;
   }
 
+  /** Present-day share for a section over the last 180 daily rosters, for report cards. */
+  @Transactional(readOnly = true)
+  public Map<String, Object> sectionSummary(UUID sectionId) {
+    TenantScope scope = TenantContext.require();
+    if (sectionId == null) {
+      throw new AttendanceException("VALIDATION", "sectionId is required");
+    }
+    requireSectionAccess(scope, sectionId);
+    LocalDate to = LocalDate.now();
+    LocalDate from = to.minusDays(180);
+    List<AttendanceSessionEntity> found =
+        sessions.findByOrganizationIdAndSectionIdAndAttendanceDateBetweenOrderByAttendanceDateDesc(
+            scope.organizationId(), sectionId, from, to);
+    List<AttendanceSessionEntity> daily =
+        found.stream().filter(s -> s.getPeriodId() == null).toList();
+    List<AttendanceSessionEntity> use = daily.isEmpty() ? found : daily;
+
+    Map<String, double[]> tally = new LinkedHashMap<>();
+    Map<String, String> studentIds = new LinkedHashMap<>();
+    Map<String, String> admissions = new LinkedHashMap<>();
+    for (AttendanceSessionEntity session : use) {
+      for (AttendanceMarkEntity mark : marks.findBySessionIdOrderByStudentNameAsc(session.getId())) {
+        String key =
+            mark.getStudentId() != null
+                ? "id:" + mark.getStudentId()
+                : "adm:" + mark.getAdmissionNo();
+        if (key.endsWith("null") || key.endsWith(":")) {
+          continue;
+        }
+        double[] box = tally.computeIfAbsent(key, k -> new double[2]);
+        box[1] += 1;
+        String status = mark.getStatus() == null ? "" : mark.getStatus().trim().toUpperCase(Locale.ROOT);
+        if ("PRESENT".equals(status) || "LATE".equals(status)) {
+          box[0] += 1;
+        } else if ("HALF_DAY".equals(status)) {
+          box[0] += 0.5;
+        }
+        if (mark.getStudentId() != null) {
+          studentIds.put(key, mark.getStudentId().toString());
+        }
+        if (mark.getAdmissionNo() != null) {
+          admissions.put(key, mark.getAdmissionNo());
+        }
+      }
+    }
+
+    List<Map<String, Object>> rows = new ArrayList<>();
+    for (Map.Entry<String, double[]> entry : tally.entrySet()) {
+      double present = entry.getValue()[0];
+      double working = entry.getValue()[1];
+      Map<String, Object> row = new LinkedHashMap<>();
+      row.put("studentId", studentIds.get(entry.getKey()));
+      row.put("admissionNo", admissions.get(entry.getKey()));
+      row.put("presentDays", present);
+      row.put("workingDays", (int) working);
+      row.put(
+          "percentage",
+          working <= 0 ? null : Math.round((present * 1000.0) / working) / 10.0);
+      rows.add(row);
+    }
+    Map<String, Object> out = new LinkedHashMap<>();
+    out.put("sectionId", sectionId.toString());
+    out.put("from", from.toString());
+    out.put("to", to.toString());
+    out.put("students", rows);
+    return out;
+  }
+
   /** Printable class attendance register (PDF/Excel/CSV via report-builder tabular export). */
   @Transactional(readOnly = true)
   public Map<String, Object> registerExport(

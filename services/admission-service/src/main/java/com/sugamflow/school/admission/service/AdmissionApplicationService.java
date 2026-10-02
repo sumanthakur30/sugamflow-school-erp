@@ -283,6 +283,7 @@ public class AdmissionApplicationService {
       throw new AdmissionException("FORM_MISSING", "Form definition not found: " + formKey);
     }
     validateMandatory(form, answers);
+    refuseOpenDuplicate(scope, stringOr(answers.get("mobile"), ""));
 
     Map<String, Object> workflow = engines.getWorkflow(scope, workflowKey);
     if (workflow == null) {
@@ -408,6 +409,7 @@ public class AdmissionApplicationService {
             "Online admission is not enabled for this school (FEATURE_WEBSITE_ADMISSION).");
       }
       requireModuleEnabled(scope);
+      refuseOpenDuplicate(scope, mobile);
 
       Map<String, Object> answers = new LinkedHashMap<>();
       answers.put("fullName", fullName);
@@ -1307,6 +1309,43 @@ public class AdmissionApplicationService {
       out.add(slim);
     }
     return out;
+  }
+
+  private void refuseOpenDuplicate(TenantScope scope, String mobile) {
+    if (mobile == null || mobile.isBlank() || scope == null) {
+      return;
+    }
+    String branch = scope.branchId();
+    String session = scope.academicSessionId();
+    boolean branchBlank = branch == null || branch.isBlank();
+    boolean sessionBlank = session == null || session.isBlank();
+    List<AdmissionApplicationEntity> open =
+        repository.findOpenByMobile(
+            scope.organizationId(),
+            branchBlank ? "" : branch,
+            branchBlank,
+            sessionBlank ? "" : session,
+            sessionBlank,
+            mobile.trim());
+    if (open.isEmpty()) {
+      return;
+    }
+    AdmissionApplicationEntity existing = open.get(0);
+    String name = "applicant";
+    if (existing.getAnswers() != null && existing.getAnswers().get("fullName") != null) {
+      name = String.valueOf(existing.getAnswers().get("fullName"));
+    }
+    throw new AdmissionException(
+        "DUPLICATE_MOBILE",
+        "An open application already exists for "
+            + mobile.trim()
+            + ": "
+            + name
+            + " ("
+            + existing.getId()
+            + ", "
+            + existing.getStatus()
+            + ")");
   }
 
   private static String stringOr(Object value, String fallback) {

@@ -113,6 +113,7 @@ public class PayrollProperties {
     }
 
     private String attendanceBaseUrl = "http://localhost:8192";
+    private String studentBaseUrl = "http://localhost:8191";
 
     public String getPublicApiBaseUrl() {
       return publicApiBaseUrl;
@@ -128,6 +129,14 @@ public class PayrollProperties {
 
     public void setAttendanceBaseUrl(String attendanceBaseUrl) {
       this.attendanceBaseUrl = attendanceBaseUrl;
+    }
+
+    public String getStudentBaseUrl() {
+      return studentBaseUrl;
+    }
+
+    public void setStudentBaseUrl(String studentBaseUrl) {
+      this.studentBaseUrl = studentBaseUrl;
     }
   }
 }

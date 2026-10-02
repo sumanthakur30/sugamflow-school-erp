@@ -205,3 +205,25 @@
     margin: 0.75rem 0.85rem;
   }
 }
+
+@media (max-width: 640px) {
+  .portal-shell main {
+    padding: 0.85rem 0.7rem 2.5rem;
+  }
+
+  .portal-shell main :is(input, select, textarea, button) {
+    max-width: 100%;
+    min-height: 2.75rem;
+    font-size: 1rem;
+  }
+
+  .portal-shell main .table-wrap,
+  .portal-shell main table {
+    max-width: 100%;
+  }
+
+  .portal-shell .logout,
+  .portal-shell nav a {
+    min-height: 2.75rem;
+  }
+}
