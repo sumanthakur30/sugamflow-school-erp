@@ -47,12 +47,38 @@
 
   @if (mode === 'documents') {
     <div class="panel">
-      <p>Print packs prepared by the school. Open them from Reports when you are signed in as staff.</p>
-      <ul>
-        @for (doc of documents; track doc.key) {
-          <li>{{ doc.label }}</li>
-        }
-      </ul>
+      <h2>Report cards</h2>
+      @if (!reportCards.length) {
+        <p class="muted">No published report card yet.</p>
+      }
+      @for (card of reportCards; track card.sectionId + card.termKey + (card.student?.admissionNo || '')) {
+        <p>
+          {{ card.student?.studentName || card.student?.admissionNo }} · {{ card.termKey }}
+          <button type="button" class="btn secondary" (click)="downloadReport(card)" [disabled]="busy">
+            Download report card
+          </button>
+        </p>
+      }
+    </div>
+    <div class="panel">
+      <h2>ID card and transfer certificate</h2>
+      @if (admissionNos.length > 1) {
+        <label>
+          Child
+          <select [(ngModel)]="selectedAdmission" name="childAdmission">
+            @for (no of admissionNos; track no) {
+              <option [value]="no">{{ no }}</option>
+            }
+          </select>
+        </label>
+      } @else if (selectedAdmission) {
+        <p class="muted">Admission {{ selectedAdmission }}</p>
+      }
+      @for (doc of packs; track doc.key) {
+        <button type="button" class="btn secondary" (click)="downloadPack(doc.key)" [disabled]="busy || !selectedAdmission">
+          Download {{ doc.label }}
+        </button>
+      }
     </div>
   }
 

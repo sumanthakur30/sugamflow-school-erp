@@ -2,6 +2,7 @@ package com.sugamflow.school.reportbuilder.web;
 
 import com.sugamflow.school.common.api.ApiResponse;
 import com.sugamflow.school.common.tenant.TenantContext;
+import com.sugamflow.school.reportbuilder.service.ParentDocumentService;
 import com.sugamflow.school.reportbuilder.service.ReportElementCatalog;
 import com.sugamflow.school.reportbuilder.service.ReportTemplateService;
 import java.util.List;
@@ -21,9 +22,12 @@ import org.springframework.web.server.ResponseStatusException;
 @RequestMapping("/api/reports")
 public class ReportBuilderController {
   private final ReportTemplateService service;
+  private final ParentDocumentService parentDocuments;
 
-  public ReportBuilderController(ReportTemplateService service) {
+  public ReportBuilderController(
+      ReportTemplateService service, ParentDocumentService parentDocuments) {
     this.service = service;
+    this.parentDocuments = parentDocuments;
   }
 
   @GetMapping("/bootstrap")
@@ -63,6 +67,16 @@ public class ReportBuilderController {
     try {
       return ApiResponse.ok(service.save(TenantContext.require().organizationId(), key, body));
     } catch (IllegalStateException ex) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, ex.getMessage());
+    }
+  }
+
+  @PostMapping("/mine/{templateKey}")
+  public ApiResponse<Map<String, Object>> mine(
+      @PathVariable("templateKey") String templateKey, @RequestBody Map<String, Object> body) {
+    try {
+      return ApiResponse.ok(parentDocuments.download(templateKey, body));
+    } catch (IllegalArgumentException | IllegalStateException ex) {
       throw new ResponseStatusException(HttpStatus.BAD_REQUEST, ex.getMessage());
     }
   }

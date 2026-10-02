@@ -6,6 +6,7 @@ import { Subscription, forkJoin, of } from 'rxjs';
 import { catchError } from 'rxjs/operators';
 import { ApiService } from '../../core/api.service';
 import { TenantContextService } from '../../core/tenant-context.service';
+import { isDemoOrganization } from '../../core/tenant-context.util';
 import { ModuleBootstrapService } from '../../core/module-bootstrap.service';
 import { ListToolbarComponent } from '../../shared/list-toolbar/list-toolbar.component';
 import { ListPagerComponent } from '../../shared/list-toolbar/list-pager.component';
@@ -82,6 +83,7 @@ export class FinanceComponent implements OnInit, OnDestroy {
   tab: FinanceTab = 'overview';
   globalQ = '';
 
+  readonly demoTenant = isDemoOrganization();
   paymentGatewayEnabled = false;
   accountingEnabled = false;
   paymentMode = 'simulate';
@@ -763,7 +765,37 @@ export class FinanceComponent implements OnInit, OnDestroy {
   }
 
   reminderStub(row: OutstandingRow, channel: string): void {
-    this.status = `${channel} reminder queued for ${row.studentName} (${row.mobile}) — wire notification template next.`;
+    const admissionNo = row.admissionNo && row.admissionNo !== '—' ? row.admissionNo : '';
+    if (!admissionNo) {
+      this.error = 'This demand has no admission number, so a reminder cannot be queued';
+      return;
+    }
+    this.busy = true;
+    this.error = '';
+    this.api
+      .post<any>('/api/fee/due-reminders/run', {
+        admissionNo,
+        channel: channel.toUpperCase() === 'WHATSAPP' ? 'WHATSAPP' : channel.toUpperCase(),
+      })
+      .subscribe({
+        next: (result) => {
+          this.busy = false;
+          if (result?.disabled) {
+            this.status = 'Due reminders are turned off in fee settings';
+            return;
+          }
+          const reminded = Number(result?.reminded || 0);
+          const skipped = Number(result?.skipped || 0);
+          this.status =
+            reminded > 0
+              ? `${channel} reminder queued for ${row.studentName} (${reminded} demand${reminded === 1 ? '' : 's'})`
+              : `No reminder queued for ${row.studentName}. ${skipped} demand${skipped === 1 ? '' : 's'} skipped.`;
+        },
+        error: (err) => {
+          this.busy = false;
+          this.error = err?.error?.message ?? 'Could not queue the fee reminder';
+        },
+      });
   }
 
   saveHead(): void {

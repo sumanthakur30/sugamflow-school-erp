@@ -52,5 +52,36 @@
         </button>
       </div>
     </section>
+
+    <section class="panel">
+      <h3>Export log</h3>
+      <p>Each directory or UDISE+ download is recorded with who ran it and whether Aadhaar was in the file.</p>
+      @if (!exports.length) {
+        <p>No exports recorded yet.</p>
+      } @else {
+        <table>
+          <thead>
+            <tr>
+              <th>When</th>
+              <th>Export</th>
+              <th>Rows</th>
+              <th>Aadhaar</th>
+              <th>Role</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (row of exports; track row.id) {
+              <tr>
+                <td>{{ row.createdAt }}</td>
+                <td>{{ row.exportKind }}</td>
+                <td>{{ row.rowCount }}</td>
+                <td>{{ row.includesAadhaar ? 'Included' : 'Not included' }}</td>
+                <td>{{ row.actorRole }}</td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      }
+    </section>
   }
 </section>

@@ -39,6 +39,7 @@ export class AttendanceRosterComponent implements OnInit {
     { value: 'ABSENT', label: 'Absent' },
     { value: 'LATE', label: 'Late' },
     { value: 'LEAVE', label: 'Leave' },
+    { value: 'HALF_DAY', label: 'Half day' },
     { value: 'NOT_MARKED', label: 'Not marked' },
   ];
 
@@ -177,6 +178,7 @@ export class AttendanceRosterComponent implements OnInit {
         else if (student.status === 'ABSENT') counts.absent++;
         else if (student.status === 'LATE') counts.late++;
         else if (student.status === 'LEAVE') counts.leave++;
+        else if (student.status === 'HALF_DAY') counts.halfDay++;
         else counts.notMarked++;
         return counts;
       },
@@ -437,7 +439,24 @@ export class AttendanceRosterComponent implements OnInit {
   }
 
   private emptySummary(): AttendanceSummary {
-    return { total: 0, present: 0, absent: 0, late: 0, leave: 0, notMarked: 0 };
+    return { total: 0, present: 0, absent: 0, late: 0, leave: 0, halfDay: 0, notMarked: 0 };
+  }
+
+  markShort(option: string): string {
+    if (option === 'PRESENT') return 'P';
+    if (option === 'ABSENT') return 'A';
+    if (option === 'LATE') return 'L';
+    if (option === 'HALF_DAY') return 'H';
+    return 'Lv';
+  }
+
+  markLabel(option: string): string {
+    if (option === 'HALF_DAY') return 'Half day';
+    if (option === 'LEAVE') return 'Leave';
+    if (option === 'PRESENT') return 'Present';
+    if (option === 'ABSENT') return 'Absent';
+    if (option === 'LATE') return 'Late';
+    return option;
   }
 
   private todayLocal(): string {

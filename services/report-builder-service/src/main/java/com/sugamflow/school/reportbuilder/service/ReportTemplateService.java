@@ -104,6 +104,16 @@ public class ReportTemplateService {
   @Transactional
   public Map<String, Object> render(String org, String key, Map<String, Object> body) {
     requireFeature();
+    return renderDocument(org, key, body);
+  }
+
+  /** Parent ID card and transfer certificate. Caller already checked the child. */
+  @Transactional
+  public Map<String, Object> renderIssued(String org, String key, Map<String, Object> body) {
+    return renderDocument(org, key, body);
+  }
+
+  private Map<String, Object> renderDocument(String org, String key, Map<String, Object> body) {
     Map<String, Object> template = get(org, key);
     if (template == null) {
       throw new IllegalArgumentException("Template not found: " + key);

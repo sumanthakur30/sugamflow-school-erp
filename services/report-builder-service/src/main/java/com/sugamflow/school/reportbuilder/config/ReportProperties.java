@@ -13,6 +13,7 @@ public class ReportProperties {
 
   public static class Integrations {
     private String subscriptionBaseUrl = "http://localhost:8182";
+    private String studentBaseUrl = "http://localhost:8191";
 
     public String getSubscriptionBaseUrl() {
       return subscriptionBaseUrl;
@@ -20,6 +21,14 @@ public class ReportProperties {
 
     public void setSubscriptionBaseUrl(String subscriptionBaseUrl) {
       this.subscriptionBaseUrl = subscriptionBaseUrl;
+    }
+
+    public String getStudentBaseUrl() {
+      return studentBaseUrl;
+    }
+
+    public void setStudentBaseUrl(String studentBaseUrl) {
+      this.studentBaseUrl = studentBaseUrl;
     }
   }
 }

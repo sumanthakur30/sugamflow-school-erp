@@ -1,0 +1,20 @@
+<section class="unavailable">
+  <p class="brand">SugamFlow School</p>
+  <h1>{{ planBlocked ? 'Module not on this plan' : 'School modules could not be loaded' }}</h1>
+  <p class="copy">
+    @if (planBlocked) {
+      This area is turned off for the current subscription. Ask the school owner to enable it, or return after the plan is updated.
+    } @else {
+      Paid modules stay closed until the subscription service answers. Retry to load the plan again.
+    }
+  </p>
+  @if (stillDown) {
+    <p class="copy warn">The plan is still unavailable. Try again in a moment.</p>
+  }
+  @if (!planBlocked) {
+    <button type="button" (click)="retry()" [disabled]="retrying">
+      {{ retrying ? 'Checking plan…' : 'Retry' }}
+    </button>
+  }
+  <button type="button" class="secondary" (click)="signOut()">Sign out</button>
+</section>
