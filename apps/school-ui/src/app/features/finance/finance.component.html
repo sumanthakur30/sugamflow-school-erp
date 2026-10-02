@@ -732,19 +732,21 @@
             </div>
             <div class="form-actions actions">
               <button type="button" (click)="createIntent()" [disabled]="busy">Create intent</button>
-              <button
-                type="button"
-                class="secondary"
-                (click)="simulateCapture()"
-                [disabled]="
-                  busy ||
-                  !lastIntent ||
-                  lastIntent.status !== 'PENDING' ||
-                  (lastIntent.adapter && lastIntent.adapter !== 'SIMULATED')
-                "
-              >
-                Simulate capture
-              </button>
+              @if (demoTenant) {
+                <button
+                  type="button"
+                  class="secondary"
+                  (click)="simulateCapture()"
+                  [disabled]="
+                    busy ||
+                    !lastIntent ||
+                    lastIntent.status !== 'PENDING' ||
+                    (lastIntent.adapter && lastIntent.adapter !== 'SIMULATED')
+                  "
+                >
+                  Simulate capture
+                </button>
+              }
             </div>
             @if (lastIntent) {
               <div class="fin-intent">

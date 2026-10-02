@@ -1,8 +1,9 @@
 import { inject } from '@angular/core';
-import { CanActivateFn, Router } from '@angular/router';
+import { CanActivateFn, Router, UrlTree } from '@angular/router';
 import { map } from 'rxjs';
 import { AuthSessionService } from './auth-session.service';
 import { EntitlementsService } from './entitlements.service';
+import { featureDeniedUrl, roleHome } from './role-home';
 
 /** Route data: { feature?: string, roles?: string[], permissions?: string[] } */
 export const featureGuard: CanActivateFn = (route) => {
@@ -43,32 +44,21 @@ export const featureGuard: CanActivateFn = (route) => {
     return true;
   }
 
+  const decide = (flags: Record<string, boolean> | undefined): true | UrlTree => {
+    if (!flags) {
+      // Do not open the module. /modules-unavailable is not feature-gated, so this cannot loop.
+      return router.createUrlTree(['/modules-unavailable']);
+    }
+    return flags[feature] === true ? true : router.parseUrl(featureDeniedUrl(role, feature));
+  };
+
   const current = entitlements.current();
-  if (current?.featureFlags) {
-    return current.featureFlags[feature] === true
-      ? true
-      : router.createUrlTree([roleHome(role)]);
+  if (current?.loadState === 'ready' && current.featureFlags) {
+    return decide(current.featureFlags);
+  }
+  if (current?.loadState === 'unavailable') {
+    return router.createUrlTree(['/modules-unavailable']);
   }
 
-  return entitlements.load().pipe(
-    map((e) => {
-      const flags = e?.featureFlags;
-      // Fail open when subscription/entitlements is down — otherwise every
-      // guarded route redirects to /admin/admission and loops into a blank page.
-      if (!flags) {
-        return true;
-      }
-      return flags[feature] === true ? true : router.createUrlTree([roleHome(role)]);
-    }),
-  );
+  return entitlements.load().pipe(map((e) => decide(e.featureFlags)));
 };
-
-function roleHome(role: string): string {
-  if (role === 'PARENT' || role === 'GUARDIAN' || role === 'STUDENT') {
-    return '/parent';
-  }
-  if (role === 'TEACHER') {
-    return '/teacher';
-  }
-  return '/admin/dashboard';
-}

@@ -50,6 +50,7 @@
         <div class="summary-item absent"><span>Absent</span><strong>{{ summary.absent }}</strong></div>
         <div class="summary-item late"><span>Late</span><strong>{{ summary.late }}</strong></div>
         <div class="summary-item leave"><span>Leave</span><strong>{{ summary.leave }}</strong></div>
+        <div class="summary-item half-day"><span>Half day</span><strong>{{ summary.halfDay }}</strong></div>
         <div class="summary-item unmarked">
           <span>Not marked</span><strong>{{ summary.notMarked }}</strong>
         </div>
@@ -120,6 +121,14 @@
             [disabled]="busy || locked() || !selectedKeys.size"
           >
             Mark leave
+          </button>
+          <button
+            type="button"
+            class="secondary bulk-half"
+            (click)="applyBulkStatus('HALF_DAY')"
+            [disabled]="busy || locked() || !selectedKeys.size"
+          >
+            Mark half day
           </button>
         </div>
 
@@ -269,14 +278,13 @@
                           [class.absent]="option === 'ABSENT'"
                           [class.late]="option === 'LATE'"
                           [class.leave]="option === 'LEAVE'"
+                          [class.half-day]="option === 'HALF_DAY'"
                           [attr.aria-pressed]="student.status === option"
                           [disabled]="busy || locked()"
                           (click)="setStudentStatus(student, option)"
                         >
-                          <span class="status-short" aria-hidden="true">
-                            {{ option === 'PRESENT' ? 'P' : option === 'ABSENT' ? 'A' : option === 'LATE' ? 'L' : 'Lv' }}
-                          </span>
-                          <span class="status-long">{{ option === 'LEAVE' ? 'Leave' : (option | titlecase) }}</span>
+                          <span class="status-short" aria-hidden="true">{{ markShort(option) }}</span>
+                          <span class="status-long">{{ markLabel(option) }}</span>
                         </button>
                       }
                     </div>

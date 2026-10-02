@@ -1,0 +1,47 @@
+<section class="panel">
+  <h2>Staff attendance</h2>
+  <p class="muted">
+    Mark the campus staff for a day, then submit the month. A payslip cannot be approved or marked paid until that month is submitted.
+  </p>
+  <p class="error" *ngIf="error">{{ error }}</p>
+  <p class="ok" *ngIf="status && !error">{{ status }}</p>
+  <div class="form-grid">
+    <label>
+      Month
+      <input type="month" [(ngModel)]="month" name="staffMonth" (change)="load()" />
+    </label>
+    <label>
+      Date
+      <input type="date" [(ngModel)]="date" name="staffDate" (change)="load()" />
+    </label>
+  </div>
+  <p class="muted">Month status: {{ sheetStatus }}</p>
+  <p *ngIf="loading">Loading staff…</p>
+  <table *ngIf="!loading && staff.length">
+    <thead>
+      <tr>
+        <th>Staff</th>
+        <th>Status</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr *ngFor="let row of staff">
+        <td>{{ row.staffName }}</td>
+        <td>
+          <select [(ngModel)]="row.status" [name]="'staff-' + row.staffId" [disabled]="submitted || busy">
+            <option *ngFor="let status of statuses" [value]="status">{{ status === 'HALF_DAY' ? 'Half day' : status }}</option>
+          </select>
+        </td>
+      </tr>
+    </tbody>
+  </table>
+  <p class="muted" *ngIf="!loading && !staff.length">No staff records for this campus.</p>
+  <div class="form-actions actions" *ngIf="!loading">
+    <button type="button" class="btn secondary" (click)="save()" [disabled]="busy || submitted || !staff.length">
+      Save day
+    </button>
+    <button type="button" class="btn primary" (click)="submitMonth()" [disabled]="busy || submitted">
+      Submit month
+    </button>
+  </div>
+</section>

@@ -4,6 +4,14 @@ import { RouterLink } from '@angular/router';
 import { ApiService } from '../../core/api.service';
 
 type UdiseColumn = { key: string; label: string; selected: boolean };
+type ExportAuditRow = {
+  id: string;
+  exportKind: string;
+  includesAadhaar: boolean;
+  rowCount: number;
+  actorRole: string;
+  createdAt: string;
+};
 
 @Component({
   selector: 'sf-udise-export',
@@ -43,8 +51,10 @@ export class UdiseExportComponent implements OnInit {
   statusMsg = '';
   usingDefaults = true;
   columns: UdiseColumn[] = [];
+  exports: ExportAuditRow[] = [];
 
   ngOnInit(): void {
+    this.loadExports();
     this.api.get<{ columns: UdiseColumn[]; usingDefaults: boolean }>('/api/student/directory/udise-setting').subscribe({
       next: (res) => {
         this.columns = res?.columns ?? [];
@@ -54,6 +64,17 @@ export class UdiseExportComponent implements OnInit {
       error: (err) => {
         this.loading = false;
         this.error = err?.error?.message ?? 'Could not load UDISE+ columns';
+      },
+    });
+  }
+
+  loadExports(): void {
+    this.api.get<ExportAuditRow[]>('/api/student/directory/export-audit').subscribe({
+      next: (rows) => {
+        this.exports = Array.isArray(rows) ? rows : [];
+      },
+      error: () => {
+        this.exports = [];
       },
     });
   }

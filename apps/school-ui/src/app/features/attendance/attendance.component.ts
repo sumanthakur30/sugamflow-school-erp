@@ -25,6 +25,7 @@ import {
   filterNonIdentityFields,
 } from '../../shared/student-lookup';
 import { AttendanceRosterComponent } from '../../shared/attendance-roster';
+import { StaffAttendanceComponent } from './staff-attendance.component';
 
 @Component({
   selector: 'sf-attendance',
@@ -36,6 +37,7 @@ import { AttendanceRosterComponent } from '../../shared/attendance-roster';
     ListPagerComponent,
     StudentLookupComponent,
     AttendanceRosterComponent,
+    StaffAttendanceComponent,
   ],
   templateUrl: './attendance.component.html',
   styleUrls: [
@@ -62,7 +64,7 @@ export class AttendanceComponent implements OnInit, OnDestroy {
   formKey = 'attendance_mark';
   workflowKey = 'attendance';
   /** Admin primary mode: class roster (bulk) vs workflow records. */
-  viewMode: 'roster' | 'records' = 'roster';
+  viewMode: 'roster' | 'staff' | 'records' = 'roster';
   fields: Array<{ key: string; label: string; type: string; mandatory: boolean }> = [];
   answers: Record<string, unknown> = {};
   selectedStudent: StudentLookupRow | null = null;

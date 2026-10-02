@@ -255,13 +255,25 @@
         >
           Workflow records
         </button>
+        <button
+          type="button"
+          role="tab"
+          class="mode-tab"
+          [class.active]="viewMode === 'staff'"
+          [attr.aria-selected]="viewMode === 'staff'"
+          (click)="viewMode = 'staff'"
+        >
+          Staff
+        </button>
       </div>
 
       @if (viewMode === 'roster') {
         <sf-attendance-roster
           title="Class roster"
-          subtitle="Choose a class and date, mark exceptions, then save or submit."
+          subtitle="Choose a class and date, mark present, absent, late, leave, or half day, then save or submit."
         />
+      } @else if (viewMode === 'staff') {
+        <sf-staff-attendance />
       } @else {
       <section class="panel inbox-panel">
         <sf-list-toolbar

@@ -27,11 +27,14 @@ export class PortalExtraComponent implements OnInit {
   selectedQuizId = '';
   leave = { subjectRef: '', subjectName: '', title: 'Leave', note: '' };
 
-  readonly documents = [
+  readonly packs = [
     { key: 'id_card', label: 'ID card' },
-    { key: 'admit_card', label: 'Admit card' },
     { key: 'transfer_certificate', label: 'Transfer certificate' },
   ];
+  reportCards: any[] = [];
+  admissionNos: string[] = [];
+  selectedAdmission = '';
+  busy = false;
 
   ngOnInit(): void {
     this.route.data.subscribe((data) => {
@@ -96,7 +99,101 @@ export class PortalExtraComponent implements OnInit {
       });
       return;
     }
+    if (this.mode === 'documents') {
+      this.api.get<any>('/api/student/access-scope').subscribe({
+        next: (scope) => {
+          this.admissionNos = Array.isArray(scope?.admissionNos) ? scope.admissionNos : [];
+          this.selectedAdmission = this.admissionNos[0] || '';
+        },
+      });
+      this.api.get<any[]>('/api/exam/report-cards/mine').subscribe({
+        next: (cards) => {
+          this.reportCards = cards || [];
+          this.loading = false;
+        },
+        error: (err) => {
+          this.loading = false;
+          this.error = err?.error?.message ?? 'Report cards are not available for this login';
+        },
+      });
+      return;
+    }
     this.loading = false;
+  }
+
+  downloadReport(card: any): void {
+    const student = card?.student || {};
+    const sectionId = card?.sectionId;
+    const termKey = card?.termKey;
+    if (!sectionId || !termKey) {
+      this.error = 'This report card is missing its class or term';
+      return;
+    }
+    const key = student.studentId
+      ? `studentId=${encodeURIComponent(student.studentId)}`
+      : `admissionNo=${encodeURIComponent(student.admissionNo || '')}`;
+    this.busy = true;
+    this.error = '';
+    this.api
+      .getBlob(
+        `/api/exam/report-cards/mine.pdf?sectionId=${encodeURIComponent(sectionId)}&termKey=${encodeURIComponent(termKey)}&${key}`,
+      )
+      .subscribe({
+        next: (blob) => {
+          this.busy = false;
+          this.saveBlob(blob, `report-card-${student.admissionNo || 'student'}-${termKey}.pdf`);
+        },
+        error: () => {
+          this.busy = false;
+          this.error = 'Could not download the report card';
+        },
+      });
+  }
+
+  downloadPack(templateKey: string): void {
+    if (!this.selectedAdmission) {
+      this.error = 'No child is linked to this login';
+      return;
+    }
+    this.busy = true;
+    this.error = '';
+    this.api
+      .post<any>(`/api/reports/mine/${templateKey}`, {
+        format: 'PDF',
+        admissionNo: this.selectedAdmission,
+        data: {
+          admissionNo: this.selectedAdmission,
+          student: { admissionNo: this.selectedAdmission, studentName: this.selectedAdmission },
+        },
+      })
+      .subscribe({
+        next: (file) => {
+          this.busy = false;
+          const encoded = String(file?.contentBase64 || '');
+          if (!encoded) {
+            this.error = 'The school has not published this document yet';
+            return;
+          }
+          const bytes = Uint8Array.from(atob(encoded), (ch) => ch.charCodeAt(0));
+          this.saveBlob(
+            new Blob([bytes], { type: 'application/pdf' }),
+            String(file.fileName || `${templateKey}.pdf`),
+          );
+        },
+        error: (err) => {
+          this.busy = false;
+          this.error = err?.error?.message ?? 'Could not download this document';
+        },
+      });
+  }
+
+  private saveBlob(blob: Blob, fileName: string): void {
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = fileName;
+    link.click();
+    URL.revokeObjectURL(url);
   }
 
   submitQuiz(): void {

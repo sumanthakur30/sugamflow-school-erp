@@ -716,6 +716,10 @@ public class FinanceService {
   @Transactional
   public Map<String, Object> simulateCapture(UUID intentId) {
     TenantScope scope = TenantContext.require();
+    if (!demoOrganization(scope.organizationId())) {
+      throw new FeeException(
+          "DEMO_ONLY", "Simulated payment capture is only available for the demo school");
+    }
     requireFee(scope);
     if (!engines.isFeatureEnabled(scope, FinanceCatalog.FEATURE_MULTI_PAYMENT_GATEWAY)) {
       throw new FeeException(
@@ -1204,6 +1208,14 @@ public class FinanceService {
     } catch (NumberFormatException ex) {
       return BigDecimal.ZERO;
     }
+  }
+
+  private static boolean demoOrganization(String organizationId) {
+    if (organizationId == null) {
+      return false;
+    }
+    String org = organizationId.trim().toLowerCase(java.util.Locale.ROOT);
+    return "demo-school".equals(org) || org.contains("demo");
   }
 
   private static String stringOr(Object raw, String fallback) {

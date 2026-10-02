@@ -1,5 +1,6 @@
 package com.sugamflow.school.academic.web;
 
+import com.sugamflow.school.academic.service.AcademicCalendarService;
 import com.sugamflow.school.academic.service.AcademicStructureService;
 import com.sugamflow.school.academic.service.TeacherScopeService;
 import com.sugamflow.school.common.api.ApiResponse;
@@ -22,10 +23,15 @@ public class AcademicController {
 
   private final AcademicStructureService service;
   private final TeacherScopeService teacherScope;
+  private final AcademicCalendarService calendar;
 
-  public AcademicController(AcademicStructureService service, TeacherScopeService teacherScope) {
+  public AcademicController(
+      AcademicStructureService service,
+      TeacherScopeService teacherScope,
+      AcademicCalendarService calendar) {
     this.service = service;
     this.teacherScope = teacherScope;
+    this.calendar = calendar;
   }
 
   @GetMapping("/bootstrap")
@@ -132,6 +138,16 @@ public class AcademicController {
   }
 
   // ---- teacher scope (consumed by RBAC) -------------------------------------
+
+  @GetMapping("/calendar")
+  public ApiResponse<Map<String, Object>> calendar() {
+    return ApiResponse.ok(calendar.get());
+  }
+
+  @PutMapping("/calendar")
+  public ApiResponse<Map<String, Object>> saveCalendar(@RequestBody Map<String, Object> body) {
+    return ApiResponse.ok(calendar.save(body));
+  }
 
   @GetMapping("/teacher-scope")
   public ApiResponse<Map<String, Object>> teacherScope(

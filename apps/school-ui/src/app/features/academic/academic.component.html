@@ -295,5 +295,47 @@
         </button>
       </div>
     </article>
+
+    <article class="panel">
+      <h2>Working days and holidays</h2>
+      <p class="muted">Monday to Friday is the default week. Add school holidays for this campus and session.</p>
+      <p class="panel-err" *ngIf="calendarError">{{ calendarError }}</p>
+      <div class="row-actions">
+        <button
+          type="button"
+          class="btn ghost"
+          *ngFor="let day of weekDays"
+          [class.primary]="workingDays.includes(day.key)"
+          (click)="toggleWorkingDay(day.key)"
+          [disabled]="!canManage || busy"
+        >
+          {{ day.label }}
+        </button>
+      </div>
+      <ul class="list" *ngIf="holidays.length">
+        <li *ngFor="let holiday of holidays">
+          <div class="row-main">
+            <strong>{{ holiday.name }}</strong>
+            <span class="muted">{{ holiday.date }}</span>
+          </div>
+          <button type="button" class="linkish danger" *ngIf="canManage" (click)="removeHoliday(holiday.date)">
+            Remove
+          </button>
+        </li>
+      </ul>
+      <p class="muted" *ngIf="!holidays.length">No holidays saved yet.</p>
+      <div class="form-grid" *ngIf="canManage">
+        <label>
+          Date
+          <input type="date" [(ngModel)]="holidayDate" name="holidayDate" />
+        </label>
+        <label>
+          Name
+          <input [(ngModel)]="holidayName" name="holidayName" placeholder="Republic Day" />
+        </label>
+        <button type="button" class="btn ghost" (click)="addHoliday()" [disabled]="busy">Add holiday</button>
+        <button type="button" class="btn primary" (click)="saveCalendar()" [disabled]="busy">Save calendar</button>
+      </div>
+    </article>
   </div>
 </section>
