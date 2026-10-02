@@ -385,13 +385,40 @@ export class RoleDashboardComponent implements OnInit, OnDestroy {
         route: '/admin/student-directory',
         tone: 'green',
       },
+      inactiveStudents: {
+        id: 'inactiveStudents',
+        label: 'Inactive students',
+        value: data.students == null ? '—' : Number(data.students.inactive ?? 0),
+        hint:
+          data.students == null
+            ? 'Count unavailable — check student service / network'
+            : 'Status INACTIVE for this campus',
+        route: '/admin/student-directory',
+        queryParams: { status: 'INACTIVE' },
+        tone: 'amber',
+      },
       staff: {
         id: 'staff',
         label: 'Active staff',
-        value: data.staff?.active ?? data.staff?.total ?? '—',
-        hint: `${data.staff?.total ?? 0} total records`,
+        value: data.staff == null ? '—' : (data.staff.active ?? data.staff.total ?? 0),
+        hint:
+          data.staff == null
+            ? 'Count unavailable — check staff service / network'
+            : `${data.staff.total ?? 0} total records`,
         route: '/admin/staff-directory',
         tone: 'blue',
+      },
+      inactiveStaff: {
+        id: 'inactiveStaff',
+        label: 'Inactive staff',
+        value: data.staff == null ? '—' : Number(data.staff.inactive ?? 0),
+        hint:
+          data.staff == null
+            ? 'Count unavailable — check staff service / network'
+            : 'Status INACTIVE for this campus',
+        route: '/admin/staff-directory',
+        queryParams: { status: 'INACTIVE' },
+        tone: 'purple',
       },
       admissions: {
         id: 'admissions',
@@ -490,18 +517,43 @@ export class RoleDashboardComponent implements OnInit, OnDestroy {
     };
 
     const roleMetricIds: Record<string, string[]> = {
-      PRINCIPAL: ['students', 'staff', 'admissions', 'feeIncome', 'pendingFees', 'attendance'],
-      ACCOUNTANT: ['feeIncome', 'pendingFees', 'netProfit', 'salary', 'students'],
-      ACCOUNTS: ['feeIncome', 'pendingFees', 'netProfit', 'salary', 'students'],
-      FINANCE: ['feeIncome', 'pendingFees', 'netProfit', 'salary', 'students'],
-      RECEPTION: ['admissions', 'students', 'attendance', 'staff'],
-      RECEPTIONIST: ['admissions', 'students', 'attendance', 'staff'],
-      LIBRARIAN: ['library', 'students', 'staff', 'attendance'],
+      PRINCIPAL: [
+        'students',
+        'inactiveStudents',
+        'staff',
+        'inactiveStaff',
+        'admissions',
+        'feeIncome',
+        'pendingFees',
+        'attendance',
+      ],
+      ACCOUNTANT: ['feeIncome', 'pendingFees', 'netProfit', 'salary', 'students', 'inactiveStudents'],
+      ACCOUNTS: ['feeIncome', 'pendingFees', 'netProfit', 'salary', 'students', 'inactiveStudents'],
+      FINANCE: ['feeIncome', 'pendingFees', 'netProfit', 'salary', 'students', 'inactiveStudents'],
+      RECEPTION: ['admissions', 'students', 'inactiveStudents', 'attendance', 'staff', 'inactiveStaff'],
+      RECEPTIONIST: [
+        'admissions',
+        'students',
+        'inactiveStudents',
+        'attendance',
+        'staff',
+        'inactiveStaff',
+      ],
+      LIBRARIAN: ['library', 'students', 'inactiveStudents', 'staff', 'inactiveStaff', 'attendance'],
       TEACHER: ['classes', 'scopedStudents', 'slots', 'attendance'],
     };
     const ids =
       roleMetricIds[this.role] ??
-      ['students', 'staff', 'admissions', 'feeIncome', 'pendingFees', 'attendance'];
+      [
+        'students',
+        'inactiveStudents',
+        'staff',
+        'inactiveStaff',
+        'admissions',
+        'feeIncome',
+        'pendingFees',
+        'attendance',
+      ];
     this.metrics = ids.map((id) => all[id]).filter(Boolean);
   }
 

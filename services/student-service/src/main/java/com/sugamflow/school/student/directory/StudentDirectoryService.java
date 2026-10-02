@@ -118,6 +118,7 @@ public class StudentDirectoryService {
         notBlank(scope.branchId()) && notBlank(scope.academicSessionId());
     long total;
     long active;
+    long inactive;
     long alumni;
     long tc;
     if (scoped) {
@@ -127,6 +128,9 @@ public class StudentDirectoryService {
       active =
           repository.countByOrganizationIdAndBranchIdAndAcademicSessionIdAndStatusAndDeletedAtIsNull(
               scope.organizationId(), scope.branchId(), scope.academicSessionId(), "ACTIVE");
+      inactive =
+          repository.countByOrganizationIdAndBranchIdAndAcademicSessionIdAndStatusAndDeletedAtIsNull(
+              scope.organizationId(), scope.branchId(), scope.academicSessionId(), "INACTIVE");
       alumni =
           repository.countByOrganizationIdAndBranchIdAndAcademicSessionIdAndStatusAndDeletedAtIsNull(
               scope.organizationId(), scope.branchId(), scope.academicSessionId(), "ALUMNI");
@@ -136,6 +140,8 @@ public class StudentDirectoryService {
     } else {
       total = repository.countByOrganizationIdAndDeletedAtIsNull(scope.organizationId());
       active = repository.countByOrganizationIdAndStatusAndDeletedAtIsNull(scope.organizationId(), "ACTIVE");
+      inactive =
+          repository.countByOrganizationIdAndStatusAndDeletedAtIsNull(scope.organizationId(), "INACTIVE");
       alumni = repository.countByOrganizationIdAndStatusAndDeletedAtIsNull(scope.organizationId(), "ALUMNI");
       tc = repository.countByOrganizationIdAndStatusAndDeletedAtIsNull(scope.organizationId(), "TC_ISSUED");
     }
@@ -175,6 +181,7 @@ public class StudentDirectoryService {
     Map<String, Object> out = new LinkedHashMap<>();
     out.put("total", total);
     out.put("active", active);
+    out.put("inactive", inactive);
     out.put("alumni", alumni);
     out.put("tcIssued", tc);
     out.put("boys", boys);

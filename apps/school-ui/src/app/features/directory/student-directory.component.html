@@ -35,15 +35,19 @@
     <p class="panel">Student Directory requires FEATURE_STUDENT_MASTER.</p>
   } @else {
     <section class="panel summary-strip" aria-label="Directory summary">
-      <button type="button" class="stat" (click)="applySummaryFilter('all')">
+      <button type="button" class="stat" [class.active]="!status && !trashMode" (click)="applySummaryFilter('all')">
         <span>Total</span>
         <strong>{{ summary['total'] ?? 0 }}</strong>
       </button>
-      <button type="button" class="stat" (click)="applySummaryFilter('active')">
+      <button type="button" class="stat" [class.active]="status === 'ACTIVE' && !trashMode" (click)="applySummaryFilter('active')">
         <span>Active</span>
         <strong>{{ summary['active'] ?? 0 }}</strong>
       </button>
-      <button type="button" class="stat" (click)="applySummaryFilter('tc')">
+      <button type="button" class="stat" [class.active]="status === 'INACTIVE' && !trashMode" (click)="applySummaryFilter('inactive')">
+        <span>Inactive</span>
+        <strong>{{ summary['inactive'] ?? 0 }}</strong>
+      </button>
+      <button type="button" class="stat" [class.active]="status === 'TC_ISSUED' && !trashMode" (click)="applySummaryFilter('tc')">
         <span>TC Issued</span>
         <strong>{{ summary['tcIssued'] ?? 0 }}</strong>
       </button>

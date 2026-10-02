@@ -162,6 +162,16 @@
         <button
           type="button"
           class="stat"
+          [class.active]="activeSummary === 'inactive'"
+          (click)="applySummaryFilter('inactive')"
+          title="Filter inactive staff"
+        >
+          <span>Inactive</span>
+          <strong>{{ summary['inactive'] ?? 0 }}</strong>
+        </button>
+        <button
+          type="button"
+          class="stat"
           [class.active]="activeSummary === 'teachers'"
           (click)="applySummaryFilter('teachers')"
           title="Filter teachers / academic roles"

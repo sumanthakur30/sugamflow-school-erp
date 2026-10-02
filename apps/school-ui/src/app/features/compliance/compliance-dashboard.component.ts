@@ -114,7 +114,7 @@ import {
 
         <div class="panel">
           <h3 style="margin-top: 0; font-size: 1.1rem">Pending submissions</h3>
-          @if (!dash.recentCampaigns?.length) {
+          @if (!dash.recentCampaigns.length) {
             <p class="muted">No campaigns yet. Run validation from Data Readiness to create one.</p>
           } @else {
             <table class="data">
