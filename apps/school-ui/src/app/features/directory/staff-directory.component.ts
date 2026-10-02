@@ -1,4 +1,4 @@
-import { Component, OnDestroy, OnInit, inject } from '@angular/core';
+import { Component, ElementRef, HostListener, OnDestroy, OnInit, ViewChild, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
@@ -116,7 +116,24 @@ export class StaffDirectoryComponent implements OnInit, OnDestroy {
   showInvite = false;
   /** When set, the form edits an existing staff member instead of creating. */
   editingId: string | null = null;
+  /** When set, the same form is shown read-only as the staff profile. */
+  viewingId: string | null = null;
   deletingId: string | null = null;
+  statusBusyId: string | null = null;
+  openMenuId: string | null = null;
+  openMenuRow: any = null;
+  menuTop = 0;
+  menuLeft = 0;
+  pendingDelete: { id: string; name: string } | null = null;
+  private menuAnchor: HTMLElement | null = null;
+  private readonly onAnyScroll = (): void => {
+    if (this.openMenuId && this.menuAnchor) {
+      this.positionMenu(this.menuAnchor);
+    }
+  };
+
+  @ViewChild('rowMenu') rowMenu?: ElementRef<HTMLElement>;
+  @ViewChild('deleteDialog') deleteDialog?: ElementRef<HTMLElement>;
   draft: Record<string, unknown> = {
     fullName: '',
     mobile: '',
@@ -151,7 +168,7 @@ export class StaffDirectoryComponent implements OnInit, OnDestroy {
   copyHint = '';
 
   get showForm(): boolean {
-    return this.showCreate || !!this.editingId;
+    return this.showCreate || !!this.editingId || !!this.viewingId;
   }
 
   get canInviteLogin(): boolean {
@@ -165,6 +182,7 @@ export class StaffDirectoryComponent implements OnInit, OnDestroy {
 
   get pageTitle(): string {
     if (this.showInvite) return 'Invite staff login';
+    if (this.viewingId) return 'Staff profile';
     if (this.editingId) return 'Edit staff member';
     if (this.showCreate) return 'Add staff member';
     return 'Staff';
@@ -174,6 +192,7 @@ export class StaffDirectoryComponent implements OnInit, OnDestroy {
     if (this.showInvite) {
       return 'Create a login and send a set-password link to teachers, principals, and other staff.';
     }
+    if (this.viewingId) return 'Review this employee’s details.';
     if (this.editingId) return 'Update employee details and save changes.';
     if (this.showCreate) return 'Create a teaching or non-teaching employee profile.';
     return 'Manage teaching and non-teaching employees from one directory.';
@@ -217,10 +236,20 @@ export class StaffDirectoryComponent implements OnInit, OnDestroy {
       this.loadRoleTemplates();
     }
     this.campusReadySub = this.tenantContext.whenCampusReady().subscribe(() => this.reload());
+    document.addEventListener('scroll', this.onAnyScroll, true);
   }
 
   ngOnDestroy(): void {
     this.campusReadySub?.unsubscribe();
+    document.removeEventListener('scroll', this.onAnyScroll, true);
+    const menu = this.rowMenu?.nativeElement;
+    if (menu?.parentElement === document.body) {
+      menu.remove();
+    }
+    const backdrop = this.deleteDialog?.nativeElement.parentElement;
+    if (backdrop?.parentElement === document.body) {
+      backdrop.remove();
+    }
   }
 
   reload(): void {
@@ -312,6 +341,7 @@ export class StaffDirectoryComponent implements OnInit, OnDestroy {
   }
 
   search(page = 0): void {
+    this.closeRowMenu(false);
     this.searching = true;
     this.error = '';
     this.api
@@ -534,6 +564,7 @@ export class StaffDirectoryComponent implements OnInit, OnDestroy {
   }
 
   startInviteFromRow(row: any): void {
+    this.closeRowMenu(false);
     if (!this.canInviteLogin) {
       return;
     }
@@ -576,6 +607,253 @@ export class StaffDirectoryComponent implements OnInit, OnDestroy {
   }
 
   startEdit(row: any): void {
+    this.loadStaffRecord(row, 'edit');
+  }
+
+  viewStaff(row: any): void {
+    this.loadStaffRecord(row, 'view');
+  }
+
+  beginEditFromProfile(): void {
+    if (!this.viewingId) return;
+    this.editingId = this.viewingId;
+    this.viewingId = null;
+  }
+
+  staffLabel(row: any): string {
+    return String(row?.fullName || row?.employeeNo || 'staff member');
+  }
+
+  isInactiveStaff(row: any): boolean {
+    return String(row?.status || '').toUpperCase() === 'INACTIVE';
+  }
+
+  toggleRowMenu(event: Event, row: any): void {
+    event.stopPropagation();
+    const id = String(row?.id || '').trim();
+    const button = event.currentTarget as HTMLElement | null;
+    if (!id || !button) return;
+    if (this.openMenuId === id) {
+      this.closeRowMenu(true);
+      return;
+    }
+    this.openRowMenu(button, row);
+  }
+
+  onRowMenuButtonKeydown(event: KeyboardEvent, row: any): void {
+    if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
+    event.preventDefault();
+    event.stopPropagation();
+    const id = String(row?.id || '').trim();
+    const button = event.currentTarget as HTMLElement | null;
+    if (!id || !button) return;
+    if (this.openMenuId !== id) {
+      this.openRowMenu(button, row);
+    }
+    const focusLast = event.key === 'ArrowUp';
+    window.setTimeout(() => this.focusMenuItem(focusLast ? -1 : 0));
+  }
+
+  onMenuKeydown(event: KeyboardEvent): void {
+    const items = this.menuItems();
+    if (!items.length) return;
+    const current = items.indexOf(document.activeElement as HTMLButtonElement);
+    if (event.key === 'ArrowDown') {
+      event.preventDefault();
+      items[(current + 1 + items.length) % items.length].focus();
+    } else if (event.key === 'ArrowUp') {
+      event.preventDefault();
+      items[(current - 1 + items.length) % items.length].focus();
+    } else if (event.key === 'Home') {
+      event.preventDefault();
+      items[0].focus();
+    } else if (event.key === 'End') {
+      event.preventDefault();
+      items[items.length - 1].focus();
+    } else if (event.key === 'Tab') {
+      event.preventDefault();
+      this.closeRowMenu(true);
+    }
+  }
+
+  onDeleteKeydown(event: KeyboardEvent): void {
+    if (event.key !== 'Tab' || !this.deleteDialog) return;
+    const buttons = Array.from(this.deleteDialog.nativeElement.querySelectorAll<HTMLButtonElement>('button'));
+    if (buttons.length < 2) return;
+    const first = buttons[0];
+    const last = buttons[buttons.length - 1];
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  }
+
+  askDelete(row: any): void {
+    const id = String(row?.id || '').trim();
+    if (!id) return;
+    this.closeRowMenu(false);
+    this.pendingDelete = { id, name: this.staffLabel(row) };
+    window.setTimeout(() => {
+      const dialog = this.deleteDialog?.nativeElement;
+      const backdrop = dialog?.parentElement;
+      if (backdrop && backdrop.parentElement !== document.body) {
+        document.body.appendChild(backdrop);
+      }
+      dialog?.querySelector<HTMLButtonElement>('[data-cancel]')?.focus();
+    });
+  }
+
+  cancelDelete(): void {
+    this.pendingDelete = null;
+    this.menuAnchor?.focus();
+  }
+
+  confirmDelete(): void {
+    if (!this.pendingDelete || this.deletingId) return;
+    const { id, name } = this.pendingDelete;
+    this.pendingDelete = null;
+    this.deleteStaffById(id, name);
+  }
+
+  toggleStaffStatus(row: any): void {
+    const id = String(row?.id || '').trim();
+    if (!id || this.saving || this.statusBusyId) return;
+    this.closeRowMenu(false);
+    const next = this.isInactiveStaff(row) ? 'ACTIVE' : 'INACTIVE';
+    const name = this.staffLabel(row);
+    this.statusBusyId = id;
+    this.error = '';
+    this.statusMsg = '';
+    this.api.put<any>(`/api/staff/staff/${id}`, { status: next }).subscribe({
+      next: () => {
+        this.statusBusyId = null;
+        this.statusMsg = next === 'ACTIVE' ? `Activated ${name}` : `Deactivated ${name}`;
+        this.loadSummary();
+        this.search(this.page.page);
+      },
+      error: (err) => {
+        this.statusBusyId = null;
+        this.error = err?.error?.message ?? 'Could not update staff status';
+      },
+    });
+  }
+
+  @HostListener('document:click', ['$event'])
+  onDocumentClick(event: MouseEvent): void {
+    if (!this.openMenuId) return;
+    const target = event.target as Node | null;
+    if (target && this.rowMenu?.nativeElement.contains(target)) return;
+    if (target && this.menuAnchor?.contains(target)) return;
+    this.closeRowMenu(false);
+  }
+
+  @HostListener('document:keydown', ['$event'])
+  onDocumentKeydown(event: KeyboardEvent): void {
+    if (event.key !== 'Escape') return;
+    if (this.pendingDelete) {
+      event.preventDefault();
+      this.cancelDelete();
+      return;
+    }
+    if (this.openMenuId) {
+      event.preventDefault();
+      this.closeRowMenu(true);
+    }
+  }
+
+  @HostListener('window:resize')
+  onViewportResize(): void {
+    if (this.openMenuId && this.menuAnchor) {
+      this.positionMenu(this.menuAnchor);
+    }
+  }
+
+  private openRowMenu(button: HTMLElement, row: any): void {
+    const id = String(row?.id || '').trim();
+    if (!id) return;
+    this.menuAnchor = button;
+    this.openMenuRow = row;
+    this.openMenuId = id;
+    this.positionMenu(button);
+    window.setTimeout(() => {
+      if (this.openMenuId !== id) return;
+      const menu = this.rowMenu?.nativeElement;
+      if (menu && menu.parentElement !== document.body) {
+        document.body.appendChild(menu);
+      }
+      this.positionMenu(button);
+      this.focusMenuItem(0);
+    });
+  }
+
+  private closeRowMenu(restoreFocus: boolean): void {
+    const anchor = this.menuAnchor;
+    this.openMenuId = null;
+    this.openMenuRow = null;
+    if (restoreFocus) {
+      anchor?.focus();
+    }
+  }
+
+  private positionMenu(button: HTMLElement): void {
+    const rect = button.getBoundingClientRect();
+    if (!this.isButtonVisible(button, rect)) {
+      this.closeRowMenu(false);
+      return;
+    }
+    const menu = this.rowMenu?.nativeElement;
+    const width = menu?.offsetWidth || 220;
+    const height = menu?.offsetHeight || (this.canInviteLogin ? 228 : 188);
+    let left = rect.right - width;
+    if (left < 8) left = 8;
+    if (left + width > window.innerWidth - 8) {
+      left = Math.max(8, window.innerWidth - width - 8);
+    }
+    let top = rect.bottom + 4;
+    if (top + height > window.innerHeight - 8) {
+      top = Math.max(8, rect.top - height - 4);
+    }
+    this.menuTop = top;
+    this.menuLeft = left;
+  }
+
+  private isButtonVisible(button: HTMLElement, rect: DOMRect): boolean {
+    if (rect.bottom <= 0 || rect.top >= window.innerHeight || rect.right <= 0 || rect.left >= window.innerWidth) {
+      return false;
+    }
+    let parent = button.parentElement;
+    while (parent) {
+      const style = getComputedStyle(parent);
+      const overflow = `${style.overflow}${style.overflowX}${style.overflowY}`;
+      if (/(auto|scroll|hidden|clip)/.test(overflow)) {
+        const box = parent.getBoundingClientRect();
+        if (rect.bottom <= box.top || rect.top >= box.bottom || rect.right <= box.left || rect.left >= box.right) {
+          return false;
+        }
+      }
+      parent = parent.parentElement;
+    }
+    return true;
+  }
+
+  private focusMenuItem(index: number): void {
+    const items = this.menuItems();
+    if (!items.length) return;
+    const next = index < 0 ? items.length - 1 : Math.min(index, items.length - 1);
+    items[next].focus();
+  }
+
+  private menuItems(): HTMLButtonElement[] {
+    const root = this.rowMenu?.nativeElement;
+    if (!root) return [];
+    return Array.from(root.querySelectorAll<HTMLButtonElement>('[role="menuitem"]:not(:disabled)'));
+  }
+
+  private loadStaffRecord(row: any, mode: 'edit' | 'view'): void {
+    this.closeRowMenu(false);
     const id = String(row?.id || '').trim();
     if (!id) return;
     this.error = '';
@@ -586,7 +864,8 @@ export class StaffDirectoryComponent implements OnInit, OnDestroy {
         this.saving = false;
         this.showCreate = false;
         this.showInvite = false;
-        this.editingId = id;
+        this.editingId = mode === 'edit' ? id : null;
+        this.viewingId = mode === 'view' ? id : null;
         const answers = (staff?.answers || {}) as Record<string, unknown>;
         const joiningIso =
           this.parseJoiningDateToIso(String(answers['joiningDate'] || '')) ||
@@ -617,21 +896,16 @@ export class StaffDirectoryComponent implements OnInit, OnDestroy {
     });
   }
 
-  deleteStaff(row: any): void {
-    const id = String(row?.id || '').trim();
-    if (!id) return;
-    const name = String(row?.fullName || row?.employeeNo || 'this staff member');
-    if (!window.confirm(`Delete ${name}? They will be removed from the staff list.`)) {
-      return;
-    }
+  private deleteStaffById(id: string, name: string): void {
     this.deletingId = id;
     this.error = '';
     this.statusMsg = '';
     this.api.delete<any>(`/api/staff/staff/${id}`).subscribe({
       next: () => {
         this.deletingId = null;
-        if (this.editingId === id) {
+        if (this.editingId === id || this.viewingId === id) {
           this.editingId = null;
+          this.viewingId = null;
           this.resetDraft();
         }
         this.statusMsg = `Deleted ${name}`;
@@ -672,6 +946,7 @@ export class StaffDirectoryComponent implements OnInit, OnDestroy {
 
   cancelCreate(): void {
     this.editingId = null;
+    this.viewingId = null;
     this.showInvite = false;
     this.inviteResult = null;
     this.resetDraft();
