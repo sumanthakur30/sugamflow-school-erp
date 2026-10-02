@@ -43,6 +43,7 @@ public class WorkflowDefinitionService {
   @Transactional
   public void ensureDefaults(){
     upsertSystem("admission", defaultAdmission());
+    upsertSystem("leave", defaultLeave());
     upsertSystem("fee", defaultFee());
     upsertSystem("attendance", defaultAttendance());
     upsertSystem("exam", defaultExam());
@@ -67,6 +68,18 @@ public class WorkflowDefinitionService {
       step(1,"Reception","RECEPTION",24), step(2,"Principal","PRINCIPAL",48),
       step(3,"Accounts","ACCOUNTANT",24), step(4,"Management","MANAGEMENT",72),
       step(5,"Completed","SYSTEM",0)));
+    wf.put("autoApproveRules", List.of()); wf.put("rejectRules", List.of());
+    wf.put("escalationRules", List.of()); wf.put("notificationRules", List.of());
+    return wf;
+  }
+
+  private Map<String,Object> defaultLeave(){
+    Map<String,Object> wf=new LinkedHashMap<>();
+    wf.put("workflowKey","leave"); wf.put("name","Leave Approval");
+    wf.put("steps", List.of(
+      step(1,"Class teacher","TEACHER",24),
+      step(2,"Principal","PRINCIPAL",48),
+      step(3,"Completed","SYSTEM",0)));
     wf.put("autoApproveRules", List.of()); wf.put("rejectRules", List.of());
     wf.put("escalationRules", List.of()); wf.put("notificationRules", List.of());
     return wf;

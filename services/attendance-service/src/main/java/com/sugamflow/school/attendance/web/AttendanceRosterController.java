@@ -34,6 +34,11 @@ public class AttendanceRosterController {
     return ApiResponse.ok(service.roster(sectionId, date, periodId));
   }
 
+  @GetMapping("/exceptions")
+  public ApiResponse<List<Map<String, Object>>> exceptions() {
+    return ApiResponse.ok(service.exceptions());
+  }
+
   @GetMapping("/roster/summary")
   public ApiResponse<Map<String, Object>> summary(@RequestParam("sectionId") UUID sectionId) {
     return ApiResponse.ok(service.sectionSummary(sectionId));

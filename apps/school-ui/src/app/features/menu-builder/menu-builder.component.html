@@ -1,11 +1,14 @@
 <section class="page">
   <div class="page-head">
     <h2>Menu Builder</h2>
-    <p>Create, hide, reorder, and nest navigation — roles, feature flags, and branches.</p>
+    <p>Hide, rename, and reorder the live school menu. Saving changes the shell for this campus.</p>
   </div>
 
   @if (error) {
     <p class="error panel" role="alert">{{ error }}</p>
+  }
+  @if (usingLiveCatalog) {
+    <p class="status panel">Showing the live school menu. Save to apply labels, order, and visibility.</p>
   }
   @if (status) {
     <p class="status panel">{{ status }}</p>

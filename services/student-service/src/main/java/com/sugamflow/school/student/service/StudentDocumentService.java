@@ -14,8 +14,12 @@ import com.sugamflow.school.student.persistence.repo.StudentDocumentRepository;
 import com.sugamflow.school.student.persistence.repo.StudentRecordRepository;
 import com.sugamflow.school.student.web.StudentException;
 import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
+import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
 import java.util.Base64;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -140,15 +144,59 @@ public class StudentDocumentService {
     entity.setByteLength(bytes instanceof Number n ? n.intValue() : null);
     entity.setIssuedBy(scope.userId());
     entity.setIssuedAt(now);
-    entity.setMeta(
-        Map.of(
-            "verifyUrl",
-            verifyUrl,
-            "studentName",
-            stringOr(studentDto.get("fullName"), ""),
-            "classSection",
-            stringOr(studentDto.get("classSection"), "")));
+    Map<String, Object> meta = new LinkedHashMap<>();
+    meta.put("verifyUrl", verifyUrl);
+    meta.put("studentName", stringOr(studentDto.get("fullName"), ""));
+    meta.put("classSection", stringOr(studentDto.get("classSection"), ""));
+    String expiresAt = stringOr(body.get("expiresAt"), "");
+    if (!expiresAt.isBlank()) {
+      meta.put("expiresAt", expiresAt);
+    }
+    entity.setMeta(meta);
     return toDto(documents.save(entity));
+  }
+
+  /** Issued documents whose expiry still matches the document rule. */
+  @Transactional(readOnly = true)
+  public List<Map<String, Object>> expiring() {
+    TenantScope scope = TenantContext.require();
+    LocalDate today = LocalDate.now(ZoneId.of("Asia/Kolkata"));
+    List<Map<String, Object>> rows = new ArrayList<>();
+    for (StudentDocumentEntity entity :
+        documents.findTop200ByOrganizationIdAndStatusOrderByIssuedAtDesc(
+            scope.organizationId(), "ISSUED")) {
+      if (rows.size() >= 25) {
+        break;
+      }
+      Object raw = entity.getMeta() == null ? null : entity.getMeta().get("expiresAt");
+      if (raw == null || String.valueOf(raw).isBlank()) {
+        continue;
+      }
+      LocalDate expires;
+      try {
+        expires = LocalDate.parse(String.valueOf(raw).substring(0, 10));
+      } catch (RuntimeException ex) {
+        continue;
+      }
+      long days = ChronoUnit.DAYS.between(today, expires);
+      boolean matched;
+      try {
+        matched =
+            engines
+                .evaluateRules(scope, Map.of("document", Map.of("daysToExpiry", days)))
+                .contains("NOTIFY_DOCUMENT");
+      } catch (RuntimeException ex) {
+        matched = days <= 30;
+      }
+      if (!matched) {
+        continue;
+      }
+      Map<String, Object> row = toDto(entity);
+      row.put("daysToExpiry", days);
+      row.put("expiresAt", expires.toString());
+      rows.add(row);
+    }
+    return rows;
   }
 
   @Transactional(readOnly = true)
