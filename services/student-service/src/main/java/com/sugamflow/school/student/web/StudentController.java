@@ -91,6 +91,12 @@ public class StudentController {
     return ApiResponse.ok(student360.profile(id));
   }
 
+  @PostMapping("/students/{id}/apaar-consent")
+  public ApiResponse<Map<String, Object>> apaarConsent(
+      @PathVariable("id") UUID id, @RequestBody Map<String, Object> body) {
+    return ApiResponse.ok(service.recordApaarConsent(id, body));
+  }
+
   @PostMapping("/students/{id}/remarks")
   public ApiResponse<Map<String, Object>> addRemark(
       @PathVariable("id") UUID id, @RequestBody Map<String, Object> body) {

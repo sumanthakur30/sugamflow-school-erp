@@ -30,6 +30,9 @@ export class Student360Component implements OnInit {
   messageBody = '';
   messageChannel = 'DESK';
   savingNote = false;
+  apaarConsent = 'PENDING';
+  apaarId = '';
+  savingApaar = false;
 
   ngOnInit(): void {
     this.route.paramMap.subscribe((pm) => {
@@ -46,6 +49,9 @@ export class Student360Component implements OnInit {
     this.api.get<any>(`/api/student/students/${this.studentId}/360`).subscribe({
       next: (d) => {
         this.data = d;
+        const answers = d?.student?.answers ?? {};
+        this.apaarConsent = answers.apaarConsent || 'PENDING';
+        this.apaarId = answers.apaarId || '';
         this.portalUsername = this.admissionNo() || this.portalUsername;
         this.loading = false;
       },
@@ -58,6 +64,27 @@ export class Student360Component implements OnInit {
 
   setTab(t: string): void {
     this.tab = t;
+  }
+
+  saveApaar(): void {
+    if (!this.studentId) return;
+    this.savingApaar = true;
+    this.error = '';
+    this.api
+      .post(`/api/student/students/${this.studentId}/apaar-consent`, {
+        apaarConsent: this.apaarConsent,
+        apaarId: this.apaarId,
+      })
+      .subscribe({
+        next: () => {
+          this.savingApaar = false;
+          this.load();
+        },
+        error: (err) => {
+          this.savingApaar = false;
+          this.error = err?.error?.message ?? 'Could not save APAAR status';
+        },
+      });
   }
 
   addRemark(): void {
@@ -186,6 +213,9 @@ export class Student360Component implements OnInit {
       gender: 'Gender',
       house: 'House',
       dob: 'Date of birth',
+      apaarId: 'APAAR ID',
+      apaarConsent: 'APAAR consent',
+      apaarConsentAt: 'APAAR recorded',
     };
     if (map[key]) return map[key];
     return key

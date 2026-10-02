@@ -426,6 +426,54 @@ public class LifecycleService {
     return statusTransition(body, LifecycleCatalog.EVENT_ALUMNI, "alumniStatus", "ALUMNI");
   }
 
+  /** Move one student to another section without changing their status. */
+  @Transactional
+  public Map<String, Object> changeSection(Map<String, Object> body) {
+    TenantScope scope = TenantContext.require();
+    requireLifecycle(scope);
+    ensureDefaults(scope);
+    UUID studentId = parseUuid(body.get("studentId"), "studentId");
+    Map<String, Object> settings = lifecycleSettings(scope);
+    Map<String, Object> statusPolicy = statusPolicy(scope, settings);
+    StudentRecordEntity student = requireStudent(studentId, scope.organizationId());
+    assertNotTerminal(student, statusPolicy);
+    String classField = stringOr(settings.get("classFieldKey"), "classApplied");
+    String toClass = stringOr(body.get("targetClass"), "");
+    if (toClass.isBlank()) {
+      throw new StudentException("VALIDATION", "targetClass is required");
+    }
+    String fromClass = stringOr(student.getAnswers().get(classField), "");
+    if (toClass.equals(fromClass)) {
+      throw new StudentException("VALIDATION", "The student is already in " + toClass);
+    }
+    String reason = stringOr(body.get("reason"), "Section change");
+    student.getAnswers().put(classField, toClass);
+    student.setUpdatedAt(Instant.now());
+    appendHistory(
+        student,
+        LifecycleCatalog.EVENT_SECTION_CHANGE,
+        reason,
+        Map.of("fromClass", fromClass, "toClass", toClass));
+    Map<String, Object> payload = new LinkedHashMap<>();
+    payload.put("fromClass", fromClass);
+    payload.put("toClass", toClass);
+    payload.put("classFieldKey", classField);
+    payload.put("reason", reason);
+    LifecycleEventEntity event =
+        newEvent(
+            scope,
+            student,
+            LifecycleCatalog.EVENT_SECTION_CHANGE,
+            "COMPLETED",
+            stringOr(body.get("idempotencyKey"), null),
+            payload);
+    eventRepo.save(event);
+    studentRepo.save(student);
+    Map<String, Object> out = toEventDto(event);
+    out.put("student", slimStudent(student, classField));
+    return out;
+  }
+
   @Transactional(readOnly = true)
   public List<Map<String, Object>> listEvents(UUID studentId) {
     TenantScope scope = TenantContext.require();
