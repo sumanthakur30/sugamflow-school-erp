@@ -549,7 +549,7 @@ public class ReportTemplateService {
   }
 
   private void ensureStudentDocumentTemplates() {
-    upsertCanonicalTemplate("id_card", idCardTemplate(), "context.verifyUrl");
+    refreshIdCardTemplates(idCardTemplate());
     upsertCanonicalTemplate("admit_card", admitCardTemplate(), "ADMIT CARD");
     upsertCanonicalTemplate("transfer_certificate", transferCertificateTemplate(), "TRANSFER CERTIFICATE");
     upsertCanonicalTemplate(
@@ -566,6 +566,35 @@ public class ReportTemplateService {
             "CHARACTER CERTIFICATE",
             "This is to certify that {{student.name}} (Admission No: {{student.admissionNo}}) of class {{student.classSection}} bears a good moral character."),
         "context.verifyUrl");
+  }
+
+  /** Replace seeded ID cards that are still the old A4 block. Leave a saved CR80 design alone. */
+  private void refreshIdCardTemplates(Map<String, Object> canonical) {
+    boolean hasGlobal = false;
+    for (ReportTemplateEntity row : repo.findByTemplateKey("id_card")) {
+      if (row.getOrganizationId() == null) {
+        hasGlobal = true;
+      }
+      String payload = String.valueOf(row.getPayload());
+      if (payload.contains("cr80-v3")) {
+        continue;
+      }
+      Map<String, Object> copy = new LinkedHashMap<>(canonical);
+      if (row.getOrganizationId() != null) {
+        copy.put("organizationId", row.getOrganizationId());
+      }
+      row.setPayload(copy);
+      row.setUpdatedAt(Instant.now());
+      repo.save(row);
+    }
+    if (!hasGlobal) {
+      ReportTemplateEntity created = new ReportTemplateEntity();
+      created.setOrganizationId(null);
+      created.setTemplateKey("id_card");
+      created.setPayload(canonical);
+      created.setUpdatedAt(Instant.now());
+      repo.save(created);
+    }
   }
 
   private void upsertCanonicalTemplate(
@@ -637,35 +666,126 @@ public class ReportTemplateService {
     repo.save(entity);
   }
 
+  /**
+   * CR80 landscape card. Canvas is 324×204 CSS px (3.375in × 2.125in at 96dpi). The PDF page is
+   * the same size in points, so print at 100% matches a physical ID card.
+   */
   private Map<String, Object> idCardTemplate() {
     Map<String, Object> t = new LinkedHashMap<>();
     t.put("templateKey", "id_card");
     t.put("name", "Student ID Card");
-    t.put("layout", Map.of("width", 794, "height", 1123, "units", "px", "paper", "A4"));
+    t.put("layoutVersion", "cr80-v3");
+    t.put("layout", Map.of("width", 324, "height", 204, "units", "px", "paper", "CR80"));
     t.put(
         "elements",
         List.of(
-            element("heading", "STUDENT IDENTITY CARD", 40, 48, 18, 420, 28),
-            element("box", "", 40, 90, 11, 520, 220),
-            element("image", "{{student.photoDirectUrl}}", 400, 110, 11, 120, 140),
-            element("text", "Name: {{student.name}}", 60, 110, 12, 300, 24),
-            element("text", "Admission No: {{student.admissionNo}}", 60, 140, 11, 300, 24),
-            element("text", "Class: {{student.classSection}}", 60, 170, 11, 300, 24),
-            element("text", "PEN: {{student.penNumber}}", 60, 200, 10, 300, 20),
-            element("text", "APAAR: {{student.apaarId}}", 60, 220, 10, 300, 20),
-            element("text", "Session: {{context.academicSessionId}}", 60, 245, 11, 300, 20),
-            element("text", "Ref: {{document.referenceNo}}", 60, 265, 10, 300, 20),
-            element("qr", "{{context.verifyUrl}}", 420, 270, 11, 100, 100),
-            element("text", "Scan to verify", 420, 380, 9, 120, 20),
-            element(
-                "text",
-                "Organization: {{context.organizationId}} · Branch: {{context.branchId}}",
-                40,
-                420,
-                10,
-                520,
-                24),
-            element("text", "Issued at {{context.issuedAt}}", 40, 450, 10, 400, 24)));
+            styled(element("box", "", 0, 0, 0, 324, 204), "z", 0, "fillColor", "#FFFFFF", "borderWidth", 0),
+            styled(element("box", "", 0, 0, 0, 324, 36), "z", 1, "fillColor", "#0E3A5D", "borderWidth", 0),
+            styled(
+                element("image", "{{context.logoUrl}}", 6, 5, 8, 26, 26),
+                "z", 2,
+                "bind", "context.logoUrl",
+                "fillColor", "#FFFFFF",
+                "borderRadius", 4,
+                "borderWidth", 0,
+                "objectFit", "cover"),
+            styled(
+                element("heading", "{{context.organizationName}}", 38, 5, 10, 278, 14),
+                "z", 2, "bold", true, "color", "#FFFFFF"),
+            styled(
+                element(
+                    "text",
+                    "{{context.branchName}}  ·  {{context.sessionLabel}}",
+                    38,
+                    20,
+                    7,
+                    278,
+                    12),
+                "z", 2, "color", "#E2E8F0"),
+            styled(
+                element("image", "{{student.photoDirectUrl}}", 8, 42, 8, 48, 64),
+                "z", 2,
+                "bind", "student.photoDirectUrl",
+                "objectFit", "cover",
+                "borderWidth", 1,
+                "borderColor", "#CBD5E1",
+                "borderRadius", 4),
+            styled(
+                element("text", "{{student.name}}", 62, 42, 11, 142, 14),
+                "z", 2, "bold", true, "color", "#0F172A"),
+            styled(
+                element("text", "Class  {{student.classSection}}", 62, 58, 7, 142, 11),
+                "z", 2, "color", "#1E293B"),
+            styled(
+                element("text", "{{student.rollLine}}", 62, 70, 7, 142, 11),
+                "z", 2, "color", "#1E293B"),
+            styled(
+                element("text", "DOB  {{student.dateOfBirth}}", 62, 82, 7, 142, 11),
+                "z", 2, "color", "#1E293B"),
+            styled(
+                element("text", "Blood", 62, 96, 7, 34, 12),
+                "z", 2, "color", "#1E293B"),
+            styled(
+                element("box", "", 98, 94, 0, 32, 14),
+                "z", 2,
+                "fillColor", "#9F1239",
+                "borderWidth", 0,
+                "borderRadius", 3),
+            styled(
+                element("text", "{{student.bloodGroup}}", 98, 95, 8, 32, 12),
+                "z", 3, "bold", true, "align", "center", "color", "#FFFFFF"),
+            styled(
+                element("text", "Emergency  {{student.emergencyContact}}", 62, 112, 7, 142, 12),
+                "z", 2, "color", "#1E293B"),
+            styled(
+                element("text", "APAAR  {{student.apaarId}}", 210, 42, 7, 106, 11),
+                "z", 2, "color", "#1E293B"),
+            styled(
+                element("text", "PEN  {{student.penNumber}}", 210, 54, 7, 106, 11),
+                "z", 2, "color", "#1E293B"),
+            styled(
+                element("box", "", 210, 68, 0, 106, 80),
+                "z", 2,
+                "fillColor", "#FFFFFF",
+                "borderWidth", 1,
+                "borderColor", "#E2E8F0",
+                "borderRadius", 6),
+            styled(
+                element("qr", "{{context.verifyUrl}}", 228, 74, 8, 56, 56),
+                "z", 3, "bind", "context.verifyUrl", "quietZone", 6),
+            styled(
+                element("text", "Scan to verify", 210, 132, 7, 106, 12),
+                "z", 3, "align", "center", "color", "#1E293B"),
+            styled(element("box", "", 0, 156, 0, 324, 48), "z", 1, "fillColor", "#F4F7FB", "borderWidth", 0),
+            styled(
+                element("text", "Transport  {{student.transportMode}}", 8, 162, 7, 140, 12),
+                "z", 2, "color", "#1E293B"),
+            styled(
+                element("text", "Issued  {{context.issuedAt}}", 8, 176, 7, 140, 12),
+                "z", 2, "color", "#1E293B"),
+            styled(
+                element("text", "Valid  {{context.expiresAt}}", 8, 188, 7, 140, 12),
+                "z", 2, "color", "#1E293B"),
+            styled(element("line", "", 168, 176, 6, 70, 2), "z", 2, "color", "#334155", "borderWidth", 0.8),
+            styled(
+                element("text", "Principal", 156, 186, 6, 94, 12),
+                "z", 2, "align", "center", "color", "#334155"),
+            styled(
+                element("box", "", 286, 164, 0, 26, 26),
+                "z", 2,
+                "fillColor", "#FFFFFF",
+                "borderWidth", 1,
+                "borderColor", "#94A3B8",
+                "borderRadius", 13),
+            styled(
+                element("text", "Seal", 286, 171, 6, 26, 12),
+                "z", 3, "align", "center", "color", "#334155"),
+            styled(
+                element("box", "", 1, 1, 0, 322, 202),
+                "z", 9,
+                "borderWidth", 1.25,
+                "borderColor", "#C5D0DC",
+                "borderRadius", 10)));
     t.put("charts", List.of());
     t.put("filters", List.of());
     t.put("calculatedFields", List.of());
@@ -761,6 +881,13 @@ public class ReportTemplateService {
     el.put("fontSize", fontSize);
     el.put("width", width);
     el.put("height", height);
+    return el;
+  }
+
+  private static Map<String, Object> styled(Map<String, Object> el, Object... pairs) {
+    for (int i = 0; i + 1 < pairs.length; i += 2) {
+      el.put(String.valueOf(pairs[i]), pairs[i + 1]);
+    }
     return el;
   }
 }
