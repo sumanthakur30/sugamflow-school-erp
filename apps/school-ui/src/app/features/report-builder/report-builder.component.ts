@@ -24,6 +24,10 @@ export interface ReportElement {
   borderWidth?: number;
   borderColor?: string;
   borderRadius?: number;
+  fillColor?: string;
+  color?: string;
+  quietZone?: number;
+  z?: number;
 }
 
 const SAMPLE_PHOTO_DATA_URL =
@@ -463,6 +467,9 @@ export class ReportBuilderComponent implements OnInit, OnDestroy {
     if (el.type === 'line' || el.type === 'box' || el.type === 'image') {
       return '';
     }
+    if (el.type === 'qr') {
+      return 'QR';
+    }
     const raw = el.text || (el.bind ? `{{${el.bind}}}` : el.type);
     if (!this.previewContext) {
       return raw;
@@ -479,7 +486,7 @@ export class ReportBuilderComponent implements OnInit, OnDestroy {
     if (el.fallbackSrc && this.isDrawableImage(el.fallbackSrc)) {
       return el.fallbackSrc;
     }
-    if (this.previewContext) {
+    if (this.previewContext || (el.bind ?? '').includes('logo')) {
       return '';
     }
     return SAMPLE_PHOTO_DATA_URL;
@@ -594,7 +601,84 @@ export class ReportBuilderComponent implements OnInit, OnDestroy {
         return '';
       }
     }
-    return String(cur);
+    return this.formatBound(path, String(cur));
+  }
+
+  /** Match the PDF: issued/expiry as "16 Jul 2026", DOB as DD-MM-YYYY. */
+  private formatBound(path: string, value: string): string {
+    const key = path.toLowerCase();
+    const dob = key.endsWith('dateofbirth') || key.endsWith('.dob');
+    const cardDate = key.endsWith('issuedat') || key.endsWith('expiresat') || key.endsWith('validuntil');
+    if (!dob && !cardDate) {
+      return value;
+    }
+    const iso = value.match(/^(\d{4})-(\d{2})-(\d{2})(?:T|$)/);
+    if (!iso) {
+      return value;
+    }
+    const day = iso[3];
+    const month = iso[2];
+    const year = iso[1];
+    if (dob) {
+      return `${day}-${month}-${year}`;
+    }
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    return `${day} ${months[Number(month) - 1]} ${year}`;
+  }
+
+  private dash(value: string): string {
+    return value.trim() ? value.trim() : '—';
+  }
+
+  private emergencyPhone(answers: Record<string, unknown>): string {
+    const keys = [
+      'emergencyContact',
+      'emergencyMobile',
+      'guardianMobile',
+      'fatherMobile',
+      'parentMobile',
+      'mobile',
+    ];
+    for (const key of keys) {
+      const value = this.text(answers[key]);
+      if (value) {
+        return value;
+      }
+    }
+    const guardians = answers['guardians'];
+    if (!Array.isArray(guardians)) {
+      return '';
+    }
+    let fallback = '';
+    for (const row of guardians) {
+      if (!row || typeof row !== 'object') {
+        continue;
+      }
+      const guardian = row as Record<string, unknown>;
+      const mobile = this.text(guardian['mobile'] || guardian['phone']);
+      if (!mobile) {
+        continue;
+      }
+      if (guardian['isPrimary'] === true || String(guardian['isPrimary']).toLowerCase() === 'true') {
+        return mobile;
+      }
+      if (!fallback) {
+        fallback = mobile;
+      }
+    }
+    return fallback;
+  }
+
+  private transportLabel(answers: Record<string, unknown>): string {
+    const mode = this.text(answers['transportMode'] || answers['modeOfTransport'] || answers['conveyance']);
+    if (mode) {
+      return mode;
+    }
+    if (!('transport' in answers)) {
+      return '—';
+    }
+    const flag = String(answers['transport']).toLowerCase();
+    return flag === 'true' || flag === 'yes' || flag === '1' ? 'Bus' : 'Walker';
   }
 
   private isDrawableImage(value: string): boolean {
@@ -1023,9 +1107,17 @@ export class ReportBuilderComponent implements OnInit, OnDestroy {
     studentMap['classSection'] = classSection;
     studentMap['classApplied'] = this.text(answers['classApplied'] || classSection);
     studentMap['fatherName'] = fatherName;
-    studentMap['penNumber'] = this.text(answers['penNumber'] || answers['pen']);
-    studentMap['apaarId'] = this.text(answers['apaarId'] || answers['apaarNumber']);
+    studentMap['penNumber'] = this.dash(this.text(answers['penNumber'] || answers['pen']));
+    studentMap['apaarId'] = this.dash(this.text(answers['apaarId'] || answers['apaarNumber']));
     studentMap['schoolStudentId'] = this.text(answers['schoolStudentId']);
+    studentMap['dateOfBirth'] = this.text(answers['dateOfBirth'] || answers['dob']);
+    studentMap['bloodGroup'] = this.dash(this.text(answers['bloodGroup'] || answers['blood_group']));
+    studentMap['emergencyContact'] = this.dash(this.emergencyPhone(answers));
+    studentMap['transportMode'] = this.transportLabel(answers);
+    const rollNo = this.text(answers['rollNo']);
+    studentMap['rollLine'] = rollNo
+      ? `Roll  ${rollNo}  ·  ${admissionNo}`
+      : `Adm  ${admissionNo}`;
     studentMap['photoDirectUrl'] = photoDirectUrl;
     studentMap['photoBase64'] = photoDirectUrl;
     studentMap['photoUrl'] = photoDirectUrl;

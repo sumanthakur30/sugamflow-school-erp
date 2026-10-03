@@ -168,6 +168,7 @@
           >
             <div
               class="canvas"
+              [class.paper-cr80]="draft.layout?.paper === 'CR80'"
               [style.width.px]="canvasWidth"
               [style.height.px]="canvasHeight"
               [style.transform]="'scale(' + canvasScale + ')'"
@@ -187,9 +188,15 @@
                   [style.width.px]="el.width"
                   [style.height.px]="el.height"
                   [class.el-image]="el.type === 'image'"
+                  [class.el-qr]="el.type === 'qr'"
                   [style.fontSize.px]="el.fontSize || 11"
                   [style.fontWeight]="el.bold || el.type === 'heading' ? '700' : '500'"
                   [style.textAlign]="el.align || 'left'"
+                  [style.color]="el.color || null"
+                  [style.--el-fill]="el.fillColor || null"
+                  [style.--el-bc]="el.borderColor || null"
+                  [style.--el-bw.px]="el.borderWidth ?? null"
+                  [style.--el-br.px]="el.borderRadius || 0"
                   [style.--photo-bw.px]="el.type === 'image' ? (el.borderWidth ?? 1) : null"
                   [style.--photo-bc]="el.type === 'image' ? el.borderColor || '#94a3b8' : null"
                   [style.--photo-br.px]="el.type === 'image' ? el.borderRadius || 0 : null"
