@@ -1440,6 +1440,41 @@ export class ReportBuilderComponent implements OnInit, OnDestroy {
     };
   }
 
+  /** Copy admission answers into blank student fields. A saved student value is left as-is. */
+  private async fillBlankFromAdmission(
+    answers: Record<string, unknown>,
+    applicationId: string,
+  ): Promise<void> {
+    if (!applicationId) {
+      return;
+    }
+    try {
+      const app = await firstValueFrom(
+        this.api.get<any>(`/api/admission/applications/${applicationId}`).pipe(
+          timeout(8000),
+          catchError(() => of(null)),
+        ),
+      );
+      const source = (app?.answers ?? {}) as Record<string, unknown>;
+      for (const [key, value] of Object.entries(source)) {
+        if (value == null || typeof value === 'object') {
+          continue;
+        }
+        if (!this.blankDash(this.text(answers[key])) && this.blankDash(this.text(value))) {
+          answers[key] = value;
+        }
+      }
+      if (!this.blankDash(this.text(answers['dateOfBirth'])) && this.blankDash(this.text(answers['dob']))) {
+        answers['dateOfBirth'] = answers['dob'];
+      }
+      if (!this.blankDash(this.text(answers['dob'])) && this.blankDash(this.text(answers['dateOfBirth']))) {
+        answers['dob'] = answers['dateOfBirth'];
+      }
+    } catch {
+      // The card still uses the student record when the application cannot be loaded.
+    }
+  }
+
   private async photoDataUrl(raw: string): Promise<string> {
     const value = raw.trim();
     if (!value || value === 'on-file') {
