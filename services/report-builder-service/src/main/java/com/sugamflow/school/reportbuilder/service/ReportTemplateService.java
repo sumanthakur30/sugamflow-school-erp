@@ -576,7 +576,7 @@ public class ReportTemplateService {
         hasGlobal = true;
       }
       String payload = String.valueOf(row.getPayload());
-      if (payload.contains("cr80-v4")) {
+      if (payload.contains("cr80-v7")) {
         continue;
       }
       Map<String, Object> copy = new LinkedHashMap<>(canonical);
@@ -674,7 +674,7 @@ public class ReportTemplateService {
     Map<String, Object> t = new LinkedHashMap<>();
     t.put("templateKey", "id_card");
     t.put("name", "Student ID Card");
-    t.put("layoutVersion", "cr80-v4");
+    t.put("layoutVersion", "cr80-v7");
     t.put("layout", Map.of("width", 324, "height", 204, "units", "px", "paper", "CR80"));
     t.put(
         "elements",
@@ -711,60 +711,27 @@ public class ReportTemplateService {
                 "borderColor", "#CBD5E1",
                 "borderRadius", 4),
             styled(
-                element("text", "{{student.name}}", 62, 40, 11, 142, 13),
+                element("text", "{{student.name}}", 62, 52, 11, 180, 14),
                 "z", 2, "bold", true, "color", "#0F172A"),
             styled(
-                element("text", "Class  {{student.classSection}}", 62, 54, 7, 142, 11),
-                "z", 2, "color", "#1E293B"),
+                element("id-fields", "", 62, 68, 8, 182, 84),
+                "z", 2, "bind", "student.idCardLines", "color", "#1E293B"),
             styled(
-                element("text", "{{student.rollLine}}", 62, 65, 7, 142, 11),
-                "z", 2, "color", "#1E293B"),
-            styled(
-                element("text", "DOB  {{student.dob}}", 62, 76, 7, 142, 11),
-                "z", 2, "color", "#1E293B"),
-            styled(
-                element("text", "Blood Group", 62, 88, 7, 68, 12),
-                "z", 2, "color", "#1E293B"),
-            styled(
-                element("box", "", 132, 87, 0, 30, 14),
-                "z", 2,
-                "fillColor", "#9F1239",
-                "borderWidth", 0,
-                "borderRadius", 3),
-            styled(
-                element("text", "{{student.bloodGroup}}", 132, 88, 7, 30, 12),
-                "z", 3, "bold", true, "align", "center", "color", "#FFFFFF"),
-            styled(
-                element("text", "Mobile  {{student.mobileNo}}", 62, 103, 7, 142, 11),
-                "z", 2, "color", "#1E293B"),
-            styled(
-                element("text", "Emergency  {{student.emergencyNo}}", 62, 115, 7, 142, 12),
-                "z", 2, "color", "#1E293B"),
-            styled(
-                element("text", "APAAR  {{student.apaarId}}", 210, 42, 7, 106, 11),
-                "z", 2, "color", "#1E293B"),
-            styled(
-                element("text", "PEN  {{student.penNumber}}", 210, 54, 7, 106, 11),
-                "z", 2, "color", "#1E293B"),
-            styled(
-                element("box", "", 210, 68, 0, 106, 80),
+                element("box", "", 250, 68, 0, 66, 68),
                 "z", 2,
                 "fillColor", "#FFFFFF",
                 "borderWidth", 1,
                 "borderColor", "#E2E8F0",
                 "borderRadius", 6),
             styled(
-                element("qr", "{{context.verifyUrl}}", 228, 74, 8, 56, 56),
-                "z", 3, "bind", "context.verifyUrl", "quietZone", 6),
+                element("qr", "{{context.verifyUrl}}", 258, 74, 8, 48, 48),
+                "z", 3, "bind", "context.verifyUrl", "quietZone", 4),
             styled(
-                element("text", "Scan to verify", 210, 132, 7, 106, 12),
+                element("text", "Scan to verify", 250, 122, 7, 66, 12),
                 "z", 3, "align", "center", "color", "#1E293B"),
             styled(element("box", "", 0, 156, 0, 324, 48), "z", 1, "fillColor", "#F4F7FB", "borderWidth", 0),
             styled(
-                element("text", "Transport  {{student.transportMode}}", 8, 162, 7, 140, 12),
-                "z", 2, "color", "#1E293B"),
-            styled(
-                element("text", "Issued  {{context.issuedAt}}", 8, 176, 7, 140, 12),
+                element("text", "Issued  {{context.issuedAt}}", 8, 164, 7, 140, 12),
                 "z", 2, "color", "#1E293B"),
             styled(
                 element("text", "Valid  {{context.expiresAt}}", 8, 188, 7, 140, 12),
