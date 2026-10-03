@@ -417,6 +417,9 @@ public class StudentDocumentService {
     full.put("apaarId", dashIfBlank(stringOr(studentDto.get("apaarId"), "")));
     full.put("samagraId", stringOr(studentDto.get("samagraId"), ""));
     full.put("schoolStudentId", stringOr(studentDto.get("schoolStudentId"), ""));
+    if (TYPE_ID_CARD.equals(documentType)) {
+      full.put("idCardLines", buildIdCardLines(scope, student, answers, full));
+    }
     if (!TYPE_ID_CARD.equals(documentType)) {
       return full;
     }
@@ -424,35 +427,281 @@ public class StudentDocumentService {
     if (allowed.isEmpty()) {
       return full;
     }
-    // Always keep visual identity anchors used by the template shell.
     allowed.add("name");
     allowed.add("fullName");
-    allowed.add("admissionNo");
     allowed.add("photoBase64");
     allowed.add("photoUrl");
     allowed.add("photoDirectUrl");
     allowed.add("photoContentUrl");
-    allowed.add("classSection");
-    allowed.add("classApplied");
-    allowed.add("grade");
-    allowed.add("section");
-    allowed.add("rollLine");
-    allowed.add("dob");
-    allowed.add("dateOfBirth");
-    allowed.add("bloodGroup");
-    allowed.add("mobile");
-    allowed.add("mobileNo");
-    allowed.add("emergencyContact");
-    allowed.add("emergencyNo");
-    allowed.add("transportMode");
-    allowed.add("pen");
-    allowed.add("penNumber");
-    allowed.add("apaarId");
+    allowed.add("idCardLines");
     Map<String, Object> filtered = new LinkedHashMap<>();
     for (Map.Entry<String, Object> e : full.entrySet()) {
       filtered.put(e.getKey(), allowed.contains(e.getKey()) ? e.getValue() : "");
     }
     return filtered;
+  }
+
+  /**
+   * Lines for fields with {@code showOnIdCard=true} on the student form and the admission form.
+   * Turning a field on in either form shows it. Name and photo stay in the card chrome.
+   */
+  @SuppressWarnings("unchecked")
+  private List<Map<String, Object>> buildIdCardLines(
+      TenantScope scope,
+      StudentRecordEntity student,
+      Map<String, Object> answers,
+      Map<String, Object> values) {
+    Map<String, IdField> fields = new LinkedHashMap<>();
+    String studentForm = student.getFormKey();
+    if (studentForm != null && !studentForm.isBlank()) {
+      absorbIdCardFields(fields, loadForm(scope, studentForm.trim()));
+    }
+    absorbIdCardFields(fields, loadForm(scope, "student_master"));
+    absorbIdCardFields(fields, loadForm(scope, "admission_form"));
+    List<Map<String, Object>> lines = new ArrayList<>();
+    IdField classField = null;
+    for (IdField field : fields.values()) {
+      if (!field.on || !isClassKey(field.key)) {
+        continue;
+      }
+      if (classField == null || "classApplied".equals(field.key) || "classSection".equals(field.key)) {
+        classField = field;
+      }
+    }
+    if (classField != null) {
+      String[] gradeSection = gradeAndSection(answers, stringOr(values.get("classSection"), ""));
+      lines.add(idLine(classField.key, classField.label, classLine(gradeSection[0], gradeSection[1])));
+    }
+    for (IdField field : fields.values()) {
+      if (!field.on || skipIdCardLine(field)) {
+        continue;
+      }
+      lines.add(idLine(field.key, field.label, idCardValue(field, answers, values)));
+    }
+    return fitIdCardLines(lines);
+  }
+
+  /**
+   * The CR80 column is 98px. Filled values stay; empty flags fill the remaining rows, with date of
+   * birth and blood group ahead of other blanks, and anything past eight lines is left off.
+   */
+  private static List<Map<String, Object>> fitIdCardLines(List<Map<String, Object>> lines) {
+    List<Map<String, Object>> filled = new ArrayList<>();
+    List<Map<String, Object>> blank = new ArrayList<>();
+    for (Map<String, Object> line : lines) {
+      if (present(stringOr(line.get("value"), "")).isEmpty()) {
+        blank.add(line);
+      } else {
+        filled.add(line);
+      }
+    }
+    blank.sort(
+        java.util.Comparator.comparingInt(
+            line -> blankLinePriority(stringOr(line.get("key"), ""))));
+    List<Map<String, Object>> fitted = new ArrayList<>(filled);
+    for (Map<String, Object> line : blank) {
+      if (fitted.size() >= MAX_ID_CARD_LINES) {
+        break;
+      }
+      fitted.add(line);
+    }
+    if (fitted.size() > MAX_ID_CARD_LINES) {
+      return new ArrayList<>(fitted.subList(0, MAX_ID_CARD_LINES));
+    }
+    return fitted;
+  }
+
+  private static int blankLinePriority(String key) {
+    return switch (key) {
+      case "dob", "dateOfBirth" -> 0;
+      case "bloodGroup" -> 1;
+      case "fatherName" -> 2;
+      case "motherName" -> 3;
+      case "mobile", "mobileNo" -> 4;
+      default -> 10;
+    };
+  }
+
+  @SuppressWarnings("unchecked")
+  private Map<String, Object> loadForm(TenantScope scope, String formKey) {
+    try {
+      return engines.getForm(scope, formKey);
+    } catch (RuntimeException ex) {
+      return null;
+    }
+  }
+
+  @SuppressWarnings("unchecked")
+  private void absorbIdCardFields(Map<String, IdField> fields, Map<String, Object> form) {
+    if (form == null) {
+      return;
+    }
+    Object sectionsObj = form.get("sections");
+    if (!(sectionsObj instanceof List<?> sections)) {
+      return;
+    }
+    for (Object sectionObj : sections) {
+      if (!(sectionObj instanceof Map<?, ?> section)) {
+        continue;
+      }
+      Object fieldsObj = section.get("fields");
+      if (!(fieldsObj instanceof List<?> sectionFields)) {
+        continue;
+      }
+      for (Object fieldObj : sectionFields) {
+        if (!(fieldObj instanceof Map<?, ?> raw)) {
+          continue;
+        }
+        Map<String, Object> field = (Map<String, Object>) raw;
+        if (!field.containsKey("showOnIdCard")) {
+          continue;
+        }
+        String key = stringOr(field.get("key"), "");
+        if (key.isBlank()) {
+          continue;
+        }
+        boolean on = truthy(field.get("showOnIdCard"));
+        IdField existing = fields.get(key);
+        if (existing == null) {
+          IdField created = new IdField();
+          created.key = key;
+          created.label = stringOr(field.get("label"), key);
+          created.type = stringOr(field.get("type"), "TEXTBOX");
+          created.on = on;
+          fields.put(key, created);
+        } else if (on) {
+          existing.on = true;
+        }
+      }
+    }
+  }
+
+  private static boolean isClassKey(String key) {
+    return "classApplied".equals(key) || "classSection".equals(key) || "classGrade".equals(key);
+  }
+
+  private static boolean skipIdCardLine(IdField field) {
+    String key = field.key;
+    String type = field.type.toUpperCase(Locale.ROOT);
+    return "fullName".equals(key)
+        || "name".equals(key)
+        || "studentName".equals(key)
+        || "photo".equals(key)
+        || "studentPhoto".equals(key)
+        || "section".equals(key)
+        || "sectionLetter".equals(key)
+        || "classGrade".equals(key)
+        || "classApplied".equals(key)
+        || "classSection".equals(key)
+        || "IMAGE".equals(type)
+        || "FILE".equals(type);
+  }
+
+  private String idCardValue(IdField field, Map<String, Object> answers, Map<String, Object> values) {
+    String key = field.key;
+    if ("dob".equals(key) || "dateOfBirth".equals(key)) {
+      return dobLabel(firstAnswer(answers, "dateOfBirth", "dob", "birthDate"));
+    }
+    String type = field.type.toUpperCase(Locale.ROOT);
+    if ("CHECKBOX".equals(type)) {
+      String raw = firstAnswer(answers, key);
+      if (raw.isBlank()) {
+        raw = stringOr(values.get(key), "");
+      }
+      if (raw.isBlank()) {
+        return "—";
+      }
+      boolean on =
+          "true".equalsIgnoreCase(raw) || "yes".equalsIgnoreCase(raw) || "1".equals(raw);
+      return on ? "Yes" : "No";
+    }
+    String raw = present(stringOr(values.get(key), ""));
+    if (raw.isEmpty()) {
+      raw = firstAnswer(answers, aliasesFor(key));
+    }
+    if (raw.isEmpty() && "fatherName".equals(key)) {
+      raw = guardianName(answers, "Father");
+    }
+    if (raw.isEmpty() && "motherName".equals(key)) {
+      raw = guardianName(answers, "Mother");
+    }
+    if (raw.isEmpty() && ("penNumber".equals(key) || "pen".equals(key))) {
+      raw = present(stringOr(values.get("pen"), ""));
+      if (raw.isEmpty()) {
+        raw = present(stringOr(values.get("penNumber"), ""));
+      }
+    }
+    if (raw.isEmpty() && ("mobile".equals(key) || "mobileNo".equals(key))) {
+      raw = present(stringOr(values.get("mobileNo"), ""));
+      if (raw.isEmpty()) {
+        raw = present(stringOr(values.get("mobile"), ""));
+      }
+    }
+    return dashIfBlank(raw);
+  }
+
+  private static String[] aliasesFor(String key) {
+    return switch (key) {
+      case "mobile", "mobileNo" ->
+          new String[] {"mobile", "mobileNo", "contactNo", "contactNumber", "phone", "studentMobile"};
+      case "bloodGroup" -> new String[] {"bloodGroup", "blood_group", "bloodType"};
+      case "penNumber", "pen" -> new String[] {"penNumber", "pen"};
+      case "apaarId" -> new String[] {"apaarId", "apaarNumber"};
+      case "fatherName" -> new String[] {"fatherName", "parentName"};
+      case "motherName" -> new String[] {"motherName"};
+      case "dob", "dateOfBirth" -> new String[] {"dateOfBirth", "dob", "birthDate"};
+      default -> new String[] {key};
+    };
+  }
+
+  @SuppressWarnings("unchecked")
+  private static String guardianName(Map<String, Object> answers, String relation) {
+    Object raw = answers.get("guardians");
+    if (!(raw instanceof List<?> guardians)) {
+      return "";
+    }
+    for (Object row : guardians) {
+      if (!(row instanceof Map<?, ?> guardian)) {
+        continue;
+      }
+      String rel = stringOr(guardian.get("relation"), "");
+      if (!relation.equalsIgnoreCase(rel)) {
+        continue;
+      }
+      String name = stringOr(guardian.get("fullName"), "");
+      if (name.isBlank()) {
+        name = stringOr(guardian.get("name"), "");
+      }
+      if (!name.isBlank()) {
+        return name;
+      }
+    }
+    return "";
+  }
+
+  private static String present(String value) {
+    if (value == null) {
+      return "";
+    }
+    String trimmed = value.trim();
+    return trimmed.isEmpty() || "—".equals(trimmed) ? "" : trimmed;
+  }
+
+  private static Map<String, Object> idLine(String key, String label, String value) {
+    Map<String, Object> line = new LinkedHashMap<>();
+    line.put("key", key);
+    line.put("label", label == null || label.isBlank() ? key : label);
+    line.put("value", value == null || value.isBlank() ? "—" : value);
+    return line;
+  }
+
+  private static final int MAX_ID_CARD_LINES = 8;
+
+  private static final class IdField {
+    private String key;
+    private String label;
+    private String type;
+    private boolean on;
   }
 
   @SuppressWarnings("unchecked")

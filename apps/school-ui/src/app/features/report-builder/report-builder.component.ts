@@ -1,7 +1,7 @@
 import { Component, OnDestroy, OnInit, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { Subscription, catchError, firstValueFrom, map, of, timeout } from 'rxjs';
+import { Subscription, catchError, firstValueFrom, forkJoin, map, of, timeout } from 'rxjs';
 import { ActivatedRoute } from '@angular/router';
 import { ApiService } from '../../core/api.service';
 import { TenantContextService } from '../../core/tenant-context.service';
@@ -43,6 +43,19 @@ export interface ReportTemplate {
   filters?: unknown[];
   calculatedFields?: unknown[];
   schedule?: unknown;
+}
+
+export interface IdCardField {
+  key: string;
+  label: string;
+  type: string;
+  showOnIdCard: boolean;
+}
+
+export interface IdCardLine {
+  key: string;
+  label: string;
+  value: string;
 }
 
 export interface IdCardStudent {
@@ -131,6 +144,7 @@ export class ReportBuilderComponent implements OnInit, OnDestroy {
     hasText: boolean;
   }> = [];
   samplePreviewData: Record<string, unknown> = {};
+  idCardFormFields: IdCardField[] = [];
   formats: string[] = [];
 
   selectedKey = '';
@@ -198,6 +212,7 @@ export class ReportBuilderComponent implements OnInit, OnDestroy {
       this.loading = false;
       if (this.featureEnabled) {
         this.loadCatalogs();
+        this.loadIdCardForms();
       }
       if (this.featureEnabled && this.templates.length) {
         const requested = this.route.snapshot.queryParamMap.get('template');
@@ -646,8 +661,197 @@ export class ReportBuilderComponent implements OnInit, OnDestroy {
     return `${day} ${months[Number(month) - 1]} ${year}`;
   }
 
+  get idCardLines(): IdCardLine[] {
+    const student = ((this.previewContext ?? this.samplePreviewData)['student'] ?? {}) as Record<string, unknown>;
+    return this.composeIdCardLines(this.idCardFormFields, student);
+  }
+
+  private loadIdCardForms(): void {
+    const load = (key: string) =>
+      this.api.get<any>(`/api/forms/${encodeURIComponent(key)}`).pipe(catchError(() => of(null)));
+    forkJoin([load('student_master'), load('admission_form')]).subscribe(([studentForm, admissionForm]) => {
+      const fields = new Map<string, IdCardField>();
+      this.absorbIdCardFields(fields, studentForm);
+      this.absorbIdCardFields(fields, admissionForm);
+      this.idCardFormFields = [...fields.values()];
+    });
+  }
+
+  private absorbIdCardFields(fields: Map<string, IdCardField>, form: any): void {
+    const sections = form?.sections;
+    if (!Array.isArray(sections)) {
+      return;
+    }
+    for (const section of sections) {
+      const sectionFields = section?.fields;
+      if (!Array.isArray(sectionFields)) {
+        continue;
+      }
+      for (const field of sectionFields) {
+        if (!field || typeof field !== 'object' || !('showOnIdCard' in field)) {
+          continue;
+        }
+        const key = this.text(field.key);
+        if (!key) {
+          continue;
+        }
+        const on = field.showOnIdCard === true || String(field.showOnIdCard).toLowerCase() === 'true';
+        const existing = fields.get(key);
+        if (!existing) {
+          fields.set(key, {
+            key,
+            label: this.text(field.label) || key,
+            type: this.text(field.type) || 'TEXTBOX',
+            showOnIdCard: on,
+          });
+        } else if (on) {
+          existing.showOnIdCard = true;
+        }
+      }
+    }
+  }
+
+  private composeIdCardLines(fields: IdCardField[], student: Record<string, unknown>): IdCardLine[] {
+    const shown = fields.filter((field) => field.showOnIdCard);
+    const lines: IdCardLine[] = [];
+    const classField = shown.find((field) => field.key === 'classApplied' || field.key === 'classSection')
+      ?? shown.find((field) => field.key === 'classGrade');
+    if (classField) {
+      const klass = this.classDisplay(student);
+      lines.push({ key: classField.key, label: classField.label, value: klass.classSection });
+    }
+    for (const field of shown) {
+      if (this.skipIdCardLine(field)) {
+        continue;
+      }
+      lines.push({ key: field.key, label: field.label, value: this.idCardValue(field, student) });
+    }
+    return this.fitIdCardLines(lines);
+  }
+
+  /** CR80 field column is 98px tall. Keep filled values, then date of birth and blood group. */
+  private fitIdCardLines(lines: IdCardLine[]): IdCardLine[] {
+    const filled = lines.filter((line) => this.blankDash(line.value));
+    const blank = lines
+      .filter((line) => !this.blankDash(line.value))
+      .sort((a, b) => this.blankLinePriority(a.key) - this.blankLinePriority(b.key));
+    return [...filled, ...blank].slice(0, 8);
+  }
+
+  private blankLinePriority(key: string): number {
+    switch (key) {
+      case 'dob':
+      case 'dateOfBirth':
+        return 0;
+      case 'bloodGroup':
+        return 1;
+      case 'fatherName':
+        return 2;
+      case 'motherName':
+        return 3;
+      case 'mobile':
+      case 'mobileNo':
+        return 4;
+      default:
+        return 10;
+    }
+  }
+
+  private skipIdCardLine(field: IdCardField): boolean {
+    const type = field.type.toUpperCase();
+    return (
+      field.key === 'fullName' ||
+      field.key === 'name' ||
+      field.key === 'studentName' ||
+      field.key === 'photo' ||
+      field.key === 'studentPhoto' ||
+      field.key === 'section' ||
+      field.key === 'sectionLetter' ||
+      field.key === 'classGrade' ||
+      field.key === 'classApplied' ||
+      field.key === 'classSection' ||
+      type === 'IMAGE' ||
+      type === 'FILE'
+    );
+  }
+
+  private idCardValue(field: IdCardField, student: Record<string, unknown>): string {
+    if (field.key === 'dob' || field.key === 'dateOfBirth') {
+      return this.formatBound('student.dob', this.lookupText(student, ['dateOfBirth', 'dob', 'birthDate']));
+    }
+    if (field.type.toUpperCase() === 'CHECKBOX') {
+      const raw = this.lookupText(student, [field.key]);
+      if (!raw) {
+        return '—';
+      }
+      const on = raw.toLowerCase() === 'true' || raw.toLowerCase() === 'yes' || raw === '1';
+      return on ? 'Yes' : 'No';
+    }
+    let raw = this.lookupText(student, this.idCardAliases(field.key));
+    if (!raw && field.key === 'fatherName') {
+      raw = this.guardianName(student, 'Father');
+    }
+    if (!raw && field.key === 'motherName') {
+      raw = this.guardianName(student, 'Mother');
+    }
+    return this.dash(raw);
+  }
+
+  private idCardAliases(key: string): string[] {
+    switch (key) {
+      case 'mobile':
+      case 'mobileNo':
+        return ['mobile', 'mobileNo', 'contactNo', 'contactNumber', 'phone', 'studentMobile'];
+      case 'bloodGroup':
+        return ['bloodGroup', 'blood_group', 'bloodType'];
+      case 'penNumber':
+      case 'pen':
+        return ['penNumber', 'pen'];
+      case 'apaarId':
+        return ['apaarId', 'apaarNumber'];
+      case 'fatherName':
+        return ['fatherName', 'parentName'];
+      case 'motherName':
+        return ['motherName'];
+      default:
+        return [key];
+    }
+  }
+
+  private lookupText(answers: Record<string, unknown>, keys: string[]): string {
+    for (const key of keys) {
+      const value = this.blankDash(this.text(answers[key]));
+      if (value) {
+        return value;
+      }
+    }
+    return '';
+  }
+
+  private guardianName(answers: Record<string, unknown>, relation: string): string {
+    const guardians = answers['guardians'];
+    if (!Array.isArray(guardians)) {
+      return '';
+    }
+    for (const row of guardians) {
+      if (!row || typeof row !== 'object') {
+        continue;
+      }
+      const guardian = row as Record<string, unknown>;
+      if (this.text(guardian['relation']).toLowerCase() !== relation.toLowerCase()) {
+        continue;
+      }
+      return this.text(guardian['fullName'] || guardian['name']);
+    }
+    return '';
+  }
+
   private dash(value: string): string {
-    return value.trim() ? value.trim() : '—';
+    return value.trim() && value.trim() !== '—' ? value.trim() : '—';
+  }
+
+  private blankDash(value: string): string {
+    return value.trim() === '—' ? '' : value.trim();
   }
 
   private idCardStudent(answers: Record<string, unknown>, admissionNo: string, name: string): IdCardStudent {
@@ -670,9 +874,9 @@ export class ReportBuilderComponent implements OnInit, OnDestroy {
   }
 
   private classDisplay(answers: Record<string, unknown>): { grade: string; section: string; classSection: string } {
-    let grade = this.firstText(answers, ['classGrade', 'grade', 'className']);
-    let section = this.firstText(answers, ['sectionLetter', 'section']);
-    const combined = this.firstText(answers, ['classSection', 'classApplied']);
+    let grade = this.blankDash(this.firstText(answers, ['classGrade', 'grade', 'className']));
+    let section = this.blankDash(this.firstText(answers, ['sectionLetter', 'section']));
+    const combined = this.blankDash(this.firstText(answers, ['classSection', 'classApplied']));
     if (!grade && combined) {
       const parts = this.splitGradeSection(combined);
       grade = parts[0];
@@ -1177,7 +1381,8 @@ export class ReportBuilderComponent implements OnInit, OnDestroy {
     photoMissing: boolean;
   }> {
     const student = await firstValueFrom(this.api.get<any>(`/api/student/students/${id}`));
-    const answers = (student?.answers ?? {}) as Record<string, unknown>;
+    const answers = { ...((student?.answers ?? {}) as Record<string, unknown>) };
+    await this.fillBlankFromAdmission(answers, this.text(student?.sourceApplicationId));
     const name = this.text(answers['fullName'] || answers['studentName']);
     const admissionNo = this.text(student?.admissionNo || answers['admissionNo']);
     const card = this.idCardStudent(answers, admissionNo, name);
