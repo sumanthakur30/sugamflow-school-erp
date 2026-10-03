@@ -158,13 +158,19 @@ public final class ReportElementCatalog {
   public static Map<String, Object> samplePreviewData() {
     Map<String, Object> student = new LinkedHashMap<>();
     student.put("name", "Priya Nair");
+    student.put("grade", "Grade 8");
+    student.put("section", "A");
     student.put("admissionNo", "ADM-1001");
     student.put("classApplied", "Grade 8");
     student.put("classSection", "Grade 8 - A");
     student.put("rollLine", "Adm  ADM-1001");
-    student.put("dateOfBirth", "10-12-2007");
+    student.put("dob", "10/12/2007");
+    student.put("dateOfBirth", "10/12/2007");
     student.put("bloodGroup", "O+");
+    student.put("mobileNo", "9999900001");
+    student.put("emergencyNo", "9871986210");
     student.put("emergencyContact", "9871986210");
+    student.put("pen", "PEN1234567");
     student.put("transportMode", "Bus");
     student.put("penNumber", "PEN1234567");
     student.put("apaarId", "APAAR-998877");
