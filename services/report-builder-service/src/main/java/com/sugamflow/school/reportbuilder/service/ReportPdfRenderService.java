@@ -540,23 +540,30 @@ public class ReportPdfRenderService {
     return formatBound(path, String.valueOf(cur));
   }
 
-  /** Issued/expiry print as "16 Jul 2026". Date of birth prints as DD-MM-YYYY. */
+  /** Issued/expiry print as "16 Jul 2026". Date of birth prints as DD/MM/YYYY. */
   private static String formatBound(String path, String value) {
-    if (value == null || value.isBlank()) {
-      return value == null ? "" : value;
-    }
-    String key = path.toLowerCase(Locale.ROOT);
+    String key = path == null ? "" : path.toLowerCase(Locale.ROOT);
     boolean dob = key.endsWith("dateofbirth") || key.endsWith(".dob");
     boolean cardDate = key.endsWith("issuedat") || key.endsWith("expiresat") || key.endsWith("validuntil");
+    if (value == null || value.isBlank()) {
+      return dob || cardDate ? "—" : (value == null ? "" : value);
+    }
     if (!dob && !cardDate) {
       return value;
     }
+    if ("—".equals(value.trim())) {
+      return "—";
+    }
     try {
+      if (dob && value.matches("\\d{2}[-/]\\d{2}[-/]\\d{4}")) {
+        String[] parts = value.split("[-/]");
+        return parts[0] + "/" + parts[1] + "/" + parts[2];
+      }
       if (value.length() >= 20 && value.contains("T")) {
         Instant instant = Instant.parse(value);
         DateTimeFormatter fmt =
             dob
-                ? DateTimeFormatter.ofPattern("dd-MM-yyyy").withZone(ZoneId.of("Asia/Kolkata"))
+                ? DateTimeFormatter.ofPattern("dd/MM/yyyy").withZone(ZoneId.of("Asia/Kolkata"))
                 : DateTimeFormatter.ofPattern("dd MMM yyyy", Locale.ENGLISH)
                     .withZone(ZoneId.of("Asia/Kolkata"));
         return fmt.format(instant);
@@ -564,7 +571,7 @@ public class ReportPdfRenderService {
       if (value.length() >= 10 && value.charAt(4) == '-' && value.charAt(7) == '-') {
         LocalDate date = LocalDate.parse(value.substring(0, 10));
         return dob
-            ? date.format(DateTimeFormatter.ofPattern("dd-MM-yyyy"))
+            ? date.format(DateTimeFormatter.ofPattern("dd/MM/yyyy"))
             : date.format(DateTimeFormatter.ofPattern("dd MMM yyyy", Locale.ENGLISH));
       }
     } catch (RuntimeException ignored) {

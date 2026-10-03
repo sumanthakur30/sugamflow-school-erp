@@ -191,6 +191,7 @@
                   [class.el-qr]="el.type === 'qr'"
                   [style.fontSize.px]="el.fontSize || 11"
                   [style.fontWeight]="el.bold || el.type === 'heading' ? '700' : '500'"
+                  [class.el-center]="el.align === 'center'"
                   [style.textAlign]="el.align || 'left'"
                   [style.color]="el.color || null"
                   [style.--el-fill]="el.fillColor || null"
