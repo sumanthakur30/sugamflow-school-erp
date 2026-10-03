@@ -25,6 +25,7 @@ Docker network (external): `sumanthakur30_default`
 | `03-sugamflow-start.sh` | Start SugamFlow shop apps only |
 | `03-sugamflow-stop.sh` | Stop SugamFlow shop apps only |
 | `04-pull-recreate-all-school.sh` | Pull Hub images + recreate all School services (Phase A+B) |
+| `demo/*.sh` | **Demo on-demand** — retail always-on; school/clinic/IPD/fieldforce only when showing that vertical (see `demo/README.md`) |
 
 **PC prod env preflight:** `D:\school\scripts\check-prod-env.ps1`  
 (JWT secret match, internal API key match, SMTP not localhost, Website CMS DB vars)
@@ -56,7 +57,33 @@ WITH_IPD=1 SCHOOL_PHASE=b bash scripts/ec2/00-full-deploy-and-flyway-check.sh
 CHECK_ONLY=1 bash scripts/ec2/00-full-deploy-and-flyway-check.sh
 ```
 
-Script defaults: `SUGAMFLOW_DIR=/home/ec2-user/opt/sugamflow`, `SCHOOL_DIR=/home/ec2-user/opt/school`. Override if your paths differ (`/opt/sugamflow`, etc.).
+Script defaults: `SUGAMFLOW_DIR=/opt/sugamflow`, `SCHOOL_DIR=/opt/school`.
+
+### Demo day (RAM-saving) — prefer `docker compose`
+
+Full copy-paste commands: [`demo/README.md`](demo/README.md) (also on EC2 at `/opt/school/scripts/ec2/demo/README.md` and `/opt/sugamflow/scripts/demo/README.md`).
+
+```bash
+# Everyday retail — keep core + retail apps up (see demo/README.md)
+
+# School pitch
+cd /opt/school
+docker compose -f docker-compose.school.ec2-rds.yml --env-file .env.school.production \
+  --profile phase-b --profile website up -d
+# after:
+docker compose -f docker-compose.school.ec2-rds.yml --env-file .env.school.production \
+  --profile phase-b --profile website stop
+
+# Clinic pitch
+cd /opt/sugamflow
+docker compose -f docker-compose.ec2-rds.yml --env-file .env.production up -d \
+  doctor-service appointment-service queue-management-service
+# after:
+docker compose -f docker-compose.ec2-rds.yml --env-file .env.production stop \
+  doctor-service appointment-service queue-management-service
+```
+
+Optional wrappers (same groups): `demo/up-*.sh`, `demo/down-demos.sh`.
 
 ### Compose + env (production)
 
