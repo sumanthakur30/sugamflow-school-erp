@@ -576,7 +576,7 @@ public class ReportTemplateService {
         hasGlobal = true;
       }
       String payload = String.valueOf(row.getPayload());
-      if (payload.contains("cr80-v3")) {
+      if (payload.contains("cr80-v4")) {
         continue;
       }
       Map<String, Object> copy = new LinkedHashMap<>(canonical);
@@ -674,7 +674,7 @@ public class ReportTemplateService {
     Map<String, Object> t = new LinkedHashMap<>();
     t.put("templateKey", "id_card");
     t.put("name", "Student ID Card");
-    t.put("layoutVersion", "cr80-v3");
+    t.put("layoutVersion", "cr80-v4");
     t.put("layout", Map.of("width", 324, "height", 204, "units", "px", "paper", "CR80"));
     t.put(
         "elements",
@@ -711,31 +711,34 @@ public class ReportTemplateService {
                 "borderColor", "#CBD5E1",
                 "borderRadius", 4),
             styled(
-                element("text", "{{student.name}}", 62, 42, 11, 142, 14),
+                element("text", "{{student.name}}", 62, 40, 11, 142, 13),
                 "z", 2, "bold", true, "color", "#0F172A"),
             styled(
-                element("text", "Class  {{student.classSection}}", 62, 58, 7, 142, 11),
+                element("text", "Class  {{student.classSection}}", 62, 54, 7, 142, 11),
                 "z", 2, "color", "#1E293B"),
             styled(
-                element("text", "{{student.rollLine}}", 62, 70, 7, 142, 11),
+                element("text", "{{student.rollLine}}", 62, 65, 7, 142, 11),
                 "z", 2, "color", "#1E293B"),
             styled(
-                element("text", "DOB  {{student.dateOfBirth}}", 62, 82, 7, 142, 11),
+                element("text", "DOB  {{student.dob}}", 62, 76, 7, 142, 11),
                 "z", 2, "color", "#1E293B"),
             styled(
-                element("text", "Blood", 62, 96, 7, 34, 12),
+                element("text", "Blood Group", 62, 88, 7, 68, 12),
                 "z", 2, "color", "#1E293B"),
             styled(
-                element("box", "", 98, 94, 0, 32, 14),
+                element("box", "", 132, 87, 0, 30, 14),
                 "z", 2,
                 "fillColor", "#9F1239",
                 "borderWidth", 0,
                 "borderRadius", 3),
             styled(
-                element("text", "{{student.bloodGroup}}", 98, 95, 8, 32, 12),
+                element("text", "{{student.bloodGroup}}", 132, 88, 7, 30, 12),
                 "z", 3, "bold", true, "align", "center", "color", "#FFFFFF"),
             styled(
-                element("text", "Emergency  {{student.emergencyContact}}", 62, 112, 7, 142, 12),
+                element("text", "Mobile  {{student.mobileNo}}", 62, 103, 7, 142, 11),
+                "z", 2, "color", "#1E293B"),
+            styled(
+                element("text", "Emergency  {{student.emergencyNo}}", 62, 115, 7, 142, 12),
                 "z", 2, "color", "#1E293B"),
             styled(
                 element("text", "APAAR  {{student.apaarId}}", 210, 42, 7, 106, 11),

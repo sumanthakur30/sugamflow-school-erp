@@ -45,6 +45,19 @@ export interface ReportTemplate {
   schedule?: unknown;
 }
 
+export interface IdCardStudent {
+  name: string;
+  grade: string;
+  section: string;
+  admissionNo: string;
+  dob: string;
+  bloodGroup: string;
+  mobileNo: string;
+  emergencyNo: string;
+  apaarId: string;
+  pen: string;
+}
+
 interface PersonHit {
   id: string;
   fullName?: string;
@@ -604,13 +617,20 @@ export class ReportBuilderComponent implements OnInit, OnDestroy {
     return this.formatBound(path, String(cur));
   }
 
-  /** Match the PDF: issued/expiry as "16 Jul 2026", DOB as DD-MM-YYYY. */
+  /** Match the PDF: issued/expiry as "16 Jul 2026", DOB as DD/MM/YYYY. */
   private formatBound(path: string, value: string): string {
     const key = path.toLowerCase();
     const dob = key.endsWith('dateofbirth') || key.endsWith('.dob');
     const cardDate = key.endsWith('issuedat') || key.endsWith('expiresat') || key.endsWith('validuntil');
     if (!dob && !cardDate) {
       return value;
+    }
+    if (!value.trim() || value.trim() === '—') {
+      return '—';
+    }
+    const dmy = value.match(/^(\d{2})[-/](\d{2})[-/](\d{4})$/);
+    if (dob && dmy) {
+      return `${dmy[1]}/${dmy[2]}/${dmy[3]}`;
     }
     const iso = value.match(/^(\d{4})-(\d{2})-(\d{2})(?:T|$)/);
     if (!iso) {
@@ -620,7 +640,7 @@ export class ReportBuilderComponent implements OnInit, OnDestroy {
     const month = iso[2];
     const year = iso[1];
     if (dob) {
-      return `${day}-${month}-${year}`;
+      return `${day}/${month}/${year}`;
     }
     const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
     return `${day} ${months[Number(month) - 1]} ${year}`;
@@ -630,21 +650,94 @@ export class ReportBuilderComponent implements OnInit, OnDestroy {
     return value.trim() ? value.trim() : '—';
   }
 
-  private emergencyPhone(answers: Record<string, unknown>): string {
-    const keys = [
-      'emergencyContact',
-      'emergencyMobile',
-      'guardianMobile',
-      'fatherMobile',
-      'parentMobile',
-      'mobile',
-    ];
+  private idCardStudent(answers: Record<string, unknown>, admissionNo: string, name: string): IdCardStudent {
+    const klass = this.classDisplay(answers);
+    const mobileNo = this.dash(
+      this.firstText(answers, ['mobileNo', 'mobile', 'contactNo', 'contactNumber', 'phone', 'studentMobile']),
+    );
+    return {
+      name,
+      grade: klass.grade,
+      section: klass.section,
+      admissionNo,
+      dob: this.formatBound('student.dob', this.firstText(answers, ['dateOfBirth', 'dob', 'birthDate'])),
+      bloodGroup: this.dash(this.firstText(answers, ['bloodGroup', 'blood_group', 'bloodType'])),
+      mobileNo,
+      emergencyNo: this.emergencyNo(answers, mobileNo),
+      apaarId: this.dash(this.firstText(answers, ['apaarId', 'apaarNumber'])),
+      pen: this.dash(this.firstText(answers, ['penNumber', 'pen'])),
+    };
+  }
+
+  private classDisplay(answers: Record<string, unknown>): { grade: string; section: string; classSection: string } {
+    let grade = this.firstText(answers, ['classGrade', 'grade', 'className']);
+    let section = this.firstText(answers, ['sectionLetter', 'section']);
+    const combined = this.firstText(answers, ['classSection', 'classApplied']);
+    if (!grade && combined) {
+      const parts = this.splitGradeSection(combined);
+      grade = parts[0];
+      if (!section) {
+        section = parts[1];
+      }
+    }
+    if (/^\d{1,2}$/.test(grade) || /^[IVX]+$/i.test(grade)) {
+      grade = `Grade ${grade}`;
+    }
+    if (section.length <= 3) {
+      section = section.toUpperCase();
+    }
+    return {
+      grade: grade || '—',
+      section: section || '—',
+      classSection: grade ? (section ? `${grade} - ${section}` : grade) : '—',
+    };
+  }
+
+  private splitGradeSection(raw: string): [string, string] {
+    const paren = raw.match(/^(.*?)\s*\(([A-Za-z0-9]+)\)\s*$/);
+    if (paren) {
+      return [paren[1].trim(), paren[2].trim()];
+    }
+    const spaced = raw.lastIndexOf(' - ');
+    if (spaced > 0) {
+      return [raw.slice(0, spaced).trim(), raw.slice(spaced + 3).trim()];
+    }
+    const dash = Math.max(raw.lastIndexOf('-'), raw.lastIndexOf('–'));
+    if (dash > 0 && raw.length - dash <= 3) {
+      return [raw.slice(0, dash).trim(), raw.slice(dash + 1).trim()];
+    }
+    return [raw.trim(), ''];
+  }
+
+  private firstText(answers: Record<string, unknown>, keys: string[]): string {
     for (const key of keys) {
       const value = this.text(answers[key]);
       if (value) {
         return value;
       }
     }
+    return '';
+  }
+
+  private emergencyNo(answers: Record<string, unknown>, mobileNo: string): string {
+    const direct = this.firstText(answers, [
+      'emergencyNo',
+      'emergencyContact',
+      'emergencyMobile',
+      'emergencyPhone',
+      'alternateMobile',
+    ]);
+    if (direct && !this.samePhone(direct, mobileNo)) {
+      return direct;
+    }
+    const guardian = this.guardianPhone(answers);
+    if (guardian && !this.samePhone(guardian, mobileNo)) {
+      return guardian;
+    }
+    return this.dash(direct);
+  }
+
+  private guardianPhone(answers: Record<string, unknown>): string {
     const guardians = answers['guardians'];
     if (!Array.isArray(guardians)) {
       return '';
@@ -667,6 +760,12 @@ export class ReportBuilderComponent implements OnInit, OnDestroy {
       }
     }
     return fallback;
+  }
+
+  private samePhone(left: string, right: string): boolean {
+    const a = left.replace(/\D/g, '');
+    const b = right.replace(/\D/g, '');
+    return !!a && a === b;
   }
 
   private transportLabel(answers: Record<string, unknown>): string {
@@ -1081,7 +1180,8 @@ export class ReportBuilderComponent implements OnInit, OnDestroy {
     const answers = (student?.answers ?? {}) as Record<string, unknown>;
     const name = this.text(answers['fullName'] || answers['studentName']);
     const admissionNo = this.text(student?.admissionNo || answers['admissionNo']);
-    const classSection = this.text(answers['classSection'] || answers['classApplied']);
+    const card = this.idCardStudent(answers, admissionNo, name);
+    const classSection = this.classDisplay(answers).classSection;
     const fatherName = this.text(answers['fatherName'] || answers['parentName']);
     let photoDirectUrl = '';
     try {
@@ -1103,16 +1203,23 @@ export class ReportBuilderComponent implements OnInit, OnDestroy {
     studentMap['name'] = name;
     studentMap['fullName'] = name;
     studentMap['studentName'] = name;
-    studentMap['admissionNo'] = admissionNo;
+    studentMap['admissionNo'] = card.admissionNo;
+    studentMap['grade'] = card.grade;
+    studentMap['section'] = card.section;
     studentMap['classSection'] = classSection;
-    studentMap['classApplied'] = this.text(answers['classApplied'] || classSection);
+    studentMap['classApplied'] = classSection;
     studentMap['fatherName'] = fatherName;
-    studentMap['penNumber'] = this.dash(this.text(answers['penNumber'] || answers['pen']));
-    studentMap['apaarId'] = this.dash(this.text(answers['apaarId'] || answers['apaarNumber']));
+    studentMap['pen'] = card.pen;
+    studentMap['penNumber'] = card.pen;
+    studentMap['apaarId'] = card.apaarId;
     studentMap['schoolStudentId'] = this.text(answers['schoolStudentId']);
-    studentMap['dateOfBirth'] = this.text(answers['dateOfBirth'] || answers['dob']);
-    studentMap['bloodGroup'] = this.dash(this.text(answers['bloodGroup'] || answers['blood_group']));
-    studentMap['emergencyContact'] = this.dash(this.emergencyPhone(answers));
+    studentMap['dob'] = card.dob;
+    studentMap['dateOfBirth'] = card.dob;
+    studentMap['bloodGroup'] = card.bloodGroup;
+    studentMap['mobileNo'] = card.mobileNo;
+    studentMap['mobile'] = card.mobileNo;
+    studentMap['emergencyNo'] = card.emergencyNo;
+    studentMap['emergencyContact'] = card.emergencyNo;
     studentMap['transportMode'] = this.transportLabel(answers);
     const rollNo = this.text(answers['rollNo']);
     studentMap['rollLine'] = rollNo

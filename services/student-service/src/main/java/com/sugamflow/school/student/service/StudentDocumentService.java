@@ -378,8 +378,12 @@ public class StudentDocumentService {
     full.put("name", stringOr(studentDto.get("fullName"), "Student"));
     full.put("fullName", stringOr(studentDto.get("fullName"), "Student"));
     full.put("admissionNo", stringOr(student.getAdmissionNo(), ""));
-    full.put("classSection", dashIfBlank(stringOr(studentDto.get("classSection"), "")));
-    full.put("classApplied", stringOr(studentDto.get("classSection"), ""));
+    Map<String, Object> answers = student.getAnswers() != null ? student.getAnswers() : Map.of();
+    String[] gradeSection = gradeAndSection(answers, stringOr(studentDto.get("classSection"), ""));
+    full.put("grade", dashIfBlank(gradeSection[0]));
+    full.put("section", dashIfBlank(gradeSection[1]));
+    full.put("classSection", classLine(gradeSection[0], gradeSection[1]));
+    full.put("classApplied", classLine(gradeSection[0], gradeSection[1]));
     full.put("rollNo", stringOr(studentDto.get("rollNo"), ""));
     full.put("house", stringOr(studentDto.get("house"), ""));
     full.put("gender", stringOr(studentDto.get("gender"), ""));
@@ -387,17 +391,29 @@ public class StudentDocumentService {
     full.put("photoContentUrl", contentUrl);
     full.put("photoBase64", photo.base64());
     full.put("photoDirectUrl", photo.dataUrl());
-    Map<String, Object> answers = student.getAnswers() != null ? student.getAnswers() : Map.of();
     String rollNo = stringOr(studentDto.get("rollNo"), "");
     String admissionNo = stringOr(student.getAdmissionNo(), "");
     full.put(
         "rollLine",
         rollNo.isBlank() ? "Adm  " + admissionNo : "Roll  " + rollNo + "  ·  " + admissionNo);
-    full.put("dateOfBirth", dobLabel(firstAnswer(answers, "dateOfBirth", "dob")));
-    full.put("bloodGroup", dashIfBlank(firstAnswer(answers, "bloodGroup", "blood_group")));
-    full.put("emergencyContact", dashIfBlank(emergencyPhone(answers)));
+    String dob = dobLabel(firstAnswer(answers, "dateOfBirth", "dob", "birthDate"));
+    full.put("dob", dob);
+    full.put("dateOfBirth", dob);
+    full.put("bloodGroup", dashIfBlank(firstAnswer(answers, "bloodGroup", "blood_group", "bloodType")));
+    String mobile = mobileNo(answers);
+    String emergency = emergencyNo(answers, mobile);
+    full.put("mobileNo", mobile);
+    full.put("mobile", mobile);
+    full.put("emergencyNo", emergency);
+    full.put("emergencyContact", emergency);
     full.put("transportMode", transportLabel(answers));
-    full.put("penNumber", dashIfBlank(stringOr(studentDto.get("penNumber"), "")));
+    String pen = firstAnswer(answers, "penNumber", "pen");
+    if (pen.isBlank()) {
+      pen = stringOr(studentDto.get("penNumber"), "");
+    }
+    pen = dashIfBlank(pen);
+    full.put("pen", pen);
+    full.put("penNumber", pen);
     full.put("apaarId", dashIfBlank(stringOr(studentDto.get("apaarId"), "")));
     full.put("samagraId", stringOr(studentDto.get("samagraId"), ""));
     full.put("schoolStudentId", stringOr(studentDto.get("schoolStudentId"), ""));
@@ -417,11 +433,19 @@ public class StudentDocumentService {
     allowed.add("photoDirectUrl");
     allowed.add("photoContentUrl");
     allowed.add("classSection");
+    allowed.add("classApplied");
+    allowed.add("grade");
+    allowed.add("section");
     allowed.add("rollLine");
+    allowed.add("dob");
     allowed.add("dateOfBirth");
     allowed.add("bloodGroup");
+    allowed.add("mobile");
+    allowed.add("mobileNo");
     allowed.add("emergencyContact");
+    allowed.add("emergencyNo");
     allowed.add("transportMode");
+    allowed.add("pen");
     allowed.add("penNumber");
     allowed.add("apaarId");
     Map<String, Object> filtered = new LinkedHashMap<>();
@@ -490,9 +514,27 @@ public class StudentDocumentService {
           if ("fullName".equals(key)) {
             keys.add("name");
           }
-          if ("classApplied".equals(key) || "classSection".equals(key)) {
+          if ("classApplied".equals(key) || "classSection".equals(key) || "classGrade".equals(key) || "sectionLetter".equals(key)) {
             keys.add("classSection");
             keys.add("classApplied");
+            keys.add("grade");
+            keys.add("section");
+          }
+          if ("dateOfBirth".equals(key) || "dob".equals(key)) {
+            keys.add("dob");
+            keys.add("dateOfBirth");
+          }
+          if ("mobile".equals(key) || "mobileNo".equals(key)) {
+            keys.add("mobile");
+            keys.add("mobileNo");
+          }
+          if ("penNumber".equals(key) || "pen".equals(key)) {
+            keys.add("pen");
+            keys.add("penNumber");
+          }
+          if (key.startsWith("emergency")) {
+            keys.add("emergencyNo");
+            keys.add("emergencyContact");
           }
         }
       }
@@ -573,15 +615,76 @@ public class StudentDocumentService {
     return value;
   }
 
+  /** Grade plus section, as "Grade 9 - A" when a section is stored. */
+  private static String[] gradeAndSection(Map<String, Object> answers, String fallbackClass) {
+    String grade = firstAnswer(answers, "classGrade", "grade", "className");
+    String section = firstAnswer(answers, "sectionLetter", "section");
+    String combined = firstAnswer(answers, "classSection", "classApplied");
+    if (combined.isBlank()) {
+      combined = fallbackClass == null ? "" : fallbackClass.trim();
+    }
+    if (grade.isBlank() && !combined.isBlank()) {
+      String[] parts = splitGradeSection(combined);
+      grade = parts[0];
+      if (section.isBlank()) {
+        section = parts[1];
+      }
+    }
+    if (grade.matches("\\d{1,2}") || grade.matches("(?i)[IVX]+")) {
+      grade = "Grade " + grade;
+    }
+    if (section.length() <= 3) {
+      section = section.toUpperCase(Locale.ROOT);
+    }
+    return new String[] {grade, section};
+  }
+
+  private static String classLine(String grade, String section) {
+    if (grade == null || grade.isBlank()) {
+      return "—";
+    }
+    if (section == null || section.isBlank()) {
+      return grade;
+    }
+    return grade + " - " + section;
+  }
+
+  private static String[] splitGradeSection(String raw) {
+    String value = raw.trim();
+    int paren = value.lastIndexOf('(');
+    if (paren > 0 && value.endsWith(")")) {
+      String section = value.substring(paren + 1, value.length() - 1).trim();
+      if (!section.isBlank() && section.length() <= 3) {
+        return new String[] {value.substring(0, paren).trim(), section};
+      }
+    }
+    int spaced = value.lastIndexOf(" - ");
+    if (spaced > 0) {
+      return new String[] {value.substring(0, spaced).trim(), value.substring(spaced + 3).trim()};
+    }
+    int dash = Math.max(value.lastIndexOf('-'), value.lastIndexOf('–'));
+    if (dash > 0 && value.length() - dash <= 3) {
+      return new String[] {value.substring(0, dash).trim(), value.substring(dash + 1).trim()};
+    }
+    return new String[] {value, ""};
+  }
+
   private static String dobLabel(String raw) {
-    if (raw == null || raw.isBlank()) {
+    if (raw == null || raw.isBlank() || "—".equals(raw.trim())) {
       return "—";
     }
     String value = raw.trim();
     try {
+      if (value.matches("\\d{2}/\\d{2}/\\d{4}")) {
+        return value;
+      }
+      if (value.matches("\\d{2}-\\d{2}-\\d{4}")) {
+        return LocalDate.parse(value, DateTimeFormatter.ofPattern("dd-MM-yyyy"))
+            .format(DateTimeFormatter.ofPattern("dd/MM/yyyy"));
+      }
       if (value.length() >= 10 && value.charAt(4) == '-' && value.charAt(7) == '-') {
         return LocalDate.parse(value.substring(0, 10))
-            .format(DateTimeFormatter.ofPattern("dd-MM-yyyy"));
+            .format(DateTimeFormatter.ofPattern("dd/MM/yyyy"));
       }
     } catch (RuntimeException ignored) {
       return value;
@@ -589,19 +692,32 @@ public class StudentDocumentService {
     return value;
   }
 
-  private static String emergencyPhone(Map<String, Object> answers) {
+  private static String mobileNo(Map<String, Object> answers) {
+    return dashIfBlank(
+        firstAnswer(answers, "mobileNo", "mobile", "contactNo", "contactNumber", "phone", "studentMobile"));
+  }
+
+  /** Emergency contact. The student's own mobile stays on the Mobile line. */
+  private static String emergencyNo(Map<String, Object> answers, String mobile) {
     String direct =
         firstAnswer(
             answers,
+            "emergencyNo",
             "emergencyContact",
             "emergencyMobile",
-            "guardianMobile",
-            "fatherMobile",
-            "parentMobile",
-            "mobile");
-    if (!direct.isBlank()) {
+            "emergencyPhone",
+            "alternateMobile");
+    if (!direct.isBlank() && !samePhone(direct, mobile)) {
       return direct;
     }
+    String guardian = guardianPhone(answers);
+    if (!guardian.isBlank() && !samePhone(guardian, mobile)) {
+      return guardian;
+    }
+    return direct.isBlank() ? "—" : direct;
+  }
+
+  private static String guardianPhone(Map<String, Object> answers) {
     Object guardians = answers.get("guardians");
     if (!(guardians instanceof List<?> list)) {
       return "";
@@ -624,6 +740,12 @@ public class StudentDocumentService {
       }
     }
     return fallback;
+  }
+
+  private static boolean samePhone(String left, String right) {
+    String a = left == null ? "" : left.replaceAll("\\D", "");
+    String b = right == null ? "" : right.replaceAll("\\D", "");
+    return !a.isBlank() && a.equals(b);
   }
 
   private static String transportLabel(Map<String, Object> answers) {
