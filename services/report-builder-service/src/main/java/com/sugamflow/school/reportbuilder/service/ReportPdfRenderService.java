@@ -130,6 +130,7 @@ public class ReportPdfRenderService {
           case "box" -> drawBox(cb, el, x, yPdf - h, w, h);
           case "image" -> drawImage(cb, el, data, x, yPdf - h, w, h);
           case "qr" -> drawQr(cb, el, data, x, yPdf - h, w, h, scale);
+          case "id-fields", "idfields" -> drawIdFields(cb, el, data, x, yPdf, w, h, scaleY);
           case "heading", "text", "field" ->
               drawText(cb, el, data, x, yPdf - h * 0.25f, w, h, scaleY);
           default -> drawText(cb, el, data, x, yPdf - h * 0.25f, w, h, scaleY);
@@ -480,6 +481,48 @@ public class ReportPdfRenderService {
       }
     } else {
       ColumnText.showTextAligned(cb, alignment, new Phrase(text, font), tx, baseline, 0);
+    }
+  }
+
+  /** Form fields marked showOnIdCard, stacked inside the reserved column. */
+  @SuppressWarnings("unchecked")
+  private void drawIdFields(
+      PdfContentByte cb,
+      Map<String, Object> el,
+      Map<String, Object> data,
+      float x,
+      float top,
+      float w,
+      float h,
+      float scaleY) {
+    Object student = data.get("student");
+    if (!(student instanceof Map<?, ?> studentMap)) {
+      return;
+    }
+    Object raw = studentMap.get("idCardLines");
+    if (!(raw instanceof List<?> lines) || lines.isEmpty()) {
+      return;
+    }
+    int count = lines.size();
+    float row = h / count;
+    float requested = floatOr(el.get("fontSize"), 8f);
+    float size = Math.min(requested * Math.max(scaleY, 0.7f), Math.max(6.5f, row * 0.78f));
+    Color ink = colorOr(el.get("color"), Color.BLACK);
+    Font font = FontFactory.getFont(FontFactory.HELVETICA, size, Font.NORMAL, ink);
+    float baseline = top - row + size * 0.2f;
+    for (Object item : lines) {
+      if (!(item instanceof Map<?, ?> line)) {
+        baseline -= row;
+        continue;
+      }
+      String label = line.get("label") == null ? "" : String.valueOf(line.get("label")).trim();
+      String value = line.get("value") == null ? "" : String.valueOf(line.get("value")).trim();
+      if (value.isEmpty()) {
+        value = "—";
+      }
+      String text = label.isEmpty() ? value : label + "  " + value;
+      ColumnText.showTextAligned(cb, com.lowagie.text.Element.ALIGN_LEFT, new Phrase(text, font), x, baseline, 0);
+      baseline -= row;
     }
   }
 

@@ -189,12 +189,14 @@
                   [style.height.px]="el.height"
                   [class.el-image]="el.type === 'image'"
                   [class.el-qr]="el.type === 'qr'"
+                  [class.id-fields-host]="el.type === 'id-fields'"
                   [style.fontSize.px]="el.fontSize || 11"
                   [style.fontWeight]="el.bold || el.type === 'heading' ? '700' : '500'"
                   [class.el-center]="el.align === 'center'"
                   [style.textAlign]="el.align || 'left'"
                   [style.color]="el.color || null"
                   [style.--el-fill]="el.fillColor || null"
+                  [style.pointer-events]="el.type === 'box' && !el.fillColor ? 'none' : null"
                   [style.--el-bc]="el.borderColor || null"
                   [style.--el-bw.px]="el.borderWidth ?? null"
                   [style.--el-br.px]="el.borderRadius || 0"
@@ -210,6 +212,15 @@
                     } @else {
                       <div class="photo-fallback">Photo</div>
                     }
+                  } @else if (el.type === 'id-fields') {
+                    <div class="id-fields">
+                      @for (line of idCardLines; track line.key) {
+                        <div class="id-field">
+                          <span class="id-field-label">{{ line.label }}</span>
+                          <span class="id-field-value">{{ line.value }}</span>
+                        </div>
+                      }
+                    </div>
                   } @else {
                     {{ displayLabel(el) }}
                   }
