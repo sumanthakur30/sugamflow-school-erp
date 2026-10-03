@@ -160,7 +160,12 @@ public final class ReportElementCatalog {
     student.put("name", "Priya Nair");
     student.put("admissionNo", "ADM-1001");
     student.put("classApplied", "Grade 8");
-    student.put("classSection", "Grade 8-A");
+    student.put("classSection", "Grade 8 - A");
+    student.put("rollLine", "Adm  ADM-1001");
+    student.put("dateOfBirth", "10-12-2007");
+    student.put("bloodGroup", "O+");
+    student.put("emergencyContact", "9871986210");
+    student.put("transportMode", "Bus");
     student.put("penNumber", "PEN1234567");
     student.put("apaarId", "APAAR-998877");
     student.put("photoBase64", "");
@@ -179,9 +184,13 @@ public final class ReportElementCatalog {
     payment.put("paymentMode", "UPI");
     Map<String, Object> context = new LinkedHashMap<>();
     context.put("organizationId", "demo-school");
+    context.put("organizationName", "Demo School");
     context.put("branchId", "main");
+    context.put("branchName", "Main");
     context.put("academicSessionId", "2025-26");
-    context.put("issuedAt", "2026-07-16T10:00:00Z");
+    context.put("sessionLabel", "2025-2026");
+    context.put("issuedAt", "16 Jul 2026");
+    context.put("expiresAt", "31 Mar 2027");
     context.put("offerLetterUrl", "https://example.local/offer.pdf");
     context.put("feeReceiptUrl", "https://example.local/receipt.pdf");
     context.put("verifyUrl", "https://example.local/verify/document/demo-token");

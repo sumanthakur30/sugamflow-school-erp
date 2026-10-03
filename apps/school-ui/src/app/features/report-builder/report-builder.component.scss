@@ -121,6 +121,19 @@
   margin-bottom: 2rem;
 }
 
+/* CR80 landscape: 3.375in × 2.125in. PDF uses the same page size. */
+.canvas.paper-cr80 {
+  border-radius: 10px;
+  border: 1px solid #c5d0dc;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.16);
+  overflow: hidden;
+}
+
+@page id-card {
+  size: 3.375in 2.125in;
+  margin: 0;
+}
+
 .el {
   position: absolute;
   box-sizing: border-box;
@@ -157,12 +170,34 @@
 }
 
 .el-box {
-  border: 1px solid #94a3b8 !important;
   display: flex;
   align-items: center;
   justify-content: center;
   color: #64748b;
-  background: color-mix(in srgb, #f8fafc 80%, transparent);
+  border-style: solid;
+  border-width: var(--el-bw, 1px);
+  border-color: var(--el-bc, #94a3b8);
+  border-radius: var(--el-br, 0);
+  background: var(--el-fill, #f8fafc);
+}
+
+.canvas.paper-cr80 .el {
+  padding: 0 1px;
+  line-height: 1.15;
+  white-space: nowrap;
+}
+
+.el-qr {
+  background: #fff;
+  border: 1px solid #111827;
+  box-sizing: border-box;
+  padding: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #111827;
+  font-size: 9px;
+  letter-spacing: 0.08em;
 }
 
 .el-image {

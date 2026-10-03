@@ -32,6 +32,9 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class StudentDocumentService {
 
+  private static final DateTimeFormatter CARD_DATE =
+      DateTimeFormatter.ofPattern("dd MMM yyyy", Locale.ENGLISH).withZone(ZoneId.of("Asia/Kolkata"));
+
   public static final String TYPE_ID_CARD = "ID_CARD";
   public static final String TYPE_BONAFIDE = "BONAFIDE";
   public static final String TYPE_CHARACTER = "CHARACTER_CERTIFICATE";
@@ -113,9 +116,14 @@ public class StudentDocumentService {
             "templateKey", templateKey));
     Map<String, Object> context = new LinkedHashMap<>();
     context.put("organizationId", scope.organizationId());
+    context.put("organizationName", humanizeId(scope.organizationId()));
     context.put("branchId", scope.branchId());
+    context.put("branchName", humanizeId(scope.branchId()));
     context.put("academicSessionId", scope.academicSessionId());
-    context.put("issuedAt", now.toString());
+    context.put("sessionLabel", sessionLabel(scope.academicSessionId()));
+    context.put("issuedAt", CARD_DATE.format(now));
+    String expiresAt = stringOr(body.get("expiresAt"), "");
+    context.put("expiresAt", expiresAt.isBlank() ? "—" : shortDate(expiresAt));
     context.put("verifyUrl", verifyUrl);
     context.put("verificationToken", token);
     data.put("context", context);
@@ -148,7 +156,6 @@ public class StudentDocumentService {
     meta.put("verifyUrl", verifyUrl);
     meta.put("studentName", stringOr(studentDto.get("fullName"), ""));
     meta.put("classSection", stringOr(studentDto.get("classSection"), ""));
-    String expiresAt = stringOr(body.get("expiresAt"), "");
     if (!expiresAt.isBlank()) {
       meta.put("expiresAt", expiresAt);
     }
@@ -371,7 +378,7 @@ public class StudentDocumentService {
     full.put("name", stringOr(studentDto.get("fullName"), "Student"));
     full.put("fullName", stringOr(studentDto.get("fullName"), "Student"));
     full.put("admissionNo", stringOr(student.getAdmissionNo(), ""));
-    full.put("classSection", stringOr(studentDto.get("classSection"), ""));
+    full.put("classSection", dashIfBlank(stringOr(studentDto.get("classSection"), "")));
     full.put("classApplied", stringOr(studentDto.get("classSection"), ""));
     full.put("rollNo", stringOr(studentDto.get("rollNo"), ""));
     full.put("house", stringOr(studentDto.get("house"), ""));
@@ -380,8 +387,18 @@ public class StudentDocumentService {
     full.put("photoContentUrl", contentUrl);
     full.put("photoBase64", photo.base64());
     full.put("photoDirectUrl", photo.dataUrl());
-    full.put("penNumber", stringOr(studentDto.get("penNumber"), ""));
-    full.put("apaarId", stringOr(studentDto.get("apaarId"), ""));
+    Map<String, Object> answers = student.getAnswers() != null ? student.getAnswers() : Map.of();
+    String rollNo = stringOr(studentDto.get("rollNo"), "");
+    String admissionNo = stringOr(student.getAdmissionNo(), "");
+    full.put(
+        "rollLine",
+        rollNo.isBlank() ? "Adm  " + admissionNo : "Roll  " + rollNo + "  ·  " + admissionNo);
+    full.put("dateOfBirth", dobLabel(firstAnswer(answers, "dateOfBirth", "dob")));
+    full.put("bloodGroup", dashIfBlank(firstAnswer(answers, "bloodGroup", "blood_group")));
+    full.put("emergencyContact", dashIfBlank(emergencyPhone(answers)));
+    full.put("transportMode", transportLabel(answers));
+    full.put("penNumber", dashIfBlank(stringOr(studentDto.get("penNumber"), "")));
+    full.put("apaarId", dashIfBlank(stringOr(studentDto.get("apaarId"), "")));
     full.put("samagraId", stringOr(studentDto.get("samagraId"), ""));
     full.put("schoolStudentId", stringOr(studentDto.get("schoolStudentId"), ""));
     if (!TYPE_ID_CARD.equals(documentType)) {
@@ -399,6 +416,14 @@ public class StudentDocumentService {
     allowed.add("photoUrl");
     allowed.add("photoDirectUrl");
     allowed.add("photoContentUrl");
+    allowed.add("classSection");
+    allowed.add("rollLine");
+    allowed.add("dateOfBirth");
+    allowed.add("bloodGroup");
+    allowed.add("emergencyContact");
+    allowed.add("transportMode");
+    allowed.add("penNumber");
+    allowed.add("apaarId");
     Map<String, Object> filtered = new LinkedHashMap<>();
     for (Map.Entry<String, Object> e : full.entrySet()) {
       filtered.put(e.getKey(), allowed.contains(e.getKey()) ? e.getValue() : "");
@@ -497,6 +522,141 @@ public class StudentDocumentService {
     }
     String s = String.valueOf(value).trim();
     return s.isEmpty() ? fallback : s;
+  }
+
+  private static String firstAnswer(Map<String, Object> answers, String... keys) {
+    for (String key : keys) {
+      String value = stringOr(answers.get(key), "");
+      if (!value.isBlank()) {
+        return value;
+      }
+    }
+    return "";
+  }
+
+  private static String dashIfBlank(String value) {
+    return value == null || value.isBlank() ? "—" : value;
+  }
+
+  /** "demo-school" → "Demo School". */
+  private static String humanizeId(String raw) {
+    if (raw == null || raw.isBlank()) {
+      return "School";
+    }
+    String[] parts = raw.trim().replace('_', ' ').replace('-', ' ').split("\\s+");
+    StringBuilder sb = new StringBuilder();
+    for (String part : parts) {
+      if (part.isBlank()) {
+        continue;
+      }
+      if (sb.length() > 0) {
+        sb.append(' ');
+      }
+      sb.append(Character.toUpperCase(part.charAt(0)));
+      if (part.length() > 1) {
+        sb.append(part.substring(1).toLowerCase(Locale.ROOT));
+      }
+    }
+    return sb.isEmpty() ? "School" : sb.toString();
+  }
+
+  /** "2025-26" → "2025-2026". Other session ids stay as stored. */
+  private static String sessionLabel(String raw) {
+    if (raw == null || raw.isBlank()) {
+      return "—";
+    }
+    String value = raw.trim();
+    if (value.matches("\\d{4}-\\d{2}")) {
+      int start = Integer.parseInt(value.substring(0, 4));
+      return start + "-" + (start + 1);
+    }
+    return value;
+  }
+
+  private static String dobLabel(String raw) {
+    if (raw == null || raw.isBlank()) {
+      return "—";
+    }
+    String value = raw.trim();
+    try {
+      if (value.length() >= 10 && value.charAt(4) == '-' && value.charAt(7) == '-') {
+        return LocalDate.parse(value.substring(0, 10))
+            .format(DateTimeFormatter.ofPattern("dd-MM-yyyy"));
+      }
+    } catch (RuntimeException ignored) {
+      return value;
+    }
+    return value;
+  }
+
+  private static String emergencyPhone(Map<String, Object> answers) {
+    String direct =
+        firstAnswer(
+            answers,
+            "emergencyContact",
+            "emergencyMobile",
+            "guardianMobile",
+            "fatherMobile",
+            "parentMobile",
+            "mobile");
+    if (!direct.isBlank()) {
+      return direct;
+    }
+    Object guardians = answers.get("guardians");
+    if (!(guardians instanceof List<?> list)) {
+      return "";
+    }
+    String fallback = "";
+    for (Object item : list) {
+      if (!(item instanceof Map<?, ?> row)) {
+        continue;
+      }
+      String mobile = stringOr(row.get("mobile"), stringOr(row.get("phone"), ""));
+      if (mobile.isBlank()) {
+        continue;
+      }
+      Object primary = row.get("isPrimary");
+      if (Boolean.TRUE.equals(primary) || "true".equalsIgnoreCase(String.valueOf(primary))) {
+        return mobile;
+      }
+      if (fallback.isBlank()) {
+        fallback = mobile;
+      }
+    }
+    return fallback;
+  }
+
+  private static String transportLabel(Map<String, Object> answers) {
+    String mode = firstAnswer(answers, "transportMode", "modeOfTransport", "conveyance");
+    if (!mode.isBlank()) {
+      return humanizeId(mode);
+    }
+    if (!answers.containsKey("transport")) {
+      return "—";
+    }
+    Object flag = answers.get("transport");
+    boolean on =
+        Boolean.TRUE.equals(flag)
+            || "true".equalsIgnoreCase(String.valueOf(flag))
+            || "yes".equalsIgnoreCase(String.valueOf(flag))
+            || "1".equals(String.valueOf(flag).trim());
+    return on ? "Bus" : "Walker";
+  }
+
+  private static String shortDate(String raw) {
+    String value = raw.trim();
+    try {
+      if (value.length() >= 20 && value.contains("T")) {
+        return CARD_DATE.format(Instant.parse(value));
+      }
+      if (value.length() >= 10) {
+        return LocalDate.parse(value.substring(0, 10))
+            .format(DateTimeFormatter.ofPattern("dd MMM yyyy", Locale.ENGLISH));
+      }
+    } catch (RuntimeException ignored) {
+      return value;
+    }
+    return value;
   }
 
   /**
