@@ -1067,13 +1067,33 @@ public class StudentDocumentService {
       return new StudentPhoto(b64, dataUrl, contentUrl);
     }
     Map<String, Object> answers = student.getAnswers() != null ? student.getAnswers() : Map.of();
-    String raw = stringOr(answers.get("photoBase64"), "");
+    String raw = embeddedImage(answers);
     String b64 = stripBase64(raw);
     String dataUrl = "";
     if (!b64.isBlank()) {
       dataUrl = raw.startsWith("data:") ? raw : "data:image/jpeg;base64," + b64;
     }
     return new StudentPhoto(b64, dataUrl, stringOr(answers.get("photoUrl"), ""));
+  }
+
+  /** Inline photograph saved under the school's form-builder field key. */
+  private static String embeddedImage(Map<String, Object> answers) {
+    for (String key : List.of("photoBase64", "photo", "studentPhoto")) {
+      String value = stringOr(answers.get(key), "");
+      if (value.startsWith("data:image/")) {
+        return value;
+      }
+    }
+    String only = "";
+    int images = 0;
+    for (Object value : answers.values()) {
+      if (!(value instanceof String text) || !text.startsWith("data:image/")) {
+        continue;
+      }
+      images++;
+      only = text;
+    }
+    return images == 1 ? only : "";
   }
 
   private static String stripBase64(String value) {
