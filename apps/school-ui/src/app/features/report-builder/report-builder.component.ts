@@ -718,15 +718,50 @@ export class ReportBuilderComponent implements OnInit, OnDestroy {
       ?? shown.find((field) => field.key === 'classGrade');
     if (classField) {
       const klass = this.classDisplay(student);
-      lines.push({ key: classField.key, label: classField.label, value: klass.classSection });
+      lines.push({ key: classField.key, label: this.fieldLabel(classField, 'Class'), value: klass.classSection });
     }
     for (const field of shown) {
       if (this.skipIdCardLine(field)) {
         continue;
       }
-      lines.push({ key: field.key, label: field.label, value: this.idCardValue(field, student) });
+      lines.push({
+        key: field.key,
+        label: this.fieldLabel(field, field.key),
+        value: this.idCardValue(field, student),
+      });
     }
-    return this.fitIdCardLines(lines);
+    const fitted = this.fitIdCardLines(lines);
+    if (fitted.some((line) => this.blankDash(line.value))) {
+      return fitted;
+    }
+    return this.fitIdCardLines(this.defaultIdCardLines(student));
+  }
+
+  /** Used when the student and admission forms have not marked any ID-card fields. */
+  private defaultIdCardLines(student: Record<string, unknown>): IdCardLine[] {
+    const klass = this.classDisplay(student);
+    const father = this.text(student['fatherName']) || this.guardianName(student, 'Father');
+    return [
+      { key: 'classApplied', label: 'Class', value: klass.classSection },
+      { key: 'admissionNo', label: 'Admission No', value: this.dash(this.text(student['admissionNo'])) },
+      {
+        key: 'dateOfBirth',
+        label: 'Date of birth',
+        value: this.dash(this.text(student['dob'] || student['dateOfBirth'])),
+      },
+      { key: 'bloodGroup', label: 'Blood group', value: this.dash(this.text(student['bloodGroup'])) },
+      {
+        key: 'mobile',
+        label: 'Mobile',
+        value: this.dash(this.text(student['mobile'] || student['mobileNo'])),
+      },
+      { key: 'fatherName', label: 'Father', value: this.dash(father) },
+    ];
+  }
+
+  private fieldLabel(field: IdCardField, fallback: string): string {
+    const label = this.text(field.label);
+    return label && label !== field.key ? label : fallback;
   }
 
   /** CR80 field column is 98px tall. Keep filled values, then date of birth and blood group. */
@@ -1183,7 +1218,7 @@ export class ReportBuilderComponent implements OnInit, OnDestroy {
       const records: Record<string, unknown>[] = [];
       for (const student of chosen) {
         const loaded = await this.loadStudentContext(student.id);
-        records.push(loaded.data);
+        records.push(this.withIdCardLines(loaded.data));
       }
       const res = await firstValueFrom(
         this.api.post<any>(`/api/reports/templates/${this.selectedKey}/render`, {
@@ -1213,7 +1248,23 @@ export class ReportBuilderComponent implements OnInit, OnDestroy {
           : 'Please select a student to preview this document.';
       return null;
     }
-    return this.previewContext;
+    return this.withIdCardLines(this.previewContext);
+  }
+
+  /** The canvas computes these lines. The PDF renderer only prints student.idCardLines. */
+  private withIdCardLines(data: Record<string, unknown>): Record<string, unknown> {
+    const student = data['student'];
+    if (!student || typeof student !== 'object' || Array.isArray(student)) {
+      return data;
+    }
+    const record = student as Record<string, unknown>;
+    return {
+      ...data,
+      student: {
+        ...record,
+        idCardLines: this.composeIdCardLines(this.idCardFormFields, record),
+      },
+    };
   }
 
   private runPersonSearch(term: string): void {
@@ -1434,10 +1485,55 @@ export class ReportBuilderComponent implements OnInit, OnDestroy {
     studentMap['photoBase64'] = photoDirectUrl;
     studentMap['photoUrl'] = photoDirectUrl;
     return {
-      data: { ...this.samplePreviewData, student: studentMap },
+      data: {
+        ...this.samplePreviewData,
+        student: studentMap,
+        context: this.cardPreviewContext(student),
+      },
       label: [name, admissionNo, classSection].filter(Boolean).join(' · '),
       photoMissing: !photoDirectUrl,
     };
+  }
+
+  /** Sample header dates stay on an empty preview. A selected student uses today's issue date. */
+  private cardPreviewContext(student: any): Record<string, unknown> {
+    const context: Record<string, unknown> = {
+      ...(((this.samplePreviewData['context'] as Record<string, unknown>) ?? {})),
+    };
+    const sessionId = this.text(student?.academicSessionId);
+    const session = this.sessions.find((item) => item.id === sessionId);
+    if (session?.label) {
+      context['sessionLabel'] = session.label;
+    } else if (/^\d{4}-\d{2}$/.test(sessionId)) {
+      const start = Number(sessionId.slice(0, 4));
+      context['sessionLabel'] = `${start}-${start + 1}`;
+    } else if (sessionId) {
+      context['sessionLabel'] = sessionId;
+    }
+    const branchId = this.text(student?.branchId);
+    if (branchId && !/^[0-9a-f-]{16,}$/i.test(branchId)) {
+      context['branchName'] = this.humanizeId(branchId);
+    }
+    context['issuedAt'] = new Intl.DateTimeFormat('en-GB', {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+      timeZone: 'Asia/Kolkata',
+    }).format(new Date());
+    const years = this.text(context['sessionLabel']).match(/^(\d{4})-(\d{4})$/);
+    if (years) {
+      context['expiresAt'] = `31 Mar ${years[2]}`;
+    }
+    return context;
+  }
+
+  private humanizeId(raw: string): string {
+    return raw
+      .replace(/[_-]+/g, ' ')
+      .split(/\s+/)
+      .filter(Boolean)
+      .map((part) => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
+      .join(' ');
   }
 
   /** Copy admission answers into blank student fields. A saved student value is left as-is. */

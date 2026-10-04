@@ -478,6 +478,22 @@ public class StudentDocumentService {
       }
       lines.add(idLine(field.key, field.label, idCardValue(field, answers, values)));
     }
+    if (lines.stream().noneMatch(line -> !present(stringOr(line.get("value"), "")).isEmpty())) {
+      lines.clear();
+      String[] gradeSection = gradeAndSection(answers, stringOr(values.get("classSection"), ""));
+      lines.add(idLine("classApplied", "Class", classLine(gradeSection[0], gradeSection[1])));
+      lines.add(
+          idLine("admissionNo", "Admission No", dashIfBlank(stringOr(values.get("admissionNo"), ""))));
+      lines.add(idLine("dateOfBirth", "Date of birth", dashIfBlank(stringOr(values.get("dob"), ""))));
+      lines.add(
+          idLine("bloodGroup", "Blood group", dashIfBlank(stringOr(values.get("bloodGroup"), ""))));
+      lines.add(idLine("mobile", "Mobile", dashIfBlank(stringOr(values.get("mobile"), ""))));
+      String father = guardianName(answers, "Father");
+      if (father.isBlank()) {
+        father = firstAnswer(answers, "fatherName", "parentName");
+      }
+      lines.add(idLine("fatherName", "Father", dashIfBlank(father)));
+    }
     return fitIdCardLines(lines);
   }
 

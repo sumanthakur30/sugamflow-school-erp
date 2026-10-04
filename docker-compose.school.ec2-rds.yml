@@ -198,7 +198,7 @@ services:
 
   student-service:
     <<: *jvm-service
-    image: ${IMAGE_PREFIX:-sumanthakur30}/student-service:${IMAGE_TAG:-1.0.0}
+    image: ${IMAGE_PREFIX:-sumanthakur30}/student-service:${STUDENT_IMAGE_TAG:-${IMAGE_TAG:-1.0.0}}
     environment:
       <<: *common-env
       EUREKA_INSTANCE_HOSTNAME: student-service
@@ -214,6 +214,27 @@ services:
       STUDENT_ACADEMIC_URL: http://academic-structure-service:8199
       STUDENT_FEE_URL: http://fee-service:8190
       STUDENT_FORMS_URL: http://form-builder-service:8183
+      STUDENT_REPORTS_URL: http://report-builder-service:8186
+
+  report-builder-service:
+    <<: *jvm-service
+    image: ${IMAGE_PREFIX:-sumanthakur30}/report-builder-service:${REPORTS_IMAGE_TAG:-${IMAGE_TAG:-1.0.0}}
+    environment:
+      <<: *common-env
+      EUREKA_INSTANCE_HOSTNAME: report-builder-service
+      SERVER_PORT: 8186
+      SCHOOL_REPORTS_DB_URL: ${SCHOOL_REPORTS_DB_URL}
+      SCHOOL_REPORTS_DB_USERNAME: ${SCHOOL_REPORTS_DB_USERNAME}
+      SCHOOL_REPORTS_DB_PASSWORD: ${SCHOOL_REPORTS_DB_PASSWORD}
+      SPRING_DATASOURCE_URL: ${SCHOOL_REPORTS_DB_URL}
+      SPRING_DATASOURCE_USERNAME: ${SCHOOL_REPORTS_DB_USERNAME}
+      SPRING_DATASOURCE_PASSWORD: ${SCHOOL_REPORTS_DB_PASSWORD}
+      SPRING_FLYWAY_SCHEMAS: reports
+      SPRING_FLYWAY_DEFAULT_SCHEMA: reports
+      SPRING_FLYWAY_CREATE_SCHEMAS: "true"
+      SPRING_JPA_PROPERTIES_HIBERNATE_DEFAULT_SCHEMA: reports
+      REPORT_SUBSCRIPTION_URL: http://subscription-service:8182
+      REPORT_STUDENT_URL: http://student-service:8191
 
   staff-service:
     <<: *jvm-service
