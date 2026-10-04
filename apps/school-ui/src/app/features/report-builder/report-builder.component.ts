@@ -128,6 +128,7 @@ export class ReportBuilderComponent implements OnInit, OnDestroy {
   private readonly modules = inject(ModuleBootstrapService);
   private readonly route = inject(ActivatedRoute);
   private campusReadySub?: Subscription;
+  private templateQuerySub?: Subscription;
 
   loading = true;
   featureEnabled = false;
@@ -188,10 +189,20 @@ export class ReportBuilderComponent implements OnInit, OnDestroy {
 
   ngOnInit(): void {
     this.campusReadySub = this.tenantContext.whenCampusReady().subscribe(() => this.bootstrap());
+    this.templateQuerySub = this.route.queryParamMap.subscribe((params) => {
+      const requested = params.get('template');
+      if (!requested || requested === this.selectedKey || !this.templates.length) {
+        return;
+      }
+      if (this.templates.some((template) => template.templateKey === requested)) {
+        this.selectTemplate(requested);
+      }
+    });
   }
 
   ngOnDestroy(): void {
     this.campusReadySub?.unsubscribe();
+    this.templateQuerySub?.unsubscribe();
     this.searchSub?.unsubscribe();
     if (this.searchTimer) {
       clearTimeout(this.searchTimer);
@@ -1433,21 +1444,13 @@ export class ReportBuilderComponent implements OnInit, OnDestroy {
   }> {
     const student = await firstValueFrom(this.api.get<any>(`/api/student/students/${id}`));
     const answers = { ...((student?.answers ?? {}) as Record<string, unknown>) };
-    await this.fillBlankFromAdmission(answers, this.text(student?.sourceApplicationId));
+    const admission = await this.fillBlankFromAdmission(answers, this.text(student?.sourceApplicationId));
     const name = this.text(answers['fullName'] || answers['studentName']);
     const admissionNo = this.text(student?.admissionNo || answers['admissionNo']);
     const card = this.idCardStudent(answers, admissionNo, name);
     const classSection = this.classDisplay(answers).classSection;
     const fatherName = this.text(answers['fatherName'] || answers['parentName']);
-    let photoDirectUrl = '';
-    try {
-      photoDirectUrl = await this.photoDataUrl(this.text(answers['photoUrl']));
-      if (!photoDirectUrl) {
-        photoDirectUrl = await this.photoDataUrl(this.text(answers['photo']));
-      }
-    } catch {
-      photoDirectUrl = '';
-    }
+    const photoDirectUrl = await this.resolveStudentPhoto(this.text(student?.id || id), answers, admission);
     const studentMap: Record<string, unknown> = {};
     for (const [key, value] of Object.entries(answers)) {
       if (typeof value === 'string' && (value.startsWith('data:') || value === 'on-file')) {
@@ -1540,9 +1543,9 @@ export class ReportBuilderComponent implements OnInit, OnDestroy {
   private async fillBlankFromAdmission(
     answers: Record<string, unknown>,
     applicationId: string,
-  ): Promise<void> {
+  ): Promise<Record<string, unknown>> {
     if (!applicationId) {
-      return;
+      return {};
     }
     try {
       const app = await firstValueFrom(
@@ -1566,9 +1569,136 @@ export class ReportBuilderComponent implements OnInit, OnDestroy {
       if (!this.blankDash(this.text(answers['dob'])) && this.blankDash(this.text(answers['dateOfBirth']))) {
         answers['dob'] = answers['dateOfBirth'];
       }
+      return source;
     } catch {
-      // The card still uses the student record when the application cannot be loaded.
+      return {};
     }
+  }
+
+  /**
+   * Same photo the student profile uses: vault attachment first, then any image stored on the
+   * student or the admission form. Preview and PDF both receive the resulting data URL.
+   */
+  private async resolveStudentPhoto(
+    studentId: string,
+    answers: Record<string, unknown>,
+    admission: Record<string, unknown>,
+  ): Promise<string> {
+    const vaultUrl = studentId ? await this.vaultPhotoUrl(studentId) : '';
+    let dataUrl = '';
+    if (vaultUrl) {
+      try {
+        dataUrl = await this.photoDataUrl(vaultUrl);
+      } catch {
+        dataUrl = '';
+      }
+    }
+    if (!dataUrl) {
+      for (const ref of this.photoRefs(answers, admission)) {
+        try {
+          dataUrl = await this.photoDataUrl(ref);
+        } catch {
+          dataUrl = '';
+        }
+        if (dataUrl) {
+          break;
+        }
+      }
+    }
+    if (dataUrl.startsWith('data:image/') && dataUrl.length > 700_000) {
+      dataUrl = await this.shrinkDataUrl(dataUrl);
+    }
+    if (dataUrl.startsWith('data:image/') && studentId && !vaultUrl) {
+      await this.storeVaultPhoto(studentId, dataUrl);
+    }
+    return dataUrl;
+  }
+
+  private photoRefs(
+    answers: Record<string, unknown>,
+    admission: Record<string, unknown>,
+  ): string[] {
+    const out: string[] = [];
+    const seen = new Set<string>();
+    const push = (raw: unknown) => {
+      const value = this.text(raw);
+      if (!value || value === 'on-file' || seen.has(value)) {
+        return;
+      }
+      seen.add(value);
+      out.push(value);
+    };
+    for (const bag of [answers, admission]) {
+      push(bag['photoUrl']);
+      push(bag['photo']);
+      const attachmentId = this.text(bag['studentPhoto']);
+      if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(attachmentId)) {
+        push(`/api/student/attachments/${attachmentId}/content`);
+      }
+      for (const value of Object.values(bag)) {
+        if (typeof value === 'string' && value.startsWith('data:image/')) {
+          push(value);
+        }
+      }
+    }
+    return out;
+  }
+
+  private async vaultPhotoUrl(studentId: string): Promise<string> {
+    try {
+      const rows = await firstValueFrom(
+        this.api.get<Array<{ attachmentType?: string; contentUrl?: string }>>(
+          `/api/student/students/${studentId}/attachments`,
+        ),
+      );
+      const photo = (rows ?? []).find(
+        (row) => row.attachmentType === 'STUDENT_PHOTO' && !!row.contentUrl,
+      );
+      return photo?.contentUrl ? String(photo.contentUrl) : '';
+    } catch {
+      return '';
+    }
+  }
+
+  private async storeVaultPhoto(studentId: string, dataUrl: string): Promise<void> {
+    try {
+      const payload = dataUrl.length > 700_000 ? await this.shrinkDataUrl(dataUrl) : dataUrl;
+      if (!payload.startsWith('data:image/') || payload.length > 700_000) {
+        return;
+      }
+      await firstValueFrom(
+        this.api.post(`/api/student/students/${studentId}/attachments`, {
+          type: 'STUDENT_PHOTO',
+          fileName: 'student-photo.jpg',
+          contentType: 'image/jpeg',
+          contentBase64: payload,
+        }),
+      );
+    } catch {
+      // The card still renders the data URL when the vault write is rejected.
+    }
+  }
+
+  private shrinkDataUrl(dataUrl: string): Promise<string> {
+    return new Promise((resolve) => {
+      const img = new Image();
+      img.onload = () => {
+        const maxSide = 800;
+        const scale = Math.min(1, maxSide / Math.max(img.width, img.height, 1));
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.max(1, Math.round(img.width * scale));
+        canvas.height = Math.max(1, Math.round(img.height * scale));
+        const ctx = canvas.getContext('2d');
+        if (!ctx) {
+          resolve(dataUrl);
+          return;
+        }
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        resolve(canvas.toDataURL('image/jpeg', 0.72));
+      };
+      img.onerror = () => resolve('');
+      img.src = dataUrl;
+    });
   }
 
   private async photoDataUrl(raw: string): Promise<string> {
