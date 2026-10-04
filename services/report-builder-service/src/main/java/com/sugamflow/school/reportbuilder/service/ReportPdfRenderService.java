@@ -500,7 +500,11 @@ public class ReportPdfRenderService {
       return;
     }
     Object raw = studentMap.get("idCardLines");
-    if (!(raw instanceof List<?> lines) || lines.isEmpty()) {
+    List<?> lines = raw instanceof List<?> list ? list : List.of();
+    if (lines.isEmpty() || lines.stream().noneMatch(ReportPdfRenderService::lineHasValue)) {
+      lines = fallbackIdCardLines(studentMap);
+    }
+    if (lines.isEmpty()) {
       return;
     }
     int count = lines.size();
@@ -524,6 +528,48 @@ public class ReportPdfRenderService {
       ColumnText.showTextAligned(cb, com.lowagie.text.Element.ALIGN_LEFT, new Phrase(text, font), x, baseline, 0);
       baseline -= row;
     }
+  }
+
+  private static boolean lineHasValue(Object item) {
+    if (!(item instanceof Map<?, ?> line)) {
+      return false;
+    }
+    String value = line.get("value") == null ? "" : String.valueOf(line.get("value")).trim();
+    return !value.isEmpty() && !"\u2014".equals(value) && !"—".equals(value);
+  }
+
+  /** Prints the standard card rows when the form has not marked any ID-card fields. */
+  private static List<Map<String, Object>> fallbackIdCardLines(Map<?, ?> student) {
+    List<Map<String, Object>> lines = new ArrayList<>();
+    addFallback(lines, "classApplied", "Class", textOf(student, "classSection", "classApplied"));
+    addFallback(lines, "admissionNo", "Admission No", textOf(student, "admissionNo"));
+    addFallback(lines, "dateOfBirth", "Date of birth", textOf(student, "dob", "dateOfBirth"));
+    addFallback(lines, "bloodGroup", "Blood group", textOf(student, "bloodGroup"));
+    addFallback(lines, "mobile", "Mobile", textOf(student, "mobile", "mobileNo"));
+    addFallback(lines, "fatherName", "Father", textOf(student, "fatherName"));
+    return lines;
+  }
+
+  private static void addFallback(List<Map<String, Object>> lines, String key, String label, String value) {
+    Map<String, Object> line = new LinkedHashMap<>();
+    line.put("key", key);
+    line.put("label", label);
+    line.put("value", value == null || value.isBlank() || "—".equals(value.trim()) ? "—" : value.trim());
+    lines.add(line);
+  }
+
+  private static String textOf(Map<?, ?> student, String... keys) {
+    for (String key : keys) {
+      Object value = student.get(key);
+      if (value == null) {
+        continue;
+      }
+      String text = String.valueOf(value).trim();
+      if (!text.isEmpty() && !"\u2014".equals(text) && !"—".equals(text)) {
+        return text;
+      }
+    }
+    return "";
   }
 
   @SuppressWarnings("unchecked")
