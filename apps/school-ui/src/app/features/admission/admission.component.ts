@@ -851,7 +851,7 @@ export class AdmissionComponent implements OnInit, OnDestroy {
     if (key === 'photo' || key === 'studentphoto' || field.label.toLowerCase().includes('photo')) {
       return "Upload a recent passport-size photograph. This photo will be used for the student's ID Card, Admit Card and other school documents.";
     }
-    return 'JPG, JPEG, PNG, or WebP. Maximum 512 KB.';
+    return 'JPG, JPEG, PNG, or WebP. Large photos are resized to fit the student record.';
   }
 
   onImageSelected(field: FormField, ev: Event): void {
@@ -865,36 +865,64 @@ export class AdmissionComponent implements OnInit, OnDestroy {
       this.fieldErrors = { ...this.fieldErrors, [field.key]: 'Use JPG, JPEG, PNG, or WebP' };
       return;
     }
-    if (file.size > 512 * 1024) {
-      this.fieldErrors = { ...this.fieldErrors, [field.key]: 'Photo must be 512 KB or smaller' };
+    if (file.size > 8 * 1024 * 1024) {
+      this.fieldErrors = { ...this.fieldErrors, [field.key]: 'Photo must be 8 MB or smaller' };
       return;
     }
-    const reader = new FileReader();
-    reader.onload = () => {
-      const dataUrl = String(reader.result || '');
-      const img = new Image();
-      img.onload = () => {
-        if (img.width < 120 || img.height < 120 || img.width > 2400 || img.height > 2400) {
-          this.fieldErrors = {
-            ...this.fieldErrors,
-            [field.key]: 'Photo must be between 120 and 2400 pixels on each side',
-          };
-          this.cdr.markForCheck();
-          return;
-        }
+    void this.readStudentPhoto(file)
+      .then((dataUrl) => {
         this.answers[field.key] = dataUrl;
         const next = { ...this.fieldErrors };
         delete next[field.key];
         this.fieldErrors = next;
         this.cdr.markForCheck();
+      })
+      .catch((message: string) => {
+        this.fieldErrors = { ...this.fieldErrors, [field.key]: message };
+        this.cdr.markForCheck();
+      });
+  }
+
+  /** Fit the photograph under the student vault limit without stretching it. */
+  private readStudentPhoto(file: File): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const url = URL.createObjectURL(file);
+      const img = new Image();
+      img.onload = () => {
+        URL.revokeObjectURL(url);
+        if (img.width < 120 || img.height < 120) {
+          reject('Photo must be at least 120 pixels on each side');
+          return;
+        }
+        const maxSide = 800;
+        const scale = Math.min(1, maxSide / Math.max(img.width, img.height));
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.max(1, Math.round(img.width * scale));
+        canvas.height = Math.max(1, Math.round(img.height * scale));
+        const ctx = canvas.getContext('2d');
+        if (!ctx) {
+          reject('Could not read that image');
+          return;
+        }
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.82);
+        if (dataUrl.length > 700_000) {
+          const smaller = canvas.toDataURL('image/jpeg', 0.62);
+          if (smaller.length > 700_000) {
+            reject('Photo is still too large after compression. Use a smaller image.');
+            return;
+          }
+          resolve(smaller);
+          return;
+        }
+        resolve(dataUrl);
       };
       img.onerror = () => {
-        this.fieldErrors = { ...this.fieldErrors, [field.key]: 'Could not read that image' };
-        this.cdr.markForCheck();
+        URL.revokeObjectURL(url);
+        reject('Could not read that image');
       };
-      img.src = dataUrl;
-    };
-    reader.readAsDataURL(file);
+      img.src = url;
+    });
   }
 
   clearImage(field: FormField): void {

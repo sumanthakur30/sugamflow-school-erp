@@ -27,6 +27,8 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import java.util.regex.Pattern;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -35,6 +37,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class StudentRecordService {
+
+  private static final Logger log = LoggerFactory.getLogger(StudentRecordService.class);
 
   public static final String FEATURE_STUDENT_MASTER = "FEATURE_STUDENT_MASTER";
   public static final String MODULE_STUDENT = "student";
@@ -864,6 +868,9 @@ public class StudentRecordService {
     assertUniquePen(scope.organizationId(), answers, entity.getId());
     assertUniqueRollInClass(scope.organizationId(), answers, entity.getId());
 
+    Map<String, Object> photoSource = new LinkedHashMap<>(answers);
+    stripEmbeddedImages(answers);
+
     String reason = stringOr(body.get("reason"), "Student profile correction");
     List<Map<String, Object>> changes = diffAnswers(before, answers);
     if (!Objects.equals(stringOr(beforeAdmission, ""), stringOr(admissionNo, ""))) {
@@ -899,7 +906,9 @@ public class StudentRecordService {
     event.put("changes", changes);
     entity.getHistory().add(event);
 
-    return toDto(repository.save(entity));
+    StudentRecordEntity saved = repository.save(entity);
+    promoteAdmissionPhoto(saved, photoSource);
+    return toDto(repository.findById(saved.getId()).orElse(saved));
   }
 
   /** Soft delete — hides from normal lists. Body: { reason } required. */
@@ -1887,8 +1896,8 @@ public class StudentRecordService {
     body.put("contentBase64", dataUrl.substring(comma + 1));
     try {
       attachments.upload(student.getId(), body);
-    } catch (RuntimeException ignored) {
-      // Enrollment stands. Staff can upload the photo on the student profile.
+    } catch (RuntimeException ex) {
+      log.warn("Student photo was not stored for {}: {}", student.getId(), ex.getMessage());
     }
   }
 
@@ -1901,17 +1910,32 @@ public class StudentRecordService {
     return url.startsWith("/api/student/attachments/");
   }
 
+  /**
+   * Admission Form Builder stores the photograph under the school's field key, not only
+   * {@code photo} / {@code studentPhoto}. Prefer a photo-named field when several images exist.
+   */
   private static String embeddedPhoto(Map<String, Object> source) {
-    if (source == null) {
+    if (source == null || source.isEmpty()) {
       return null;
     }
-    for (String key : List.of("photo", "studentPhoto")) {
-      String value = stringVal(source, key);
-      if (value.startsWith("data:image/")) {
+    String only = null;
+    int images = 0;
+    for (Map.Entry<String, Object> entry : source.entrySet()) {
+      if (!(entry.getValue() instanceof String value) || !value.startsWith("data:image/")) {
+        continue;
+      }
+      images++;
+      only = value;
+      String key = entry.getKey() == null ? "" : entry.getKey().toLowerCase(Locale.ROOT);
+      if (key.equals("photo")
+          || key.equals("studentphoto")
+          || key.contains("photo")
+          || key.contains("picture")
+          || key.contains("image")) {
         return value;
       }
     }
-    return null;
+    return images == 1 ? only : null;
   }
 
   /** Drop inline image payloads so the student row stores the vault reference only. */
