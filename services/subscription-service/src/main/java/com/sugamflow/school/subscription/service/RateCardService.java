@@ -344,10 +344,10 @@ public class RateCardService {
               standard_amount_minor, discount_bps, final_amount_minor, gst_inclusive, billing_cycle,
               valid_from, valid_until, status, reason, created_by,
               input_mode, recommended_discount_bps, max_discount_bps, approval_required,
-              discount_amount_minor, gst_amount_minor
+              discount_amount_minor, gst_amount_minor, rounding_step
             ) VALUES (
               ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CAST(? AS DATE), CAST(? AS DATE), ?, ?, ?,
-              ?, ?, ?, ?, ?, ?
+              ?, ?, ?, ?, ?, ?, ?
             )
             RETURNING id
             """,
@@ -372,7 +372,8 @@ public class RateCardService {
             math.get("maxDiscountBps"),
             approval,
             math.get("discountAmountMinor"),
-            math.get("gstAmountMinor"));
+            math.get("gstAmountMinor"),
+            math.get("roundingStep"));
     Map<String, Object> out = new LinkedHashMap<>();
     out.put("id", id);
     out.put("status", status);
@@ -380,6 +381,87 @@ public class RateCardService {
     out.put("finalAmountMinor", supplied);
     out.put("discountBps", bps);
     out.put("standardAmountMinor", standard);
+    out.put("roundingStep", math.get("roundingStep"));
+    return out;
+  }
+
+  @Transactional
+  public Map<String, Object> updateQuote(long id, Map<String, Object> body) {
+    Integer existing =
+        jdbc.queryForObject("SELECT COUNT(*) FROM pricing_quote WHERE id = ?", Integer.class, id);
+    if (existing == null || existing == 0) {
+      throw new IllegalArgumentException("Unknown quote: " + id);
+    }
+    String customer = required(body, "customerName");
+    Map<String, Object> math = quoteMath(body);
+    long standard = ((Number) math.get("standardAmountMinor")).longValue();
+    int bps = ((Number) math.get("discountBps")).intValue();
+    long supplied = ((Number) math.get("finalAmountMinor")).longValue();
+    boolean approval = Boolean.TRUE.equals(math.get("approvalRequired"));
+    String status = approval ? "PENDING" : "DRAFT";
+    String featureCodes = text(body, "featureCodes");
+    int updated =
+        jdbc.update(
+            """
+            UPDATE pricing_quote
+               SET customer_name = ?,
+                   organization_id = ?,
+                   business_type_code = ?,
+                   plan_id = ?,
+                   feature_codes = COALESCE(?, feature_codes),
+                   standard_amount_minor = ?,
+                   discount_bps = ?,
+                   final_amount_minor = ?,
+                   gst_inclusive = ?,
+                   billing_cycle = ?,
+                   valid_from = CAST(? AS DATE),
+                   valid_until = CAST(? AS DATE),
+                   status = ?,
+                   reason = ?,
+                   approved_by = NULL,
+                   input_mode = ?,
+                   recommended_discount_bps = ?,
+                   max_discount_bps = ?,
+                   approval_required = ?,
+                   discount_amount_minor = ?,
+                   gst_amount_minor = ?,
+                   rounding_step = ?,
+                   updated_at = NOW()
+             WHERE id = ?
+            """,
+            customer,
+            blankToNull(text(body, "organizationId")),
+            blankToNull(text(body, "businessTypeCode")),
+            blankToNull(text(body, "planId")),
+            featureCodes == null ? null : featureCodes,
+            standard,
+            bps,
+            supplied,
+            Boolean.TRUE.equals(math.get("gstInclusive")),
+            math.get("billingCycle"),
+            blankToNull(text(body, "validFrom")),
+            blankToNull(text(body, "validUntil")),
+            status,
+            blankToNull(text(body, "reason")),
+            math.get("inputMode"),
+            math.get("recommendedDiscountBps"),
+            math.get("maxDiscountBps"),
+            approval,
+            math.get("discountAmountMinor"),
+            math.get("gstAmountMinor"),
+            math.get("roundingStep"),
+            id);
+    if (updated == 0) {
+      throw new IllegalArgumentException("Unknown quote: " + id);
+    }
+    Map<String, Object> out = new LinkedHashMap<>();
+    out.put("id", id);
+    out.put("status", status);
+    out.put("approvalRequired", approval);
+    out.put("finalAmountMinor", supplied);
+    out.put("discountBps", bps);
+    out.put("standardAmountMinor", standard);
+    out.put("roundingStep", math.get("roundingStep"));
     return out;
   }
 
@@ -387,11 +469,11 @@ public class RateCardService {
   public List<Map<String, Object>> listQuotes() {
     return jdbc.query(
         """
-        SELECT id, customer_name, organization_id, business_type_code, plan_id,
+        SELECT id, customer_name, organization_id, business_type_code, plan_id, feature_codes,
                standard_amount_minor, discount_bps, final_amount_minor, billing_cycle,
                valid_from, valid_until, status, reason, created_by, approved_by, created_at,
                input_mode, recommended_discount_bps, max_discount_bps, approval_required,
-               discount_amount_minor, gst_amount_minor, gst_inclusive
+               discount_amount_minor, gst_amount_minor, gst_inclusive, rounding_step
           FROM pricing_quote
          ORDER BY created_at DESC
         """,
@@ -402,6 +484,7 @@ public class RateCardService {
           item.put("organizationId", rs.getString("organization_id"));
           item.put("businessTypeCode", rs.getString("business_type_code"));
           item.put("planId", rs.getString("plan_id"));
+          item.put("featureCodes", rs.getString("feature_codes"));
           item.put("standardAmountMinor", rs.getLong("standard_amount_minor"));
           item.put("discountBps", rs.getInt("discount_bps"));
           item.put("finalAmountMinor", rs.getLong("final_amount_minor"));
@@ -420,6 +503,7 @@ public class RateCardService {
           item.put("discountAmountMinor", rs.getObject("discount_amount_minor"));
           item.put("gstAmountMinor", rs.getObject("gst_amount_minor"));
           item.put("gstInclusive", rs.getBoolean("gst_inclusive"));
+          item.put("roundingStep", rs.getString("rounding_step"));
           return item;
         });
   }
@@ -705,14 +789,21 @@ public class RateCardService {
         throw new IllegalArgumentException("discountBps cannot exceed 10000");
       }
       finalAmount = RateCardMath.sellingMinor(standard, bps);
-      if (body.get("finalAmountMinor") != null) {
+      if (body.get("finalAmountMinor") != null && "NONE".equals(roundingStep(text(body, "roundingStep")))) {
         long supplied = nonNegative(body.get("finalAmountMinor"), "finalAmountMinor");
         if (supplied != finalAmount) {
           throw new IllegalArgumentException("finalAmountMinor must equal the discounted standard amount");
         }
       }
     }
-    boolean approval = RateCardMath.approvalRequired(bps, maxDiscount);
+    String step = roundingStep(text(body, "roundingStep"));
+    long exactFinal = finalAmount;
+    finalAmount = RateCardMath.roundMinor(finalAmount, step);
+    if (finalAmount > standard) {
+      finalAmount = standard;
+    }
+    int effectiveBps = RateCardMath.bpsFromPrices(standard, finalAmount);
+    boolean approval = RateCardMath.approvalRequired(Math.max(bps, effectiveBps), maxDiscount);
     int gstBps = defaultGstBps();
     long gst = RateCardMath.gstMinor(finalAmount, gstBps, gstInclusive);
     long payable = gstInclusive ? finalAmount : finalAmount + gst;
@@ -731,7 +822,9 @@ public class RateCardService {
     out.put("maxDiscountBps", type == null ? null : maxDiscount);
     out.put("discountBps", bps);
     out.put("discountAmountMinor", Math.max(0, standard - finalAmount));
+    out.put("exactFinalAmountMinor", exactFinal);
     out.put("finalAmountMinor", finalAmount);
+    out.put("roundingStep", step);
     out.put("gstInclusive", gstInclusive);
     out.put("gstBps", gstBps);
     out.put("gstAmountMinor", gst);
@@ -811,6 +904,17 @@ public class RateCardService {
 
   private static boolean yearly(String cycle) {
     return "YEARLY".equalsIgnoreCase(cycle) || "ANNUAL".equalsIgnoreCase(cycle);
+  }
+
+  private static String roundingStep(String raw) {
+    if (!StringUtils.hasText(raw)) {
+      return "NONE";
+    }
+    String step = raw.trim().toUpperCase(Locale.ROOT);
+    if (!Set.of("NONE", "RUPEE", "TEN", "HUNDRED").contains(step)) {
+      throw new IllegalArgumentException("roundingStep must be NONE, RUPEE, TEN, or HUNDRED");
+    }
+    return step;
   }
 
   private static String text(Map<String, Object> body, String key) {

@@ -86,6 +86,12 @@ public class RateCardController {
     return ApiResponse.ok(rateCardService.createQuote(body));
   }
 
+  @PutMapping("/quotes/{id}")
+  public ApiResponse<Map<String, Object>> updateQuote(
+      @PathVariable long id, @RequestBody Map<String, Object> body) {
+    return ApiResponse.ok(rateCardService.updateQuote(id, body));
+  }
+
   @PostMapping("/quotes/{id}/status")
   public ApiResponse<Map<String, Object>> quoteStatus(
       @PathVariable long id, @RequestBody Map<String, Object> body) {

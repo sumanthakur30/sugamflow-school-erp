@@ -32,6 +32,25 @@ public final class RateCardMath {
     return discountBps > Math.max(0, maxDiscountBps);
   }
 
+  /**
+   * Half-up rounding of a paise amount. RUPEE is ₹1, TEN is ₹10, HUNDRED is ₹100.
+   * NONE and any other step leave the paise unchanged.
+   */
+  public static long roundMinor(long amountMinor, String step) {
+    long amount = Math.max(0, amountMinor);
+    long unit =
+        switch (step == null ? "NONE" : step.trim().toUpperCase(java.util.Locale.ROOT)) {
+          case "RUPEE" -> 100L;
+          case "TEN" -> 1_000L;
+          case "HUNDRED" -> 10_000L;
+          default -> 1L;
+        };
+    if (unit <= 1) {
+      return amount;
+    }
+    return Math.round(amount / (double) unit) * unit;
+  }
+
   /** GST portion. Inclusive amounts already contain the tax. */
   public static long gstMinor(long amountMinor, int gstBps, boolean inclusive) {
     long amount = Math.max(0, amountMinor);

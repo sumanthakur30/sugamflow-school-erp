@@ -31,6 +31,16 @@ class RateCardMathTest {
   }
 
   @Test
+  void roundsTheCustomerPriceWithoutChangingTheStandard() {
+    assertEquals(100_000L, RateCardMath.roundMinor(99_960L, "RUPEE"));
+    assertEquals(125_000L, RateCardMath.roundMinor(124_950L, "RUPEE"));
+    assertEquals(125_000L, RateCardMath.roundMinor(124_950L, "TEN"));
+    assertEquals(120_000L, RateCardMath.roundMinor(124_950L, "HUNDRED"));
+    assertEquals(99_960L, RateCardMath.roundMinor(99_960L, "NONE"));
+    assertEquals(99_960L, RateCardMath.sellingMinor(249_900L, 6000));
+  }
+
+  @Test
   void businessTypeRateOverridesTheStandardRate() {
     assertEquals(699_00L, RateCardMath.rateMinor(699_00L, 499_00L));
     assertEquals(499_00L, RateCardMath.rateMinor(null, 499_00L));
