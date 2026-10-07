@@ -41,6 +41,22 @@ public class RateCardController {
     return ApiResponse.ok(rateCardService.reviseRate(body));
   }
 
+  @GetMapping("/packages")
+  public ApiResponse<List<Map<String, Object>>> packages(
+      @RequestParam(value = "open", defaultValue = "true") boolean open) {
+    return ApiResponse.ok(rateCardService.listPackages(open));
+  }
+
+  @PutMapping("/packages")
+  public ApiResponse<Map<String, Object>> revisePackage(@RequestBody Map<String, Object> body) {
+    return ApiResponse.ok(rateCardService.revisePackage(body));
+  }
+
+  @PostMapping("/proposals/preview")
+  public ApiResponse<Map<String, Object>> previewProposal(@RequestBody Map<String, Object> body) {
+    return ApiResponse.ok(rateCardService.previewProposal(body));
+  }
+
   @GetMapping("/plans/{planId}/value")
   public ApiResponse<Map<String, Object>> valuePlan(
       @PathVariable String planId,
@@ -68,6 +84,35 @@ public class RateCardController {
   @PostMapping("/quotes")
   public ApiResponse<Map<String, Object>> createQuote(@RequestBody Map<String, Object> body) {
     return ApiResponse.ok(rateCardService.createQuote(body));
+  }
+
+  @PutMapping("/quotes/{id}")
+  public ApiResponse<Map<String, Object>> updateQuote(
+      @PathVariable long id, @RequestBody Map<String, Object> body) {
+    return ApiResponse.ok(rateCardService.updateQuote(id, body));
+  }
+
+  @PutMapping("/quotes/{id}/cycle")
+  public ApiResponse<Map<String, Object>> switchCycle(
+      @PathVariable long id, @RequestBody Map<String, Object> body) {
+    return ApiResponse.ok(rateCardService.switchCycle(id, body));
+  }
+
+  @GetMapping("/quotes/{id}/payments")
+  public ApiResponse<List<Map<String, Object>>> payments(@PathVariable long id) {
+    return ApiResponse.ok(rateCardService.listPayments(id));
+  }
+
+  @PostMapping("/quotes/{id}/payments")
+  public ApiResponse<Map<String, Object>> recordPayment(
+      @PathVariable long id, @RequestBody Map<String, Object> body) {
+    return ApiResponse.ok(rateCardService.recordPayment(id, body));
+  }
+
+  @PostMapping("/quotes/{id}/payment-link")
+  public ApiResponse<Map<String, Object>> paymentLink(
+      @PathVariable long id, @RequestBody Map<String, Object> body) {
+    return ApiResponse.ok(rateCardService.createPaymentLink(id, body));
   }
 
   @PostMapping("/quotes/{id}/status")
