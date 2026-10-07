@@ -92,6 +92,29 @@ public class RateCardController {
     return ApiResponse.ok(rateCardService.updateQuote(id, body));
   }
 
+  @PutMapping("/quotes/{id}/cycle")
+  public ApiResponse<Map<String, Object>> switchCycle(
+      @PathVariable long id, @RequestBody Map<String, Object> body) {
+    return ApiResponse.ok(rateCardService.switchCycle(id, body));
+  }
+
+  @GetMapping("/quotes/{id}/payments")
+  public ApiResponse<List<Map<String, Object>>> payments(@PathVariable long id) {
+    return ApiResponse.ok(rateCardService.listPayments(id));
+  }
+
+  @PostMapping("/quotes/{id}/payments")
+  public ApiResponse<Map<String, Object>> recordPayment(
+      @PathVariable long id, @RequestBody Map<String, Object> body) {
+    return ApiResponse.ok(rateCardService.recordPayment(id, body));
+  }
+
+  @PostMapping("/quotes/{id}/payment-link")
+  public ApiResponse<Map<String, Object>> paymentLink(
+      @PathVariable long id, @RequestBody Map<String, Object> body) {
+    return ApiResponse.ok(rateCardService.createPaymentLink(id, body));
+  }
+
   @PostMapping("/quotes/{id}/status")
   public ApiResponse<Map<String, Object>> quoteStatus(
       @PathVariable long id, @RequestBody Map<String, Object> body) {

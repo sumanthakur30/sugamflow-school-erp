@@ -32,6 +32,22 @@ public final class RateCardMath {
     return discountBps > Math.max(0, maxDiscountBps);
   }
 
+  /** Free-form quotes have no annual package price, so a year is twelve months and a month is one twelfth. */
+  public static long cycleStandardMinor(long amountMinor, boolean fromYearly, boolean toYearly) {
+    long amount = Math.max(0, amountMinor);
+    if (fromYearly == toYearly) {
+      return amount;
+    }
+    if (!fromYearly && toYearly) {
+      return amount * 12L;
+    }
+    return Math.round(amount / 12.0);
+  }
+
+  public static long pendingMinor(long finalMinor, long paidMinor) {
+    return Math.max(0, Math.max(0, finalMinor) - Math.max(0, paidMinor));
+  }
+
   /**
    * Half-up rounding of a paise amount. RUPEE is ₹1, TEN is ₹10, HUNDRED is ₹100.
    * NONE and any other step leave the paise unchanged.

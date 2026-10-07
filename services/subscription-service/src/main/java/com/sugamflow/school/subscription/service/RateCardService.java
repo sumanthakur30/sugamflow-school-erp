@@ -1,5 +1,6 @@
 package com.sugamflow.school.subscription.service;
 
+import com.sugamflow.school.subscription.payment.SubscriptionRazorpayClient;
 import com.sugamflow.school.subscription.pricing.RateCardMath;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -7,6 +8,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -52,10 +54,14 @@ public class RateCardService {
       JOIN feature_definition f ON f.code = r.feature_code
       """;
 
-  private final JdbcTemplate jdbc;
+  private static final Set<String> PAYMENT_METHODS = Set.of("CASH", "BANK", "CHEQUE", "UPI", "RAZORPAY");
 
-  public RateCardService(JdbcTemplate jdbc) {
+  private final JdbcTemplate jdbc;
+  private final SubscriptionRazorpayClient razorpayClient;
+
+  public RateCardService(JdbcTemplate jdbc, SubscriptionRazorpayClient razorpayClient) {
     this.jdbc = jdbc;
+    this.razorpayClient = razorpayClient;
   }
 
   @Transactional(readOnly = true)
@@ -340,13 +346,14 @@ public class RateCardService {
         jdbc.queryForObject(
             """
             INSERT INTO pricing_quote (
-              customer_name, organization_id, business_type_code, plan_id, feature_codes,
+              customer_name, organization_id, organization_name, owner_phone, owner_email,
+              business_type_code, plan_id, feature_codes,
               standard_amount_minor, discount_bps, final_amount_minor, gst_inclusive, billing_cycle,
               valid_from, valid_until, status, reason, created_by,
               input_mode, recommended_discount_bps, max_discount_bps, approval_required,
               discount_amount_minor, gst_amount_minor, rounding_step
             ) VALUES (
-              ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CAST(? AS DATE), CAST(? AS DATE), ?, ?, ?,
+              ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CAST(? AS DATE), CAST(? AS DATE), ?, ?, ?,
               ?, ?, ?, ?, ?, ?, ?
             )
             RETURNING id
@@ -354,6 +361,9 @@ public class RateCardService {
             Long.class,
             customer,
             blankToNull(text(body, "organizationId")),
+            blankToNull(text(body, "organizationName")),
+            blankToNull(text(body, "ownerPhone")),
+            blankToNull(text(body, "ownerEmail")),
             blankToNull(text(body, "businessTypeCode")),
             blankToNull(text(body, "planId")),
             text(body, "featureCodes") == null ? "" : text(body, "featureCodes"),
@@ -398,7 +408,8 @@ public class RateCardService {
     int bps = ((Number) math.get("discountBps")).intValue();
     long supplied = ((Number) math.get("finalAmountMinor")).longValue();
     boolean approval = Boolean.TRUE.equals(math.get("approvalRequired"));
-    String status = approval ? "PENDING" : "DRAFT";
+    String current = quoteStatus(id);
+    String status = settleStatus(id, supplied, approval, current);
     String featureCodes = text(body, "featureCodes");
     int updated =
         jdbc.update(
@@ -406,6 +417,9 @@ public class RateCardService {
             UPDATE pricing_quote
                SET customer_name = ?,
                    organization_id = ?,
+                   organization_name = ?,
+                   owner_phone = ?,
+                   owner_email = ?,
                    business_type_code = ?,
                    plan_id = ?,
                    feature_codes = COALESCE(?, feature_codes),
@@ -418,7 +432,7 @@ public class RateCardService {
                    valid_until = CAST(? AS DATE),
                    status = ?,
                    reason = ?,
-                   approved_by = NULL,
+                   approved_by = CASE WHEN ? IN ('PENDING', 'DRAFT', 'REJECTED') THEN NULL ELSE approved_by END,
                    input_mode = ?,
                    recommended_discount_bps = ?,
                    max_discount_bps = ?,
@@ -431,6 +445,9 @@ public class RateCardService {
             """,
             customer,
             blankToNull(text(body, "organizationId")),
+            blankToNull(text(body, "organizationName")),
+            blankToNull(text(body, "ownerPhone")),
+            blankToNull(text(body, "ownerEmail")),
             blankToNull(text(body, "businessTypeCode")),
             blankToNull(text(body, "planId")),
             featureCodes == null ? null : featureCodes,
@@ -443,6 +460,7 @@ public class RateCardService {
             blankToNull(text(body, "validUntil")),
             status,
             blankToNull(text(body, "reason")),
+            status,
             math.get("inputMode"),
             math.get("recommendedDiscountBps"),
             math.get("maxDiscountBps"),
@@ -469,11 +487,13 @@ public class RateCardService {
   public List<Map<String, Object>> listQuotes() {
     return jdbc.query(
         """
-        SELECT id, customer_name, organization_id, business_type_code, plan_id, feature_codes,
+        SELECT id, customer_name, organization_id, organization_name, owner_phone, owner_email,
+               business_type_code, plan_id, feature_codes,
                standard_amount_minor, discount_bps, final_amount_minor, billing_cycle,
                valid_from, valid_until, status, reason, created_by, approved_by, created_at,
                input_mode, recommended_discount_bps, max_discount_bps, approval_required,
-               discount_amount_minor, gst_amount_minor, gst_inclusive, rounding_step
+               discount_amount_minor, gst_amount_minor, gst_inclusive, rounding_step,
+               COALESCE((SELECT SUM(amount_minor) FROM pricing_quote_payment p WHERE p.quote_id = pricing_quote.id), 0) AS paid_amount_minor
           FROM pricing_quote
          ORDER BY created_at DESC
         """,
@@ -482,6 +502,9 @@ public class RateCardService {
           item.put("id", rs.getLong("id"));
           item.put("customerName", rs.getString("customer_name"));
           item.put("organizationId", rs.getString("organization_id"));
+          item.put("organizationName", rs.getString("organization_name"));
+          item.put("ownerPhone", rs.getString("owner_phone"));
+          item.put("ownerEmail", rs.getString("owner_email"));
           item.put("businessTypeCode", rs.getString("business_type_code"));
           item.put("planId", rs.getString("plan_id"));
           item.put("featureCodes", rs.getString("feature_codes"));
@@ -504,6 +527,10 @@ public class RateCardService {
           item.put("gstAmountMinor", rs.getObject("gst_amount_minor"));
           item.put("gstInclusive", rs.getBoolean("gst_inclusive"));
           item.put("roundingStep", rs.getString("rounding_step"));
+          long paid = rs.getLong("paid_amount_minor");
+          long fin = rs.getLong("final_amount_minor");
+          item.put("paidAmountMinor", paid);
+          item.put("pendingAmountMinor", RateCardMath.pendingMinor(fin, paid));
           return item;
         });
   }
@@ -511,7 +538,7 @@ public class RateCardService {
   @Transactional
   public Map<String, Object> setQuoteStatus(long id, Map<String, Object> body) {
     String status = required(body, "status").toUpperCase(Locale.ROOT);
-    if (!Set.of("DRAFT", "PENDING", "APPROVED", "REJECTED").contains(status)) {
+    if (!Set.of("DRAFT", "PENDING", "APPROVED", "REJECTED", "PAID", "PARTIAL").contains(status)) {
       throw new IllegalArgumentException("Unknown quote status: " + status);
     }
     String approver = blankToNull(text(body, "approvedBy"));
@@ -532,6 +559,208 @@ public class RateCardService {
       throw new IllegalArgumentException("Unknown quote: " + id);
     }
     return Map.of("id", id, "status", status);
+  }
+
+  @Transactional
+  public Map<String, Object> switchCycle(long id, Map<String, Object> body) {
+    Map<String, Object> quote = requireQuote(id);
+    boolean toYearly = yearly(required(body, "billingCycle"));
+    boolean fromYearly = yearly(String.valueOf(quote.get("billingCycle")));
+    String type = blankToNull(quote.get("businessTypeCode") == null ? null : String.valueOf(quote.get("businessTypeCode")));
+    Map<String, Object> mathBody = new LinkedHashMap<>();
+    mathBody.put("businessTypeCode", type);
+    mathBody.put("billingCycle", toYearly ? "YEARLY" : "MONTHLY");
+    mathBody.put("inputMode", "DISCOUNT");
+    mathBody.put("discountBps", quote.get("discountBps"));
+    mathBody.put("roundingStep", quote.get("roundingStep"));
+    if (type == null) {
+      long standard = ((Number) quote.get("standardAmountMinor")).longValue();
+      mathBody.put("standardAmountMinor", RateCardMath.cycleStandardMinor(standard, fromYearly, toYearly));
+    }
+    Map<String, Object> math = quoteMath(mathBody);
+    long finalAmount = ((Number) math.get("finalAmountMinor")).longValue();
+    boolean approval = Boolean.TRUE.equals(math.get("approvalRequired"));
+    String status = settleStatus(id, finalAmount, approval, String.valueOf(quote.get("status")));
+    jdbc.update(
+        """
+        UPDATE pricing_quote
+           SET billing_cycle = ?,
+               standard_amount_minor = ?,
+               final_amount_minor = ?,
+               discount_amount_minor = ?,
+               gst_amount_minor = ?,
+               approval_required = ?,
+               status = ?,
+               approved_by = CASE WHEN ? IN ('PENDING', 'DRAFT', 'REJECTED') THEN NULL ELSE approved_by END,
+               updated_at = NOW()
+         WHERE id = ?
+        """,
+        math.get("billingCycle"),
+        math.get("standardAmountMinor"),
+        finalAmount,
+        math.get("discountAmountMinor"),
+        math.get("gstAmountMinor"),
+        approval,
+        status,
+        status,
+        id);
+    long paid = paidAmount(id);
+    Map<String, Object> out = new LinkedHashMap<>();
+    out.put("id", id);
+    out.put("billingCycle", math.get("billingCycle"));
+    out.put("standardAmountMinor", math.get("standardAmountMinor"));
+    out.put("discountBps", math.get("discountBps"));
+    out.put("finalAmountMinor", finalAmount);
+    out.put("paidAmountMinor", paid);
+    out.put("pendingAmountMinor", RateCardMath.pendingMinor(finalAmount, paid));
+    out.put("status", status);
+    return out;
+  }
+
+  @Transactional(readOnly = true)
+  public List<Map<String, Object>> listPayments(long id) {
+    requireQuote(id);
+    return jdbc.query(
+        """
+        SELECT id, amount_minor, method, reference_no, note, paid_on, recorded_by
+          FROM pricing_quote_payment
+         WHERE quote_id = ?
+         ORDER BY paid_on, id
+        """,
+        (rs, row) -> {
+          Map<String, Object> item = new LinkedHashMap<>();
+          item.put("id", rs.getLong("id"));
+          item.put("amountMinor", rs.getLong("amount_minor"));
+          item.put("method", rs.getString("method"));
+          item.put("referenceNo", rs.getString("reference_no"));
+          item.put("note", rs.getString("note"));
+          item.put("paidOn", rs.getDate("paid_on"));
+          item.put("recordedBy", rs.getString("recorded_by"));
+          return item;
+        },
+        id);
+  }
+
+  @Transactional
+  public Map<String, Object> recordPayment(long id, Map<String, Object> body) {
+    Map<String, Object> quote = requireQuote(id);
+    if ("REJECTED".equals(quote.get("status"))) {
+      throw new IllegalArgumentException("A rejected quotation cannot take a payment");
+    }
+    String method = required(body, "method").toUpperCase(Locale.ROOT);
+    if (!PAYMENT_METHODS.contains(method)) {
+      throw new IllegalArgumentException("method must be CASH, BANK, CHEQUE, UPI, or RAZORPAY");
+    }
+    long amount = nonNegative(body.get("amountMinor"), "amountMinor");
+    if (amount <= 0) {
+      throw new IllegalArgumentException("Payment amount must be greater than zero");
+    }
+    long finalAmount = ((Number) quote.get("finalAmountMinor")).longValue();
+    long pending = RateCardMath.pendingMinor(finalAmount, paidAmount(id));
+    if (amount > pending) {
+      throw new IllegalArgumentException("Payment cannot exceed the pending amount");
+    }
+    jdbc.update(
+        """
+        INSERT INTO pricing_quote_payment (quote_id, amount_minor, method, reference_no, note, paid_on, recorded_by)
+        VALUES (?, ?, ?, ?, ?, COALESCE(CAST(? AS DATE), CURRENT_DATE), ?)
+        """,
+        id,
+        amount,
+        method,
+        blankToNull(text(body, "referenceNo")),
+        blankToNull(text(body, "note")),
+        blankToNull(text(body, "paidOn")),
+        blankToNull(text(body, "recordedBy")));
+    boolean approval = Boolean.TRUE.equals(quote.get("approvalRequired"));
+    String status = settleStatus(id, finalAmount, approval, String.valueOf(quote.get("status")));
+    jdbc.update(
+        "UPDATE pricing_quote SET status = ?, updated_at = NOW() WHERE id = ?",
+        status,
+        id);
+    long paid = paidAmount(id);
+    Map<String, Object> out = new LinkedHashMap<>();
+    out.put("id", id);
+    out.put("status", status);
+    out.put("paidAmountMinor", paid);
+    out.put("pendingAmountMinor", RateCardMath.pendingMinor(finalAmount, paid));
+    out.put("finalAmountMinor", finalAmount);
+    return out;
+  }
+
+  @Transactional
+  public Map<String, Object> createPaymentLink(long id, Map<String, Object> body) {
+    Map<String, Object> quote = requireQuote(id);
+    if ("REJECTED".equals(quote.get("status"))) {
+      throw new IllegalArgumentException("A rejected quotation cannot take a payment");
+    }
+    long finalAmount = ((Number) quote.get("finalAmountMinor")).longValue();
+    long pending = RateCardMath.pendingMinor(finalAmount, paidAmount(id));
+    if (pending <= 0) {
+      throw new IllegalArgumentException("Nothing is pending on this quotation");
+    }
+    String phone = blankToNull(text(body, "ownerPhone"));
+    String email = blankToNull(text(body, "ownerEmail"));
+    if (phone == null) {
+      phone = quote.get("ownerPhone") == null ? null : String.valueOf(quote.get("ownerPhone"));
+    }
+    if (email == null) {
+      email = quote.get("ownerEmail") == null ? null : String.valueOf(quote.get("ownerEmail"));
+    }
+    String token = quote.get("paymentToken") == null ? null : String.valueOf(quote.get("paymentToken"));
+    if (!StringUtils.hasText(token)) {
+      token = UUID.randomUUID().toString().replace("-", "");
+    }
+    jdbc.update(
+        """
+        UPDATE pricing_quote
+           SET payment_token = ?, owner_phone = COALESCE(?, owner_phone), owner_email = COALESCE(?, owner_email), updated_at = NOW()
+         WHERE id = ?
+        """,
+        token,
+        phone,
+        email,
+        id);
+    String rupees = String.format(Locale.ROOT, "%.2f", pending / 100.0);
+    String customer = String.valueOf(quote.get("customerName"));
+    String message =
+        "SugamFlow quotation for "
+            + customer
+            + ". Amount due ₹"
+            + rupees
+            + ". Payment reference "
+            + token
+            + ".";
+    Map<String, Object> checkout = new LinkedHashMap<>();
+    if (pending >= 100) {
+      try {
+        checkout =
+            razorpayClient.createOrder(
+                pending,
+                "INR",
+                "quote-" + id,
+                Map.of("quoteId", String.valueOf(id), "reference", token));
+        Object orderId = checkout.get("razorpayOrderId");
+        if (orderId != null) {
+          message = message + " Razorpay order " + orderId + ".";
+        }
+      } catch (RuntimeException ex) {
+        checkout.put("provider", "UNAVAILABLE");
+        checkout.put("checkoutMode", "MANUAL");
+      }
+    } else {
+      checkout.put("provider", "MANUAL");
+      checkout.put("checkoutMode", "MANUAL");
+    }
+    Map<String, Object> out = new LinkedHashMap<>();
+    out.put("id", id);
+    out.put("token", token);
+    out.put("message", message);
+    out.put("pendingAmountMinor", pending);
+    out.put("ownerPhone", phone);
+    out.put("ownerEmail", email);
+    out.put("checkout", checkout);
+    return out;
   }
 
   @Transactional(readOnly = true)
@@ -900,6 +1129,72 @@ public class RateCardService {
     item.put("annualSavingMinor", Math.max(0, listYear - yearly));
     item.put("annualSavingBps", listYear == 0 ? 0 : Math.max(0, Math.round((listYear - yearly) * 10_000.0 / listYear)));
     return item;
+  }
+
+  private Map<String, Object> requireQuote(long id) {
+    List<Map<String, Object>> rows =
+        jdbc.query(
+            """
+            SELECT id, customer_name, organization_name, owner_phone, owner_email, business_type_code,
+                   billing_cycle, standard_amount_minor, discount_bps, final_amount_minor,
+                   rounding_step, status, approval_required, payment_token
+              FROM pricing_quote
+             WHERE id = ?
+            """,
+            (rs, row) -> {
+              Map<String, Object> item = new LinkedHashMap<>();
+              item.put("id", rs.getLong("id"));
+              item.put("customerName", rs.getString("customer_name"));
+              item.put("organizationName", rs.getString("organization_name"));
+              item.put("ownerPhone", rs.getString("owner_phone"));
+              item.put("ownerEmail", rs.getString("owner_email"));
+              item.put("businessTypeCode", rs.getString("business_type_code"));
+              item.put("billingCycle", rs.getString("billing_cycle"));
+              item.put("standardAmountMinor", rs.getLong("standard_amount_minor"));
+              item.put("discountBps", rs.getInt("discount_bps"));
+              item.put("finalAmountMinor", rs.getLong("final_amount_minor"));
+              item.put("roundingStep", rs.getString("rounding_step"));
+              item.put("status", rs.getString("status"));
+              item.put("approvalRequired", rs.getBoolean("approval_required"));
+              item.put("paymentToken", rs.getString("payment_token"));
+              return item;
+            },
+            id);
+    if (rows.isEmpty()) {
+      throw new IllegalArgumentException("Unknown quote: " + id);
+    }
+    return rows.get(0);
+  }
+
+  private String quoteStatus(long id) {
+    String status = jdbc.queryForObject("SELECT status FROM pricing_quote WHERE id = ?", String.class, id);
+    return status == null ? "DRAFT" : status;
+  }
+
+  private long paidAmount(long id) {
+    Long paid =
+        jdbc.queryForObject(
+            "SELECT COALESCE(SUM(amount_minor), 0) FROM pricing_quote_payment WHERE quote_id = ?",
+            Long.class,
+            id);
+    return paid == null ? 0L : paid;
+  }
+
+  private String settleStatus(long id, long finalAmount, boolean approval, String current) {
+    long paid = paidAmount(id);
+    if (paid > 0 && paid >= finalAmount) {
+      return "PAID";
+    }
+    if (paid > 0) {
+      return "PARTIAL";
+    }
+    if (approval) {
+      return "PENDING";
+    }
+    if ("APPROVED".equals(current) || "REJECTED".equals(current)) {
+      return current;
+    }
+    return "DRAFT";
   }
 
   private static boolean yearly(String cycle) {

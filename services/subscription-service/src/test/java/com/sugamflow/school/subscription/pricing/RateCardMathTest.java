@@ -31,6 +31,17 @@ class RateCardMathTest {
   }
 
   @Test
+  void switchesAFreeFormQuoteBetweenMonthlyAndYearly() {
+    long monthly = 249_900L;
+    long yearly = RateCardMath.cycleStandardMinor(monthly, false, true);
+    assertEquals(2_998_800L, yearly);
+    assertEquals(monthly, RateCardMath.cycleStandardMinor(yearly, true, false));
+    assertEquals(100_000L, RateCardMath.roundMinor(RateCardMath.sellingMinor(monthly, 6000), "RUPEE"));
+    assertEquals(799_600L, RateCardMath.pendingMinor(1_799_300L, 999_700L));
+    assertEquals(0L, RateCardMath.pendingMinor(100_000L, 100_000L));
+  }
+
+  @Test
   void roundsTheCustomerPriceWithoutChangingTheStandard() {
     assertEquals(100_000L, RateCardMath.roundMinor(99_960L, "RUPEE"));
     assertEquals(125_000L, RateCardMath.roundMinor(124_950L, "RUPEE"));
