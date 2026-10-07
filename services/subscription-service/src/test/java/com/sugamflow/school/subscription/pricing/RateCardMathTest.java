@@ -20,6 +20,17 @@ class RateCardMathTest {
   }
 
   @Test
+  void proposalAmountCalculatesDiscountWithoutChangingTheStandard() {
+    long standard = 499_900L;
+    long proposal = 350_000L;
+    int bps = RateCardMath.bpsFromPrices(standard, proposal);
+    assertEquals(2999, bps);
+    assertEquals(true, RateCardMath.approvalRequired(bps, 2000));
+    assertEquals(false, RateCardMath.approvalRequired(1500, 2000));
+    assertEquals(0, RateCardMath.bpsFromPrices(standard, standard));
+  }
+
+  @Test
   void businessTypeRateOverridesTheStandardRate() {
     assertEquals(699_00L, RateCardMath.rateMinor(699_00L, 499_00L));
     assertEquals(499_00L, RateCardMath.rateMinor(null, 499_00L));

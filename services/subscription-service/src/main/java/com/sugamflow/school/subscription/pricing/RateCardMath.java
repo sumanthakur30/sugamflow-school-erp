@@ -17,6 +17,21 @@ public final class RateCardMath {
     return Math.max(0, listMinor) - discountMinor(listMinor, discountBps);
   }
 
+  /** Basis points so a proposed rupee amount can be shown as a discount percent. */
+  public static int bpsFromPrices(long standardMinor, long proposalMinor) {
+    long standard = Math.max(0, standardMinor);
+    long proposal = Math.max(0, proposalMinor);
+    if (standard == 0 || proposal >= standard) {
+      return 0;
+    }
+    long discount = standard - proposal;
+    return (int) Math.round((discount * 10_000.0) / standard);
+  }
+
+  public static boolean approvalRequired(int discountBps, int maxDiscountBps) {
+    return discountBps > Math.max(0, maxDiscountBps);
+  }
+
   /** GST portion. Inclusive amounts already contain the tax. */
   public static long gstMinor(long amountMinor, int gstBps, boolean inclusive) {
     long amount = Math.max(0, amountMinor);

@@ -41,6 +41,22 @@ public class RateCardController {
     return ApiResponse.ok(rateCardService.reviseRate(body));
   }
 
+  @GetMapping("/packages")
+  public ApiResponse<List<Map<String, Object>>> packages(
+      @RequestParam(value = "open", defaultValue = "true") boolean open) {
+    return ApiResponse.ok(rateCardService.listPackages(open));
+  }
+
+  @PutMapping("/packages")
+  public ApiResponse<Map<String, Object>> revisePackage(@RequestBody Map<String, Object> body) {
+    return ApiResponse.ok(rateCardService.revisePackage(body));
+  }
+
+  @PostMapping("/proposals/preview")
+  public ApiResponse<Map<String, Object>> previewProposal(@RequestBody Map<String, Object> body) {
+    return ApiResponse.ok(rateCardService.previewProposal(body));
+  }
+
   @GetMapping("/plans/{planId}/value")
   public ApiResponse<Map<String, Object>> valuePlan(
       @PathVariable String planId,
