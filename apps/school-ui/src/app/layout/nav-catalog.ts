@@ -107,6 +107,12 @@ export const TOP_NAV: NavGroup[] = [
           roles: ['SHOP_OWNER', 'SUPER_ADMIN', 'ADMIN', 'PRINCIPAL'],
         },
         {
+          path: '/admin/biometric',
+          label: 'Biometric Attendance',
+          feature: 'FEATURE_ATTENDANCE',
+          roles: ['SHOP_OWNER', 'SUPER_ADMIN', 'ADMIN', 'PRINCIPAL'],
+        },
+        {
           path: '/admin/offline',
           label: 'Offline Mode',
           feature: 'FEATURE_OFFLINE_MODE',
