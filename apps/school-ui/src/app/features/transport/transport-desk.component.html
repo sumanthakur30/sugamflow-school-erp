@@ -1,0 +1,230 @@
+<section class="desk">
+  <div class="kpis">
+    <article>
+      <span>Active fleet</span>
+      <strong>{{ activeFleet }}/{{ vehicles.length }}</strong>
+    </article>
+    <article>
+      <span>Transport students</span>
+      <strong>{{ studentTotal }}</strong>
+    </article>
+    <article>
+      <span>Live delay alerts</span>
+      <strong>{{ delayAlerts }}</strong>
+    </article>
+    <article>
+      <span>Pending transport fees</span>
+      <strong>{{ inr(pendingFees) }}</strong>
+    </article>
+  </div>
+
+  <div class="quick">
+    <button type="button" class="primary" (click)="vehicleForm = !vehicleForm">+ Add vehicle</button>
+    <button type="button" (click)="openSavedRoutes.emit()">+ Create route</button>
+    <button type="button" (click)="assignStudents.emit()">Assign students</button>
+    <button type="button" (click)="downloadRoute()">Download route sheet</button>
+    @if (savedRouteCount) {
+      <span class="hint">{{ savedRouteCount }} saved route{{ savedRouteCount === 1 ? '' : 's' }} on this campus</span>
+    }
+  </div>
+
+  @if (notice) {
+    <p class="notice">{{ notice }}</p>
+  }
+
+  @if (vehicleForm) {
+    <form class="panel" (ngSubmit)="addVehicle()">
+      <h3>Add vehicle</h3>
+      <div class="form-row">
+        <label>Registration <input [(ngModel)]="vehicleDraft.registration" name="reg" required placeholder="BR01AB1213" /></label>
+        <label>Type
+          <select [(ngModel)]="vehicleDraft.type" name="vtype">
+            @for (type of typeOptions; track type) {
+              <option [value]="type">{{ type }}</option>
+            }
+          </select>
+        </label>
+        <label>Route
+          <select [(ngModel)]="vehicleDraft.routeNo" name="vroute">
+            @for (route of routeOptions; track route) {
+              <option [value]="route">{{ route }}</option>
+            }
+          </select>
+        </label>
+        <label>Driver <input [(ngModel)]="vehicleDraft.driver" name="driver" /></label>
+        <label>Phone <input [(ngModel)]="vehicleDraft.driverPhone" name="phone" /></label>
+      </div>
+      <div class="form-actions">
+        <button type="submit" class="primary">Save vehicle</button>
+        <button type="button" (click)="vehicleForm = false">Cancel</button>
+      </div>
+    </form>
+  }
+
+  <div class="filters">
+    <label>Route
+      <select [(ngModel)]="routeFilter" name="routeFilter">
+        <option value="">All routes</option>
+        @for (route of routeOptions; track route) {
+          <option [value]="route">{{ route }}</option>
+        }
+      </select>
+    </label>
+    <label>Vehicle type
+      <select [(ngModel)]="typeFilter" name="typeFilter">
+        <option value="">All types</option>
+        @for (type of typeOptions; track type) {
+          <option [value]="type">{{ type }}</option>
+        }
+      </select>
+    </label>
+    <label>Payment
+      <select [(ngModel)]="payFilter" name="payFilter">
+        <option value="">All payments</option>
+        <option value="Paid">Paid</option>
+        <option value="Overdue">Overdue</option>
+      </select>
+    </label>
+    <label>Class
+      <select [(ngModel)]="classFilter" name="classFilter">
+        <option value="">All classes</option>
+        @for (name of classOptions; track name) {
+          <option [value]="name">{{ name }}</option>
+        }
+      </select>
+    </label>
+  </div>
+
+  <div class="tabs" role="tablist">
+    <button type="button" [class.on]="tab === 'live'" (click)="tab = 'live'">Live fleet</button>
+    <button type="button" [class.on]="tab === 'routes'" (click)="tab = 'routes'">Routes &amp; stops</button>
+    <button type="button" [class.on]="tab === 'fleet'" (click)="tab = 'fleet'">Fleet &amp; compliance</button>
+    <button type="button" [class.on]="tab === 'students'" (click)="tab = 'students'">Students &amp; fees</button>
+  </div>
+
+  @if (tab === 'live') {
+    <div class="split">
+      <ul class="bus-list">
+        @for (bus of visibleVehicles; track bus.id) {
+          <li [class.on]="bus.id === selected?.id">
+            <button type="button" (click)="selectedId = bus.id">
+              <strong>{{ bus.registration }}</strong>
+              <span>{{ bus.routeNo }} · {{ bus.run }} · {{ bus.speedKmh }} km/h</span>
+              <span>ETA {{ bus.eta }} · {{ bus.driver }}</span>
+            </button>
+          </li>
+        }
+      </ul>
+      <div class="map" aria-label="Fleet map">
+        <svg viewBox="0 0 100 100" role="img">
+          <polyline [attr.points]="routeLine()" />
+          @for (bus of visibleVehicles; track bus.id) {
+            <g [attr.transform]="'translate(' + marker(bus).x + ' ' + marker(bus).y + ')'" (click)="selectedId = bus.id">
+              <circle r="2.4" [class.hot]="bus.id === selected?.id" />
+              <text y="-3">{{ bus.routeNo }}</text>
+            </g>
+          }
+        </svg>
+        @if (selected) {
+          <p>{{ selected.registration }} is {{ selected.run }} on {{ selected.routeNo }}. Driver {{ selected.driver }} {{ selected.driverPhone }}.</p>
+        }
+      </div>
+    </div>
+  }
+
+  @if (tab === 'routes') {
+    <div class="route-grid">
+      @for (route of routes; track route.routeNo) {
+        <article>
+          <header>
+            <h3>{{ route.routeNo }} · {{ route.name }}</h3>
+            <span>{{ route.vehicleId }}</span>
+          </header>
+          <ol>
+            @for (stop of route.stops; track stop.name) {
+              <li>
+                <strong>{{ stop.name }}</strong>
+                <span>{{ stop.zoneKm }} km · {{ stop.fee ? inr(stop.fee) : 'Campus' }}</span>
+              </li>
+            }
+          </ol>
+          <div class="card-actions">
+            <button type="button" (click)="selectVehicle(route.vehicleId)">View map</button>
+            <button type="button" (click)="editRoute(route)">Edit route</button>
+            <button type="button" (click)="manageStudents(route.routeNo)">Manage students</button>
+          </div>
+        </article>
+      }
+    </div>
+  }
+
+  @if (tab === 'fleet') {
+    <div class="route-grid">
+      @for (bus of visibleVehicles; track bus.id) {
+        <article>
+          <header>
+            <h3>{{ bus.registration }}</h3>
+            <span class="badge" [attr.data-status]="bus.status">{{ bus.status }}</span>
+          </header>
+          <p>{{ bus.type }} · {{ bus.fuel }} · {{ bus.routeNo }}</p>
+          <p>Driver {{ bus.driver }} · {{ bus.driverPhone }}</p>
+          <ul class="expiry">
+            <li>Insurance {{ bus.insuranceExpiry }}</li>
+            <li>Pollution {{ bus.pollutionExpiry }}</li>
+            <li>Licence {{ bus.licenseExpiry }}</li>
+          </ul>
+          <div class="card-actions">
+            <button type="button" (click)="selectVehicle(bus.id)">View map</button>
+            <button type="button" (click)="manageStudents(bus.routeNo)">Manage students</button>
+            <button type="button" (click)="openMaintain(bus)">Log maintenance</button>
+          </div>
+        </article>
+      }
+    </div>
+  }
+
+  @if (tab === 'students') {
+    <p class="hint">Showing {{ visibleStudents.length }} students on this page. Campus roster is {{ studentTotal }}.</p>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Student</th>
+            <th>Class</th>
+            <th>Route</th>
+            <th>Pickup / drop</th>
+            <th>Monthly fee</th>
+            <th>Payment</th>
+            <th>RFID</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (row of visibleStudents; track row.id) {
+            <tr>
+              <td>{{ row.name }}</td>
+              <td>{{ row.className }}</td>
+              <td>{{ row.routeNo }}</td>
+              <td>{{ row.pickup }} / {{ row.drop }}</td>
+              <td>{{ inr(row.monthlyFee) }}</td>
+              <td><span class="badge" [attr.data-pay]="row.payment">{{ row.payment }}</span></td>
+              <td>{{ row.rfid }}</td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  }
+
+  @if (maintainFor) {
+    <form class="panel" (ngSubmit)="saveMaintain()">
+      <h3>Log maintenance · {{ maintainFor.registration }}</h3>
+      <label>Note
+        <input [(ngModel)]="maintainNote" name="note" placeholder="Brake check, insurance follow-up" />
+      </label>
+      <div class="form-actions">
+        <button type="submit" class="primary">Mark maintenance due</button>
+        <button type="button" (click)="maintainFor = null">Cancel</button>
+      </div>
+    </form>
+  }
+</section>
