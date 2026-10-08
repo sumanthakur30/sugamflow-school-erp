@@ -26,6 +26,7 @@ import {
   filterNonIdentityFields,
 } from '../../shared/student-lookup';
 import { ExamBulkComponent } from './exam-bulk.component';
+import { ExamDateSheetComponent } from './date-sheet.component';
 
 @Component({
   selector: 'sf-exam',
@@ -37,6 +38,7 @@ import { ExamBulkComponent } from './exam-bulk.component';
     ListPagerComponent,
     StudentLookupComponent,
     ExamBulkComponent,
+    ExamDateSheetComponent,
   ],
   templateUrl: './exam.component.html',
   styleUrls: [
@@ -73,7 +75,7 @@ export class ExamComponent implements OnInit, OnDestroy {
   formOpen = false;
   bulkOpen = false;
   /** Class progress and one-student workflow are separate lists. */
-  listTab: 'class' | 'student' = 'class';
+  listTab: 'sheets' | 'class' | 'student' = 'sheets';
   actionComment = '';
   submitting = false;
   private submitLocked = false;
