@@ -228,11 +228,16 @@
     </div>
   } @else {
     <header class="page-head list-head">
-      <div>
-          <h2>Exam Marks</h2>
-          <p>Enter marks for a whole class, or look up one student.</p>
+        <div>
+          @if (listTab === 'sheets') {
+            <h2>Date sheets</h2>
+            <p>Exam schedules by class, with student and subject counts.</p>
+          } @else {
+            <h2>Exam Marks</h2>
+            <p>Enter marks for a whole class, or look up one student.</p>
+          }
         </div>
-        @if (featureEnabled && !loading) {
+        @if (featureEnabled && !loading && listTab !== 'sheets') {
           <div class="head-actions">
             <button type="button" (click)="openBulk()">+ Enter marks</button>
             <button type="button" class="secondary" (click)="openForm()">Individual student</button>
@@ -252,7 +257,17 @@
     } @else if (!featureEnabled && !error) {
       <p class="panel">Exam is not enabled for this plan (FEATURE_EXAM).</p>
     } @else {
-      <div class="panel mode-tabs" role="tablist" aria-label="Exam marks lists">
+      <div class="panel mode-tabs" role="tablist" aria-label="Exam sections">
+        <button
+          type="button"
+          role="tab"
+          class="mode-tab"
+          [class.active]="listTab === 'sheets'"
+          [attr.aria-selected]="listTab === 'sheets'"
+          (click)="listTab = 'sheets'"
+        >
+          Date sheets
+        </button>
         <button
           type="button"
           role="tab"
@@ -275,6 +290,9 @@
         </button>
       </div>
 
+      <div [hidden]="listTab !== 'sheets'">
+        <sf-exam-date-sheet />
+      </div>
       <div [hidden]="listTab !== 'class'">
         <sf-exam-bulk view="home" />
       </div>
