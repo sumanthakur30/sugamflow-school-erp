@@ -1,0 +1,168 @@
+<section class="ds" aria-label="Exam date sheets">
+  <div class="ds-filters">
+    <label class="ds-field grow">
+      <span class="sr">Search by exam title</span>
+      <input
+        type="search"
+        [(ngModel)]="query"
+        name="examTitle"
+        placeholder="Search by Exam Title"
+        (keyup.enter)="search()"
+      />
+    </label>
+    <label class="ds-field">
+      <span class="sr">Class</span>
+      <select [(ngModel)]="className" name="className">
+        <option value="">Select Class</option>
+        @for (name of classes; track name) {
+          <option [value]="name">{{ name }}</option>
+        }
+      </select>
+    </label>
+    <label class="ds-field labeled">
+      <span>From date</span>
+      <input type="date" [(ngModel)]="from" name="fromDate" />
+    </label>
+    <label class="ds-field labeled">
+      <span>To date</span>
+      <input type="date" [(ngModel)]="to" name="toDate" />
+    </label>
+    <label class="ds-field">
+      <span class="sr">Status</span>
+      <select [(ngModel)]="status" name="status">
+        <option value="">All statuses</option>
+        @for (item of statuses; track item) {
+          <option [value]="item">{{ item }}</option>
+        }
+      </select>
+    </label>
+    <div class="ds-actions">
+      <button type="button" class="ds-btn primary" (click)="search()">Search</button>
+      <button type="button" class="ds-btn ghost" (click)="reset()">Reset</button>
+      <button type="button" class="ds-btn outline" (click)="goBack()">Go Back</button>
+    </div>
+    <button type="button" class="ds-btn add" (click)="openCreate()">+ Add New Date Sheet</button>
+  </div>
+
+  <p class="ds-count">
+    @if (visible.length) {
+      Showing 1 – {{ visible.length }} of {{ visible.length }}
+    } @else {
+      Showing 0 of {{ sheets.length }}
+    }
+  </p>
+
+  @if (editorOpen) {
+    <form class="ds-editor" (ngSubmit)="save()">
+      <h3>{{ editingId ? 'Edit date sheet' : 'New date sheet' }}</h3>
+      <div class="ds-editor-grid">
+        <label>
+          Exam title
+          <input [(ngModel)]="draft.title" name="draftTitle" required placeholder="half yearly" />
+        </label>
+        <label>
+          Class
+          <select [(ngModel)]="draft.className" name="draftClass">
+            @for (name of classes; track name) {
+              <option [value]="name">{{ name }}</option>
+            }
+          </select>
+        </label>
+        <label>
+          Year
+          <input [(ngModel)]="draft.year" name="draftYear" />
+        </label>
+        <label>
+          From
+          <input type="date" [(ngModel)]="draft.from" name="draftFrom" required />
+        </label>
+        <label>
+          To
+          <input type="date" [(ngModel)]="draft.to" name="draftTo" required />
+        </label>
+        <label>
+          Students
+          <input [(ngModel)]="draft.students" name="draftStudents" placeholder="Leave blank for N/A" />
+        </label>
+        <label>
+          Subjects
+          <input [(ngModel)]="draft.subjects" name="draftSubjects" type="number" min="1" />
+        </label>
+        <label>
+          Status
+          <select [(ngModel)]="draft.status" name="draftStatus">
+            @for (item of statuses; track item) {
+              <option [value]="item">{{ item }}</option>
+            }
+          </select>
+        </label>
+        <label class="span">
+          Subject names
+          <input
+            [(ngModel)]="draft.subjectNames"
+            name="draftNames"
+            placeholder="English, Mathematics, Science"
+          />
+        </label>
+      </div>
+      <div class="ds-editor-actions">
+        <button type="submit" class="ds-btn primary">Save</button>
+        <button type="button" class="ds-btn ghost" (click)="cancelEditor()">Cancel</button>
+      </div>
+    </form>
+  }
+
+  @if (viewing) {
+    <article class="ds-detail" id="date-sheet-print">
+      <header>
+        <div>
+          <h3>{{ viewing.title }}</h3>
+          <p>{{ viewing.className }} · {{ viewing.year }} · {{ viewing.status }}</p>
+        </div>
+        <button type="button" class="ds-btn ghost no-print" (click)="closeView()">Close</button>
+      </header>
+      <p class="ds-detail-range">{{ formatDay(viewing.from) }} – {{ formatDay(viewing.to) }}</p>
+      <ol>
+        @for (name of viewing.subjectNames; track name) {
+          <li>{{ name }}</li>
+        }
+      </ol>
+    </article>
+  }
+
+  @if (!visible.length) {
+    <p class="ds-empty">No date sheets match these filters.</p>
+  } @else {
+    <div class="ds-grid">
+      @for (sheet of visible; track sheet.id) {
+        <article class="ds-card">
+          <h3>{{ sheet.title }}</h3>
+          <div class="ds-metrics">
+            <div>
+              <strong>{{ studentLabel(sheet) }}</strong>
+              <span>Students</span>
+            </div>
+            <div>
+              <strong>{{ sheet.subjects }}</strong>
+              <span>Subjects</span>
+            </div>
+          </div>
+          <div class="ds-pills">
+            <span class="pill class">{{ sheet.className }}</span>
+            <span class="pill year">{{ sheet.year }}</span>
+          </div>
+          <div class="ds-pills">
+            <span class="pill date">From {{ formatDay(sheet.from) }}</span>
+            <span class="pill date">To {{ formatDay(sheet.to) }}</span>
+          </div>
+          <div class="ds-card-actions">
+            <button type="button" class="act view" (click)="view(sheet)">View</button>
+            <button type="button" class="act print" (click)="print(sheet)">Print</button>
+            <button type="button" class="act edit" (click)="openEdit(sheet)">Edit</button>
+            <button type="button" class="act delete" (click)="remove(sheet)">Delete</button>
+          </div>
+        </article>
+      }
+    </div>
+  }
+</section>
