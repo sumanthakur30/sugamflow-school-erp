@@ -1,0 +1,287 @@
+<div class="cal">
+  <header class="toolbar">
+    <div class="nav">
+      <button type="button" (click)="shift(-1)" aria-label="Previous">‹</button>
+      <button type="button" (click)="goToday()">Today</button>
+      <button type="button" (click)="shift(1)" aria-label="Next">›</button>
+      <h2>{{ title }}</h2>
+    </div>
+    <div class="tools">
+      <label>Year
+        <select [(ngModel)]="year" name="year">
+          @for (item of years; track item) {
+            <option [value]="item">{{ item }}</option>
+          }
+        </select>
+      </label>
+      <label>Jump
+        <input type="date" (change)="jump($any($event.target).value)" />
+      </label>
+      <input type="search" [(ngModel)]="search" name="search" placeholder="Search title, class, teacher, room" />
+      <select [(ngModel)]="view" name="view">
+        <option value="month">Month</option>
+        <option value="week">Week</option>
+        <option value="day">Day</option>
+        <option value="agenda">Agenda</option>
+      </select>
+      @if (canEdit) {
+        <button type="button" class="primary" (click)="openCreate()">+ Create event</button>
+      }
+    </div>
+  </header>
+
+  @if (notice) { <p class="note">{{ notice }}</p> }
+  @if (pendingMove) {
+    <p class="confirm">
+      Move “{{ pendingMove.occurrence.event.title }}” to {{ pendingMove.to }}?
+      <button type="button" class="primary" (click)="confirmMove()">Confirm</button>
+      <button type="button" (click)="pendingMove = null">Cancel</button>
+    </p>
+  }
+
+  <div class="layout">
+    <aside>
+      <h3>My calendars</h3>
+      @for (item of calendars; track item.id) {
+        <label class="check">
+          <input type="checkbox" [(ngModel)]="enabled[item.id]" [name]="item.id" />
+          <i [style.background]="colors[item.types[0]]"></i>
+          {{ item.label }}
+        </label>
+      }
+      <h3>Filter</h3>
+      <label>Class
+        <select [(ngModel)]="classFilter" name="classFilter">
+          <option value="">All classes</option>
+          <option value="Class 8-A">Class 8-A</option>
+          <option value="Class 10-A">Class 10-A</option>
+        </select>
+      </label>
+      <h3>Upcoming</h3>
+      @if (!upcoming.length) {
+        <p class="muted">No events scheduled</p>
+      }
+      @for (row of upcoming; track row.event.id + row.date) {
+        <button type="button" class="up" (click)="selected = row">
+          <strong>{{ row.date }}</strong>
+          <span>{{ row.event.startTime || 'All day' }} {{ row.event.title }}</span>
+        </button>
+      }
+      <div class="side-actions">
+        @if (canManage) {
+          <button type="button" (click)="publishHolidays()">Publish holidays</button>
+        }
+        <button type="button" (click)="exportCsv()">Export</button>
+      </div>
+      @if (audit.length) {
+        <h3>Recent changes</h3>
+        <ul class="audit">
+          @for (line of audit; track line) { <li>{{ line }}</li> }
+        </ul>
+      }
+    </aside>
+
+    <section class="board">
+      @if (!visible.length && view === 'agenda') {
+        <p class="empty">No events found. Try another search, or create an event.</p>
+      }
+
+      @if (view === 'month') {
+        <div class="weekdays">
+          @for (name of ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']; track name) {
+            <span>{{ name }}</span>
+          }
+        </div>
+        <div class="month">
+          @for (cell of monthCells(); track cell.iso) {
+            <div
+              class="day"
+              [class.out]="!cell.inMonth"
+              [class.weekend]="cell.weekend"
+              [class.today]="isToday(cell.iso)"
+              (click)="openCreate(cell.iso)"
+              (dragover)="$event.preventDefault()"
+              (drop)="askMove(cell.iso); $event.stopPropagation()"
+            >
+              <span class="num">{{ cell.iso.slice(8) }}</span>
+              @for (row of onDay(cell.iso).slice(0, 3); track row.event.id + row.date) {
+                <button
+                  type="button"
+                  class="chip"
+                  draggable="true"
+                  [style.borderColor]="colors[row.event.type]"
+                  (click)="$event.stopPropagation(); selected = row"
+                  (dragstart)="drag = { id: row.event.id, date: row.date }; $event.stopPropagation()"
+                >
+                  {{ row.event.type }} · {{ row.event.title }}
+                </button>
+              }
+              @if (onDay(cell.iso).length > 3) {
+                <button type="button" class="more" (click)="$event.stopPropagation(); dayOverflow = cell.iso">
+                  + {{ onDay(cell.iso).length - 3 }} more
+                </button>
+              }
+            </div>
+          }
+        </div>
+      }
+
+      @if (view === 'week' || view === 'day') {
+        <div class="time-head">
+          <span></span>
+          @for (iso of (view === 'day' ? [range.from] : weekDays()); track iso) {
+            <span [class.today]="isToday(iso)">{{ iso.slice(8) }}</span>
+          }
+        </div>
+        <div class="time-grid" [style.gridTemplateColumns]="'52px repeat(' + (view === 'day' ? 1 : 7) + ', 1fr)'">
+          <div class="hours">
+            @for (hour of hours; track hour) { <span>{{ hour }}:00</span> }
+          </div>
+          @for (iso of (view === 'day' ? [range.from] : weekDays()); track iso) {
+            <div class="col" (click)="openCreate(iso)">
+              @for (row of onDay(iso); track row.event.id + row.date) {
+                @if (!row.event.allDay) {
+                  <button type="button" class="block" [ngStyle]="blockStyle(row)" (click)="$event.stopPropagation(); selected = row">
+                    {{ row.event.title }}
+                  </button>
+                }
+              }
+            </div>
+          }
+        </div>
+      }
+
+      @if (view === 'agenda') {
+        <div class="agenda">
+          @for (iso of weekDays().concat([]); track iso) {}
+          @for (row of visible; track row.event.id + row.date) {
+            <article (click)="selected = row">
+              <time>{{ row.date }} · {{ row.event.startTime || 'All day' }}</time>
+              <h3>{{ row.event.title }}</h3>
+              <p>{{ row.event.type }} · {{ row.event.className || row.event.audience }} · {{ row.event.location || 'No location' }}</p>
+            </article>
+          }
+        </div>
+      }
+    </section>
+  </div>
+
+  @if (dayOverflow) {
+    <aside class="drawer">
+      <header>
+        <h3>{{ dayOverflow }}</h3>
+        <button type="button" (click)="dayOverflow = null">Close</button>
+      </header>
+      @for (row of onDay(dayOverflow); track row.event.id) {
+        <button type="button" class="up" (click)="selected = row; dayOverflow = null">{{ row.event.type }} · {{ row.event.title }}</button>
+      }
+    </aside>
+  }
+
+  @if (selected) {
+    <aside class="drawer">
+      <header>
+        <h3>{{ selected.event.title }}</h3>
+        <button type="button" (click)="selected = null">Close</button>
+      </header>
+      <p class="chip static" [style.borderColor]="colors[selected.event.type]">{{ selected.event.type }} · {{ selected.event.status }}</p>
+      <p>{{ selected.date }} · {{ selected.event.startTime || 'All day' }}<span *ngIf="selected.event.endTime">–{{ selected.event.endTime }}</span></p>
+      <p>{{ selected.event.location || 'No location' }}</p>
+      <p>{{ selected.event.description }}</p>
+      <p>{{ selected.event.audience }} {{ selected.event.className }} {{ selected.event.subject }}</p>
+      <p>Year {{ selected.event.academicYear }} · {{ selected.event.attendanceApplies ? 'Attendance required' : 'Attendance closed' }}</p>
+      <p>Reminder {{ selected.event.reminder }} · Organizer {{ selected.event.organizer }}</p>
+      @if (selected.event.recurrence !== 'none') {
+        <p>This is part of a {{ selected.event.recurrence }} series.</p>
+      }
+      @if (canEdit) {
+        <div class="side-actions">
+          <button type="button" class="primary" (click)="openEdit(selected, true)">Edit series</button>
+          @if (selected.event.recurrence !== 'none') {
+            <button type="button" (click)="openEdit(selected, false)">This date only</button>
+          }
+          <button type="button" (click)="duplicate(selected)">Duplicate</button>
+          <button type="button" (click)="remove(selected)">Delete</button>
+          @if (canManage) {
+            <button type="button" (click)="cancelEvent(selected)">Cancel event</button>
+          }
+        </div>
+      }
+    </aside>
+  }
+
+  @if (drawer) {
+    <aside class="drawer">
+      <header>
+        <h3>{{ editingId ? 'Edit event' : 'Quick create' }}</h3>
+        <button type="button" (click)="drawer = false">Close</button>
+      </header>
+      <form (ngSubmit)="save(false)">
+        <label>Title * <input [(ngModel)]="draft.title" name="title" required /></label>
+        <label>Type *
+          <select [(ngModel)]="draft.type" name="type" (ngModelChange)="draft.attendanceApplies = $event !== 'Holiday' && $event !== 'Vacation'">
+            @for (type of types; track type) { <option [value]="type">{{ type }}</option> }
+          </select>
+        </label>
+        <label>Start * <input type="date" [(ngModel)]="draft.start" name="start" required /></label>
+        <label>End * <input type="date" [(ngModel)]="draft.end" name="end" required /></label>
+        <label class="check"><input type="checkbox" [(ngModel)]="draft.allDay" name="allDay" /> All day</label>
+        @if (!draft.allDay) {
+          <label>Start time <input type="time" [(ngModel)]="draft.startTime" name="startTime" /></label>
+          <label>End time <input type="time" [(ngModel)]="draft.endTime" name="endTime" /></label>
+        }
+        @if (error) { <p class="error">{{ error }}</p> }
+        @if (conflict) {
+          <p class="error">{{ conflict }}</p>
+          @if (canManage) {
+            <button type="button" (click)="save(true)">Save anyway</button>
+          }
+        }
+        <button type="button" class="link" (click)="more = !more">{{ more ? 'Hide options' : 'More options' }}</button>
+        @if (more) {
+          <label>Description <textarea [(ngModel)]="draft.description" name="description" rows="2"></textarea></label>
+          <label>Location <input [(ngModel)]="draft.location" name="location" /></label>
+          <label>Meeting link <input [(ngModel)]="draft.meetingUrl" name="url" /></label>
+          <label>Audience
+            <select [(ngModel)]="draft.audience" name="audience">
+              <option>Entire school</option>
+              <option>Students</option>
+              <option>Parents</option>
+              <option>Teachers</option>
+              <option>Staff</option>
+            </select>
+          </label>
+          <label>Class <input [(ngModel)]="draft.className" name="className" placeholder="Class 8-A" /></label>
+          <label>Section <input [(ngModel)]="draft.section" name="section" /></label>
+          <label>Subject <input [(ngModel)]="draft.subject" name="subject" /></label>
+          <label>Academic year
+            <select [(ngModel)]="draft.academicYear" name="ay">
+              @for (item of years; track item) { <option [value]="item">{{ item }}</option> }
+            </select>
+          </label>
+          <label>Repeats
+            <select [(ngModel)]="draft.recurrence" name="repeat">
+              <option value="none">Does not repeat</option>
+              <option value="daily">Daily</option>
+              <option value="weekly">Weekly</option>
+              <option value="monthly">Monthly</option>
+            </select>
+          </label>
+          <label>Reminder
+            <select [(ngModel)]="draft.reminder" name="reminder">
+              <option>None</option>
+              <option>15 minutes</option>
+              <option>1 hour</option>
+              <option>1 day</option>
+            </select>
+          </label>
+          <label class="check"><input type="checkbox" [(ngModel)]="draft.attendanceApplies" name="att" /> Attendance required</label>
+          <label class="check"><input type="checkbox" [(ngModel)]="draft.notifyTeachers" name="nt" /> Notify teachers</label>
+          <label class="check"><input type="checkbox" [(ngModel)]="draft.notifyParents" name="np" /> Notify parents</label>
+          <p class="muted">Notifications are recorded here. They are not sent until the calendar is connected to the notification service.</p>
+        }
+        <button type="submit" class="primary">{{ editingId ? 'Save event' : 'Create event' }}</button>
+      </form>
+    </aside>
+  }
+</div>

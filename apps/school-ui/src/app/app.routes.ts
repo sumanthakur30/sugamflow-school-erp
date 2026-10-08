@@ -470,6 +470,15 @@ export const routes: Routes = [
           import('./features/timetable/timetable.component').then((m) => m.TimetableComponent),
       },
       {
+        path: 'admin/school-calendar',
+        canActivate: [featureGuard],
+        data: { roles: [...CAMPUS_ADMIN_ROLES, 'TEACHER', 'STAFF'] },
+        loadComponent: () =>
+          import('./features/school-calendar/school-calendar.component').then(
+            (m) => m.SchoolCalendarComponent,
+          ),
+      },
+      {
         path: 'admin/ops',
         canActivate: [featureGuard],
         data: { feature: 'FEATURE_OPS_DEPTH' },
