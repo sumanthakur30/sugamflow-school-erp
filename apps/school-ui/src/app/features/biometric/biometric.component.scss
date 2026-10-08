@@ -1,0 +1,43 @@
+.health[data-health='ONLINE'] { color: #1b7f3b; }
+.health[data-health='WARNING'] { color: #9a6b00; }
+.health[data-health='OFFLINE'] { color: #9b1c1c; }
+.health[data-health='ERROR'] { color: #9b1c1c; }
+.health[data-health='SYNCING'] { color: #1d4e89; }
+
+.device-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: flex-start;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+table.data {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+table.data th,
+table.data td {
+  text-align: left;
+  padding: 0.45rem 0.4rem;
+  border-bottom: 1px solid color-mix(in srgb, var(--sf-menu) 18%, transparent);
+}
+
+label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  margin-bottom: 0.6rem;
+}
