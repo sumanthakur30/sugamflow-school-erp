@@ -21,6 +21,13 @@ export interface ChartSlice {
   color?: string;
 }
 
+export interface TrendPoint {
+  key: string;
+  label: string;
+  collected: number;
+  pending: number;
+}
+
 export interface OutstandingRow {
   id: string;
   studentName: string;
