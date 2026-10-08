@@ -272,6 +272,13 @@ export const routes: Routes = [
           ),
       },
       {
+        path: 'admin/biometric',
+        canActivate: [featureGuard],
+        data: { feature: 'FEATURE_ATTENDANCE', roles: CAMPUS_ADMIN_ROLES },
+        loadComponent: () =>
+          import('./features/biometric/biometric.component').then((m) => m.BiometricComponent),
+      },
+      {
         path: 'admin/offline',
         canActivate: [featureGuard],
         data: { feature: 'FEATURE_OFFLINE_MODE', roles: CAMPUS_ADMIN_ROLES },

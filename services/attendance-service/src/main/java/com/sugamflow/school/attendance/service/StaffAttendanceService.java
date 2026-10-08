@@ -6,6 +6,7 @@ import com.sugamflow.school.attendance.web.AttendanceException;
 import com.sugamflow.school.common.tenant.TenantContext;
 import com.sugamflow.school.common.tenant.TenantScope;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.time.YearMonth;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -63,6 +64,61 @@ public class StaffAttendanceService {
     entity.setMarks(kept);
     entity.setUpdatedAt(Instant.now());
     return toMap(repository.save(entity));
+  }
+
+  /**
+   * Updates one employee for one date. A submitted month is left unchanged.
+   * Other employees on that date stay as they are.
+   */
+  @Transactional
+  public void mergeBiometric(
+      String organizationId,
+      String branchId,
+      LocalDate date,
+      String staffId,
+      String staffName,
+      String status) {
+    String month = YearMonth.from(date).toString();
+    String branch = branchId == null || branchId.isBlank() ? "" : branchId.trim();
+    String day = date.toString();
+    StaffAttendanceMonthEntity entity =
+        repository
+            .findByOrganizationIdAndBranchIdAndYearMonth(organizationId, branch, month)
+            .orElse(null);
+    if (entity != null && "SUBMITTED".equals(entity.getStatus())) {
+      return;
+    }
+    if (entity == null) {
+      entity = new StaffAttendanceMonthEntity();
+      entity.setId(UUID.randomUUID());
+      entity.setOrganizationId(organizationId);
+      entity.setBranchId(branch);
+      entity.setYearMonth(month);
+      entity.setStatus("DRAFT");
+      entity.setMarks(new ArrayList<>());
+    }
+    String rosterStatus = "EARLY_DEPARTURE".equals(status) ? "PRESENT" : status;
+    if (!STATUSES.contains(rosterStatus)) {
+      rosterStatus = "PRESENT";
+    }
+    List<Map<String, Object>> kept = new ArrayList<>();
+    for (Map<String, Object> existing : entity.getMarks()) {
+      boolean sameDay = day.equals(String.valueOf(existing.get("date")));
+      boolean sameStaff = staffId.equals(String.valueOf(existing.get("staffId")));
+      if (!(sameDay && sameStaff)) {
+        kept.add(existing);
+      }
+    }
+    Map<String, Object> row = new LinkedHashMap<>();
+    row.put("staffId", staffId);
+    row.put("staffName", staffName == null ? "" : staffName);
+    row.put("date", day);
+    row.put("status", rosterStatus);
+    row.put("source", "BIOMETRIC");
+    kept.add(row);
+    entity.setMarks(kept);
+    entity.setUpdatedAt(Instant.now());
+    repository.save(entity);
   }
 
   @Transactional

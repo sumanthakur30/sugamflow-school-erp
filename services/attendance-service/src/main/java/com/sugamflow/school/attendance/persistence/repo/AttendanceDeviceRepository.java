@@ -13,4 +13,6 @@ public interface AttendanceDeviceRepository extends JpaRepository<AttendanceDevi
       String organizationId, String deviceKey);
 
   Optional<AttendanceDeviceEntity> findByIdAndOrganizationId(String id, String organizationId);
+
+  Optional<AttendanceDeviceEntity> findBySerialNumber(String serialNumber);
 }

@@ -1,0 +1,237 @@
+<section class="page">
+  <div class="page-head">
+    <h2>Biometric attendance</h2>
+    <p>Devices send punches. SugamFlow decides attendance, late marks, and parent alerts.</p>
+  </div>
+
+  <div class="chip-list">
+    <button type="button" class="chip" [class.ok]="tab === 'devices'" (click)="select('devices')">Devices</button>
+    <button type="button" class="chip" [class.ok]="tab === 'health'" (click)="select('health')">Health</button>
+    <button type="button" class="chip" [class.ok]="tab === 'live'" (click)="select('live')">Live</button>
+    <button type="button" class="chip" [class.ok]="tab === 'enrollments'" (click)="select('enrollments')">Enrollment</button>
+    <button type="button" class="chip" [class.ok]="tab === 'sync'" (click)="select('sync')">Sync logs</button>
+    <button type="button" class="chip" [class.ok]="tab === 'unknown'" (click)="select('unknown')">Unknown</button>
+    <button type="button" class="chip" [class.ok]="tab === 'rules'" (click)="select('rules')">Rules</button>
+    <button type="button" class="chip" [class.ok]="tab === 'reports'" (click)="select('reports')">Reports</button>
+  </div>
+
+  @if (error) { <p class="error panel" role="alert">{{ error }}</p> }
+  @if (status) { <p class="status panel">{{ status }}</p> }
+  @if (issuedKey) {
+    <p class="panel">API key (shown once): <code>{{ issuedKey }}</code></p>
+  }
+
+  @if (tab === 'devices' || tab === 'health') {
+    <div class="grid three">
+      <div class="panel"><strong>{{ health.total || 0 }}</strong><div>Devices</div></div>
+      <div class="panel"><strong>{{ health.online || 0 }}</strong><div>Online</div></div>
+      <div class="panel"><strong>{{ health.offline || 0 }}</strong><div>Offline</div></div>
+    </div>
+    <div class="grid three">
+      <div class="panel"><strong>{{ health.syncing || 0 }}</strong><div>Syncing</div></div>
+      <div class="panel"><strong>{{ health.error || 0 }}</strong><div>Error</div></div>
+    </div>
+  }
+
+  @if (tab === 'devices') {
+    <section class="panel">
+      <h3>Add device</h3>
+      <div class="grid two">
+        <label>Name <input [(ngModel)]="draft.name" name="name" /></label>
+        <label>Serial <input [(ngModel)]="draft.serialNumber" name="serial" /></label>
+        <label>Vendor
+          <select [(ngModel)]="draft.vendor" name="vendor">
+            <option>ZKTECO</option><option>ESSL</option><option>MATRIX</option><option>MANTRA</option><option>RFID</option><option>GENERIC</option>
+          </select>
+        </label>
+        <label>Type
+          <select [(ngModel)]="draft.deviceType" name="type">
+            <option value="FINGERPRINT">Fingerprint</option>
+            <option value="FACE">Face recognition</option>
+            <option value="RFID">RFID</option>
+            <option value="FACE_FINGERPRINT">Face + fingerprint</option>
+            <option value="GENERIC">Generic</option>
+          </select>
+        </label>
+        <label>Location <input [(ngModel)]="draft.location" name="location" /></label>
+        <label>Gate <input [(ngModel)]="draft.gate" name="gate" /></label>
+        <label>Branch <input [(ngModel)]="draft.branchId" name="branch" /></label>
+        <label>Direction
+          <select [(ngModel)]="draft.direction" name="direction">
+            <option>BOTH</option><option>IN</option><option>OUT</option>
+          </select>
+        </label>
+      </div>
+      <button type="button" (click)="saveDevice()" [disabled]="busy">Register device</button>
+      <p class="muted">Point the device server URL at <code>/iclock/cdata</code> and include the API key as <code>key</code>. The serial alone is not trusted.</p>
+    </section>
+
+    <section class="panel filters">
+      <input placeholder="Branch" [(ngModel)]="filters.branchId" name="fBranch" />
+      <input placeholder="Type" [(ngModel)]="filters.deviceType" name="fType" />
+      <input placeholder="Status" [(ngModel)]="filters.status" name="fStatus" />
+      <input placeholder="Location" [(ngModel)]="filters.location" name="fLocation" />
+      <button type="button" (click)="reload()">Filter</button>
+    </section>
+
+    @if (loading) { <p class="panel">Loading devices…</p> }
+    @for (device of devices; track device.id) {
+      <article class="panel device-row">
+        <div>
+          <strong>{{ device.name }}</strong>
+          <span class="health" [attr.data-health]="device.health">{{ device.health }}</span>
+          <div class="muted">{{ device.vendor }} · {{ device.serialNumber }} · {{ device.deviceType }}</div>
+          <div class="muted">{{ device.location }} {{ device.gate }} · Last punch {{ clock(device.lastEvent) }} · Heartbeat {{ clock(device.lastHeartbeat) }}</div>
+          <div class="muted">{{ device.punchesToday }} punches today · key {{ device.credentialPrefix }}…</div>
+        </div>
+        <div class="actions">
+          <button type="button" (click)="command(device, 'TEST')">Test</button>
+          <button type="button" (click)="command(device, 'SYNC_TIME')">Sync time</button>
+          <button type="button" (click)="command(device, 'PULL')">Pull</button>
+          <button type="button" (click)="regenerate(device)">New key</button>
+          <button type="button" (click)="disable(device)">Disable</button>
+          <button type="button" (click)="command(device, 'REBOOT')">Restart</button>
+        </div>
+      </article>
+    }
+  }
+
+  @if (tab === 'health') {
+    <table class="data">
+      <thead>
+        <tr><th>Device</th><th>Status</th><th>Heartbeat</th><th>Last punch</th><th>Drift</th><th>Today</th><th>Failed</th></tr>
+      </thead>
+      <tbody>
+        @for (device of health.devices || []; track device.id) {
+          <tr>
+            <td>{{ device.name }}<div class="muted">{{ device.location }}</div></td>
+            <td class="health" [attr.data-health]="device.health">{{ device.health }}</td>
+            <td>{{ clock(device.lastHeartbeat) }}</td>
+            <td>{{ clock(device.lastEvent) }}</td>
+            <td>{{ device.driftSeconds ?? '—' }}s</td>
+            <td>{{ device.punchesToday }}</td>
+            <td>{{ device.failedEvents }}</td>
+          </tr>
+        }
+      </tbody>
+    </table>
+  }
+
+  @if (tab === 'live') {
+    <table class="data">
+      <thead><tr><th>Time</th><th>Person</th><th>Class</th><th>Method</th><th>Gate</th><th>Event</th><th>Parent</th></tr></thead>
+      <tbody>
+        @for (row of live; track row.eventTime + row.person) {
+          <tr>
+            <td>{{ clock(row.eventTime) }}</td>
+            <td>{{ row.person }}</td>
+            <td>{{ row.classSection }}</td>
+            <td>{{ row.verification }}</td>
+            <td>{{ row.gate }}</td>
+            <td>{{ row.eventType }}</td>
+            <td>{{ row.parentNotified ? 'Notified' : '—' }}</td>
+          </tr>
+        }
+      </tbody>
+    </table>
+  }
+
+  @if (tab === 'enrollments') {
+    <section class="panel">
+      <h3>Map a biometric ID</h3>
+      <div class="grid two">
+        <label>Name <input [(ngModel)]="enrollment.displayName" name="enName" /></label>
+        <label>Type
+          <select [(ngModel)]="enrollment.personType" name="enType"><option>STUDENT</option><option>STAFF</option></select>
+        </label>
+        <label>Biometric ID <input [(ngModel)]="enrollment.enrollmentCode" name="enCode" /></label>
+        <label>Admission / employee no. <input [(ngModel)]="enrollment.personCode" name="enPerson" /></label>
+        <label>Person id <input [(ngModel)]="enrollment.personId" name="enId" /></label>
+        <label>Class <input [(ngModel)]="enrollment.classSection" name="enClass" /></label>
+        <label>Section id <input [(ngModel)]="enrollment.sectionId" name="enSection" /></label>
+        <label>Parent mobile <input [(ngModel)]="enrollment.notifyMobile" name="enMobile" /></label>
+      </div>
+      <button type="button" (click)="saveEnrollment()">Save mapping</button>
+    </section>
+    <section class="panel">
+      <input placeholder="Search" [(ngModel)]="enrollmentQuery" name="enQ" />
+      <button type="button" (click)="loadEnrollments()">Search</button>
+      <table class="data">
+        <thead><tr><th>Person</th><th>Type</th><th>Biometric ID</th><th>Code</th><th>Class</th><th>Status</th><th></th></tr></thead>
+        <tbody>
+          @for (row of enrollments; track row.id) {
+            <tr>
+              <td>{{ row.displayName }}</td>
+              <td>{{ row.personType }}</td>
+              <td>{{ row.enrollmentCode }}</td>
+              <td>{{ row.personCode }}</td>
+              <td>{{ row.classSection }}</td>
+              <td>{{ row.status }}</td>
+              <td><button type="button" (click)="disableEnrollment(row)">Disable</button></td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </section>
+  }
+
+  @if (tab === 'sync' || tab === 'unknown') {
+    <table class="data">
+      <thead><tr><th>Received</th><th>Person</th><th>Event</th><th>Status</th><th>Error</th><th></th></tr></thead>
+      <tbody>
+        @for (row of events; track row.id) {
+          <tr>
+            <td>{{ clock(row.receivedAt) }}</td>
+            <td>{{ row.personCode }}</td>
+            <td>{{ row.eventType }}</td>
+            <td>{{ row.status }}</td>
+            <td>{{ row.error }}</td>
+            <td>
+              <button type="button" (click)="retry(row)">Retry</button>
+              @if (tab === 'unknown') { <button type="button" (click)="ignore(row)">Ignore</button> }
+            </td>
+          </tr>
+        }
+      </tbody>
+    </table>
+  }
+
+  @if (tab === 'rules') {
+    <section class="panel">
+      <div class="grid two">
+        <label>Mode
+          <select [(ngModel)]="rule.punchMode" name="mode">
+            <option value="FIRST_LAST">First punch in, last punch out</option>
+            <option value="DEVICE_STATUS">Device decides in/out</option>
+            <option value="GATE">Entrance and exit gates</option>
+            <option value="TIME_SPLIT">Time split</option>
+          </select>
+        </label>
+        <label>Timezone <input [(ngModel)]="rule.timeZone" name="tz" /></label>
+        <label>Start <input [(ngModel)]="rule.schoolStart" name="start" /></label>
+        <label>Grace minutes <input type="number" [(ngModel)]="rule.graceMinutes" name="grace" /></label>
+        <label>End <input [(ngModel)]="rule.schoolEnd" name="end" /></label>
+        <label>Split <input [(ngModel)]="rule.splitTime" name="split" /></label>
+        <label>Half day minutes <input type="number" [(ngModel)]="rule.halfDayMinutes" name="half" /></label>
+        <label>Channels <input [(ngModel)]="rule.notifyChannels" name="channels" /></label>
+      </div>
+      <label><input type="checkbox" [(ngModel)]="rule.notifyOnCheckIn" name="notify" /> Notify parents on check-in</label>
+      <button type="button" (click)="saveRules()">Save rules</button>
+    </section>
+  }
+
+  @if (tab === 'reports') {
+    <section class="panel">
+      <p>Present {{ summary.present || 0 }} · Absent {{ summary.absent || 0 }} · Late {{ summary.late || 0 }} · Leave {{ summary.leave || 0 }}</p>
+      <p>Punches {{ summary.punches || 0 }} · Failed {{ summary.failed || 0 }} · Unknown {{ summary.unknownPersons || 0 }} · Offline devices {{ summary.offlineDevices || 0 }}</p>
+      <label>Date <input type="date" [(ngModel)]="report.date" name="rdate" /></label>
+      <button type="button" (click)="loadSummary()">Refresh</button>
+      <button type="button" (click)="download('daily')">Daily CSV</button>
+      <label>From <input type="date" [(ngModel)]="report.from" name="from" /></label>
+      <label>To <input type="date" [(ngModel)]="report.to" name="to" /></label>
+      <select [(ngModel)]="report.personType" name="ptype"><option>STUDENT</option><option>STAFF</option></select>
+      <button type="button" (click)="download('people')">People CSV</button>
+      <button type="button" (click)="printReport()">Print</button>
+    </section>
+  }
+</section>
