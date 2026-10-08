@@ -13,9 +13,7 @@ import { ListPagerComponent } from '../../shared/list-toolbar/list-pager.compone
 import { ListSortOption, sortRows } from '../../shared/list-toolbar/list-controls';
 import { StudentLookupComponent } from '../../shared/student-lookup/student-lookup.component';
 import { StudentLookupRow } from '../../shared/student-lookup/student-lookup.models';
-import { FinanceKpiCardComponent } from '../../shared/finance-ui/finance-kpi-card.component';
-import { FinanceBarChartComponent } from '../../shared/finance-ui/finance-bar-chart.component';
-import { FinanceDonutChartComponent } from '../../shared/finance-ui/finance-donut-chart.component';
+import { FinanceTrendChartComponent } from '../../shared/finance-ui/finance-trend-chart.component';
 import {
   ActivityItem,
   ChartSlice,
@@ -23,12 +21,15 @@ import {
   FinanceKpi,
   OutstandingRow,
   PaymentModeCard,
+  TrendPoint,
 } from '../../shared/finance-ui/finance-dashboard.models';
 import {
   buildActivity,
   buildAlerts,
   buildFinanceKpis,
   buildOutstanding,
+  collectionTrend,
+  executiveNumbers,
   feeHeadSlices,
   formatInr,
   monthlyCollectionSeries,
@@ -57,9 +58,7 @@ export type FinanceTab =
     ListToolbarComponent,
     ListPagerComponent,
     StudentLookupComponent,
-    FinanceKpiCardComponent,
-    FinanceBarChartComponent,
-    FinanceDonutChartComponent,
+    FinanceTrendChartComponent,
   ],
   templateUrl: './finance.component.html',
   styleUrls: [
@@ -106,6 +105,17 @@ export class FinanceComponent implements OnInit, OnDestroy {
   modeCards: PaymentModeCard[] = [];
   alerts: FinanceAlert[] = [];
   activity: ActivityItem[] = [];
+  trend: TrendPoint[] = [];
+  range: 'year' | 'month' = 'year';
+  snapshot = {
+    totalCollected: 0,
+    pendingFees: 0,
+    todayCollection: 0,
+    onlineAmount: 0,
+    offlineAmount: 0,
+    monthDelta: 0,
+    progress: 0,
+  };
 
   headsQ = '';
   structuresQ = '';
@@ -382,6 +392,68 @@ export class FinanceComponent implements OnInit, OnDestroy {
       dueStudents: new Set(this.outstanding.map((r) => r.admissionNo)).size,
     });
     this.activity = buildActivity(this.collections, this.transactions, this.heads);
+    this.snapshot = executiveNumbers({
+      collections: this.collections,
+      transactions: this.transactions,
+    });
+    this.trend = collectionTrend(this.collections, this.range);
+  }
+
+  setRange(range: 'year' | 'month'): void {
+    this.range = range;
+    this.trend = collectionTrend(this.collections, range);
+  }
+
+  exportOverview(): void {
+    const lines = [
+      'metric,value',
+      `Total collected,${this.snapshot.totalCollected}`,
+      `Pending,${this.snapshot.pendingFees}`,
+      `Today,${this.snapshot.todayCollection}`,
+      `Online,${this.snapshot.onlineAmount}`,
+      `Cash,${this.snapshot.offlineAmount}`,
+      '',
+      'period,collected,pending',
+      ...this.trend.map((p) => `${p.label},${p.collected},${p.pending}`),
+      '',
+      'student,class,pending',
+      ...this.outstanding.slice(0, 20).map((r) => `${r.studentName},${r.classSection},${r.dueAmount}`),
+    ];
+    const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'fee-dashboard.csv';
+    link.click();
+    URL.revokeObjectURL(url);
+  }
+
+  printOverview(): void {
+    window.print();
+  }
+
+  remind(row: OutstandingRow): void {
+    this.router.navigate(['/admin/comms'], {
+      queryParams: { student: row.studentName, mobile: row.mobile },
+    });
+  }
+
+  headWidth(value: number): number {
+    const max = Math.max(1, ...this.headSlices.slice(0, 5).map((s) => s.value));
+    return Math.round((value / max) * 100);
+  }
+
+  sparkline(): string {
+    const values = this.trend.map((p) => p.collected);
+    const max = Math.max(1, ...values);
+    if (!values.length) return '';
+    return values
+      .map((v, i) => {
+        const x = (i / Math.max(1, values.length - 1)) * 88;
+        const y = 28 - (v / max) * 24;
+        return `${x},${y}`;
+      })
+      .join(' ');
   }
 
   applyGlobalSearch(): void {

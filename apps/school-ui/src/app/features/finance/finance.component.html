@@ -6,10 +6,15 @@
         <p>Operational dashboard for collections, dues, structures, and payments.</p>
       </div>
       <div class="head-actions">
+        <button type="button" class="secondary" (click)="printOverview()">Export PDF</button>
+        <button type="button" class="secondary" (click)="exportOverview()">Export Excel</button>
+        <div class="range-switch" role="group" aria-label="Date range">
+          <button type="button" [class.is-on]="range === 'year'" (click)="setRange('year')">Academic year</button>
+          <button type="button" [class.is-on]="range === 'month'" (click)="setRange('month')">Month</button>
+        </div>
         <button type="button" (click)="runQuick({ label: 'Collect', link: ['/admin/fee'], query: { new: '1' } })">
-          Collect fee
+          Collect fee +
         </button>
-        <button type="button" class="secondary" (click)="setTab('demand')">Generate demand</button>
         <button type="button" class="secondary" (click)="reload()" [disabled]="loading || busy">
           Refresh
         </button>
@@ -60,123 +65,99 @@
     </div>
   } @else {
     @if (tab === 'overview') {
-      <section class="fin-kpi-grid" aria-label="Finance summary">
-        @for (k of kpis; track k.key) {
-          <sf-finance-kpi-card [kpi]="k" (action)="onKpiAction($event)" />
-        }
+      <section class="exec-kpis" aria-label="Fee summary">
+        <article class="exec-card">
+          <div class="exec-card-top">
+            <span>Total fee collected</span>
+            <strong class="delta" [class.down]="snapshot.monthDelta < 0">
+              {{ snapshot.monthDelta >= 0 ? '+' : '' }}{{ snapshot.monthDelta }}%
+            </strong>
+          </div>
+          <div class="exec-value">{{ formatMoney(snapshot.totalCollected) }}</div>
+          <svg class="spark" viewBox="0 0 88 32" aria-hidden="true">
+            <polyline [attr.points]="sparkline()" />
+          </svg>
+        </article>
+        <article class="exec-card warn">
+          <div class="exec-card-top"><span>Pending fees</span></div>
+          <div class="exec-value">{{ formatMoney(snapshot.pendingFees) }}</div>
+          <button type="button" class="text-link" (click)="setTab('collections')">View defaulters</button>
+        </article>
+        <article class="exec-card">
+          <div class="exec-card-top"><span>Today's collection</span></div>
+          <div class="exec-value">{{ formatMoney(snapshot.todayCollection) }}</div>
+          <p class="exec-hint">Approved receipts posted today</p>
+        </article>
+        <article class="exec-card">
+          <div class="exec-card-top"><span>Online vs cash</span></div>
+          <div class="exec-value">{{ formatMoney(snapshot.onlineAmount) }}</div>
+          <p class="exec-hint">Cash {{ formatMoney(snapshot.offlineAmount) }}</p>
+        </article>
+        <article class="exec-card">
+          <div class="exec-card-top"><span>Collection progress</span><strong>{{ snapshot.progress }}%</strong></div>
+          <div class="gauge" aria-hidden="true"><span [style.width.%]="snapshot.progress"></span></div>
+          <p class="exec-hint">Collected against collected plus pending</p>
+        </article>
       </section>
 
-      <section class="panel fin-quick" aria-label="Quick actions">
-        <h3 class="form-section-title">Quick actions</h3>
-        <div class="fin-quick-row">
-          @for (a of quickActions; track a.label) {
-            <button type="button" class="fin-chip-btn" (click)="runQuick(a)">{{ a.label }}</button>
+      <div class="exec-main">
+        <section class="panel exec-chart">
+          <h3 class="form-section-title">Collection and revenue</h3>
+          <p class="exec-hint">Bars are collected. The curve is pending for the same period.</p>
+          <sf-finance-trend-chart [points]="trend" />
+        </section>
+        <section class="panel exec-side">
+          <h3 class="form-section-title">Fee type breakdown</h3>
+          @if (!headSlices.length) {
+            <p class="muted">No approved fee heads in this view.</p>
           }
-        </div>
-      </section>
-
-      <div class="fin-overview-grid">
-        <section class="panel fin-panel-link" role="button" tabindex="0" (click)="openDestination({ link: ['/admin/fee'] })" (keyup.enter)="openDestination({ link: ['/admin/fee'] })">
-          <sf-finance-bar-chart title="Monthly fee collection" [slices]="monthlySeries" />
-          <span class="fin-panel-cta">Open fee list →</span>
-        </section>
-        <section class="panel fin-panel-link" role="button" tabindex="0" (click)="setTab('payments')" (keyup.enter)="setTab('payments')">
-          <sf-finance-donut-chart
-            title="Payment mode distribution"
-            [slices]="modeSlices"
-            [centerLabel]="modeSlices.length ? 'Modes' : ''"
-          />
-          <span class="fin-panel-cta">Open payments →</span>
-        </section>
-        <section class="panel fin-panel-link" role="button" tabindex="0" (click)="setTab('heads')" (keyup.enter)="setTab('heads')">
-          <sf-finance-bar-chart title="Collection by fee head" [slices]="headSlices" />
-          <span class="fin-panel-cta">Open fee heads →</span>
-        </section>
-        <section class="panel fin-panel-link" role="button" tabindex="0" (click)="setTab('collections')" (keyup.enter)="setTab('collections')">
-          <sf-finance-bar-chart title="Pending by class" [slices]="pendingClassSlices" fill="#c2410c" />
-          <span class="fin-panel-cta">Review dues →</span>
-        </section>
-      </div>
-
-      <div class="fin-overview-grid two">
-        <section class="panel">
-          <h3 class="form-section-title">Finance alerts</h3>
-          <ul class="fin-alert-list">
-            @for (a of alerts; track a.id) {
-              <li
-                [class]="'fin-alert tone-' + a.tone"
-                [class.is-clickable]="!!(a.actionTab || a.actionLink)"
-                (click)="a.actionTab || a.actionLink ? onAlertAction(a) : null"
-              >
-                <div>
-                  <strong>{{ a.title }}</strong>
-                  <p>{{ a.detail }}</p>
-                </div>
-                @if (a.actionLabel || a.actionTab || a.actionLink) {
-                  <button
-                    type="button"
-                    class="tiny"
-                    (click)="$event.stopPropagation(); onAlertAction(a)"
-                  >
-                    {{ a.actionLabel || 'Open' }}
-                  </button>
-                }
-              </li>
-            }
-          </ul>
-        </section>
-        <section class="panel">
-          <h3 class="form-section-title">Recent activity</h3>
-          <ol class="fin-timeline">
-            @for (ev of activity; track ev.id) {
-              <li
-                class="fin-timeline-item"
-                [class]="'tone-' + ev.tone"
-                [class.is-clickable]="ev.id.startsWith('c-') || ev.id.startsWith('t-') || ev.id.startsWith('h-')"
-                role="button"
-                tabindex="0"
-                (click)="openActivity(ev)"
-                (keyup.enter)="openActivity(ev)"
-              >
-                <div class="fin-timeline-title">{{ ev.title }}</div>
-                <div class="fin-timeline-detail">{{ ev.detail }}</div>
-                <div class="fin-timeline-at">{{ formatWhen(ev.at) }}</div>
-              </li>
-            }
-          </ol>
+          @for (head of headSlices.slice(0, 5); track head.key) {
+            <div class="head-row">
+              <div class="head-meta">
+                <span>{{ head.label }}</span>
+                <strong>{{ formatMoney(head.value) }}</strong>
+              </div>
+              <div class="head-track"><span [style.width.%]="headWidth(head.value)"></span></div>
+            </div>
+          }
+          <h3 class="form-section-title due-title">Top pending balances</h3>
+          @for (row of outstanding.slice(0, 5); track row.id) {
+            <div class="due-row">
+              <span class="avatar">{{ row.studentName.charAt(0) }}</span>
+              <div>
+                <strong>{{ row.studentName }}</strong>
+                <div class="exec-hint">{{ row.classSection }}</div>
+              </div>
+              <strong class="due-amt">{{ formatMoney(row.dueAmount) }}</strong>
+              <button type="button" class="tiny" (click)="remind(row)">Send reminder</button>
+            </div>
+          }
+          @if (!outstanding.length) {
+            <p class="muted">No pending student balances.</p>
+          }
         </section>
       </div>
 
       <section class="panel">
-        <h3 class="form-section-title">Payment mode summary</h3>
-        <div class="fin-mode-grid">
-          @for (m of modeCards; track m.mode) {
-            <article
-              class="fin-mode-card is-clickable"
-              role="button"
-              tabindex="0"
-              (click)="openModeCard(m)"
-              (keyup.enter)="openModeCard(m)"
-            >
-              <h4>{{ m.mode }}</h4>
-              <div class="fin-mode-metrics">
-                <div>
-                  <span>Today</span>
-                  <strong>{{ formatMoney(m.today) }}</strong>
-                </div>
-                <div>
-                  <span>Month</span>
-                  <strong>{{ formatMoney(m.month) }}</strong>
-                </div>
-                <div>
-                  <span>Count</span>
-                  <strong>{{ m.count }}</strong>
-                </div>
-              </div>
-              <span class="fin-mode-open">Open receipts →</span>
-            </article>
-          }
-        </div>
+        <h3 class="form-section-title">Real-time fee activity</h3>
+        <table class="data activity-table">
+          <thead>
+            <tr><th>Student / reference</th><th>Detail</th><th>Status</th><th>When</th></tr>
+          </thead>
+          <tbody>
+            @for (ev of activity; track ev.id) {
+              <tr class="is-clickable" (click)="openActivity(ev)">
+                <td>{{ ev.title }}</td>
+                <td>{{ ev.detail }}</td>
+                <td><span [class]="'pill tone-' + ev.tone">{{ ev.tone === 'ok' ? 'Success' : ev.tone === 'warn' ? 'Pending' : 'Info' }}</span></td>
+                <td>{{ formatWhen(ev.at) }}</td>
+              </tr>
+            }
+            @if (!activity.length) {
+              <tr><td colspan="4" class="muted">No recent fee activity.</td></tr>
+            }
+          </tbody>
+        </table>
       </section>
     }
 

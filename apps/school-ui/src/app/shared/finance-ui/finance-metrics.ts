@@ -5,6 +5,7 @@ import {
   FinanceKpi,
   OutstandingRow,
   PaymentModeCard,
+  TrendPoint,
 } from './finance-dashboard.models';
 
 function num(v: unknown): number {
@@ -211,6 +212,51 @@ export function buildOutstanding(collections: any[]): OutstandingRow[] {
     .sort((a, b) => b.dueAmount - a.dueAmount);
 }
 
+function monthBuckets(collections: any[], months: number): TrendPoint[] {
+  const now = new Date();
+  const out: TrendPoint[] = [];
+  for (let i = months - 1; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    const rows = collections.filter((c) => isSameMonth(c.updatedAt || c.createdAt, d));
+    out.push({
+      key: `${d.getFullYear()}-${d.getMonth() + 1}`,
+      label: d.toLocaleString(undefined, { month: 'short' }),
+      collected: rows
+        .filter((c) => String(c.status).toUpperCase() === 'APPROVED')
+        .reduce((s, c) => s + num(c.answers?.amount), 0),
+      pending: rows
+        .filter((c) => String(c.status).toUpperCase() !== 'APPROVED')
+        .reduce((s, c) => s + num(c.answers?.amount), 0),
+    });
+  }
+  return out;
+}
+
+/** Academic year view: last 12 months. Month view: each day of the current month. */
+export function collectionTrend(collections: any[], range: 'year' | 'month'): TrendPoint[] {
+  if (range === 'year') {
+    return monthBuckets(collections, 12);
+  }
+  const now = new Date();
+  const days = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+  const out: TrendPoint[] = [];
+  for (let day = 1; day <= days; day++) {
+    const d = new Date(now.getFullYear(), now.getMonth(), day);
+    const rows = collections.filter((c) => isSameDay(c.updatedAt || c.createdAt, d));
+    out.push({
+      key: d.toISOString().slice(0, 10),
+      label: String(day),
+      collected: rows
+        .filter((c) => String(c.status).toUpperCase() === 'APPROVED')
+        .reduce((s, c) => s + num(c.answers?.amount), 0),
+      pending: rows
+        .filter((c) => String(c.status).toUpperCase() !== 'APPROVED')
+        .reduce((s, c) => s + num(c.answers?.amount), 0),
+    });
+  }
+  return out;
+}
+
 export function monthlyCollectionSeries(collections: any[], months = 6): ChartSlice[] {
   const now = new Date();
   const out: ChartSlice[] = [];
@@ -347,6 +393,55 @@ export function buildAlerts(input: {
     });
   }
   return alerts;
+}
+
+export function executiveNumbers(input: {
+  collections: any[];
+  transactions: any[];
+}): {
+  totalCollected: number;
+  pendingFees: number;
+  todayCollection: number;
+  onlineAmount: number;
+  offlineAmount: number;
+  monthDelta: number;
+  progress: number;
+} {
+  const now = new Date();
+  const prev = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+  const approved = input.collections.filter((c) => String(c.status).toUpperCase() === 'APPROVED');
+  const pending = input.collections.filter((c) => String(c.status).toUpperCase() !== 'APPROVED');
+  const sum = (rows: any[]) => rows.reduce((s, r) => s + num(r?.answers?.amount ?? r?.netAmount), 0);
+  const totalCollected = sum(approved);
+  const pendingFees = sum(pending);
+  const monthCollection = sum(approved.filter((c) => isSameMonth(c.updatedAt || c.createdAt, now)));
+  const prevMonthCollection = sum(approved.filter((c) => isSameMonth(c.updatedAt || c.createdAt, prev)));
+  const monthDelta =
+    prevMonthCollection > 0
+      ? Math.round(((monthCollection - prevMonthCollection) / prevMonthCollection) * 100)
+      : monthCollection > 0
+        ? 100
+        : 0;
+  const onlineAmount = input.transactions
+    .filter((t) => ['CAPTURED', 'SUCCESS', 'PAID'].includes(String(t.status || '').toUpperCase()))
+    .reduce((s, t) => s + num(t.netAmount), 0);
+  const offlineAmount = sum(
+    approved.filter((c) =>
+      String(c.answers?.paymentMode || '')
+        .toUpperCase()
+        .includes('CASH'),
+    ),
+  );
+  const base = totalCollected + pendingFees;
+  return {
+    totalCollected,
+    pendingFees,
+    todayCollection: sum(approved.filter((c) => isSameDay(c.updatedAt || c.createdAt, now))),
+    onlineAmount,
+    offlineAmount,
+    monthDelta,
+    progress: base > 0 ? Math.round((totalCollected / base) * 100) : 0,
+  };
 }
 
 export function buildActivity(collections: any[], transactions: any[], heads: any[]): ActivityItem[] {
