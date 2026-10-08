@@ -96,6 +96,11 @@ export const TOP_NAV: NavGroup[] = [
           label: 'Timetable',
           roles: ['SHOP_OWNER', 'SUPER_ADMIN', 'ADMIN', 'PRINCIPAL'],
         },
+        {
+          path: '/admin/school-calendar',
+          label: 'Calendar',
+          roles: ['SHOP_OWNER', 'SUPER_ADMIN', 'ADMIN', 'PRINCIPAL', 'TEACHER', 'STAFF'],
+        },
         { path: '/admin/attendance', label: 'Attendance', feature: 'FEATURE_ATTENDANCE' },
         { path: '/admin/exam', label: 'Exam / Gradebook', feature: 'FEATURE_EXAM' },
         { path: '/admin/lms', label: 'LMS', feature: 'FEATURE_LMS' },
