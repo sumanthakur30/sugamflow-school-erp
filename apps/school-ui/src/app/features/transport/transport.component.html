@@ -79,6 +79,15 @@
       <button
         type="button"
         role="tab"
+        [attr.aria-selected]="view === 'desk'"
+        [class.active]="view === 'desk'"
+        (click)="selectView('desk')"
+      >
+        Fleet desk
+      </button>
+      <button
+        type="button"
+        role="tab"
         [attr.aria-selected]="view === 'routes'"
         [class.active]="view === 'routes'"
         (click)="selectView('routes')"
@@ -116,6 +125,14 @@
         Workflow
       </button>
     </nav>
+
+    @if (view === 'desk') {
+      <sf-transport-desk
+        [savedRouteCount]="routes.length"
+        (openSavedRoutes)="openCreateRoute()"
+        (assignStudents)="selectView('assign')"
+      />
+    }
 
     @if (view === 'routes') {
       @if (showRouteForm) {
