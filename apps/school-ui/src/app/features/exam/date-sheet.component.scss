@@ -1,0 +1,312 @@
+.ds {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+.sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  border: 0;
+}
+
+.ds-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+  align-items: center;
+  padding: 0.75rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.75rem;
+  background: #fff;
+}
+
+.ds-field {
+  position: relative;
+  min-width: 9.5rem;
+}
+
+.ds-field.grow {
+  flex: 1 1 14rem;
+}
+
+.ds-field.labeled {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #64748b;
+}
+
+.ds-field input,
+.ds-field select,
+.ds-editor input,
+.ds-editor select {
+  width: 100%;
+  box-sizing: border-box;
+  height: 2.4rem;
+  padding: 0 0.7rem;
+  border: 1px solid #d6dee8;
+  border-radius: 0.55rem;
+  background: #f8fafc;
+  color: #0f172a;
+  font: inherit;
+}
+
+.ds-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.ds-btn {
+  height: 2.4rem;
+  padding: 0 0.9rem;
+  border-radius: 0.55rem;
+  border: 1px solid transparent;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.ds-btn.primary,
+.ds-btn.add {
+  background: #0b6e4f;
+  color: #fff;
+}
+
+.ds-btn.add {
+  margin-left: auto;
+}
+
+.ds-btn.ghost {
+  background: #f1f5f9;
+  color: #334155;
+  border-color: #e2e8f0;
+}
+
+.ds-btn.outline {
+  background: #fff;
+  color: #0b6e4f;
+  border-color: #0b6e4f;
+}
+
+.ds-count {
+  margin: 0;
+  color: #64748b;
+  font-size: 0.92rem;
+}
+
+.ds-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.ds-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 1rem 1rem 0.9rem;
+  border: 1px solid #e6edf5;
+  border-radius: 0.9rem;
+  background: #fff;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.04);
+}
+
+.ds-card h3,
+.ds-editor h3,
+.ds-detail h3 {
+  margin: 0;
+  text-align: center;
+  font-size: 1.05rem;
+  text-transform: capitalize;
+}
+
+.ds-metrics {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.55rem;
+}
+
+.ds-metrics div {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.15rem;
+  padding: 0.7rem 0.4rem;
+  border-radius: 0.7rem;
+  background: #f8fafc;
+  border: 1px solid #eef2f7;
+}
+
+.ds-metrics strong {
+  font-size: 1.15rem;
+}
+
+.ds-metrics span {
+  color: #64748b;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.ds-pills {
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  min-height: 1.7rem;
+  padding: 0.15rem 0.65rem;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #fff;
+}
+
+.pill.class {
+  background: #0b6e4f;
+}
+
+.pill.year {
+  background: #0f766e;
+}
+
+.pill.date {
+  background: #15803d;
+}
+
+.ds-card-actions {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.35rem;
+  margin-top: auto;
+}
+
+.act {
+  height: 2.15rem;
+  border: 0;
+  border-radius: 0.55rem;
+  color: #fff;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.act.view {
+  background: #0b6e4f;
+}
+
+.act.print {
+  background: #1d4ed8;
+}
+
+.act.edit {
+  background: #d97706;
+}
+
+.act.delete {
+  background: #dc2626;
+}
+
+.ds-editor,
+.ds-detail {
+  padding: 1rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.85rem;
+  background: #fff;
+}
+
+.ds-editor-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.7rem;
+  margin-top: 0.8rem;
+}
+
+.ds-editor-grid label,
+.ds-editor-grid .span {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: #334155;
+}
+
+.ds-editor-grid .span {
+  grid-column: 1 / -1;
+}
+
+.ds-editor-actions {
+  display: flex;
+  gap: 0.45rem;
+  margin-top: 0.8rem;
+}
+
+.ds-detail header {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: flex-start;
+}
+
+.ds-detail header p,
+.ds-detail-range {
+  margin: 0.25rem 0 0;
+  color: #64748b;
+}
+
+.ds-detail ol {
+  margin: 0.8rem 0 0;
+  padding-left: 1.2rem;
+}
+
+.ds-empty {
+  margin: 0;
+  padding: 1.5rem;
+  text-align: center;
+  color: #64748b;
+  background: #fff;
+  border: 1px dashed #cbd5e1;
+  border-radius: 0.85rem;
+}
+
+@media (max-width: 1100px) {
+  .ds-grid,
+  .ds-editor-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .ds-btn.add {
+    margin-left: 0;
+  }
+}
+
+@media (max-width: 720px) {
+  .ds-grid,
+  .ds-editor-grid,
+  .ds-card-actions {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media print {
+  .no-print,
+  .ds-filters,
+  .ds-count,
+  .ds-grid,
+  .ds-editor {
+    display: none !important;
+  }
+}
