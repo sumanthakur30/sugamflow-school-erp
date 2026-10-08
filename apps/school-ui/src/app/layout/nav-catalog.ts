@@ -101,6 +101,11 @@ export const TOP_NAV: NavGroup[] = [
         { path: '/admin/lms', label: 'LMS', feature: 'FEATURE_LMS' },
         { path: '/admin/classroom', label: 'Classroom', feature: 'FEATURE_LMS' },
         {
+          path: '/admin/online-classes',
+          label: 'Online Classes',
+          roles: ['SHOP_OWNER', 'SUPER_ADMIN', 'ADMIN', 'PRINCIPAL', 'TEACHER', 'STAFF'],
+        },
+        {
           path: '/admin/devices',
           label: 'Device Adapters',
           feature: 'FEATURE_ATTENDANCE',
