@@ -306,6 +306,15 @@ export const routes: Routes = [
           import('./features/classroom/classroom.component').then((m) => m.ClassroomComponent),
       },
       {
+        path: 'admin/online-classes',
+        canActivate: [featureGuard],
+        data: { roles: [...CAMPUS_ADMIN_ROLES, 'TEACHER', 'STAFF'] },
+        loadComponent: () =>
+          import('./features/online-classes/online-classes.component').then(
+            (m) => m.OnlineClassesComponent,
+          ),
+      },
+      {
         path: 'admin/app-users',
         canActivate: [featureGuard],
         data: { feature: 'FEATURE_STUDENT_MASTER' },

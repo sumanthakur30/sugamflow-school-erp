@@ -1,0 +1,254 @@
+<div class="oc">
+  <header class="oc-head">
+    <div>
+      <h2>Online Classes</h2>
+      <p>Manage and schedule video sessions.</p>
+    </div>
+    @if (audience === 'teacher') {
+      <button type="button" class="oc-btn primary" (click)="openCreate()">+ Create Online Class</button>
+    }
+  </header>
+
+  <div class="oc-bar">
+    <label class="grow">
+      <span class="sr">Search</span>
+      <input
+        type="search"
+        [(ngModel)]="query"
+        name="q"
+        placeholder="Search by class title or keyword"
+      />
+    </label>
+    <label>
+      <span class="sr">Platform</span>
+      <select [(ngModel)]="platform" name="platform">
+        <option value="">All platforms</option>
+        @for (item of platforms; track item) {
+          <option [value]="item">{{ item }}</option>
+        }
+      </select>
+    </label>
+    <label>
+      <span class="sr">When</span>
+      <select [(ngModel)]="window" name="window">
+        <option value="">All times</option>
+        @for (item of windows; track item) {
+          <option [value]="item">{{ item }}</option>
+        }
+      </select>
+    </label>
+    <label>
+      <span class="sr">Status</span>
+      <select [(ngModel)]="status" name="status">
+        <option value="">All statuses</option>
+        @for (item of statuses; track item) {
+          <option [value]="item">{{ item }}</option>
+        }
+      </select>
+    </label>
+    <div class="oc-switch" role="group" aria-label="View">
+      <button type="button" [class.on]="view === 'table'" (click)="view = 'table'">Table</button>
+      <button type="button" [class.on]="view === 'grid'" (click)="view = 'grid'">Grid</button>
+    </div>
+    <div class="oc-switch" role="group" aria-label="Audience">
+      <button type="button" [class.on]="audience === 'teacher'" (click)="audience = 'teacher'">Teacher</button>
+      <button type="button" [class.on]="audience === 'student'" (click)="audience = 'student'">Student</button>
+    </div>
+  </div>
+
+  <p class="oc-meta">
+    Showing {{ visible.length }} of {{ classes.length }}
+    @if (notice) {
+      <span>{{ notice }}</span>
+    }
+  </p>
+
+  @if (!visible.length) {
+    <p class="oc-empty">No online classes match these filters.</p>
+  } @else if (view === 'table') {
+    <div class="oc-table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Class title</th>
+            <th>Platform</th>
+            <th>
+              <button type="button" class="sort" (click)="toggleSort()">
+                Date &amp; time {{ sortAsc ? '↑' : '↓' }}
+              </button>
+            </th>
+            <th>Audience</th>
+            <th>Teacher / presenter</th>
+            <th>Status</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (row of visible; track row.id) {
+            <tr>
+              <td>
+                <div class="title">{{ row.title }}</div>
+                <div class="sub">{{ row.subject }}</div>
+              </td>
+              <td><span class="plat" [attr.data-plat]="row.platform">{{ row.platform }}</span></td>
+              <td class="when">{{ whenLabel(row.startsAt) }}</td>
+              <td>{{ row.sections.join(', ') }}</td>
+              <td>
+                <span class="who">
+                  <span class="avatar" aria-hidden="true">{{ initials(row.teacher) }}</span>
+                  {{ row.teacher }}
+                </span>
+              </td>
+              <td>
+                <span class="badge" [attr.data-tone]="statusTone(row)">{{ statusLabel(row) }}</span>
+              </td>
+              <td>
+                <div class="acts">
+                  @if (audience === 'teacher') {
+                    <button type="button" class="tiny go" (click)="start(row)" [disabled]="row.status === 'Cancelled' || row.status === 'Completed'">Start</button>
+                    <button type="button" class="tiny" (click)="openEdit(row)">Edit</button>
+                    <button type="button" class="tiny" (click)="copyLink(row)">Copy link</button>
+                    <button type="button" class="tiny danger" (click)="remove(row)">Delete</button>
+                    @if (row.status === 'Completed' || sessionWindow(row) === 'Past Sessions') {
+                      <button type="button" class="tiny" (click)="openRecording(row)">
+                        {{ row.recordingUrl ? 'View recording' : 'Upload recording' }}
+                      </button>
+                    }
+                  } @else {
+                    <button type="button" class="tiny go" (click)="join(row)" [disabled]="!joinEnabled(row)">
+                      Join class
+                    </button>
+                    @if (row.recordingUrl) {
+                      <button type="button" class="tiny" (click)="openRecording(row)">View recording</button>
+                    }
+                  }
+                </div>
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  } @else {
+    <div class="oc-grid">
+      @for (row of visible; track row.id) {
+        <article class="card">
+          <header>
+            <h3>{{ row.title }}</h3>
+            <span class="badge" [attr.data-tone]="statusTone(row)">{{ statusLabel(row) }}</span>
+          </header>
+          <p>{{ row.subject }} · {{ row.sections.join(', ') }}</p>
+          <p><span class="plat" [attr.data-plat]="row.platform">{{ row.platform }}</span></p>
+          <p class="when">{{ whenLabel(row.startsAt) }} · {{ row.durationMinutes }} min</p>
+          <p class="who">
+            <span class="avatar" aria-hidden="true">{{ initials(row.teacher) }}</span>
+            {{ row.teacher }}
+          </p>
+        </article>
+      }
+    </div>
+  }
+
+  @if (editorOpen) {
+    <div class="oc-modal" role="dialog" aria-modal="true" aria-labelledby="oc-title">
+      <form class="oc-dialog" (ngSubmit)="save()">
+        <header>
+          <h3 id="oc-title">{{ editingId ? 'Edit online class' : 'Create online class' }}</h3>
+          <button type="button" class="tiny" (click)="closeEditor()">Close</button>
+        </header>
+        <div class="form-grid">
+          <label class="span">
+            Title
+            <input [(ngModel)]="draft.title" name="title" required placeholder="Fundamentals of Electro Magnetics" />
+          </label>
+          <label>
+            Subject
+            <select [(ngModel)]="draft.subject" name="subject">
+              @for (item of subjectOptions; track item) {
+                <option [value]="item">{{ item }}</option>
+              }
+            </select>
+          </label>
+          <label>
+            Teacher / host
+            <select [(ngModel)]="draft.teacher" name="teacher">
+              @for (item of teacherOptions; track item) {
+                <option [value]="item">{{ item }}</option>
+              }
+            </select>
+          </label>
+          <label>
+            Platform
+            <select [(ngModel)]="draft.platform" name="draftPlatform">
+              @for (item of platforms; track item) {
+                <option [value]="item">{{ item }}</option>
+              }
+            </select>
+          </label>
+          <label>
+            Date and time
+            <input type="datetime-local" [(ngModel)]="draft.startsAt" name="startsAt" required />
+          </label>
+          <label>
+            Duration (minutes)
+            <input type="number" min="10" [(ngModel)]="draft.durationMinutes" name="duration" />
+          </label>
+          <label>
+            Passcode / meeting key
+            <input [(ngModel)]="draft.passcode" name="passcode" />
+          </label>
+          <fieldset class="span">
+            <legend>Class / section</legend>
+            <div class="checks">
+              @for (section of sectionOptions; track section) {
+                <label>
+                  <input
+                    type="checkbox"
+                    [checked]="draft.sections.includes(section)"
+                    (change)="toggleSection(section, $any($event.target).checked)"
+                  />
+                  {{ section }}
+                </label>
+              }
+            </div>
+          </fieldset>
+          <label class="span">
+            Meeting link
+            <input [(ngModel)]="draft.meetingUrl" name="url" placeholder="Leave blank to generate a placeholder link" />
+          </label>
+          <label class="span">
+            Description
+            <textarea [(ngModel)]="draft.description" name="description" rows="3"></textarea>
+          </label>
+          <label class="toggle span">
+            <input type="checkbox" [(ngModel)]="draft.notify" name="notify" />
+            Send SMS / WhatsApp notification
+          </label>
+        </div>
+        <footer>
+          <button type="submit" class="oc-btn primary">Save class</button>
+          <button type="button" class="oc-btn ghost" (click)="closeEditor()">Cancel</button>
+        </footer>
+      </form>
+    </div>
+  }
+
+  @if (recordingFor) {
+    <div class="oc-modal" role="dialog" aria-modal="true" aria-labelledby="rec-title">
+      <form class="oc-dialog" (ngSubmit)="saveRecording()">
+        <header>
+          <h3 id="rec-title">Recording for {{ recordingFor.title }}</h3>
+          <button type="button" class="tiny" (click)="recordingFor = null">Close</button>
+        </header>
+        <label>
+          Recording URL
+          <input [(ngModel)]="recordingUrl" name="recordingUrl" placeholder="https://" />
+        </label>
+        <footer>
+          <button type="submit" class="oc-btn primary">Save recording</button>
+          <button type="button" class="oc-btn ghost" (click)="recordingFor = null">Cancel</button>
+        </footer>
+      </form>
+    </div>
+  }
+</div>
