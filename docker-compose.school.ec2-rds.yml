@@ -176,7 +176,7 @@ services:
 
   fee-service:
     <<: *jvm-service
-    image: ${IMAGE_PREFIX:-sumanthakur30}/fee-service:${IMAGE_TAG:-1.0.0}
+    image: ${IMAGE_PREFIX:-sumanthakur30}/fee-service:${FEE_IMAGE_TAG:-${IMAGE_TAG:-1.0.0}}
     environment:
       <<: *common-env
       EUREKA_INSTANCE_HOSTNAME: fee-service
