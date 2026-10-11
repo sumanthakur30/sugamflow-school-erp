@@ -5,7 +5,9 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sugamflow.school.common.tenant.TenantContext;
 import com.sugamflow.school.common.tenant.TenantScope;
 import com.sugamflow.school.fee.config.FeeProperties;
+import com.sugamflow.school.fee.finance.FeeConcessionCalculator;
 import com.sugamflow.school.fee.finance.FinanceCatalog;
+import com.sugamflow.school.fee.persistence.entity.StudentFeeAdjustmentEntity;
 import com.sugamflow.school.fee.integration.ConfigEngineClient;
 import com.sugamflow.school.fee.integration.StudentProfileClient;
 import com.sugamflow.school.fee.payment.GatewayOrderResult;
@@ -43,6 +45,7 @@ public class FinanceService {
   private final PaymentGatewayRegistry gatewayRegistry;
   private final FeeCollectionService feeCollections;
   private final StudentProfileClient studentProfiles;
+  private final StudentFeeAdjustmentService feeAdjustments;
   private final ObjectMapper objectMapper;
 
   public FinanceService(
@@ -53,6 +56,7 @@ public class FinanceService {
       PaymentGatewayRegistry gatewayRegistry,
       @Lazy FeeCollectionService feeCollections,
       StudentProfileClient studentProfiles,
+      StudentFeeAdjustmentService feeAdjustments,
       ObjectMapper objectMapper) {
     this.definitionRepo = definitionRepo;
     this.transactionRepo = transactionRepo;
@@ -61,6 +65,7 @@ public class FinanceService {
     this.gatewayRegistry = gatewayRegistry;
     this.feeCollections = feeCollections;
     this.studentProfiles = studentProfiles;
+    this.feeAdjustments = feeAdjustments;
     this.objectMapper = objectMapper;
   }
 
@@ -509,6 +514,7 @@ public class FinanceService {
     BigDecimal discount = BigDecimal.ZERO;
     String concessionKey = stringOr(body.get("concessionKey"), null);
     Map<String, Object> concessionApplied = null;
+    List<String> otherHeads = List.of();
     if ((concessionKey == null || concessionKey.isBlank())
         && bool(settings.get("autoApplyScholarship"), true)
         && truthy(studentAnswers.get("scholarship"))) {
@@ -519,19 +525,24 @@ public class FinanceService {
         Map<String, Object> concession =
             requireDefinition(scope, FinanceCatalog.TYPE_CONCESSION, concessionKey);
         discount = computeConcession(concession, lines, gross);
+        otherHeads = FeeConcessionCalculator.heads(concession.get("appliesToHeads"));
         concessionApplied =
-            Map.of(
-                "definitionKey",
-                concessionKey,
-                "name",
-                stringOr(concession.get("name"), concessionKey),
-                "discountAmount",
-                discount);
+            new LinkedHashMap<>(
+                Map.of(
+                    "definitionKey",
+                    concessionKey,
+                    "name",
+                    stringOr(concession.get("name"), concessionKey),
+                    "discountAmount",
+                    discount));
       } catch (FeeException ex) {
         if (forPersist) throw ex;
         log.debug("Concession {} skipped: {}", concessionKey, ex.getMessage());
       }
     }
+    Map<String, Object> concessionBreakdown =
+        familyConcessions(scope, studentRef, studentAnswers, lines, concessionKey, otherHeads, discount);
+    discount = toDecimal(concessionBreakdown.get("totalConcession")).min(gross).max(BigDecimal.ZERO);
 
     BigDecimal taxableBase = gross.subtract(discount).max(BigDecimal.ZERO);
     // Re-scale GST proportionally after discount when GST is enabled.
@@ -599,6 +610,7 @@ public class FinanceService {
     out.put("lines", lines);
     out.put("grossAmount", gross.setScale(2, RoundingMode.HALF_UP));
     out.put("discountAmount", discount.setScale(2, RoundingMode.HALF_UP));
+    out.put("concessionBreakdown", concessionBreakdown);
     out.put("gstAmount", gstAmount.setScale(2, RoundingMode.HALF_UP));
     out.put("lateFeeAmount", lateFee.setScale(2, RoundingMode.HALF_UP));
     out.put("netAmount", net);
@@ -896,6 +908,12 @@ public class FinanceService {
   }
 
   @Transactional
+  public boolean concessionApprovalRequired() {
+    TenantScope scope = TenantContext.require();
+    requireFee(scope);
+    return bool(feeModuleSettings(scope).get("concessionApprovalRequired"), false);
+  }
+
   public void ensureDefaults(TenantScope scope) {
     seedMissing(
         scope, FinanceCatalog.TYPE_FEE_HEAD, FinanceCatalog.defaultHeads());
@@ -978,6 +996,66 @@ public class FinanceService {
             scope.organizationId(), type, key, "ACTIVE")
         .map(FinanceDefinitionEntity::getPayload)
         .orElseThrow(() -> new FeeException("NOT_FOUND", type + " not found: " + key));
+  }
+
+  private Map<String, Object> familyConcessions(
+      TenantScope scope,
+      String studentRef,
+      Map<String, Object> studentAnswers,
+      List<Map<String, Object>> lines,
+      String concessionKey,
+      List<String> otherHeads,
+      BigDecimal otherDiscount) {
+    List<FeeConcessionCalculator.FeeLine> feeLines = new ArrayList<>();
+    for (Map<String, Object> line : lines) {
+      if ("lateFee".equals(String.valueOf(line.get("source")))) {
+        continue;
+      }
+      feeLines.add(
+          new FeeConcessionCalculator.FeeLine(
+              stringOr(line.get("headKey"), ""), toDecimal(line.get("amount"))));
+    }
+    FeeConcessionCalculator.SiblingPolicy policy = null;
+    try {
+      policy =
+          FeeConcessionCalculator.siblingPolicy(
+              requireDefinition(scope, FinanceCatalog.TYPE_CONCESSION, "sibling_policy"));
+    } catch (FeeException ex) {
+      log.debug("Sibling policy not configured: {}", ex.getMessage());
+    }
+    StudentFeeAdjustmentEntity row = feeAdjustments.approvedFor(scope, studentRef);
+    FeeConcessionCalculator.StudentAdjustment adjustment = null;
+    if (row != null) {
+      adjustment =
+          FeeConcessionCalculator.studentAdjustment(
+              row.getId(),
+              row.getMode(),
+              row.getAdjustmentValue(),
+              row.getAppliesToHeads(),
+              row.getStatus());
+    }
+    boolean skipSibling =
+        concessionKey != null
+            && (concessionKey.equalsIgnoreCase("sibling_policy")
+                || concessionKey.equalsIgnoreCase("sibling_10"));
+    FeeConcessionCalculator.Result result =
+        FeeConcessionCalculator.calculate(
+            feeLines,
+            otherDiscount,
+            otherHeads,
+            adjustment,
+            policy,
+            FeeConcessionCalculator.admissionNos(studentAnswers.get("siblingAdmissionNos")),
+            studentRef,
+            skipSibling);
+    Map<String, Object> breakdown = result.toMap();
+    if (row != null) {
+      breakdown.put("studentAdjustmentId", row.getId());
+      breakdown.put("studentAdjustmentStatus", row.getStatus());
+      breakdown.put("studentReason", row.getReason());
+      breakdown.put("studentMode", row.getMode());
+    }
+    return breakdown;
   }
 
   private BigDecimal computeConcession(
