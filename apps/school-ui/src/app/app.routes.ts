@@ -213,6 +213,16 @@ export const routes: Routes = [
           import('./features/admission/admission.component').then((m) => m.AdmissionComponent),
       },
       {
+        path: 'admin/privacy',
+        canActivate: [featureGuard],
+        data: {
+          feature: 'FEATURE_STUDENT_MASTER',
+          roles: ['SHOP_OWNER', 'SUPER_ADMIN', 'ADMIN', 'PRINCIPAL', 'OWNER'],
+        },
+        loadComponent: () =>
+          import('./features/privacy/school-privacy.component').then((m) => m.SchoolPrivacyComponent),
+      },
+      {
         path: 'admin/fee',
         canActivate: [featureGuard],
         data: { feature: 'FEATURE_FEE' },
