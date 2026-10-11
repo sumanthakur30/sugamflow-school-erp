@@ -45,6 +45,12 @@ export const TOP_NAV: NavGroup[] = [
           label: 'Promotions & Transfers',
           feature: 'FEATURE_ACADEMIC_LIFECYCLE',
         },
+        {
+          path: '/admin/privacy',
+          label: 'Student privacy',
+          feature: 'FEATURE_STUDENT_MASTER',
+          roles: ['SHOP_OWNER', 'SUPER_ADMIN', 'ADMIN', 'PRINCIPAL', 'OWNER'],
+        },
       ],
     },
     {
