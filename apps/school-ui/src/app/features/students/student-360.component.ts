@@ -37,6 +37,13 @@ export class Student360Component implements OnInit {
   campusesLoaded = false;
   targetBranchId = '';
   transferring = false;
+  feeQuote: any = null;
+  feeAdjustment: any = null;
+  feeMode = 'CUSTOM_PAYABLE';
+  feeValue: number | null = null;
+  feeHeads = 'TUITION';
+  feeReason = '';
+  feeMessage = '';
 
   ngOnInit(): void {
     this.route.paramMap.subscribe((pm) => {
@@ -60,6 +67,7 @@ export class Student360Component implements OnInit {
         this.syncCampusTarget();
         this.portalUsername = this.admissionNo() || this.portalUsername;
         this.loading = false;
+        this.loadFeeQuote();
       },
       error: (err) => {
         this.loading = false;
@@ -246,6 +254,61 @@ export class Student360Component implements OnInit {
         error: (err) => {
           this.error = err?.error?.message ?? 'Could not record the app user';
         },
+      });
+  }
+
+  loadFeeQuote(): void {
+    const admissionNo = this.admissionNo();
+    if (!admissionNo) return;
+    this.api
+      .post<any>('/api/fee/finance/demands/preview', { studentRef: admissionNo })
+      .subscribe({ next: (quote) => (this.feeQuote = quote), error: () => (this.feeQuote = null) });
+    this.api.get<any[]>(`/api/fee/finance/adjustments?admissionNo=${encodeURIComponent(admissionNo)}`).subscribe({
+      next: (rows) => (this.feeAdjustment = (rows ?? []).find((row) => row.status === 'APPROVED' || row.status === 'PENDING') ?? null),
+      error: () => (this.feeAdjustment = null),
+    });
+  }
+
+  saveFeeAdjustment(): void {
+    const admissionNo = this.admissionNo();
+    if (!admissionNo || this.feeValue == null || !this.feeReason.trim()) {
+      this.feeMessage = 'Enter the new amount and a reason.';
+      return;
+    }
+    this.feeMessage = '';
+    this.api
+      .post('/api/fee/finance/adjustments', {
+        admissionNo,
+        mode: this.feeMode,
+        value: this.feeValue,
+        appliesToHeads: this.feeHeads
+          .split(',')
+          .map((head) => head.trim().toUpperCase())
+          .filter(Boolean),
+        reason: this.feeReason.trim(),
+      })
+      .subscribe({
+        next: () => {
+          this.feeMessage = 'Fee adjustment saved for this student only. Earlier receipts are unchanged.';
+          this.feeReason = '';
+          this.loadFeeQuote();
+        },
+        error: (err) => (this.feeMessage = err?.error?.message ?? 'Could not save the fee adjustment'),
+      });
+  }
+
+  removeFeeAdjustment(): void {
+    if (!this.feeAdjustment?.id) return;
+    this.api
+      .post(`/api/fee/finance/adjustments/${this.feeAdjustment.id}/remove`, {
+        reason: this.feeReason.trim() || 'Removed from student fee profile',
+      })
+      .subscribe({
+        next: () => {
+          this.feeMessage = 'Adjustment removed. The next demand uses the standard fee.';
+          this.loadFeeQuote();
+        },
+        error: (err) => (this.feeMessage = err?.error?.message ?? 'Could not remove the adjustment'),
       });
   }
 

@@ -90,6 +90,13 @@ export class FinanceComponent implements OnInit, OnDestroy {
   heads: any[] = [];
   structures: any[] = [];
   concessions: any[] = [];
+  siblingEnabled = true;
+  siblingStacking = 'STUDENT_THEN_SIBLING';
+  siblingHeads = 'TUITION,ANNUAL';
+  siblingRulesText = '1,PERCENT,0\n2,PERCENT,10\n3,PERCENT,15';
+  siblingSubsequent = 15;
+  siblingMessage = '';
+  feeAdjustments: any[] = [];
   providers: any[] = [];
   transactions: any[] = [];
   collections: any[] = [];
@@ -346,6 +353,8 @@ export class FinanceComponent implements OnInit, OnDestroy {
         this.heads = boot.heads ?? [];
         this.structures = boot.structures ?? [];
         this.concessions = boot.concessions ?? [];
+        this.syncSiblingDraft();
+        this.loadAdjustments();
         this.providers = boot.providers ?? [];
         if (this.providers.length) {
           const keys = this.providers.map((p: any) => p.definitionKey || p.payload?.definitionKey);
@@ -1122,6 +1131,79 @@ export class FinanceComponent implements OnInit, OnDestroy {
     return this.collections
       .filter((c) => String(c.status).toUpperCase() === 'APPROVED')
       .slice(0, 8);
+  }
+
+  syncSiblingDraft(): void {
+    const row = this.concessions.find((c) => c.definitionKey === 'sibling_policy');
+    const payload = row ? this.payload(row) : null;
+    if (!payload) return;
+    this.siblingEnabled = payload.enabled !== false;
+    this.siblingStacking = payload.stacking || 'STUDENT_THEN_SIBLING';
+    this.siblingHeads = (payload.appliesToHeads || []).join(',');
+    this.siblingSubsequent = Number(payload.subsequent?.value ?? 15);
+    const rules = payload.childRules || [];
+    if (rules.length) {
+      this.siblingRulesText = rules
+        .map((rule: any) => `${rule.order},${rule.type},${rule.value}`)
+        .join('\n');
+    }
+  }
+
+  saveSiblingPolicy(): void {
+    const childRules = this.siblingRulesText
+      .split(/\r?\n/)
+      .map((row) => row.trim())
+      .filter(Boolean)
+      .map((row) => {
+        const [order, type, value] = row.split(',').map((part) => part.trim());
+        return { order: Number(order), type: (type || 'PERCENT').toUpperCase(), value: Number(value || 0) };
+      })
+      .filter((rule) => rule.order > 0);
+    this.busy = true;
+    this.error = '';
+    this.siblingMessage = '';
+    this.api
+      .put('/api/fee/finance/concessions/sibling_policy', {
+        definitionKey: 'sibling_policy',
+        name: 'Sibling concession by child order',
+        kind: 'SIBLING',
+        enabled: this.siblingEnabled,
+        stacking: this.siblingStacking,
+        maxDiscountPercent: 100,
+        appliesToHeads: this.siblingHeads
+          .split(',')
+          .map((head) => head.trim().toUpperCase())
+          .filter(Boolean),
+        childRules,
+        subsequent: { type: 'PERCENT', value: Number(this.siblingSubsequent || 0) },
+      })
+      .subscribe({
+        next: () => {
+          this.busy = false;
+          this.siblingMessage = 'Sibling concession saved. It applies to the next demand, not to receipts already issued.';
+          this.reload();
+        },
+        error: (err) => {
+          this.busy = false;
+          this.error = err?.error?.message ?? 'Could not save sibling concession';
+        },
+      });
+  }
+
+  loadAdjustments(): void {
+    this.api.get<any[]>('/api/fee/finance/adjustments').subscribe({
+      next: (rows) => (this.feeAdjustments = rows ?? []),
+      error: () => (this.feeAdjustments = []),
+    });
+  }
+
+  decideAdjustment(row: any, status: string): void {
+    this.api
+      .post(`/api/fee/finance/adjustments/${row.id}/decision`, { status, reason: row.reason })
+      .subscribe({
+        next: () => this.loadAdjustments(),
+        error: (err) => (this.error = err?.error?.message ?? 'Could not update the adjustment'),
+      });
   }
 
   exportHeadsCsv(): void {

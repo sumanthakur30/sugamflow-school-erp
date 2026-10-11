@@ -518,6 +518,61 @@
             <p class="muted">No concessions configured.</p>
           }
         </div>
+        <h3 class="form-section-title">Sibling concession</h3>
+        <p class="muted">
+          Linked siblings are ordered by admission number. Child 1 keeps the standard fee. Later children use the rules below. This does not change the class fee structure.
+        </p>
+        <div class="grid two">
+          <label>
+            Eligible fee heads
+            <input [(ngModel)]="siblingHeads" name="siblingHeads" placeholder="TUITION,ANNUAL" />
+          </label>
+          <label>
+            When both a student adjustment and a sibling concession apply
+            <select [(ngModel)]="siblingStacking" name="siblingStacking">
+              <option value="STUDENT_THEN_SIBLING">Apply the student adjustment, then the sibling concession</option>
+              <option value="EXCLUSIVE_STUDENT">Use only the student adjustment</option>
+              <option value="HIGHER_ONLY">Use whichever concession is larger</option>
+            </select>
+          </label>
+          <label>
+            Child rules (order, PERCENT or FIXED, value)
+            <textarea [(ngModel)]="siblingRulesText" name="siblingRules" rows="4"></textarea>
+          </label>
+          <label>
+            Percent for every later child
+            <input type="number" [(ngModel)]="siblingSubsequent" name="siblingSubsequent" min="0" max="100" />
+          </label>
+        </div>
+        <label class="check">
+          <input type="checkbox" [(ngModel)]="siblingEnabled" name="siblingEnabled" />
+          Apply this sibling policy on new demands
+        </label>
+        <div class="head-actions">
+          <button type="button" (click)="saveSiblingPolicy()" [disabled]="busy">Save sibling policy</button>
+        </div>
+        @if (siblingMessage) {
+          <p class="muted">{{ siblingMessage }}</p>
+        }
+        <h3 class="form-section-title">Student fee adjustments</h3>
+        <div class="fin-line-list">
+          @for (row of feeAdjustments; track row.id) {
+            <div class="fin-line">
+              <span>
+                {{ row.admissionNo }} · {{ row.mode }} {{ row.value }}
+                <span class="muted"> · {{ row.status }} · {{ row.reason }}</span>
+              </span>
+              @if (row.status === 'PENDING') {
+                <span>
+                  <button type="button" (click)="decideAdjustment(row, 'APPROVED')">Approve</button>
+                  <button type="button" class="secondary" (click)="decideAdjustment(row, 'REJECTED')">Reject</button>
+                </span>
+              }
+            </div>
+          } @empty {
+            <p class="muted">No individual fee adjustments yet. Grant one from the student fee tab.</p>
+          }
+        </div>
       </section>
     }
 
@@ -625,6 +680,16 @@
                   <span>Discount</span>
                   <strong class="money">{{ formatMoney(demand.discountAmount) }}</strong>
                 </div>
+                @if (demand.concessionBreakdown) {
+                  <div>
+                    <span>Student adjustment</span>
+                    <strong class="money">{{ formatMoney(demand.concessionBreakdown.studentConcession) }}</strong>
+                  </div>
+                  <div>
+                    <span>Sibling concession</span>
+                    <strong class="money">{{ formatMoney(demand.concessionBreakdown.siblingConcession) }}</strong>
+                  </div>
+                }
                 <div>
                   <span>GST</span>
                   <strong class="money">{{ formatMoney(demand.gstAmount) }}</strong>

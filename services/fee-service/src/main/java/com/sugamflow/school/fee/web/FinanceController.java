@@ -3,6 +3,7 @@ package com.sugamflow.school.fee.web;
 import com.sugamflow.school.common.api.ApiResponse;
 import com.sugamflow.school.fee.finance.FinanceCatalog;
 import com.sugamflow.school.fee.service.FinanceService;
+import com.sugamflow.school.fee.service.StudentFeeAdjustmentService;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -13,6 +14,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -21,9 +23,11 @@ import org.springframework.web.server.ResponseStatusException;
 public class FinanceController {
 
   private final FinanceService service;
+  private final StudentFeeAdjustmentService adjustments;
 
-  public FinanceController(FinanceService service) {
+  public FinanceController(FinanceService service, StudentFeeAdjustmentService adjustments) {
     this.service = service;
+    this.adjustments = adjustments;
   }
 
   @GetMapping("/bootstrap")
@@ -122,6 +126,50 @@ public class FinanceController {
     return ApiResponse.ok(wrap(() -> service.confirmCapture(id, body == null ? Map.of() : body)));
   }
 
+  @GetMapping("/adjustments")
+  public ApiResponse<List<Map<String, Object>>> adjustments(
+      @RequestParam(name = "admissionNo", required = false) String admissionNo) {
+    return ApiResponse.ok(wrap(() -> adjustments.list(admissionNo)));
+  }
+
+  @GetMapping("/adjustments/report")
+  public ApiResponse<Map<String, Object>> adjustmentReport() {
+    return ApiResponse.ok(wrap(adjustments::report));
+  }
+
+  @GetMapping("/adjustments/{id}/history")
+  public ApiResponse<List<Map<String, Object>>> adjustmentHistory(@PathVariable("id") String id) {
+    return ApiResponse.ok(wrap(() -> adjustments.history(id)));
+  }
+
+  @PostMapping("/adjustments")
+  public ApiResponse<Map<String, Object>> createAdjustment(@RequestBody Map<String, Object> body) {
+    return ApiResponse.ok(
+        wrap(() -> adjustments.create(body, service.concessionApprovalRequired())));
+  }
+
+  @PostMapping("/adjustments/{id}/decision")
+  public ApiResponse<Map<String, Object>> decideAdjustment(
+      @PathVariable("id") String id, @RequestBody Map<String, Object> body) {
+    return ApiResponse.ok(
+        wrap(
+            () ->
+                adjustments.decide(
+                    id,
+                    body.get("status") == null ? "" : String.valueOf(body.get("status")),
+                    body.get("reason") == null ? "" : String.valueOf(body.get("reason")))));
+  }
+
+  @PostMapping("/adjustments/{id}/remove")
+  public ApiResponse<Map<String, Object>> removeAdjustment(
+      @PathVariable("id") String id, @RequestBody Map<String, Object> body) {
+    return ApiResponse.ok(
+        wrap(
+            () ->
+                adjustments.remove(
+                    id, body.get("reason") == null ? "" : String.valueOf(body.get("reason")))));
+  }
+
   @GetMapping("/transactions")
   public ApiResponse<List<Map<String, Object>>> transactions() {
     return ApiResponse.ok(wrap(service::listTransactions));
@@ -134,7 +182,7 @@ public class FinanceController {
       HttpStatus status =
           "NOT_FOUND".equals(ex.getCode())
               ? HttpStatus.NOT_FOUND
-              : "FEATURE_OFF".equals(ex.getCode())
+              :           "FEATURE_OFF".equals(ex.getCode()) || "FORBIDDEN".equals(ex.getCode())
                   ? HttpStatus.FORBIDDEN
                   : HttpStatus.BAD_REQUEST;
       throw new ResponseStatusException(status, ex.getMessage());
