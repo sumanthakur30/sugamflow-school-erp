@@ -247,6 +247,55 @@
             </li>
           }
         </ul>
+        @if (feeQuote) {
+          <p>
+            Standard fee <strong>{{ feeQuote.grossAmount }}</strong>
+            · Student adjustment <strong>{{ feeQuote.concessionBreakdown?.studentConcession ?? 0 }}</strong>
+            · Sibling concession <strong>{{ feeQuote.concessionBreakdown?.siblingConcession ?? 0 }}</strong>
+            · Payable <strong>{{ feeQuote.netAmount }}</strong>
+          </p>
+          @if (feeQuote.concessionBreakdown?.siblingOrder) {
+            <p class="muted">Sibling position in this family: {{ feeQuote.concessionBreakdown.siblingOrder }} of {{ feeQuote.concessionBreakdown.householdSize }}</p>
+          }
+        }
+        @if (feeAdjustment) {
+          <p class="muted">
+            Current adjustment: {{ feeAdjustment.mode }} {{ feeAdjustment.value }} · {{ feeAdjustment.status }} · {{ feeAdjustment.reason }}
+          </p>
+        }
+        <h3>Customize this student's fee</h3>
+        <p class="muted">The class fee stays the same for every other student.</p>
+        <div class="grid two">
+          <label>
+            Adjustment
+            <select [(ngModel)]="feeMode" name="feeMode">
+              <option value="CUSTOM_PAYABLE">Custom payable amount</option>
+              <option value="FIXED_OFF">Fixed concession</option>
+              <option value="PERCENT">Percentage concession</option>
+            </select>
+          </label>
+          <label>
+            Amount
+            <input type="number" [(ngModel)]="feeValue" name="feeValue" min="0" />
+          </label>
+          <label>
+            Fee heads
+            <input [(ngModel)]="feeHeads" name="feeHeads" placeholder="TUITION" />
+          </label>
+          <label>
+            Reason
+            <input [(ngModel)]="feeReason" name="feeReason" placeholder="Financial hardship" />
+          </label>
+        </div>
+        <div class="head-actions">
+          <button type="button" (click)="saveFeeAdjustment()">Save adjustment</button>
+          @if (feeAdjustment) {
+            <button type="button" class="secondary" (click)="removeFeeAdjustment()">Remove adjustment</button>
+          }
+        </div>
+        @if (feeMessage) {
+          <p class="muted">{{ feeMessage }}</p>
+        }
       </div>
     }
 

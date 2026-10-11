@@ -92,6 +92,26 @@ public final class FinanceCatalog {
     sibling.put("requiredRuleAction", "APPLY_SIBLING_CONCESSION");
     list.add(sibling);
 
+    Map<String, Object> siblingPolicy = new LinkedHashMap<>();
+    siblingPolicy.put("definitionKey", "sibling_policy");
+    siblingPolicy.put("name", "Sibling concession by child order");
+    siblingPolicy.put("kind", "SIBLING");
+    siblingPolicy.put("enabled", true);
+    siblingPolicy.put("appliesToHeads", List.of("TUITION", "ANNUAL"));
+    siblingPolicy.put("stacking", "STUDENT_THEN_SIBLING");
+    siblingPolicy.put("maxDiscountPercent", 100);
+    siblingPolicy.put(
+        "childRules",
+        List.of(
+            Map.of("order", 1, "type", "PERCENT", "value", 0),
+            Map.of("order", 2, "type", "PERCENT", "value", 10),
+            Map.of("order", 3, "type", "PERCENT", "value", 15)));
+    siblingPolicy.put("subsequent", Map.of("type", "PERCENT", "value", 15));
+    siblingPolicy.put(
+        "notes",
+        "First child pays the standard fee. Later children follow these rules. Edit the rules for this school.");
+    list.add(siblingPolicy);
+
     Map<String, Object> scholarship = new LinkedHashMap<>();
     scholarship.put("definitionKey", "scholarship_50");
     scholarship.put("name", "Scholarship 50% (tuition)");
