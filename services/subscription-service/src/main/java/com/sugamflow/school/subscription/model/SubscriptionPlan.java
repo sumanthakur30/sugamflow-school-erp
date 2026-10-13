@@ -102,7 +102,8 @@ public class SubscriptionPlan {
             Map.entry("FEATURE_CRM_WHATSAPP", false),
             Map.entry("FEATURE_CRM_SMS", false),
             Map.entry("FEATURE_CRM_EMAIL", true),
-            Map.entry("FEATURE_CRM_CASES", false)));
+            Map.entry("FEATURE_CRM_CASES", false),
+            Map.entry("FEATURE_CRM_CONVERT", false)));
   }
 
   /** Standalone CRM Professional. */
@@ -141,7 +142,8 @@ public class SubscriptionPlan {
             Map.entry("FEATURE_CRM_WHATSAPP", true),
             Map.entry("FEATURE_CRM_SMS", true),
             Map.entry("FEATURE_CRM_EMAIL", true),
-            Map.entry("FEATURE_CRM_CASES", false)));
+            Map.entry("FEATURE_CRM_CASES", false),
+            Map.entry("FEATURE_CRM_CONVERT", false)));
   }
 
   /** Standalone CRM Enterprise. */
@@ -180,7 +182,8 @@ public class SubscriptionPlan {
             Map.entry("FEATURE_CRM_WHATSAPP", true),
             Map.entry("FEATURE_CRM_SMS", true),
             Map.entry("FEATURE_CRM_EMAIL", true),
-            Map.entry("FEATURE_CRM_CASES", true)));
+            Map.entry("FEATURE_CRM_CASES", true),
+            Map.entry("FEATURE_CRM_CONVERT", false)));
   }
 
   /** Phase 2.3 — hospital / poly / pharmacy / pathlab / retail standalone plans (no School FEATURE_*). */
