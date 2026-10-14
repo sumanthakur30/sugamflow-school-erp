@@ -250,7 +250,8 @@
         @if (feeQuote) {
           <p>
             Standard fee <strong>{{ feeQuote.grossAmount }}</strong>
-            · Student adjustment <strong>{{ feeQuote.concessionBreakdown?.studentConcession ?? 0 }}</strong>
+            · Recurring discount <strong>{{ feeQuote.concessionBreakdown?.studentConcession ?? 0 }}</strong>
+            · This period <strong>{{ feeQuote.concessionBreakdown?.periodConcession ?? 0 }}</strong>
             · Sibling concession <strong>{{ feeQuote.concessionBreakdown?.siblingConcession ?? 0 }}</strong>
             · Payable <strong>{{ feeQuote.netAmount }}</strong>
           </p>
@@ -260,37 +261,69 @@
         }
         @if (feeAdjustment) {
           <p class="muted">
-            Current adjustment: {{ feeAdjustment.mode }} {{ feeAdjustment.value }} · {{ feeAdjustment.status }} · {{ feeAdjustment.reason }}
+            Recurring: {{ feeAdjustment.mode }} {{ feeAdjustment.value }}
+            · {{ feeAdjustment.status }}
+            · {{ feeAdjustment.effectiveFrom || 'start' }} to {{ feeAdjustment.effectiveTo || 'session end' }}
+            · {{ feeAdjustment.reason }}
           </p>
         }
-        <h3>Customize this student's fee</h3>
-        <p class="muted">The class fee stays the same for every other student.</p>
+        @if (feePeriodAdjustment) {
+          <p class="muted">
+            {{ feePeriodAdjustment.periodKey }}: {{ feePeriodAdjustment.mode }} {{ feePeriodAdjustment.value }}
+            · {{ feePeriodAdjustment.status }}
+            · {{ feePeriodAdjustment.reason }}
+          </p>
+        }
+        <h3>Student discount</h3>
+        <p class="muted">The class fee stays the same. A recurring discount repeats each eligible period. A month discount applies once.</p>
         <div class="grid two">
           <label>
-            Adjustment
-            <select [(ngModel)]="feeMode" name="feeMode">
-              <option value="CUSTOM_PAYABLE">Custom payable amount</option>
-              <option value="FIXED_OFF">Fixed concession</option>
-              <option value="PERCENT">Percentage concession</option>
+            Discount
+            <select [(ngModel)]="feeKind" name="feeKind">
+              <option value="RECURRING">Recurring for the validity period</option>
+              <option value="PERIOD">One month or fee period</option>
             </select>
           </label>
           <label>
-            Amount
+            Type
+            <select [(ngModel)]="feeMode" name="feeMode">
+              <option value="PERCENT">Percentage</option>
+              <option value="FIXED_OFF">Fixed amount</option>
+              <option value="CUSTOM_PAYABLE">Custom payable amount</option>
+            </select>
+          </label>
+          <label>
+            Value
             <input type="number" [(ngModel)]="feeValue" name="feeValue" min="0" />
           </label>
           <label>
             Fee heads
             <input [(ngModel)]="feeHeads" name="feeHeads" placeholder="TUITION" />
           </label>
+          @if (feeKind === 'PERIOD') {
+            <label>
+              Month
+              <input type="month" [(ngModel)]="feePeriod" name="feePeriod" (ngModelChange)="loadFeeQuote()" />
+            </label>
+          } @else {
+            <label>
+              From
+              <input type="date" [(ngModel)]="feeFrom" name="feeFrom" />
+            </label>
+            <label>
+              To
+              <input type="date" [(ngModel)]="feeTo" name="feeTo" />
+            </label>
+          }
           <label>
             Reason
-            <input [(ngModel)]="feeReason" name="feeReason" placeholder="Financial hardship" />
+            <input [(ngModel)]="feeReason" name="feeReason" placeholder="Merit concession" />
           </label>
         </div>
         <div class="head-actions">
           <button type="button" (click)="saveFeeAdjustment()">Save adjustment</button>
-          @if (feeAdjustment) {
-            <button type="button" class="secondary" (click)="removeFeeAdjustment()">Remove adjustment</button>
+          @if (feeKind === 'PERIOD' ? feePeriodAdjustment : feeAdjustment) {
+            <button type="button" class="secondary" (click)="removeFeeAdjustment()">Remove this discount</button>
           }
         </div>
         @if (feeMessage) {

@@ -39,9 +39,14 @@ export class Student360Component implements OnInit {
   transferring = false;
   feeQuote: any = null;
   feeAdjustment: any = null;
-  feeMode = 'CUSTOM_PAYABLE';
+  feePeriodAdjustment: any = null;
+  feeKind = 'RECURRING';
+  feeMode = 'PERCENT';
   feeValue: number | null = null;
   feeHeads = 'TUITION';
+  feePeriod = '';
+  feeFrom = '';
+  feeTo = '';
   feeReason = '';
   feeMessage = '';
 
@@ -260,27 +265,46 @@ export class Student360Component implements OnInit {
   loadFeeQuote(): void {
     const admissionNo = this.admissionNo();
     if (!admissionNo) return;
+    const preview: Record<string, string> = { studentRef: admissionNo };
+    if (this.feePeriod) {
+      preview['periodKey'] = this.feePeriod;
+    }
     this.api
-      .post<any>('/api/fee/finance/demands/preview', { studentRef: admissionNo })
+      .post<any>('/api/fee/finance/demands/preview', preview)
       .subscribe({ next: (quote) => (this.feeQuote = quote), error: () => (this.feeQuote = null) });
     this.api.get<any[]>(`/api/fee/finance/adjustments?admissionNo=${encodeURIComponent(admissionNo)}`).subscribe({
-      next: (rows) => (this.feeAdjustment = (rows ?? []).find((row) => row.status === 'APPROVED' || row.status === 'PENDING') ?? null),
-      error: () => (this.feeAdjustment = null),
+      next: (rows) => {
+        const open = (rows ?? []).filter((row) => row.status === 'APPROVED' || row.status === 'PENDING');
+        this.feeAdjustment = open.find((row) => (row.kind || 'RECURRING') !== 'PERIOD') ?? null;
+        this.feePeriodAdjustment = open.find((row) => row.kind === 'PERIOD') ?? null;
+      },
+      error: () => {
+        this.feeAdjustment = null;
+        this.feePeriodAdjustment = null;
+      },
     });
   }
 
   saveFeeAdjustment(): void {
     const admissionNo = this.admissionNo();
     if (!admissionNo || this.feeValue == null || !this.feeReason.trim()) {
-      this.feeMessage = 'Enter the new amount and a reason.';
+      this.feeMessage = 'Enter the discount and a reason.';
+      return;
+    }
+    if (this.feeKind === 'PERIOD' && !this.feePeriod) {
+      this.feeMessage = 'Choose the month this discount applies to.';
       return;
     }
     this.feeMessage = '';
     this.api
       .post('/api/fee/finance/adjustments', {
         admissionNo,
+        kind: this.feeKind,
         mode: this.feeMode,
         value: this.feeValue,
+        periodKey: this.feeKind === 'PERIOD' ? this.feePeriod : undefined,
+        effectiveFrom: this.feeFrom || undefined,
+        effectiveTo: this.feeTo || undefined,
         appliesToHeads: this.feeHeads
           .split(',')
           .map((head) => head.trim().toUpperCase())
@@ -289,7 +313,10 @@ export class Student360Component implements OnInit {
       })
       .subscribe({
         next: () => {
-          this.feeMessage = 'Fee adjustment saved for this student only. Earlier receipts are unchanged.';
+          this.feeMessage =
+            this.feeKind === 'PERIOD'
+              ? 'Month discount saved. It applies only to that fee period. Issued receipts stay unchanged.'
+              : 'Recurring discount saved. It applies to each eligible future period. Issued receipts stay unchanged.';
           this.feeReason = '';
           this.loadFeeQuote();
         },
@@ -298,9 +325,10 @@ export class Student360Component implements OnInit {
   }
 
   removeFeeAdjustment(): void {
-    if (!this.feeAdjustment?.id) return;
+    const row = this.feeKind === 'PERIOD' ? this.feePeriodAdjustment : this.feeAdjustment;
+    if (!row?.id) return;
     this.api
-      .post(`/api/fee/finance/adjustments/${this.feeAdjustment.id}/remove`, {
+      .post(`/api/fee/finance/adjustments/${row.id}/remove`, {
         reason: this.feeReason.trim() || 'Removed from student fee profile',
       })
       .subscribe({

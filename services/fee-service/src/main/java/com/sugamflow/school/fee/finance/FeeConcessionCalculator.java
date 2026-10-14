@@ -42,12 +42,14 @@ public final class FeeConcessionCalculator {
       BigDecimal standardAmount,
       BigDecimal otherConcession,
       BigDecimal studentConcession,
+      BigDecimal periodConcession,
       BigDecimal siblingConcession,
       BigDecimal totalConcession,
       BigDecimal payable,
       int siblingOrder,
       int householdSize,
       boolean studentApplied,
+      boolean periodApplied,
       boolean siblingApplied,
       String stacking,
       List<String> sources) {
@@ -57,12 +59,14 @@ public final class FeeConcessionCalculator {
       out.put("standardAmount", money(standardAmount));
       out.put("otherConcession", money(otherConcession));
       out.put("studentConcession", money(studentConcession));
+      out.put("periodConcession", money(periodConcession));
       out.put("siblingConcession", money(siblingConcession));
       out.put("totalConcession", money(totalConcession));
       out.put("payable", money(payable));
       out.put("siblingOrder", siblingOrder);
       out.put("householdSize", householdSize);
       out.put("studentApplied", studentApplied);
+      out.put("periodApplied", periodApplied);
       out.put("siblingApplied", siblingApplied);
       out.put("stacking", stacking);
       out.put("sources", sources);
@@ -79,6 +83,20 @@ public final class FeeConcessionCalculator {
       List<String> householdAdmissionNos,
       String studentRef,
       boolean skipSibling) {
+    return calculate(
+        lines, otherConcession, otherHeads, student, sibling, householdAdmissionNos, studentRef, skipSibling, null);
+  }
+
+  public static Result calculate(
+      List<FeeLine> lines,
+      BigDecimal otherConcession,
+      List<String> otherHeads,
+      StudentAdjustment student,
+      SiblingPolicy sibling,
+      List<String> householdAdmissionNos,
+      String studentRef,
+      boolean skipSibling,
+      StudentAdjustment period) {
     List<FeeLine> safeLines = lines == null ? List.of() : lines;
     BigDecimal standard = money(sum(safeLines));
     BigDecimal other = money(nz(otherConcession)).min(standard).max(BigDecimal.ZERO);
@@ -110,6 +128,25 @@ public final class FeeConcessionCalculator {
       }
     }
 
+    BigDecimal periodDiscount = BigDecimal.ZERO;
+    boolean periodApplied = false;
+    List<String> periodHeads = period == null ? List.of() : period.appliesToHeads();
+    BigDecimal periodBase = BigDecimal.ZERO;
+    if (period != null && "APPROVED".equalsIgnoreCase(period.status()) && !already(sources, "PERIOD:" + period.id())) {
+      BigDecimal periodEligible =
+          eligible(safeLines, periodHeads)
+              .subtract(overlap(other, otherHeads, periodHeads, safeLines))
+              .max(BigDecimal.ZERO);
+      BigDecimal alreadyOff =
+          share(studentDiscount, studentBase, intersection(safeLines, studentHeads, periodHeads));
+      periodBase = periodEligible.subtract(alreadyOff).max(BigDecimal.ZERO);
+      periodDiscount = money(modeDiscount(period.mode(), period.value(), periodBase)).min(periodBase);
+      if (periodDiscount.compareTo(BigDecimal.ZERO) > 0) {
+        periodApplied = true;
+        sources.add("PERIOD:" + period.id());
+      }
+    }
+
     BigDecimal siblingDiscount = BigDecimal.ZERO;
     boolean siblingApplied = false;
     if (!skipSibling
@@ -118,10 +155,12 @@ public final class FeeConcessionCalculator {
         && householdSize >= 2
         && !already(sources, "SIBLING")) {
       BigDecimal base = siblingBase;
-      if (STACK_STUDENT_THEN_SIBLING.equals(stacking) && studentApplied) {
-        BigDecimal shared =
+      if (STACK_STUDENT_THEN_SIBLING.equals(stacking) && (studentApplied || periodApplied)) {
+        BigDecimal sharedStudent =
             share(studentDiscount, studentBase, intersection(safeLines, studentHeads, siblingHeads));
-        base = base.subtract(shared).max(BigDecimal.ZERO);
+        BigDecimal sharedPeriod =
+            share(periodDiscount, periodBase, intersection(safeLines, periodHeads, siblingHeads));
+        base = base.subtract(sharedStudent).subtract(sharedPeriod).max(BigDecimal.ZERO);
       }
       ChildRule rule = ruleFor(sibling, order);
       if (rule != null) {
@@ -153,35 +192,44 @@ public final class FeeConcessionCalculator {
     }
     BigDecimal cap = standard.multiply(maxPercent).divide(BigDecimal.valueOf(100), 2, RoundingMode.HALF_UP);
     BigDecimal room = cap.subtract(other).max(BigDecimal.ZERO);
-    BigDecimal extra = studentDiscount.add(siblingDiscount);
+    BigDecimal extra = studentDiscount.add(periodDiscount).add(siblingDiscount);
     if (extra.compareTo(room) > 0) {
       BigDecimal overflow = extra.subtract(room);
       BigDecimal fromSibling = siblingDiscount.min(overflow);
       siblingDiscount = siblingDiscount.subtract(fromSibling);
       overflow = overflow.subtract(fromSibling);
+      BigDecimal fromPeriod = periodDiscount.min(overflow);
+      periodDiscount = periodDiscount.subtract(fromPeriod);
+      overflow = overflow.subtract(fromPeriod);
       studentDiscount = studentDiscount.subtract(overflow.min(studentDiscount)).max(BigDecimal.ZERO);
       siblingApplied = siblingDiscount.compareTo(BigDecimal.ZERO) > 0;
+      periodApplied = periodDiscount.compareTo(BigDecimal.ZERO) > 0;
       studentApplied = studentDiscount.compareTo(BigDecimal.ZERO) > 0;
       if (!siblingApplied) {
         sources.removeIf(s -> s.startsWith("SIBLING:"));
+      }
+      if (!periodApplied) {
+        sources.removeIf(s -> s.startsWith("PERIOD:"));
       }
       if (!studentApplied) {
         sources.removeIf(s -> s.startsWith("STUDENT:"));
       }
     }
 
-    BigDecimal total = money(other.add(studentDiscount).add(siblingDiscount)).min(standard);
+    BigDecimal total = money(other.add(studentDiscount).add(periodDiscount).add(siblingDiscount)).min(standard);
     BigDecimal payable = standard.subtract(total).max(BigDecimal.ZERO);
     return new Result(
         standard,
         money(other),
         money(studentDiscount),
+        money(periodDiscount),
         money(siblingDiscount),
         total,
         money(payable),
         order,
         householdSize,
         studentApplied,
+        periodApplied,
         siblingApplied,
         stacking,
         List.copyOf(sources));
@@ -429,5 +477,10 @@ public final class FeeConcessionCalculator {
 
   private static BigDecimal money(BigDecimal value) {
     return nz(value).setScale(2, RoundingMode.HALF_UP);
+  }
+
+  /** Paid amount reduces the already-discounted payable. It does not apply the discount again. */
+  public static BigDecimal outstanding(BigDecimal payable, BigDecimal paid) {
+    return money(nz(payable).subtract(nz(paid))).max(BigDecimal.ZERO);
   }
 }
