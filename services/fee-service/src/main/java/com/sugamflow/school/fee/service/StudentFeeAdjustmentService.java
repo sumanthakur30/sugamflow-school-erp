@@ -4,6 +4,7 @@ import com.sugamflow.school.common.security.PersonaRoles;
 import com.sugamflow.school.common.tenant.TenantContext;
 import com.sugamflow.school.common.tenant.TenantScope;
 import com.sugamflow.school.fee.finance.FeeConcessionCalculator;
+import com.sugamflow.school.fee.finance.FeePeriodFilter;
 import com.sugamflow.school.fee.integration.ConfigEngineClient;
 import com.sugamflow.school.fee.persistence.entity.StudentFeeAdjustmentAuditEntity;
 import com.sugamflow.school.fee.persistence.entity.StudentFeeAdjustmentEntity;
@@ -99,10 +100,12 @@ public class StudentFeeAdjustmentService {
       throw new FeeException("BAD_REQUEST", "Percentage cannot exceed 100");
     }
     String session = scope.academicSessionId() == null ? "" : scope.academicSessionId();
-    adjustments
-        .findFirstByOrganizationIdAndAdmissionNoAndAcademicSessionIdAndStatusOrderByCreatedAtDesc(
-            scope.organizationId(), admissionNo, session, "APPROVED")
-        .ifPresent(previous -> change(previous, "INACTIVE", "SUPERSEDED", scope.userId(), "Replaced by a newer adjustment"));
+    String kind = kindOf(body.get("kind"));
+    String periodKey = FeePeriodFilter.normalizePeriod(text(body.get("periodKey")));
+    if ("PERIOD".equals(kind) && periodKey.isBlank()) {
+      throw new FeeException("BAD_REQUEST", "A month or fee period is required for a one-period discount");
+    }
+    supersedeSameRule(scope, admissionNo, session, kind, periodKey, scope.userId());
 
     StudentFeeAdjustmentEntity row = new StudentFeeAdjustmentEntity();
     row.setId(UUID.randomUUID().toString());
@@ -111,6 +114,8 @@ public class StudentFeeAdjustmentService {
     row.setAcademicSessionId(session);
     row.setAdmissionNo(admissionNo);
     row.setMode(mode);
+    row.setAdjustmentKind(kind);
+    row.setPeriodKey("PERIOD".equals(kind) ? periodKey : null);
     row.setAdjustmentValue(value);
     row.setAppliesToHeads(FeeConcessionCalculator.heads(body.get("appliesToHeads")));
     row.setReason(reason);
@@ -144,10 +149,13 @@ public class StudentFeeAdjustmentService {
       throw new FeeException("BAD_REQUEST", "Decision must be APPROVED or REJECTED");
     }
     if ("APPROVED".equals(status)) {
-      adjustments
-          .findFirstByOrganizationIdAndAdmissionNoAndAcademicSessionIdAndStatusOrderByCreatedAtDesc(
-              scope.organizationId(), row.getAdmissionNo(), row.getAcademicSessionId(), "APPROVED")
-          .ifPresent(previous -> change(previous, "INACTIVE", "SUPERSEDED", scope.userId(), "Replaced by an approved adjustment"));
+      supersedeSameRule(
+          scope,
+          row.getAdmissionNo(),
+          row.getAcademicSessionId(),
+          kindOf(row.getAdjustmentKind()),
+          row.getPeriodKey(),
+          scope.userId());
       row.setApprovedBy(scope.userId());
     }
     row.setStatus(status);
@@ -172,15 +180,70 @@ public class StudentFeeAdjustmentService {
 
   @Transactional(readOnly = true)
   public StudentFeeAdjustmentEntity approvedFor(TenantScope scope, String admissionNo) {
-    if (admissionNo == null || admissionNo.isBlank()) {
+    return approvedRecurring(scope, admissionNo, LocalDate.now());
+  }
+
+  @Transactional(readOnly = true)
+  public StudentFeeAdjustmentEntity approvedRecurring(TenantScope scope, String admissionNo, LocalDate asOf) {
+    return latest(scope, admissionNo, "RECURRING", null, asOf);
+  }
+
+  @Transactional(readOnly = true)
+  public StudentFeeAdjustmentEntity approvedPeriod(TenantScope scope, String admissionNo, String periodKey) {
+    LocalDate asOf = FeePeriodFilter.monthOf(periodKey) == null ? LocalDate.now() : FeePeriodFilter.monthOf(periodKey).atDay(1);
+    return latest(scope, admissionNo, "PERIOD", periodKey, asOf);
+  }
+
+  private StudentFeeAdjustmentEntity latest(
+      TenantScope scope, String admissionNo, String kind, String periodKey, LocalDate asOf) {
+    if (scope == null || admissionNo == null || admissionNo.isBlank()) {
       return null;
     }
     String session = scope.academicSessionId() == null ? "" : scope.academicSessionId();
-    return adjustments
-        .findFirstByOrganizationIdAndAdmissionNoAndAcademicSessionIdAndStatusOrderByCreatedAtDesc(
-            scope.organizationId(), admissionNo.trim(), session, "APPROVED")
-        .filter(this::inForce)
-        .orElse(null);
+    for (StudentFeeAdjustmentEntity row :
+        adjustments.findByOrganizationIdAndAdmissionNoOrderByCreatedAtDesc(
+            scope.organizationId(), admissionNo.trim())) {
+      if (!"APPROVED".equals(row.getStatus()) || !sameSession(row, session)) {
+        continue;
+      }
+      if (!kindOf(row.getAdjustmentKind()).equals(kind)) {
+        continue;
+      }
+      if ("PERIOD".equals(kind) && !FeePeriodFilter.samePeriod(row.getPeriodKey(), periodKey)) {
+        continue;
+      }
+      if (FeePeriodFilter.covers(row.getEffectiveFrom(), row.getEffectiveTo(), asOf)) {
+        return row;
+      }
+    }
+    return null;
+  }
+
+  private void supersedeSameRule(
+      TenantScope scope, String admissionNo, String session, String kind, String periodKey, String actor) {
+    for (StudentFeeAdjustmentEntity previous :
+        adjustments.findByOrganizationIdAndAdmissionNoOrderByCreatedAtDesc(scope.organizationId(), admissionNo)) {
+      if (!"APPROVED".equals(previous.getStatus()) || !sameSession(previous, session)) {
+        continue;
+      }
+      if (!kindOf(previous.getAdjustmentKind()).equals(kind)) {
+        continue;
+      }
+      if ("PERIOD".equals(kind) && !FeePeriodFilter.samePeriod(previous.getPeriodKey(), periodKey)) {
+        continue;
+      }
+      change(previous, "INACTIVE", "SUPERSEDED", actor, "Replaced by a newer " + kind.toLowerCase(Locale.ROOT) + " discount");
+    }
+  }
+
+  private static boolean sameSession(StudentFeeAdjustmentEntity row, String session) {
+    String stored = row.getAcademicSessionId() == null ? "" : row.getAcademicSessionId();
+    return stored.equals(session == null ? "" : session);
+  }
+
+  private static String kindOf(Object raw) {
+    String value = raw == null ? "" : String.valueOf(raw).trim().toUpperCase(Locale.ROOT);
+    return "PERIOD".equals(value) ? "PERIOD" : "RECURRING";
   }
 
   private Map<String, Object> change(
@@ -190,14 +253,6 @@ public class StudentFeeAdjustmentService {
     adjustments.save(row);
     audit(row, action, actor, reason);
     return toDto(row);
-  }
-
-  private boolean inForce(StudentFeeAdjustmentEntity row) {
-    LocalDate today = LocalDate.now();
-    if (row.getEffectiveFrom() != null && today.isBefore(row.getEffectiveFrom())) {
-      return false;
-    }
-    return row.getEffectiveTo() == null || !today.isAfter(row.getEffectiveTo());
   }
 
   private StudentFeeAdjustmentEntity require(TenantScope scope, String id) {
@@ -244,6 +299,8 @@ public class StudentFeeAdjustmentService {
     out.put("academicSessionId", row.getAcademicSessionId());
     out.put("status", row.getStatus());
     out.put("mode", row.getMode());
+    out.put("kind", kindOf(row.getAdjustmentKind()));
+    out.put("periodKey", row.getPeriodKey());
     out.put("value", row.getAdjustmentValue());
     out.put("appliesToHeads", row.getAppliesToHeads() == null ? List.of() : row.getAppliesToHeads());
     out.put("reason", row.getReason());

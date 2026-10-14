@@ -125,7 +125,12 @@
         </div>
       </form>
       @if (demand) {
-        <p>Net amount: {{ demand.netAmount ?? demand.amount ?? '—' }}</p>
+        <p>
+          Original <strong>{{ demand.grossAmount ?? '—' }}</strong>
+          · Recurring discount <strong>{{ demand.concessionBreakdown?.studentConcession ?? 0 }}</strong>
+          · This period <strong>{{ demand.concessionBreakdown?.periodConcession ?? 0 }}</strong>
+          · Payable <strong>{{ demand.netAmount ?? demand.amount ?? '—' }}</strong>
+        </p>
       }
     </section>
   }

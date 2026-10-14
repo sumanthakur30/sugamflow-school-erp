@@ -38,6 +38,12 @@ public class StudentFeeAdjustmentEntity {
   @Column(nullable = false, length = 32)
   private String mode;
 
+  @Column(name = "adjustment_kind", nullable = false, length = 32)
+  private String adjustmentKind = "RECURRING";
+
+  @Column(name = "period_key", length = 32)
+  private String periodKey;
+
   @Column(name = "adjustment_value", nullable = false, precision = 14, scale = 2)
   private BigDecimal adjustmentValue;
 
@@ -80,6 +86,10 @@ public class StudentFeeAdjustmentEntity {
   public void setStatus(String status) { this.status = status; }
   public String getMode() { return mode; }
   public void setMode(String mode) { this.mode = mode; }
+  public String getAdjustmentKind() { return adjustmentKind; }
+  public void setAdjustmentKind(String adjustmentKind) { this.adjustmentKind = adjustmentKind; }
+  public String getPeriodKey() { return periodKey; }
+  public void setPeriodKey(String periodKey) { this.periodKey = periodKey; }
   public BigDecimal getAdjustmentValue() { return adjustmentValue; }
   public void setAdjustmentValue(BigDecimal adjustmentValue) { this.adjustmentValue = adjustmentValue; }
   public List<String> getAppliesToHeads() { return appliesToHeads; }

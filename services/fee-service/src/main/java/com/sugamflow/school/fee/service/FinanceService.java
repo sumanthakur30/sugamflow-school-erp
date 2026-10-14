@@ -6,6 +6,7 @@ import com.sugamflow.school.common.tenant.TenantContext;
 import com.sugamflow.school.common.tenant.TenantScope;
 import com.sugamflow.school.fee.config.FeeProperties;
 import com.sugamflow.school.fee.finance.FeeConcessionCalculator;
+import com.sugamflow.school.fee.finance.FeePeriodFilter;
 import com.sugamflow.school.fee.finance.FinanceCatalog;
 import com.sugamflow.school.fee.persistence.entity.StudentFeeAdjustmentEntity;
 import com.sugamflow.school.fee.integration.ConfigEngineClient;
@@ -22,10 +23,15 @@ import com.sugamflow.school.fee.web.FeeException;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Instant;
+import java.time.LocalDate;
+import java.time.YearMonth;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -165,7 +171,7 @@ public class FinanceService {
     String idem =
         stringOr(
             body.get("idempotencyKey"),
-            "DEMAND|" + scope.organizationId() + "|" + studentRef + "|" + structureKey + "|" + periodKey);
+            FeePeriodFilter.demandKey(scope.organizationId(), studentRef, structureKey, periodKey));
 
     var existing = transactionRepo.findByOrganizationIdAndIdempotencyKey(scope.organizationId(), idem);
     if (existing.isPresent()) {
@@ -450,6 +456,10 @@ public class FinanceService {
     Map<String, Object> headIndex = headIndex(scope);
     List<Map<String, Object>> lines = new ArrayList<>();
     BigDecimal gross = BigDecimal.ZERO;
+    YearMonth billMonth = FeePeriodFilter.monthOf(stringOr(body.get("periodKey"), ""));
+    int sessionStart = intOr(settings.get("sessionStartMonth"), 4);
+    boolean includeOneTime = billMonth == null || bool(body.get("includeOneTime"), false);
+    Set<String> optionalHeads = optionalHeadSelection(body);
     Object rawLines = structure.get("lines");
     if (rawLines instanceof List<?> list) {
       for (Object item : list) {
@@ -459,6 +469,16 @@ public class FinanceService {
         if (headKey.isBlank()) continue;
         BigDecimal amount = toDecimal(line.get("amount"));
         Map<String, Object> head = (Map<String, Object>) headIndex.getOrDefault(headKey, Map.of());
+        String frequency =
+            stringOr(line.get("frequency"), stringOr(head.get("frequency"), FinanceCatalog.FREQ_ONE_TIME));
+        boolean optional = Boolean.TRUE.equals(line.get("optional")) || Boolean.TRUE.equals(head.get("optional"));
+        if (optionalHeads != null && optional && !optionalHeads.contains(headKey.toUpperCase(Locale.ROOT))) {
+          continue;
+        }
+        if (billMonth != null
+            && !FeePeriodFilter.include(frequency, billMonth.getMonthValue(), sessionStart, includeOneTime)) {
+          continue;
+        }
         Map<String, Object> outLine = enrichLine(headKey, amount, line, head, settings);
         lines.add(outLine);
         gross = gross.add(amount);
@@ -541,7 +561,15 @@ public class FinanceService {
       }
     }
     Map<String, Object> concessionBreakdown =
-        familyConcessions(scope, studentRef, studentAnswers, lines, concessionKey, otherHeads, discount);
+        familyConcessions(
+            scope,
+            studentRef,
+            studentAnswers,
+            lines,
+            concessionKey,
+            otherHeads,
+            discount,
+            stringOr(body.get("periodKey"), ""));
     discount = toDecimal(concessionBreakdown.get("totalConcession")).min(gross).max(BigDecimal.ZERO);
 
     BigDecimal taxableBase = gross.subtract(discount).max(BigDecimal.ZERO);
@@ -1005,7 +1033,8 @@ public class FinanceService {
       List<Map<String, Object>> lines,
       String concessionKey,
       List<String> otherHeads,
-      BigDecimal otherDiscount) {
+      BigDecimal otherDiscount,
+      String periodKey) {
     List<FeeConcessionCalculator.FeeLine> feeLines = new ArrayList<>();
     for (Map<String, Object> line : lines) {
       if ("lateFee".equals(String.valueOf(line.get("source")))) {
@@ -1023,17 +1052,13 @@ public class FinanceService {
     } catch (FeeException ex) {
       log.debug("Sibling policy not configured: {}", ex.getMessage());
     }
-    StudentFeeAdjustmentEntity row = feeAdjustments.approvedFor(scope, studentRef);
-    FeeConcessionCalculator.StudentAdjustment adjustment = null;
-    if (row != null) {
-      adjustment =
-          FeeConcessionCalculator.studentAdjustment(
-              row.getId(),
-              row.getMode(),
-              row.getAdjustmentValue(),
-              row.getAppliesToHeads(),
-              row.getStatus());
-    }
+    YearMonth billMonth = FeePeriodFilter.monthOf(periodKey);
+    LocalDate asOf = billMonth == null ? LocalDate.now() : billMonth.atDay(1);
+    StudentFeeAdjustmentEntity row = feeAdjustments.approvedRecurring(scope, studentRef, asOf);
+    StudentFeeAdjustmentEntity periodRow =
+        billMonth == null ? null : feeAdjustments.approvedPeriod(scope, studentRef, periodKey);
+    FeeConcessionCalculator.StudentAdjustment adjustment = toAdjustment(row);
+    FeeConcessionCalculator.StudentAdjustment periodAdjustment = toAdjustment(periodRow);
     boolean skipSibling =
         concessionKey != null
             && (concessionKey.equalsIgnoreCase("sibling_policy")
@@ -1047,15 +1072,38 @@ public class FinanceService {
             policy,
             FeeConcessionCalculator.admissionNos(studentAnswers.get("siblingAdmissionNos")),
             studentRef,
-            skipSibling);
+            skipSibling,
+            periodAdjustment);
     Map<String, Object> breakdown = result.toMap();
     if (row != null) {
       breakdown.put("studentAdjustmentId", row.getId());
       breakdown.put("studentAdjustmentStatus", row.getStatus());
       breakdown.put("studentReason", row.getReason());
       breakdown.put("studentMode", row.getMode());
+      breakdown.put("studentKind", "RECURRING");
+    }
+    if (periodRow != null) {
+      breakdown.put("periodAdjustmentId", periodRow.getId());
+      breakdown.put("periodReason", periodRow.getReason());
+      breakdown.put("periodMode", periodRow.getMode());
+      breakdown.put("periodKey", periodRow.getPeriodKey());
     }
     return breakdown;
+  }
+
+  private FeeConcessionCalculator.StudentAdjustment toAdjustment(StudentFeeAdjustmentEntity row) {
+    if (row == null) {
+      return null;
+    }
+    return FeeConcessionCalculator.studentAdjustment(
+        row.getId(), row.getMode(), row.getAdjustmentValue(), row.getAppliesToHeads(), row.getStatus());
+  }
+
+  private Set<String> optionalHeadSelection(Map<String, Object> body) {
+    if (body == null || !body.containsKey("optionalHeads")) {
+      return null;
+    }
+    return new HashSet<>(FeeConcessionCalculator.heads(body.get("optionalHeads")));
   }
 
   private BigDecimal computeConcession(
