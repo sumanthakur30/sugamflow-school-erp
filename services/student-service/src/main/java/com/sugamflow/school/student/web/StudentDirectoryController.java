@@ -46,6 +46,11 @@ public class StudentDirectoryController {
     return ApiResponse.ok(service.search(params != null ? params : Map.of()));
   }
 
+  @GetMapping("/class-options")
+  public ApiResponse<Map<String, Object>> classOptions(@RequestParam Map<String, String> params) {
+    return ApiResponse.ok(service.classOptions(params != null ? params : Map.of()));
+  }
+
   @GetMapping("/summary")
   public ApiResponse<Map<String, Object>> summary() {
     return ApiResponse.ok(service.summary());

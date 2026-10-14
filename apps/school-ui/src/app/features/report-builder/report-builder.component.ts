@@ -1,7 +1,7 @@
 import { Component, OnDestroy, OnInit, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { Subscription, catchError, firstValueFrom, forkJoin, map, of, timeout } from 'rxjs';
+import { Subscription, catchError, firstValueFrom, forkJoin, of, timeout } from 'rxjs';
 import { ActivatedRoute } from '@angular/router';
 import { ApiService } from '../../core/api.service';
 import { TenantContextService } from '../../core/tenant-context.service';
@@ -88,6 +88,8 @@ interface PersonHit {
 interface ClassOption {
   id: string;
   name: string;
+  matchLike: string;
+  sequenceNo?: number;
 }
 
 interface SectionOption {
@@ -95,6 +97,12 @@ interface SectionOption {
   classId: string;
   name: string;
   studentLabel: string;
+  matchLike: string;
+}
+
+interface StudentClassGroup {
+  name: string;
+  sections?: Array<{ name?: string; label?: string }>;
 }
 
 interface SessionOption {
@@ -161,11 +169,18 @@ export class ReportBuilderComponent implements OnInit, OnDestroy {
   searchHits: PersonHit[] = [];
   searchOpen = false;
   searchBusy = false;
+  searchError = '';
+  searchActive = 0;
+  searchHasNext = false;
+  searchTotal = 0;
   filterClassId = '';
   filterSectionId = '';
   classes: ClassOption[] = [];
   sections: SectionOption[] = [];
   sessions: SessionOption[] = [];
+  catalogsBusy = false;
+  catalogError = '';
+  catalogNote = '';
 
   bulkOpen = false;
   bulkSessionId = '';
@@ -186,6 +201,9 @@ export class ReportBuilderComponent implements OnInit, OnDestroy {
   } | null = null;
   private searchTimer?: ReturnType<typeof setTimeout>;
   private searchSub?: Subscription;
+  private searchTerm = '';
+  private searchPage = 0;
+  private confirmedQuery = '';
 
   ngOnInit(): void {
     this.campusReadySub = this.tenantContext.whenCampusReady().subscribe(() => this.bootstrap());
@@ -1104,18 +1122,70 @@ export class ReportBuilderComponent implements OnInit, OnDestroy {
       clearTimeout(this.searchTimer);
     }
     const term = this.personQuery.trim();
+    if (term !== this.confirmedQuery) {
+      this.previewContext = null;
+      this.previewLabel = '';
+      this.photoWarning = '';
+      this.confirmedQuery = '';
+    }
     if (term.length < 2) {
       this.searchHits = [];
       this.searchOpen = false;
+      this.searchError = '';
+      this.searchBusy = false;
+      this.searchHasNext = false;
+      this.searchTotal = 0;
       return;
     }
-    this.searchTimer = setTimeout(() => this.runPersonSearch(term), 300);
+    this.searchTimer = setTimeout(() => this.runPersonSearch(term, 0), 300);
+  }
+
+  onSearchFocus(): void {
+    if (this.personQuery.trim().length >= 2 && (this.searchHits.length || this.searchError)) {
+      this.searchOpen = true;
+    }
+  }
+
+  onSearchKey(event: KeyboardEvent): void {
+    if (event.key === 'Escape') {
+      this.searchOpen = false;
+      return;
+    }
+    if (!this.searchOpen || !this.searchHits.length) {
+      return;
+    }
+    if (event.key === 'ArrowDown') {
+      event.preventDefault();
+      this.searchActive = Math.min(this.searchHits.length - 1, this.searchActive + 1);
+    } else if (event.key === 'ArrowUp') {
+      event.preventDefault();
+      this.searchActive = Math.max(0, this.searchActive - 1);
+    } else if (event.key === 'Enter') {
+      event.preventDefault();
+      const hit = this.searchHits[this.searchActive];
+      if (hit) {
+        void this.selectPerson(hit);
+      }
+    }
+  }
+
+  loadMoreSearch(): void {
+    if (!this.searchHasNext || this.searchBusy || this.searchTerm.length < 2) {
+      return;
+    }
+    this.runPersonSearch(this.searchTerm, this.searchPage + 1);
   }
 
   onClassFilterChange(): void {
     if (this.filterSectionId && !this.sectionChoices.some((section) => section.id === this.filterSectionId)) {
       this.filterSectionId = '';
     }
+    this.releaseConfirmedStudent();
+    this.onPersonQuery();
+  }
+
+  onSectionFilterChange(): void {
+    this.releaseConfirmedStudent();
     this.onPersonQuery();
   }
 
@@ -1146,13 +1216,16 @@ export class ReportBuilderComponent implements OnInit, OnDestroy {
           },
         };
         this.previewLabel = [person.fullName, person.employeeNo, person.designation].filter(Boolean).join(' · ');
+        this.confirmedQuery = person.fullName;
         this.personQuery = person.fullName;
         this.photoWarning = '';
       } else {
         const loaded = await this.loadStudentContext(hit.id);
         this.previewContext = loaded.data;
         this.previewLabel = loaded.label;
-        this.personQuery = this.text((loaded.data['student'] as Record<string, unknown>)?.['name']);
+        const name = this.text((loaded.data['student'] as Record<string, unknown>)?.['name']);
+        this.confirmedQuery = name;
+        this.personQuery = name;
         this.photoWarning = loaded.photoMissing ? 'Student photo is not available.' : '';
       }
     } catch (err: any) {
@@ -1169,8 +1242,12 @@ export class ReportBuilderComponent implements OnInit, OnDestroy {
     this.previewLabel = '';
     this.photoWarning = '';
     this.personQuery = '';
+    this.confirmedQuery = '';
     this.searchHits = [];
     this.searchOpen = false;
+    this.searchError = '';
+    this.searchHasNext = false;
+    this.searchTotal = 0;
   }
 
   openBulk(): void {
@@ -1180,9 +1257,7 @@ export class ReportBuilderComponent implements OnInit, OnDestroy {
     this.bulkMissingOnly = false;
     this.bulkClassId = this.filterClassId;
     this.bulkSectionId = this.filterSectionId;
-    if (!this.bulkStudents.length && (this.bulkClassId || this.bulkSectionId)) {
-      void this.loadBulkStudents();
-    }
+    void this.loadBulkStudents();
   }
 
   closeBulk(): void {
@@ -1219,7 +1294,7 @@ export class ReportBuilderComponent implements OnInit, OnDestroy {
       return;
     }
     if (chosen.length > 80) {
-      this.bulkNote = 'Generate at most 80 students at a time. Narrow the class or section.';
+      this.bulkNote = `Generate at most 80 students at a time so the PDF stays one file. ${chosen.length} are selected. Narrow the section or clear some students.`;
       return;
     }
     this.busy = true;
@@ -1278,140 +1353,166 @@ export class ReportBuilderComponent implements OnInit, OnDestroy {
     };
   }
 
-  private runPersonSearch(term: string): void {
+  private runPersonSearch(term: string, page: number): void {
     this.searchSub?.unsubscribe();
     this.searchBusy = true;
     this.searchOpen = true;
-    const classSection = this.selectedSectionLabel(this.filterSectionId);
-    if (this.documentSubject === 'employee') {
-      this.searchSub = this.api
-        .getPage<PersonHit>('/api/staff/directory/staff', 0, 8, { q: term })
-        .pipe(
-          timeout(4000),
-          map((page) => page.items ?? []),
-          catchError(() => of([] as PersonHit[])),
-        )
-        .subscribe((items) => {
-          this.searchHits = items;
-          this.searchBusy = false;
-        });
-      return;
-    }
+    this.searchError = '';
+    this.searchTerm = term;
+    const classLike =
+      this.documentSubject === 'student' ? this.classLikeFor(this.filterClassId, this.filterSectionId) : '';
+    const request =
+      this.documentSubject === 'employee'
+        ? this.api.getPage<PersonHit>('/api/staff/directory/staff', page, 25, { q: term })
+        : this.api.getPage<PersonHit>('/api/student/directory/students', page, 25, {
+            q: term,
+            status: 'ACTIVE',
+            classLike: classLike || undefined,
+            includeDeleted: 'false',
+          });
+    this.searchSub = request.pipe(timeout(15000)).subscribe({
+      next: (result) => this.applySearchPage(page, result),
+      error: (err) => {
+        if (page === 0 && this.documentSubject !== 'employee' && !classLike) {
+          this.searchFallback(term);
+          return;
+        }
+        this.failSearch(page, err);
+      },
+    });
+  }
+
+  private searchFallback(term: string): void {
     this.searchSub = this.api
-      .getPage<PersonHit>('/api/student/directory/students', 0, 8, {
-        q: term,
-        status: 'ACTIVE',
-        classSection: classSection || undefined,
-        includeDeleted: 'false',
-      })
-      .pipe(
-        timeout(4000),
-        map((page) => this.filterHits(page.items ?? [])),
-        catchError(() =>
-          this.api
-            .getPage<PersonHit>('/api/student/students/search', 0, 8, {
-              q: term,
-              classSection: classSection || undefined,
-            })
-            .pipe(
-              timeout(4000),
-              map((page) => this.filterHits(page.items ?? [])),
-              catchError(() => of([] as PersonHit[])),
-            ),
-        ),
-      )
-      .subscribe((items) => {
-        this.searchHits = items;
-        this.searchBusy = false;
+      .getPage<PersonHit>('/api/student/students/search', 0, 25, { q: term })
+      .pipe(timeout(15000))
+      .subscribe({
+        next: (result) => this.applySearchPage(0, result),
+        error: (err) => this.failSearch(0, err),
       });
   }
 
-  private filterHits(items: PersonHit[]): PersonHit[] {
-    const labels = this.classFilterLabels();
-    if (!labels.length) {
-      return items;
-    }
-    return items.filter((item) => labels.includes(String(item.classSection || '').trim()));
+  private applySearchPage(
+    page: number,
+    result: { items?: PersonHit[]; hasNext?: boolean; totalElements?: number },
+  ): void {
+    const incoming = result.items ?? [];
+    const combined = page === 0 ? incoming : [...this.searchHits, ...incoming];
+    const seen = new Set<string>();
+    this.searchHits = combined.filter((item) => {
+      if (!item.id || seen.has(item.id)) {
+        return false;
+      }
+      seen.add(item.id);
+      return true;
+    });
+    this.searchPage = page;
+    this.searchHasNext = !!result.hasNext;
+    this.searchTotal = result.totalElements ?? this.searchHits.length;
+    this.searchActive = page === 0 ? 0 : Math.min(this.searchActive, Math.max(this.searchHits.length - 1, 0));
+    this.searchBusy = false;
+    this.searchError = '';
   }
 
-  private classFilterLabels(): string[] {
-    if (this.filterSectionId) {
-      const label = this.selectedSectionLabel(this.filterSectionId);
-      return label ? [label] : [];
+  private failSearch(page: number, err: any): void {
+    this.searchBusy = false;
+    this.searchError = this.searchFailureMessage(err);
+    if (page === 0) {
+      this.searchHits = [];
+      this.searchHasNext = false;
+      this.searchTotal = 0;
     }
-    if (!this.filterClassId) {
-      return [];
+  }
+
+  private searchFailureMessage(err: any): string {
+    const body = err?.error;
+    if (typeof body === 'string' && body.trim()) {
+      return body;
     }
-    return this.sections
-      .filter((section) => section.classId === this.filterClassId)
-      .map((section) => section.studentLabel || section.name)
-      .filter(Boolean);
+    if (body?.message) {
+      return String(body.message);
+    }
+    if (err?.name === 'TimeoutError') {
+      return 'Student search timed out. Try again.';
+    }
+    return 'Student search failed. Try again.';
   }
 
   async loadBulkStudents(): Promise<void> {
-    const labels = this.bulkClassLabels();
-    if (!labels.length) {
+    const classLike = this.classLikeFor(this.bulkClassId, this.bulkSectionId);
+    if (!classLike) {
       this.bulkStudents = [];
-      this.bulkNote = 'Select a class or section.';
+      this.bulkNote = 'Select a class before generating. All classes would include the whole school.';
       return;
     }
     this.bulkNote = 'Loading students…';
+    try {
+      const loaded = await this.fetchFilteredStudents(classLike, this.bulkSessionId);
+      this.bulkStudents = loaded.items.map((item) => this.toBulkStudent(item));
+      if (!this.bulkStudents.length) {
+        this.bulkNote = 'No students in this class or section.';
+        return;
+      }
+      const count = this.bulkStudents.length;
+      const total = Math.max(loaded.total, count);
+      this.bulkNote =
+        total > count
+          ? `${count} of ${total} students loaded. Generate uses the loaded students. The saved template is not changed.`
+          : `${count} student${count === 1 ? '' : 's'} in this class and section. The saved template is not changed.`;
+    } catch (err: any) {
+      this.bulkStudents = [];
+      this.bulkNote = this.searchFailureMessage(err);
+    }
+  }
+
+  private async fetchFilteredStudents(
+    classLike: string,
+    sessionId: string,
+  ): Promise<{ items: PersonHit[]; total: number }> {
     const merged = new Map<string, PersonHit>();
-    for (const label of labels) {
-      const page = await firstValueFrom(
+    let total = 0;
+    for (let page = 0; page < 8; page++) {
+      const result = await firstValueFrom(
         this.api
-          .getPage<PersonHit>('/api/student/directory/students', 0, 80, {
-            classSection: label,
+          .getPage<PersonHit>('/api/student/directory/students', page, 200, {
+            classLike,
             status: 'ACTIVE',
-            academicSessionId: this.bulkSessionId || undefined,
+            academicSessionId: sessionId || undefined,
             includeDeleted: 'false',
           })
-          .pipe(
-            timeout(8000),
-            catchError(() =>
-              of({
-                items: [] as PersonHit[],
-                page: 0,
-                size: 0,
-                totalElements: 0,
-                totalPages: 0,
-                hasNext: false,
-              }),
-            ),
-          ),
+          .pipe(timeout(15000)),
       );
-      for (const item of page.items ?? []) {
-        if (item.id) {
+      total = result.totalElements ?? total;
+      for (const item of result.items ?? []) {
+        if (item.id && !merged.has(item.id)) {
           merged.set(item.id, item);
         }
       }
-      if (merged.size >= 80) {
+      if (!result.hasNext || (total > 0 && merged.size >= total)) {
         break;
       }
     }
-    this.bulkStudents = [...merged.values()].slice(0, 80).map((item) => this.toBulkStudent(item));
-    this.bulkNote = this.bulkStudents.length
-      ? `${this.bulkStudents.length} students loaded. The saved template is not changed.`
-      : 'No students in this class or section.';
+    return { items: [...merged.values()], total: Math.max(total, merged.size) };
   }
 
-  private bulkClassLabels(): string[] {
-    if (this.bulkSectionId) {
-      const label = this.selectedSectionLabel(this.bulkSectionId);
-      return label ? [label] : [];
+  private classLikeFor(classId: string, sectionId: string): string {
+    if (sectionId) {
+      const section = this.sections.find((item) => item.id === sectionId);
+      if (section?.matchLike) {
+        return section.matchLike;
+      }
     }
-    if (!this.bulkClassId) {
-      return [];
+    if (!classId) {
+      return '';
     }
-    const labels = this.sections
-      .filter((section) => section.classId === this.bulkClassId)
-      .map((section) => section.studentLabel || section.name)
-      .filter(Boolean);
-    if (labels.length) {
-      return labels;
-    }
-    const klass = this.classes.find((item) => item.id === this.bulkClassId);
-    return klass?.name ? [klass.name] : [];
+    return this.classes.find((item) => item.id === classId)?.matchLike || '';
+  }
+
+  private releaseConfirmedStudent(): void {
+    this.previewContext = null;
+    this.previewLabel = '';
+    this.photoWarning = '';
+    this.confirmedQuery = '';
   }
 
   private toBulkStudent(item: PersonHit): BulkStudent {
@@ -1430,11 +1531,6 @@ export class ReportBuilderComponent implements OnInit, OnDestroy {
       missingAdmission: !admission,
       missingPen: !pen,
     };
-  }
-
-  private selectedSectionLabel(sectionId: string): string {
-    const section = this.sections.find((item) => item.id === sectionId);
-    return section ? section.studentLabel || section.name : '';
   }
 
   private async loadStudentContext(id: string): Promise<{
@@ -1738,41 +1834,157 @@ export class ReportBuilderComponent implements OnInit, OnDestroy {
   }
 
   private loadCatalogs(): void {
-    this.api.get<any[]>('/api/academic/classes').subscribe({
-      next: (rows) => {
-        this.classes = (rows ?? []).map((row) => ({
-          id: String(row.id),
-          name: String(row.name || row.label || 'Class'),
-        }));
-      },
-      error: () => {
-        this.classes = [];
-      },
-    });
-    this.api.get<any[]>('/api/academic/sections').subscribe({
-      next: (rows) => {
-        this.sections = (rows ?? []).map((row) => ({
-          id: String(row.id),
-          classId: String(row.classId || ''),
-          name: String(row.name || ''),
-          studentLabel: String(row.studentLabel || row.name || ''),
-        }));
-      },
-      error: () => {
-        this.sections = [];
-      },
-    });
-    this.api.get<any[]>('/api/student/lifecycle/sessions').subscribe({
-      next: (rows) => {
-        this.sessions = (rows ?? []).map((row) => ({
+    this.catalogsBusy = true;
+    this.catalogError = '';
+    this.catalogNote = '';
+    this.classes = [];
+    this.sections = [];
+    this.filterClassId = '';
+    this.filterSectionId = '';
+    forkJoin({
+      classes: this.api.get<any[]>('/api/academic/classes').pipe(catchError(() => of(null))),
+      sections: this.api.get<any[]>('/api/academic/sections').pipe(catchError(() => of(null))),
+      sessions: this.api.get<any[]>('/api/student/lifecycle/sessions').pipe(catchError(() => of([] as any[]))),
+      studentClasses: this.api
+        .get<{ classes?: StudentClassGroup[] }>('/api/student/directory/class-options')
+        .pipe(catchError(() => of(null))),
+    }).subscribe({
+      next: (result) => {
+        this.catalogsBusy = false;
+        this.applyCatalog(result.classes ?? [], result.sections ?? [], result.studentClasses?.classes ?? []);
+        this.sessions = (result.sessions ?? []).map((row) => ({
           id: String(row.academicSessionId || row.definitionKey || row.id || ''),
           label: String(row.name || row.label || row.definitionKey || 'Session'),
         }));
+        if (result.classes === null && result.studentClasses === null) {
+          this.catalogError = 'Could not load classes and sections.';
+        } else if (!this.classes.length) {
+          this.catalogNote = 'No classes are configured for this campus and session.';
+        }
       },
       error: () => {
-        this.sessions = [];
+        this.catalogsBusy = false;
+        this.classes = [];
+        this.sections = [];
+        this.catalogError = 'Could not load classes and sections.';
       },
     });
+  }
+
+  private applyCatalog(academicClasses: any[], academicSections: any[], studentGroups: StudentClassGroup[]): void {
+    const classes: ClassOption[] = [];
+    const sections: SectionOption[] = [];
+    const classByKey = new Map<string, ClassOption>();
+    const sortedAcademic = [...(academicClasses ?? [])].sort(
+      (a, b) => Number(a?.sequenceNo ?? 9999) - Number(b?.sequenceNo ?? 9999),
+    );
+    for (const row of sortedAcademic) {
+      const name = String(row?.name || row?.label || '').trim();
+      if (!name || !row?.id) {
+        continue;
+      }
+      const option: ClassOption = {
+        id: String(row.id),
+        name,
+        matchLike: `${this.likeLiteral(name)}%`,
+        sequenceNo: Number(row.sequenceNo ?? 9999),
+      };
+      classes.push(option);
+      classByKey.set(this.compact(name), option);
+    }
+    for (const row of academicSections ?? []) {
+      const classId = String(row?.classId || '');
+      const name = String(row?.name || '').trim();
+      const studentLabel = String(row?.studentLabel || '').trim();
+      if (!row?.id || !classId) {
+        continue;
+      }
+      const klass = classes.find((item) => item.id === classId);
+      const match = this.sectionMatch(klass?.name || '', name, studentLabel);
+      sections.push({
+        id: String(row.id),
+        classId,
+        name: name || studentLabel || 'Section',
+        studentLabel: studentLabel || match,
+        matchLike: this.likeLiteral(match),
+      });
+    }
+    for (const group of studentGroups ?? []) {
+      const name = String(group?.name || '').trim();
+      if (!name) {
+        continue;
+      }
+      const key = this.compact(name);
+      let klass = classByKey.get(key);
+      if (!klass) {
+        klass = {
+          id: `student:${key}`,
+          name,
+          matchLike: `${this.likeLiteral(name)}%`,
+        };
+        classes.push(klass);
+        classByKey.set(key, klass);
+      }
+      for (const section of group.sections ?? []) {
+        const sectionName = String(section?.name || '').trim();
+        const label = String(section?.label || '').trim();
+        if (!sectionName && !label) {
+          continue;
+        }
+        const existing = sections.find(
+          (item) => item.classId === klass!.id && this.compact(item.name) === this.compact(sectionName || label),
+        );
+        if (existing) {
+          if (label) {
+            existing.matchLike = this.likeLiteral(label);
+            existing.studentLabel = label;
+          }
+          continue;
+        }
+        const stored = label || `${klass.name}-${sectionName}`;
+        sections.push({
+          id: `student:${this.compact(stored)}`,
+          classId: klass.id,
+          name: sectionName || label,
+          studentLabel: stored,
+          matchLike: this.likeLiteral(stored),
+        });
+      }
+    }
+    this.classes = classes;
+    this.sections = sections;
+    if (this.filterClassId && !classes.some((item) => item.id === this.filterClassId)) {
+      this.filterClassId = '';
+      this.filterSectionId = '';
+    }
+    if (this.filterSectionId && !sections.some((item) => item.id === this.filterSectionId)) {
+      this.filterSectionId = '';
+    }
+    if (this.bulkClassId && !classes.some((item) => item.id === this.bulkClassId)) {
+      this.bulkClassId = '';
+      this.bulkSectionId = '';
+    }
+    if (this.bulkSectionId && !sections.some((item) => item.id === this.bulkSectionId)) {
+      this.bulkSectionId = '';
+    }
+  }
+
+  private sectionMatch(className: string, sectionName: string, studentLabel: string): string {
+    if (studentLabel && this.compact(studentLabel) !== this.compact(sectionName)) {
+      return studentLabel;
+    }
+    if (className && sectionName) {
+      return `${className}-${sectionName}`;
+    }
+    return studentLabel || sectionName;
+  }
+
+  private compact(value: string): string {
+    return value.toLowerCase().replace(/[\s-]/g, '');
+  }
+
+  private likeLiteral(value: string): string {
+    return value.replace(/[\\%_]/g, '');
   }
 
   private text(value: unknown): string {

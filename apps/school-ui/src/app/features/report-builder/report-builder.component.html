@@ -90,62 +90,107 @@
         @if (documentSubject !== 'none') {
           <div class="preview-bar">
             <div class="preview-search">
-              <label>
-                {{ documentSubject === 'employee' ? 'Preview employee' : 'Preview student' }}
+              <label class="search-field">
+                {{ documentSubject === 'employee' ? 'Search and select employee' : 'Search and Select Student' }}
                 <input
                   type="search"
                   name="personQuery"
+                  role="combobox"
+                  aria-autocomplete="list"
+                  [attr.aria-expanded]="searchOpen"
+                  aria-controls="person-search-results"
                   [(ngModel)]="personQuery"
                   (ngModelChange)="onPersonQuery()"
+                  (focus)="onSearchFocus()"
+                  (keydown)="onSearchKey($event)"
                   [placeholder]="
                     documentSubject === 'employee'
                       ? 'Search employee by name or employee number'
-                      : 'Search student by name, admission no., PEN, APAAR, or student ID'
+                      : 'Name, admission number, father name, or student ID'
                   "
                   autocomplete="off"
                 />
-              </label>
-              <label>
-                Class
-                <select name="filterClass" [(ngModel)]="filterClassId" (ngModelChange)="onClassFilterChange()">
-                  <option value="">All</option>
-                  @for (klass of classes; track klass.id) {
-                    <option [value]="klass.id">{{ klass.name }}</option>
-                  }
-                </select>
-              </label>
-              <label>
-                Section
-                <select name="filterSection" [(ngModel)]="filterSectionId" (ngModelChange)="onPersonQuery()">
-                  <option value="">All</option>
-                  @for (section of sectionChoices; track section.id) {
-                    <option [value]="section.id">{{ section.name || section.studentLabel }}</option>
-                  }
-                </select>
-              </label>
-            </div>
-            @if (searchOpen) {
-              <div class="search-results" role="listbox">
-                @if (searchBusy) {
-                  <p class="muted">Searching…</p>
-                } @else if (!searchHits.length) {
-                  <p class="muted">No matches.</p>
-                } @else {
-                  @for (hit of searchHits; track hit.id) {
-                    <button type="button" class="search-hit" (click)="selectPerson(hit)">
-                      <strong>{{ hit.fullName || 'Record' }}</strong>
-                      @if (documentSubject === 'employee') {
-                        <span>Employee No: {{ hit.employeeNo || '—' }}</span>
-                        <span>{{ hit.designation || hit.department || 'Staff' }}</span>
-                      } @else {
-                        <span>Admission No: {{ hit.admissionNo || '—' }}</span>
-                        <span>Class: {{ hit.classSection || '—' }}</span>
-                        <span>Father: {{ hit.fatherName || hit.parentName || '—' }}</span>
+                @if (searchOpen) {
+                  <div class="search-results" id="person-search-results" role="listbox">
+                    @if (searchBusy && !searchHits.length) {
+                      <p class="muted">Searching…</p>
+                    } @else if (searchError && !searchHits.length) {
+                      <p class="search-error">{{ searchError }}</p>
+                    } @else if (!searchHits.length) {
+                      <p class="muted">
+                        {{ documentSubject === 'employee' ? 'No employees found' : 'No students found' }}
+                      </p>
+                    } @else {
+                      @for (hit of searchHits; track hit.id; let i = $index) {
+                        <button
+                          type="button"
+                          class="search-hit"
+                          role="option"
+                          [class.active]="i === searchActive"
+                          [attr.aria-selected]="i === searchActive"
+                          (mouseenter)="searchActive = i"
+                          (click)="selectPerson(hit)"
+                        >
+                          <strong>{{ hit.fullName || 'Record' }}</strong>
+                          @if (documentSubject === 'employee') {
+                            <span>Employee No: {{ hit.employeeNo || '—' }}</span>
+                            <span>{{ hit.designation || hit.department || 'Staff' }}</span>
+                          } @else {
+                            <span>Admission No: {{ hit.admissionNo || '—' }}</span>
+                            <span>Class: {{ hit.classSection || '—' }}</span>
+                            <span>Father: {{ hit.fatherName || hit.parentName || '—' }}</span>
+                          }
+                        </button>
                       }
-                    </button>
-                  }
+                      @if (searchBusy) {
+                        <p class="muted">Searching…</p>
+                      }
+                      @if (searchHasNext) {
+                        <button type="button" class="secondary search-more" (click)="loadMoreSearch()">
+                          Show more ({{ searchHits.length }} of {{ searchTotal }})
+                        </button>
+                      }
+                    }
+                  </div>
                 }
-              </div>
+              </label>
+              @if (documentSubject === 'student') {
+                <label>
+                  Class
+                  <select
+                    name="filterClass"
+                    [(ngModel)]="filterClassId"
+                    (ngModelChange)="onClassFilterChange()"
+                    [disabled]="catalogsBusy"
+                  >
+                    <option value="">{{ catalogsBusy ? 'Loading classes…' : 'All Classes' }}</option>
+                    @for (klass of classes; track klass.id) {
+                      <option [value]="klass.id">{{ klass.name }}</option>
+                    }
+                  </select>
+                </label>
+                <label>
+                  Section
+                  <select
+                    name="filterSection"
+                    [(ngModel)]="filterSectionId"
+                    (ngModelChange)="onSectionFilterChange()"
+                    [disabled]="catalogsBusy"
+                  >
+                    <option value="">All Sections</option>
+                    @for (section of sectionChoices; track section.id) {
+                      <option [value]="section.id">
+                        {{ filterClassId ? section.name || section.studentLabel : section.studentLabel || section.name }}
+                      </option>
+                    }
+                  </select>
+                </label>
+              }
+            </div>
+            @if (catalogError) {
+              <p class="search-error">{{ catalogError }}</p>
+            } @else if (catalogNote) {
+              <p class="muted">{{ catalogNote }}</p>
             }
             @if (previewLabel) {
               <p class="preview-selected">
@@ -342,7 +387,7 @@
             <label>
               Class
               <select name="bulkClass" [(ngModel)]="bulkClassId" (ngModelChange)="onBulkClassChange()">
-                <option value="">Select</option>
+                <option value="">Select a class</option>
                 @for (klass of classes; track klass.id) {
                   <option [value]="klass.id">{{ klass.name }}</option>
                 }
@@ -351,7 +396,7 @@
             <label>
               Section
               <select name="bulkSection" [(ngModel)]="bulkSectionId" (ngModelChange)="loadBulkStudents()">
-                <option value="">Entire class</option>
+                <option value="">All Sections</option>
                 @for (section of bulkSectionChoices; track section.id) {
                   <option [value]="section.id">{{ section.name || section.studentLabel }}</option>
                 }
@@ -398,7 +443,9 @@
             <p class="muted">{{ bulkNote }}</p>
           }
           <div class="bulk-actions">
-            <button type="button" (click)="generateBulk()" [disabled]="busy || !bulkSelectedCount">Generate PDF</button>
+            <button type="button" (click)="generateBulk()" [disabled]="busy || !bulkSelectedCount">
+              Generate PDF ({{ bulkSelectedCount }})
+            </button>
             <button type="button" class="secondary" (click)="closeBulk()">Close</button>
           </div>
         </div>

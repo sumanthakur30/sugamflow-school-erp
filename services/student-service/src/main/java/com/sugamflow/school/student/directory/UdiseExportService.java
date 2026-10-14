@@ -108,6 +108,8 @@ public class UdiseExportService {
               blank(dq.q()),
               nullToEmpty(dq.classSection()),
               blank(dq.classSection()),
+              nullToEmpty(dq.classLike()),
+              blank(dq.classLike()),
               nullToEmpty(dq.gender()),
               blank(dq.gender()),
               nullToEmpty(dq.category()),
