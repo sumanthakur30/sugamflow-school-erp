@@ -236,14 +236,18 @@ public class FormDefinitionService {
   }
 
   private void ensureStudentMasterFormEnriched() {
-    repo.findByOrganizationIdIsNullAndFormKey("student_master").ifPresent(e -> {
+    for (FormDefinitionEntity e : repo.findAll()) {
+      if (!"student_master".equals(e.getFormKey())) {
+        continue;
+      }
       Map<String, Object> payload = e.getPayload();
       String raw = String.valueOf(payload);
-      if (!raw.contains("admissionNo") || !raw.contains("classApplied")) {
+      if (e.getOrganizationId() == null
+          && (!raw.contains("admissionNo") || !raw.contains("classApplied"))) {
         e.setPayload(studentMasterForm());
         e.setUpdatedAt(Instant.now());
         repo.save(e);
-        return;
+        continue;
       }
       boolean changed =
           ensureSectionFields(
@@ -260,6 +264,9 @@ public class FormDefinitionService {
                   field("age", "Age (years)", "NUMBER", false),
                   field("mobile", "Mobile", "PHONE", true),
                   field("email", "Email", "EMAIL", false)));
+      changed |= ensureSectionFields(payload, "profile", "Profile", studentProfileFields());
+      changed |= ensureSectionFields(payload, "parents", "Parents", studentParentFields());
+      changed |= ensureSectionFields(payload, "address", "Address", studentAddressFields());
       changed |=
           ensureSectionFields(
               payload,
@@ -277,7 +284,7 @@ public class FormDefinitionService {
         e.setUpdatedAt(Instant.now());
         repo.save(e);
       }
-    });
+    }
   }
 
   private void ensureParentMasterFormEnriched() {
@@ -537,9 +544,38 @@ public class FormDefinitionService {
                     field("admissionNo", "Admission No", "TEXTBOX", false),
                     field("rollNo", "Roll Number", "TEXTBOX", false),
                     field("classApplied", "Class", "DROPDOWN", true),
+                    field("classGrade", "Grade", "TEXTBOX", false),
+                    field("sectionLetter", "Section", "TEXTBOX", false),
                     field("age", "Age (years)", "NUMBER", false),
                     field("mobile", "Mobile", "PHONE", true),
                     field("email", "Email", "EMAIL", false))),
+            Map.of(
+                "id",
+                "profile",
+                "title",
+                "Profile",
+                "repeatable",
+                false,
+                "fields",
+                studentProfileFields()),
+            Map.of(
+                "id",
+                "parents",
+                "title",
+                "Parents",
+                "repeatable",
+                false,
+                "fields",
+                studentParentFields()),
+            Map.of(
+                "id",
+                "address",
+                "title",
+                "Address",
+                "repeatable",
+                false,
+                "fields",
+                studentAddressFields()),
             Map.of(
                 "id",
                 "government_ids",
@@ -727,6 +763,45 @@ public class FormDefinitionService {
     form.put("validationRules", List.of());
     form.put("conditionalVisibility", List.of());
     return form;
+  }
+
+  private List<Map<String, Object>> studentProfileFields() {
+    return List.of(
+        choice("gender", "Gender", List.of("Male", "Female", "Other")),
+        field("dateOfBirth", "Date of Birth", "DATE", false),
+        choice("bloodGroup", "Blood Group", List.of("A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-")),
+        field("admissionDate", "Admission Date", "DATE", false),
+        field("nationality", "Nationality", "TEXTBOX", false),
+        field("religion", "Religion", "TEXTBOX", false),
+        field("category", "Category", "TEXTBOX", false),
+        field("previousSchool", "Previous School", "TEXTBOX", false),
+        field("previousClass", "Previous Class", "TEXTBOX", false));
+  }
+
+  private List<Map<String, Object>> studentParentFields() {
+    return List.of(
+        field("fatherName", "Father Name", "TEXTBOX", false),
+        field("fatherMobile", "Father Mobile", "PHONE", false),
+        field("fatherEmail", "Father Email", "EMAIL", false),
+        field("fatherOccupation", "Father Occupation", "TEXTBOX", false),
+        field("motherName", "Mother Name", "TEXTBOX", false),
+        field("motherMobile", "Mother Mobile", "PHONE", false),
+        field("motherEmail", "Mother Email", "EMAIL", false),
+        field("motherOccupation", "Mother Occupation", "TEXTBOX", false));
+  }
+
+  private List<Map<String, Object>> studentAddressFields() {
+    return List.of(
+        field("address", "Current Address", "TEXTAREA", false),
+        field("city", "City", "TEXTBOX", false),
+        field("state", "State", "TEXTBOX", false),
+        field("pinCode", "PIN Code", "TEXTBOX", false));
+  }
+
+  private Map<String, Object> choice(String key, String label, List<String> options) {
+    Map<String, Object> field = field(key, label, "DROPDOWN", false);
+    field.put("options", options);
+    return field;
   }
 
   private Map<String, Object> field(String key, String label, String type, boolean mandatory) {

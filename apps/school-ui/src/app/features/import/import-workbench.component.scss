@@ -81,6 +81,19 @@
   padding: 1.25rem;
 }
 
+.mode-row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  max-width: 22rem;
+  margin-top: 0.75rem;
+  font-weight: 700;
+}
+
+.mode-row select {
+  font-weight: 500;
+}
+
 .file-picker {
   display: flex;
   flex-direction: row;
@@ -185,7 +198,7 @@
 
 .review-stats {
   display: grid;
-  grid-template-columns: repeat(4, minmax(110px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
   gap: 0.65rem;
   margin: 1rem 0;
 }

@@ -5,6 +5,9 @@ import com.sugamflow.school.student.service.StudentImportService;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -25,6 +28,26 @@ public class StudentImportController {
   @GetMapping("/bootstrap")
   public ApiResponse<Map<String, Object>> bootstrap() {
     return ApiResponse.ok(service.bootstrap());
+  }
+
+  @GetMapping("/template.xlsx")
+  public ResponseEntity<byte[]> template() {
+    byte[] body = service.template();
+    return ResponseEntity.ok()
+        .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"student-import-template.xlsx\"")
+        .contentType(MediaType.parseMediaType(
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
+        .body(body);
+  }
+
+  @GetMapping("/jobs/{id}/errors.xlsx")
+  public ResponseEntity<byte[]> errors(@PathVariable("id") UUID id) {
+    byte[] body = service.errorReport(id);
+    return ResponseEntity.ok()
+        .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"student-import-errors.xlsx\"")
+        .contentType(MediaType.parseMediaType(
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
+        .body(body);
   }
 
   @GetMapping("/jobs")

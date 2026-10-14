@@ -58,6 +58,10 @@ export class ImportWorkbenchComponent implements OnInit, OnDestroy {
   ];
 
   csvText = '';
+  fileBase64 = '';
+  fileKind: 'csv' | 'xlsx' | '' = '';
+  importMode: 'CREATE' | 'UPDATE' | 'UPSERT' = 'CREATE';
+  columns: Array<{ key: string; label: string; required?: boolean }> = [];
 
   ngOnInit(): void {
     this.campusReadySub = this.tenantContext.whenCampusReady().subscribe(() => this.reload());
@@ -74,6 +78,7 @@ export class ImportWorkbenchComponent implements OnInit, OnDestroy {
     const apply = (b: any) => {
       this.featureEnabled = !!b.featureEnabled;
       this.targetFields = b.targetFields || [];
+      this.columns = Array.isArray(b.columns) ? b.columns : [];
       this.loading = false;
       this.loadJobs();
     };
@@ -159,6 +164,9 @@ export class ImportWorkbenchComponent implements OnInit, OnDestroy {
   }
 
   get sourceRowCount(): number {
+    if (this.fileKind === 'xlsx') {
+      return this.fileBase64 ? 1 : 0;
+    }
     const lines = this.csvText
       .split(/\r?\n/)
       .map((line) => line.trim())
@@ -167,7 +175,13 @@ export class ImportWorkbenchComponent implements OnInit, OnDestroy {
   }
 
   get canReview(): boolean {
-    return !!this.csvText.trim() && this.sourceRowCount > 0 && !this.busy;
+    if (this.busy) {
+      return false;
+    }
+    if (this.fileKind === 'xlsx') {
+      return !!this.fileBase64;
+    }
+    return !!this.csvText.trim() && this.sourceRowCount > 0;
   }
 
   get canCommit(): boolean {
@@ -187,50 +201,68 @@ export class ImportWorkbenchComponent implements OnInit, OnDestroy {
     if (!file) {
       return;
     }
-    if (!file.name.toLowerCase().endsWith('.csv')) {
-      this.error = 'Choose a CSV file';
+    const name = file.name.toLowerCase();
+    const excel = name.endsWith('.xlsx');
+    const csv = name.endsWith('.csv');
+    if (!excel && !csv) {
+      this.error = 'Choose a CSV or Excel file';
       input.value = '';
       return;
     }
+    this.selectedFileName = file.name;
+    this.selected = null;
+    this.error = '';
+    this.fileKind = excel ? 'xlsx' : 'csv';
+    this.fileBase64 = '';
+    this.csvText = '';
     const reader = new FileReader();
-    reader.onload = () => {
-      this.csvText = String(reader.result || '');
-      this.selectedFileName = file.name;
-      this.selected = null;
-      this.error = '';
-      this.status = `${file.name} selected · ${this.sourceRowCount} student rows`;
-    };
     reader.onerror = () => {
       this.error = 'The selected file could not be read';
+    };
+    if (excel) {
+      reader.onload = () => {
+        const bytes = new Uint8Array(reader.result as ArrayBuffer);
+        let binary = '';
+        const chunk = 0x8000;
+        for (let i = 0; i < bytes.length; i += chunk) {
+          binary += String.fromCharCode(...bytes.subarray(i, i + chunk));
+        }
+        this.fileBase64 = btoa(binary);
+        this.csvText = '';
+        this.status = `${file.name} selected`;
+      };
+      reader.readAsArrayBuffer(file);
+      return;
+    }
+    reader.onload = () => {
+      this.csvText = String(reader.result || '');
+      this.fileBase64 = '';
+      this.status = `${file.name} selected · ${this.sourceRowCount} student rows`;
     };
     reader.readAsText(file);
   }
 
   downloadTemplate(): void {
-    const headers = this.targetFields.length
-      ? this.targetFields
-      : ['fullName', 'admissionNo', 'age', 'mobile', 'email', 'classApplied', 'gender', 'rollNo'];
-    const example: Record<string, string> = {
-      fullName: 'Asha Rao',
-      admissionNo: 'ADM-001',
-      age: '12',
-      mobile: '9800000001',
-      email: 'asha@example.com',
-      classApplied: 'Grade 8-A',
-      gender: 'Female',
-      rollNo: '1',
-    };
-    const csv = `${headers.join(',')}\n${headers.map((key) => example[key] || '').join(',')}\n`;
-    const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
-    const anchor = document.createElement('a');
-    anchor.href = url;
-    anchor.download = 'student-import-template.csv';
-    anchor.click();
-    URL.revokeObjectURL(url);
+    this.api.getBlob('/api/student/import/template.xlsx').subscribe({
+      next: (blob) => this.saveBlob(blob, 'student-import-template.xlsx'),
+      error: () => (this.error = 'Could not download the Excel template'),
+    });
+  }
+
+  downloadErrors(): void {
+    if (!this.selected?.id) {
+      return;
+    }
+    this.api.getBlob(`/api/student/import/jobs/${this.selected.id}/errors.xlsx`).subscribe({
+      next: (blob) => this.saveBlob(blob, 'student-import-errors.xlsx'),
+      error: () => (this.error = 'Could not download the error workbook'),
+    });
   }
 
   clearSource(): void {
     this.csvText = '';
+    this.fileBase64 = '';
+    this.fileKind = '';
     this.selectedFileName = '';
     this.selected = null;
     this.status = '';
@@ -238,30 +270,51 @@ export class ImportWorkbenchComponent implements OnInit, OnDestroy {
 
   createJob(): void {
     if (!this.canReview) {
-      this.error = 'Select a CSV file containing at least one student row';
+      this.error = 'Select a CSV or Excel file containing at least one student row';
       return;
     }
     this.busy = true;
     this.status = '';
     this.error = '';
-    this.api
-      .post<any>('/api/student/import/jobs', {
-        fileName: this.selectedFileName || 'pasted-students.csv',
-        entityType: 'student_master',
-        csvText: this.csvText,
-      })
-      .subscribe({
-        next: (job) => {
-          this.busy = false;
-          this.selected = job;
-          this.status = `File prepared for review · ${job.stats?.ready || 0} ready · ${job.stats?.error || 0} need attention`;
-          this.loadJobs();
-        },
-        error: (err) => {
-          this.busy = false;
-          this.error = err?.error?.message ?? 'Create job failed';
-        },
-      });
+    this.api.post<any>('/api/student/import/jobs', this.jobBody()).subscribe({
+      next: (job) => {
+        this.busy = false;
+        this.selected = job;
+        const ready = job.stats?.ready || 0;
+        const errors = job.stats?.error || 0;
+        const skipped = job.stats?.skipped || 0;
+        const updates = job.stats?.updates || 0;
+        this.status = `File prepared for review · ${ready} ready · ${updates} updates · ${skipped} already on file · ${errors} need attention`;
+        this.loadJobs();
+      },
+      error: (err) => {
+        this.busy = false;
+        this.error = err?.error?.message ?? 'Create job failed';
+      },
+    });
+  }
+
+  private jobBody(): Record<string, unknown> {
+    const body: Record<string, unknown> = {
+      fileName: this.selectedFileName || 'pasted-students.csv',
+      entityType: 'student_master',
+      mode: this.importMode,
+    };
+    if (this.fileKind === 'xlsx' && this.fileBase64) {
+      body['fileBase64'] = this.fileBase64;
+      return body;
+    }
+    body['csvText'] = this.csvText;
+    return body;
+  }
+
+  private saveBlob(blob: Blob, fileName: string): void {
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = fileName;
+    anchor.click();
+    URL.revokeObjectURL(url);
   }
 
   open(job: any): void {
@@ -297,7 +350,7 @@ export class ImportWorkbenchComponent implements OnInit, OnDestroy {
       next: (job) => {
         this.busy = false;
         this.selected = job;
-        this.status = `Committed ${job.stats?.committed} rows`;
+        this.status = `Saved ${job.stats?.committed || 0} students · ${job.stats?.updatedCommitted || job.stats?.updates || 0} updated`;
         this.loadJobs();
       },
       error: (err) => {
@@ -305,6 +358,30 @@ export class ImportWorkbenchComponent implements OnInit, OnDestroy {
         this.error = err?.error?.message ?? 'Commit failed';
       },
     });
+  }
+
+  get importActionLabel(): string {
+    const ready = this.selected?.stats?.ready || 0;
+    const mode = String(this.selected?.mode || this.importMode);
+    if (mode === 'UPDATE') {
+      return `Update ${ready} students`;
+    }
+    if (mode === 'UPSERT') {
+      return `Save ${ready} students`;
+    }
+    return `Import ${ready} students`;
+  }
+
+  modeLabel(value: string | null | undefined): string {
+    const mode = String(value || 'CREATE').toUpperCase();
+    if (mode === 'UPDATE') return 'Update';
+    if (mode === 'UPSERT') return 'Create or update';
+    return 'Create';
+  }
+
+  unmappedColumns(): string[] {
+    const raw = this.selected?.stats?.unmapped;
+    return Array.isArray(raw) ? raw.map((item) => String(item)) : [];
   }
 
   statusLabel(value: string | null | undefined): string {
@@ -315,6 +392,9 @@ export class ImportWorkbenchComponent implements OnInit, OnDestroy {
       READY: 'Ready to import',
       INVALID: 'Needs correction',
       COMMITTED: 'Imported',
+      UPDATED: 'Updated',
+      SKIPPED: 'Already on file',
+      ERROR: 'Needs attention',
       FAILED: 'Needs attention',
     };
     return labels[status] || status.replace(/_/g, ' ') || 'Draft';

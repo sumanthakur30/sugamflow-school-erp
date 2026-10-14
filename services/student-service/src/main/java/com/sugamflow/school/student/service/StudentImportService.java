@@ -8,12 +8,15 @@ import com.sugamflow.school.student.persistence.entity.ImportJobEntity;
 import com.sugamflow.school.student.persistence.entity.ImportJobRowEntity;
 import com.sugamflow.school.student.persistence.repo.ImportJobRepository;
 import com.sugamflow.school.student.persistence.repo.ImportJobRowRepository;
+import com.sugamflow.school.student.sheet.StudentImportWorkbook;
+import com.sugamflow.school.student.sheet.StudentSheetCatalog;
 import com.sugamflow.school.student.web.StudentException;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -54,9 +57,18 @@ public class StudentImportService {
     out.put("featureEnabled", enabled);
     out.put("requiredFeatureFlag", FEATURE_IMPORT);
     out.put("entityTypes", List.of(ENTITY_STUDENT));
-    out.put(
-        "targetFields",
-        List.of("fullName", "admissionNo", "age", "mobile", "email", "classApplied", "gender", "rollNo"));
+    out.put("targetFields", StudentSheetCatalog.templateKeys());
+    List<Map<String, Object>> columns = new ArrayList<>();
+    for (StudentSheetCatalog.Col col : StudentSheetCatalog.columns()) {
+      Map<String, Object> item = new LinkedHashMap<>();
+      item.put("key", col.key());
+      item.put("label", col.label());
+      item.put("required", col.required());
+      columns.add(item);
+    }
+    out.put("columns", columns);
+    out.put("modes", List.of(StudentSheetCatalog.MODE_CREATE, StudentSheetCatalog.MODE_UPDATE, StudentSheetCatalog.MODE_UPSERT));
+    out.put("maxRows", StudentSheetCatalog.MAX_ROWS);
     return out;
   }
 
@@ -104,17 +116,18 @@ public class StudentImportService {
     }
 
     Map<String, Object> mapping = asMap(body.get("mapping"));
-    if (mapping.isEmpty()) {
-      mapping = defaultStudentMapping();
-    }
-
     List<Map<String, Object>> rawRows = parseRows(body);
     if (rawRows.isEmpty()) {
-      throw new StudentException("VALIDATION", "No data rows provided (rows[] or csvText)");
+      throw new StudentException("VALIDATION", "No data rows provided (rows[], csvText, or an Excel file)");
     }
-    if (rawRows.size() > 2000) {
+    if (rawRows.size() > StudentSheetCatalog.MAX_ROWS) {
       throw new StudentException("VALIDATION", "Max 2000 rows per job");
     }
+    if (mapping.isEmpty()) {
+      mapping = new LinkedHashMap<>(StudentSheetCatalog.defaultMapping());
+    }
+    String mode = StudentSheetCatalog.normalizeMode(stringOr(body.get("mode"), null));
+    List<String> unmapped = StudentSheetCatalog.unmappedHeaders(rawRows.get(0), mapping);
 
     ImportJobEntity job = new ImportJobEntity();
     job.setId(UUID.randomUUID());
@@ -131,6 +144,9 @@ public class StudentImportService {
 
     int ok = 0;
     int err = 0;
+    int skipped = 0;
+    int updates = 0;
+    Set<String> seenAdmission = new java.util.HashSet<>();
     List<ImportJobRowEntity> rowEntities = new ArrayList<>();
     int n = 1;
     for (Map<String, Object> raw : rawRows) {
@@ -140,15 +156,40 @@ public class StudentImportService {
       row.setOrganizationId(scope.organizationId());
       row.setRowNumber(n++);
       row.setRawJson(raw);
-      Map<String, Object> mapped = applyMapping(raw, mapping);
+      Map<String, Object> mapped = StudentSheetCatalog.mapRow(raw, mapping);
+      StudentSheetCatalog.normalize(mapped);
+      String validation =
+          StudentSheetCatalog.validate(mapped, mode, scope.branchId(), scope.academicSessionId());
+      if (validation == null) {
+        String duplicate =
+            StudentSheetCatalog.noteDuplicateAdmission(seenAdmission, stringOr(mapped.get("admissionNo"), ""));
+        if (duplicate != null) {
+          validation = duplicate;
+        }
+      }
+      String outcome = null;
+      if (validation == null) {
+        outcome = records.previewImportOutcome(scope.organizationId(), mapped, mode);
+        if ("MISSING".equals(outcome)) {
+          validation = "No student matches this admission number or PEN";
+        }
+      }
       row.setMappedJson(mapped);
-      String validation = validateMapped(mapped);
       if (validation != null) {
         row.setStatus("ERROR");
         row.setErrorMessage(validation);
         err++;
+      } else if ("SKIPPED".equals(outcome)) {
+        row.setStatus("SKIPPED");
+        row.setErrorMessage("Admission number or PEN already exists");
+        skipped++;
       } else {
         row.setStatus("READY");
+        mapped.put("_action", outcome);
+        row.setMappedJson(mapped);
+        if ("UPDATE".equals(outcome)) {
+          updates++;
+        }
         ok++;
       }
       row.setCreatedAt(Instant.now());
@@ -160,7 +201,12 @@ public class StudentImportService {
     stats.put("total", rawRows.size());
     stats.put("ready", ok);
     stats.put("error", err);
+    stats.put("skipped", skipped);
+    stats.put("updates", updates);
+    stats.put("created", Math.max(0, ok - updates));
     stats.put("committed", 0);
+    stats.put("mode", mode);
+    stats.put("unmapped", unmapped);
     job.setStatsJson(stats);
     job.setStatus(err > 0 && ok == 0 ? "INVALID" : "MAPPED");
     jobs.save(job);
@@ -174,26 +220,52 @@ public class StudentImportService {
     requireStaff(scope);
     requireImport(scope);
     ImportJobEntity job = requireJob(jobId, scope.organizationId());
+    String mode = StudentSheetCatalog.normalizeMode(stringOr(job.getStatsJson().get("mode"), null));
     int ready = 0;
     int error = 0;
+    int skipped = 0;
+    int updates = 0;
     for (ImportJobRowEntity row : rows.findByJobIdOrderByRowNumberAsc(jobId)) {
-      String validation = validateMapped(row.getMappedJson());
+      Map<String, Object> mapped = new LinkedHashMap<>(row.getMappedJson() == null ? Map.of() : row.getMappedJson());
+      mapped.remove("_action");
+      StudentSheetCatalog.normalize(mapped);
+      String validation =
+          StudentSheetCatalog.validate(mapped, mode, scope.branchId(), scope.academicSessionId());
+      String outcome = null;
+      if (validation == null) {
+        outcome = records.previewImportOutcome(scope.organizationId(), mapped, mode);
+        if ("MISSING".equals(outcome)) {
+          validation = "No student matches this admission number or PEN";
+        }
+      }
       if (validation != null) {
         row.setStatus("ERROR");
         row.setErrorMessage(validation);
         error++;
+      } else if ("SKIPPED".equals(outcome)) {
+        row.setStatus("SKIPPED");
+        row.setErrorMessage("Admission number or PEN already exists");
+        skipped++;
       } else {
         row.setStatus("READY");
         row.setErrorMessage(null);
+        mapped.put("_action", outcome);
+        if ("UPDATE".equals(outcome)) {
+          updates++;
+        }
         ready++;
       }
+      row.setMappedJson(mapped);
       row.setUpdatedAt(Instant.now());
       rows.save(row);
     }
     Map<String, Object> stats = new LinkedHashMap<>(job.getStatsJson());
     stats.put("ready", ready);
     stats.put("error", error);
-    stats.put("total", ready + error);
+    stats.put("skipped", skipped);
+    stats.put("updates", updates);
+    stats.put("created", Math.max(0, ready - updates));
+    stats.put("total", ready + error + skipped);
     job.setStatsJson(stats);
     job.setStatus("VALIDATED");
     job.setUpdatedAt(Instant.now());
@@ -212,18 +284,33 @@ public class StudentImportService {
     }
 
     int committed = 0;
+    int updated = 0;
     int error = 0;
+    String mode = StudentSheetCatalog.normalizeMode(stringOr(job.getStatsJson().get("mode"), null));
+    long pendingErrors = rows.findByJobIdAndStatusOrderByRowNumberAsc(jobId, "ERROR").size();
+    if (pendingErrors > 0) {
+      throw new StudentException("VALIDATION", "Fix the listed errors before importing");
+    }
     for (ImportJobRowEntity row : rows.findByJobIdAndStatusOrderByRowNumberAsc(jobId, "READY")) {
       try {
-        Map<String, Object> body = new LinkedHashMap<>();
-        body.put("answers", row.getMappedJson());
-        Map<String, Object> created = records.createFromImport(body);
-        row.setStatus("COMMITTED");
-        row.setErrorMessage(null);
         Map<String, Object> mapped = new LinkedHashMap<>(row.getMappedJson());
-        mapped.put("_studentId", created.get("id"));
+        mapped.remove("_action");
+        Map<String, Object> saved = records.importRow(mapped, mode);
+        String outcome = stringOr(saved.get("outcome"), "CREATED");
+        if ("SKIPPED".equals(outcome)) {
+          row.setStatus("SKIPPED");
+          row.setErrorMessage(stringOr(saved.get("message"), "Already exists"));
+        } else {
+          row.setStatus("UPDATED".equals(outcome) ? "UPDATED" : "COMMITTED");
+          row.setErrorMessage(null);
+          if ("UPDATED".equals(outcome)) {
+            updated++;
+          }
+          committed++;
+        }
+        mapped.put("_studentId", saved.get("id"));
+        mapped.put("_action", outcome);
         row.setMappedJson(mapped);
-        committed++;
       } catch (Exception ex) {
         row.setStatus("ERROR");
         row.setErrorMessage(ex.getMessage() == null ? "commit failed" : ex.getMessage());
@@ -235,13 +322,37 @@ public class StudentImportService {
 
     Map<String, Object> stats = new LinkedHashMap<>(job.getStatsJson());
     stats.put("committed", committed);
+    stats.put("updatedCommitted", updated);
     stats.put("error", ((Number) stats.getOrDefault("error", 0)).intValue() + error);
     stats.put("ready", 0);
     job.setStatsJson(stats);
-    job.setStatus(committed > 0 ? "COMMITTED" : "FAILED");
+    job.setStatus(error > 0 && committed == 0 ? "FAILED" : "COMMITTED");
     job.setUpdatedAt(Instant.now());
     jobs.save(job);
     return getJob(jobId);
+  }
+
+  public byte[] template() {
+    TenantScope scope = TenantContext.require();
+    requireImport(scope);
+    return StudentImportWorkbook.template();
+  }
+
+  public byte[] errorReport(UUID jobId) {
+    TenantScope scope = TenantContext.require();
+    requireImport(scope);
+    requireJob(jobId, scope.organizationId());
+    List<Map<String, Object>> errors = new ArrayList<>();
+    for (ImportJobRowEntity row : rows.findByJobIdAndStatusOrderByRowNumberAsc(jobId, "ERROR")) {
+      Map<String, Object> item = new LinkedHashMap<>();
+      item.put("rowNumber", row.getRowNumber());
+      item.put("errorMessage", row.getErrorMessage());
+      Map<String, Object> mapped = row.getMappedJson() == null ? Map.of() : row.getMappedJson();
+      item.put("admissionNo", mapped.get("admissionNo"));
+      item.put("fullName", mapped.get("fullName"));
+      errors.add(item);
+    }
+    return StudentImportWorkbook.errorReport(errors);
   }
 
   private void requireImport(TenantScope scope) {
@@ -331,10 +442,18 @@ public class StudentImportService {
       return out;
     }
     String csv = stringOr(body.get("csvText"), null);
-    if (csv == null || csv.isBlank()) {
-      return List.of();
+    if (csv != null && !csv.isBlank()) {
+      return parseCsv(csv);
     }
-    return parseCsv(csv);
+    String file = stringOr(body.get("fileBase64"), null);
+    if (file != null && !file.isBlank()) {
+      try {
+        return StudentImportWorkbook.parse(StudentImportWorkbook.decodeBase64(file));
+      } catch (IllegalArgumentException ex) {
+        throw new StudentException("VALIDATION", "Upload a .csv or .xlsx file");
+      }
+    }
+    return List.of();
   }
 
   private static List<Map<String, Object>> parseCsv(String csv) {
@@ -394,6 +513,8 @@ public class StudentImportService {
     m.put("createdBy", j.getCreatedBy());
     m.put("createdAt", j.getCreatedAt().toString());
     m.put("updatedAt", j.getUpdatedAt().toString());
+    Object mode = j.getStatsJson() == null ? null : j.getStatsJson().get("mode");
+    m.put("mode", mode == null ? StudentSheetCatalog.MODE_CREATE : mode);
     return m;
   }
 

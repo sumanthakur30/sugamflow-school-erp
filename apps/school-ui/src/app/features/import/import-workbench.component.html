@@ -3,9 +3,9 @@
     <div>
       <p class="eyebrow">Students</p>
       <h2>Import students</h2>
-      <p>Add many students at once from a CSV file. Nothing is saved until you review and confirm.</p>
+      <p>Add or update students from Excel or CSV. Nothing is saved until you review and confirm.</p>
     </div>
-    <button type="button" class="secondary" (click)="downloadTemplate()">Download CSV template</button>
+    <button type="button" class="secondary" (click)="downloadTemplate()">Download Excel template</button>
   </header>
 
   @if (error) {
@@ -23,7 +23,7 @@
     <nav class="import-steps" aria-label="Import progress">
       <div class="import-step active">
         <span>1</span>
-        <div><strong>Choose file</strong><small>Select your student CSV</small></div>
+        <div><strong>Choose file</strong><small>Select Excel or CSV</small></div>
       </div>
       <div class="step-line"></div>
       <div class="import-step" [class.active]="selected">
@@ -40,18 +40,29 @@
     <section class="panel upload-card">
       <div class="section-heading">
         <div>
-          <h3>1. Choose a student CSV file</h3>
-          <p class="muted">Use the template so column names and values are recognized correctly.</p>
+          <h3>1. Choose a student file</h3>
+          <p class="muted">Use the Excel template so column names, dropdowns, and values are recognized.</p>
         </div>
       </div>
 
+      <label class="mode-row">
+        What should this file do?
+        <select [(ngModel)]="importMode" name="importMode">
+          <option value="CREATE">Create new students</option>
+          <option value="UPDATE">Update existing students</option>
+          <option value="UPSERT">Create or update</option>
+        </select>
+      </label>
+
       <label class="file-picker">
-        <input type="file" accept=".csv,text/csv" (change)="onFileSelected($event)" />
-        <span class="file-icon">CSV</span>
+        <input type="file" accept=".csv,.xlsx,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" (change)="onFileSelected($event)" />
+        <span class="file-icon">{{ fileKind === 'xlsx' ? 'XLSX' : 'CSV' }}</span>
         <span class="file-copy">
-          <strong>{{ selectedFileName || 'Choose CSV file' }}</strong>
+          <strong>{{ selectedFileName || 'Choose Excel or CSV file' }}</strong>
           <small>
-            @if (selectedFileName) {
+            @if (fileKind === 'xlsx' && fileBase64) {
+              Excel file selected · review will count the rows
+            } @else if (selectedFileName || sourceRowCount) {
               {{ sourceRowCount }} student row{{ sourceRowCount === 1 ? '' : 's' }} ready to review
             } @else {
               Click to browse · maximum one file
@@ -63,8 +74,14 @@
       <div class="required-columns">
         <strong>Accepted columns</strong>
         <div class="column-chips">
-          @for (field of targetFields; track field) {
-            <span>{{ field }}</span>
+          @if (columns.length) {
+            @for (field of columns; track field.key) {
+              <span>{{ field.label }}</span>
+            }
+          } @else {
+            @for (field of targetFields; track field) {
+              <span>{{ field }}</span>
+            }
           }
         </div>
       </div>
@@ -88,7 +105,7 @@
         <button type="button" (click)="createJob()" [disabled]="!canReview">
           {{ busy ? 'Preparing…' : 'Review student data' }}
         </button>
-        @if (csvText) {
+        @if (csvText || fileBase64) {
           <button type="button" class="secondary" (click)="clearSource()" [disabled]="busy">
             Clear
           </button>
@@ -110,19 +127,26 @@
 
         <div class="review-stats">
           <div><span>Total rows</span><strong>{{ selected.stats?.total || 0 }}</strong></div>
-          <div class="ready"><span>Ready</span><strong>{{ selected.stats?.ready || 0 }}</strong></div>
+          <div class="ready"><span>New</span><strong>{{ selected.stats?.created || 0 }}</strong></div>
+          <div><span>Updates</span><strong>{{ selected.stats?.updates || 0 }}</strong></div>
+          <div><span>Already on file</span><strong>{{ selected.stats?.skipped || 0 }}</strong></div>
           <div class="invalid"><span>Need attention</span><strong>{{ selected.stats?.error || 0 }}</strong></div>
-          <div><span>Imported</span><strong>{{ selected.stats?.committed || 0 }}</strong></div>
+          <div><span>Saved</span><strong>{{ selected.stats?.committed || 0 }}</strong></div>
         </div>
+
+        @if (unmappedColumns().length) {
+          <p class="validation-hint">Columns not imported: {{ unmappedColumns().join(', ') }}</p>
+        }
 
         <div class="review-actions">
           <button type="button" class="secondary" (click)="dryRun()" [disabled]="busy">
             {{ busy ? 'Checking…' : 'Run validation' }}
           </button>
           <button type="button" (click)="commit()" [disabled]="busy || !canCommit">
-            Import {{ selected.stats?.ready || 0 }} students
+            {{ importActionLabel }}
           </button>
           @if ((selected.stats?.error || 0) > 0) {
+            <button type="button" class="secondary" (click)="downloadErrors()">Download error workbook</button>
             <span class="validation-hint">Fix the listed errors and upload the corrected file again.</span>
           } @else if (selected.status !== 'VALIDATED' && selected.status !== 'COMMITTED') {
             <span class="muted">Run validation before importing.</span>
@@ -150,6 +174,8 @@
                 <th>Admission no.</th>
                 <th>Mobile</th>
                 <th>Class / section</th>
+                <th>Gender</th>
+                <th>Father</th>
                 <th>Result</th>
               </tr>
             </thead>
@@ -163,10 +189,12 @@
                   <td>
                     {{ r.mapped?.classApplied || r.mapped?.classSection || r.raw?.classApplied || '—' }}
                   </td>
+                  <td>{{ r.mapped?.gender || '—' }}</td>
+                  <td>{{ r.mapped?.fatherName || '—' }}</td>
                   <td><span class="row-status">{{ statusLabel(r.status) }}</span></td>
                 </tr>
               } @empty {
-                <tr><td colspan="6" class="muted">No rows available for preview.</td></tr>
+                <tr><td colspan="8" class="muted">No rows available for preview.</td></tr>
               }
             </tbody>
           </table>
@@ -211,8 +239,21 @@
                 [class.active]="selected?.id === job.id"
                 (click)="open(job)"
               >
-                <span><strong>{{ job.fileName }}</strong><small>{{ job.createdAt }}</small></span>
-                <span>{{ statusLabel(job.status) }} · {{ job.stats?.total || 0 }} rows</span>
+                <span>
+                  <strong>{{ job.fileName }}</strong>
+                  <small>
+                    {{ job.createdAt }}
+                    @if (job.createdBy) {
+                      · {{ job.createdBy }}
+                    }
+                    · {{ modeLabel(job.mode || job.stats?.mode) }}
+                  </small>
+                </span>
+                <span>
+                  {{ statusLabel(job.status) }} · {{ job.stats?.total || 0 }} rows ·
+                  new {{ job.stats?.created || 0 }} · update {{ job.stats?.updates || 0 }} ·
+                  skipped {{ job.stats?.skipped || 0 }}
+                </span>
               </button>
             </li>
           } @empty {
