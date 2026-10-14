@@ -12,6 +12,8 @@ import com.sugamflow.school.student.persistence.entity.StudentRecordEntity;
 import com.sugamflow.school.student.persistence.repo.StudentRecordRepository;
 import com.sugamflow.school.student.service.RelationshipAccessService;
 import com.sugamflow.school.student.service.StudentRecordService;
+import com.sugamflow.school.student.sheet.StudentGuardianSync;
+import com.sugamflow.school.student.sheet.StudentSheetCatalog;
 import com.sugamflow.school.student.web.StudentException;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
@@ -214,25 +216,25 @@ public class StudentDirectoryService {
   public byte[] exportCsv(Map<String, String> params) {
     Map<String, String> exportParams = new LinkedHashMap<>(params != null ? params : Map.of());
     exportParams.put("page", "0");
-    exportParams.put("size", "200");
+    exportParams.put("size", "2000");
     PageResult<Map<String, Object>> page = search(exportParams);
+    List<StudentSheetCatalog.Col> columns = StudentSheetCatalog.directoryColumns();
     StringBuilder sb = new StringBuilder();
-    sb.append(
-        "admissionNo,fullName,classSection,gender,status,mobile,penNumber,apaarId,samagraId,schoolStudentId,photoUrl,branchId,academicSessionId\n");
+    for (int i = 0; i < columns.size(); i++) {
+      if (i > 0) {
+        sb.append(',');
+      }
+      sb.append(columns.get(i).label());
+    }
+    sb.append('\n');
     for (Map<String, Object> row : page.items()) {
-      sb.append(csv(row.get("admissionNo"))).append(',')
-          .append(csv(row.get("fullName"))).append(',')
-          .append(csv(row.get("classSection"))).append(',')
-          .append(csv(row.get("gender"))).append(',')
-          .append(csv(row.get("status"))).append(',')
-          .append(csv(row.get("mobile"))).append(',')
-          .append(csv(row.get("penNumber"))).append(',')
-          .append(csv(row.get("apaarId"))).append(',')
-          .append(csv(row.get("samagraId"))).append(',')
-          .append(csv(row.get("schoolStudentId"))).append(',')
-          .append(csv(row.get("photoUrl"))).append(',')
-          .append(csv(row.get("branchId"))).append(',')
-          .append(csv(row.get("academicSessionId"))).append('\n');
+      for (int i = 0; i < columns.size(); i++) {
+        if (i > 0) {
+          sb.append(',');
+        }
+        sb.append(StudentSheetCatalog.csv(exportValue(row, columns.get(i).key())));
+      }
+      sb.append('\n');
     }
     exportAudit.record("DIRECTORY_CSV", false, page.items().size());
     return sb.toString().getBytes(StandardCharsets.UTF_8);
@@ -244,28 +246,25 @@ public class StudentDirectoryService {
     requireFeature(scope);
     Map<String, String> exportParams = new LinkedHashMap<>(params != null ? params : Map.of());
     exportParams.put("page", "0");
-    exportParams.put("size", "500");
+    exportParams.put("size", "2000");
     PageResult<Map<String, Object>> page = search(exportParams);
-    List<Map<String, Object>> columns =
-        List.of(
-            Map.of("key", "admissionNo", "label", "Admission No"),
-            Map.of("key", "fullName", "label", "Full Name"),
-            Map.of("key", "classSection", "label", "Class"),
-            Map.of("key", "gender", "label", "Gender"),
-            Map.of("key", "status", "label", "Status"),
-            Map.of("key", "mobile", "label", "Mobile"),
-            Map.of("key", "penNumber", "label", "PEN"),
-            Map.of("key", "apaarId", "label", "APAAR"),
-            Map.of("key", "samagraId", "label", "Samagra"),
-            Map.of("key", "schoolStudentId", "label", "School Student ID"),
-            Map.of("key", "photoUrl", "label", "Photo URL"),
-            Map.of("key", "branchId", "label", "Branch"),
-            Map.of("key", "academicSessionId", "label", "Session"));
+    List<Map<String, Object>> columns = new java.util.ArrayList<>();
+    List<Map<String, Object>> rows = new java.util.ArrayList<>();
+    for (StudentSheetCatalog.Col col : StudentSheetCatalog.directoryColumns()) {
+      columns.add(Map.of("key", col.key(), "label", col.label()));
+    }
+    for (Map<String, Object> source : page.items()) {
+      Map<String, Object> copy = new LinkedHashMap<>();
+      for (StudentSheetCatalog.Col col : StudentSheetCatalog.directoryColumns()) {
+        copy.put(col.key(), StudentSheetCatalog.formulaSafe(exportValue(source, col.key())));
+      }
+      rows.add(copy);
+    }
     Map<String, Object> data = new LinkedHashMap<>();
     data.put("title", "Student Directory");
     data.put("subtitle", scope.organizationId() + " · " + page.items().size() + " students");
     data.put("columns", columns);
-    data.put("rows", page.items());
+    data.put("rows", rows);
     Map<String, Object> rendered =
         engines.renderReport(scope, "student_directory", data, format == null ? "EXCEL" : format);
     if (rendered == null || rendered.get("contentBase64") == null) {
@@ -285,6 +284,11 @@ public class StudentDirectoryService {
         "classSection",
         firstNonBlank(stringVal(answers, "classSection"), stringVal(answers, "classApplied")));
     row.put("gender", stringVal(answers, "gender"));
+    row.put("dateOfBirth", firstNonBlank(stringVal(answers, "dateOfBirth"), stringVal(answers, "dob")));
+    row.put("bloodGroup", stringVal(answers, "bloodGroup"));
+    row.put("admissionDate", stringVal(answers, "admissionDate"));
+    row.put("classGrade", stringVal(answers, "classGrade"));
+    row.put("sectionLetter", firstNonBlank(stringVal(answers, "sectionLetter"), stringVal(answers, "section")));
     row.put("status", e.getStatus());
     row.put("mobile", stringVal(answers, "mobile"));
     row.put("email", stringVal(answers, "email"));
@@ -301,7 +305,22 @@ public class StudentDirectoryService {
     row.put("schoolStudentId", stringVal(answers, "schoolStudentId"));
     row.put("photoUrl", StudentRecordService.displayPhotoUrl(answers));
     row.put("parentName", parentName(answers));
-    row.put("fatherName", stringVal(answers, "fatherName"));
+    row.put("fatherName", StudentGuardianSync.nameForRelation(answers, "father"));
+    row.put("fatherMobile", stringVal(answers, "fatherMobile"));
+    row.put("fatherEmail", stringVal(answers, "fatherEmail"));
+    row.put("fatherOccupation", stringVal(answers, "fatherOccupation"));
+    row.put("motherName", StudentGuardianSync.nameForRelation(answers, "mother"));
+    row.put("motherMobile", stringVal(answers, "motherMobile"));
+    row.put("motherEmail", stringVal(answers, "motherEmail"));
+    row.put("motherOccupation", stringVal(answers, "motherOccupation"));
+    row.put("address", stringVal(answers, "address"));
+    row.put("city", stringVal(answers, "city"));
+    row.put("state", stringVal(answers, "state"));
+    row.put("pinCode", firstNonBlank(stringVal(answers, "pinCode"), stringVal(answers, "pincode")));
+    row.put("nationality", stringVal(answers, "nationality"));
+    row.put("religion", stringVal(answers, "religion"));
+    row.put("previousSchool", stringVal(answers, "previousSchool"));
+    row.put("previousClass", stringVal(answers, "previousClass"));
     row.put("rte", truthy(answers.get("rte")) || "RTE".equalsIgnoreCase(stringVal(answers, "category")));
     row.put("householdId", stringVal(answers, "householdId"));
     row.put("siblingAdmissionNos", answers.get("siblingAdmissionNos"));
@@ -316,6 +335,21 @@ public class StudentDirectoryService {
     row.put("deletedBy", e.getDeletedBy());
     row.put("deleteReason", e.getDeleteReason());
     return row;
+  }
+
+  private static String exportValue(Map<String, Object> row, String key) {
+    if ("photoUrl".equals(key)) {
+      return StudentSheetCatalog.exportPhoto(row.get(key));
+    }
+    if ("classApplied".equals(key)) {
+      Object value = row.get("classApplied");
+      if (value == null || String.valueOf(value).isBlank()) {
+        value = row.get("classSection");
+      }
+      return value == null ? "" : String.valueOf(value);
+    }
+    Object value = row.get(key);
+    return value == null ? "" : String.valueOf(value);
   }
 
   private static String parentName(Map<String, Object> answers) {

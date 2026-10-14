@@ -14,6 +14,8 @@ import com.sugamflow.school.student.persistence.entity.StudentRecordEntity;
 import com.sugamflow.school.student.persistence.repo.StudentFieldAuditRepository;
 import com.sugamflow.school.student.persistence.repo.StudentRecordRepository;
 import com.sugamflow.school.student.integration.DomainSnapshotClient;
+import com.sugamflow.school.student.sheet.StudentGuardianSync;
+import com.sugamflow.school.student.sheet.StudentSheetCatalog;
 import com.sugamflow.school.student.web.StudentException;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -24,6 +26,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.regex.Pattern;
@@ -709,6 +712,7 @@ public class StudentRecordService {
             : new LinkedHashMap<>(body);
 
     Map<String, Object> answers = mapAnswers(form, sourceAnswers, Map.of());
+    StudentGuardianSync.syncFromFlat(answers);
     String admissionNo = stringOr(answers.get("admissionNo"), null);
     if (admissionNo != null && !admissionNo.isBlank()) {
       var existingAdm =
@@ -752,6 +756,172 @@ public class StudentRecordService {
     entity.setHistory(history);
 
     return toDto(repository.save(entity));
+  }
+
+  /**
+   * Create or update one mapped import row. Blank values are ignored on update. Create mode skips
+   * a student that already matches admission number or PEN.
+   */
+  @Transactional
+  public Map<String, Object> importRow(Map<String, Object> mapped, String mode) {
+    TenantScope scope = TenantContext.require();
+    try {
+      PersonaRoles.requireStaffWrite(scope);
+    } catch (SecurityException ex) {
+      throw new StudentException("FORBIDDEN", ex.getMessage());
+    }
+    requireFeature(scope);
+    requireModuleEnabled(scope);
+
+    String normalizedMode = StudentSheetCatalog.normalizeMode(mode);
+    Map<String, Object> source = new LinkedHashMap<>(mapped == null ? Map.of() : mapped);
+    StudentSheetCatalog.normalize(source);
+
+    Map<String, Object> module = engines.getModuleSettings(scope, MODULE_STUDENT);
+    String formKey = resolveFormKey(module);
+    Map<String, Object> form = engines.getForm(scope, formKey);
+    if (form == null) {
+      throw new StudentException("FORM_MISSING", "Form definition not found: " + formKey);
+    }
+    Map<String, Object> incoming = mapAnswers(form, source, Map.of());
+    normalizeIdentityAnswers(incoming);
+
+    Optional<StudentRecordEntity> existing = findImportMatch(scope.organizationId(), incoming);
+    if (existing.isPresent() && StudentSheetCatalog.MODE_CREATE.equals(normalizedMode)) {
+      Map<String, Object> skipped = new LinkedHashMap<>();
+      skipped.put("outcome", "SKIPPED");
+      skipped.put("id", existing.get().getId().toString());
+      skipped.put("message", "Admission number or PEN already exists");
+      return skipped;
+    }
+    if (existing.isEmpty() && StudentSheetCatalog.MODE_UPDATE.equals(normalizedMode)) {
+      throw new StudentException("VALIDATION", "No student matches this admission number or PEN");
+    }
+    if (existing.isPresent()) {
+      return updateImportedStudent(scope, existing.get(), form, incoming, source);
+    }
+    return createImportedStudent(scope, formKey, form, incoming, source);
+  }
+
+  @Transactional(readOnly = true)
+  public String previewImportOutcome(String organizationId, Map<String, Object> mapped, String mode) {
+    Map<String, Object> source = new LinkedHashMap<>(mapped == null ? Map.of() : mapped);
+    StudentSheetCatalog.normalize(source);
+    Optional<StudentRecordEntity> existing = findImportMatch(organizationId, source);
+    String normalizedMode = StudentSheetCatalog.normalizeMode(mode);
+    if (existing.isPresent()) {
+      return StudentSheetCatalog.MODE_CREATE.equals(normalizedMode) ? "SKIPPED" : "UPDATE";
+    }
+    return StudentSheetCatalog.MODE_UPDATE.equals(normalizedMode) ? "MISSING" : "NEW";
+  }
+
+  private Optional<StudentRecordEntity> findImportMatch(String org, Map<String, Object> answers) {
+    String admissionNo = stringOr(answers.get("admissionNo"), null);
+    if (admissionNo != null && !admissionNo.isBlank()) {
+      Optional<StudentRecordEntity> byAdmission =
+          repository.findByOrganizationIdAndAdmissionNoIgnoreCaseAndDeletedAtIsNull(org, admissionNo);
+      if (byAdmission.isPresent()) {
+        return byAdmission;
+      }
+    }
+    String pen = stringOr(answers.get("penNumber"), null);
+    if (pen != null && !pen.isBlank()) {
+      return repository.findActiveByPen(org, pen.trim());
+    }
+    return Optional.empty();
+  }
+
+  private Map<String, Object> createImportedStudent(
+      TenantScope scope,
+      String formKey,
+      Map<String, Object> form,
+      Map<String, Object> answers,
+      Map<String, Object> source) {
+    String admissionNo = stringOr(answers.get("admissionNo"), null);
+    if (admissionNo == null || admissionNo.isBlank()) {
+      admissionNo = generateAdmissionNo(scope);
+      answers.put("admissionNo", admissionNo);
+    }
+    StudentGuardianSync.syncFromFlat(answers);
+    validateMandatory(form, answers);
+    validateFormats(answers);
+    assertUniqueAdmissionNo(scope.organizationId(), admissionNo, null);
+    assertUniqueAadhaar(scope.organizationId(), answers, null);
+    assertUniquePen(scope.organizationId(), answers, null);
+    assertUniqueRollInClass(scope.organizationId(), answers, null);
+
+    StudentRecordEntity entity = new StudentRecordEntity();
+    entity.setId(UUID.randomUUID());
+    entity.setOrganizationId(scope.organizationId());
+    entity.setBranchId(scope.branchId());
+    entity.setAcademicSessionId(scope.academicSessionId());
+    entity.setFormKey(formKey);
+    entity.setStatus(stringOr(source.get("status"), "ACTIVE"));
+    entity.setAdmissionNo(admissionNo);
+    entity.setAnswers(answers);
+    entity.setCreatedBy(scope.userId());
+    entity.setCreatedAt(Instant.now());
+    entity.setUpdatedAt(Instant.now());
+    List<Map<String, Object>> history = new ArrayList<>();
+    Map<String, Object> event = new LinkedHashMap<>();
+    event.put("type", "IMPORTED");
+    event.put("at", Instant.now().toString());
+    event.put("userId", scope.userId());
+    event.put("role", scope.roleCode());
+    event.put("message", "Created from Import Workbench");
+    history.add(event);
+    entity.setHistory(history);
+    StudentRecordEntity saved = repository.save(entity);
+    Map<String, Object> dto = toDto(saved);
+    dto.put("outcome", "CREATED");
+    return dto;
+  }
+
+  private Map<String, Object> updateImportedStudent(
+      TenantScope scope,
+      StudentRecordEntity entity,
+      Map<String, Object> form,
+      Map<String, Object> incoming,
+      Map<String, Object> source) {
+    Map<String, Object> answers = new LinkedHashMap<>(entity.getAnswers() == null ? Map.of() : entity.getAnswers());
+    for (Map.Entry<String, Object> entry : incoming.entrySet()) {
+      if ("guardians".equals(entry.getKey()) || entry.getValue() == null) {
+        continue;
+      }
+      if (String.valueOf(entry.getValue()).isBlank()) {
+        continue;
+      }
+      answers.put(entry.getKey(), entry.getValue());
+    }
+    StudentGuardianSync.syncFromFlat(answers);
+    if (form != null) {
+      validateMandatory(form, answers);
+    }
+    validateFormats(answers);
+    String admissionNo = stringOr(answers.get("admissionNo"), entity.getAdmissionNo());
+    answers.put("admissionNo", admissionNo);
+    assertUniqueAdmissionNo(scope.organizationId(), admissionNo, entity.getId());
+    assertUniqueAadhaar(scope.organizationId(), answers, entity.getId());
+    assertUniquePen(scope.organizationId(), answers, entity.getId());
+    assertUniqueRollInClass(scope.organizationId(), answers, entity.getId());
+    entity.setAnswers(answers);
+    entity.setAdmissionNo(admissionNo);
+    String status = stringOr(source.get("status"), null);
+    if (status != null) {
+      entity.setStatus(status);
+    }
+    entity.setUpdatedAt(Instant.now());
+    Map<String, Object> event = new LinkedHashMap<>();
+    event.put("type", "IMPORTED_UPDATE");
+    event.put("at", Instant.now().toString());
+    event.put("userId", scope.userId());
+    event.put("role", scope.roleCode());
+    event.put("message", "Updated from Import Workbench");
+    entity.getHistory().add(event);
+    StudentRecordEntity saved = repository.save(entity);
+    Map<String, Object> dto = toDto(saved);
+    dto.put("outcome", "UPDATED");
+    return dto;
   }
 
   /**
@@ -859,6 +1029,7 @@ public class StudentRecordService {
       validateMandatory(form, answers);
     }
     normalizeIdentityAnswers(answers);
+    StudentGuardianSync.syncFromFlat(answers);
     validateFormats(answers);
 
     String admissionNo = stringOr(answers.get("admissionNo"), entity.getAdmissionNo());
@@ -2006,6 +2177,15 @@ public class StudentRecordService {
     // student_master form definition does not yet declare the field.
     if (source.containsKey("house")) {
       out.put("house", source.get("house"));
+    }
+    for (String key : StudentSheetCatalog.templateKeys()) {
+      if (out.containsKey(key) || !source.containsKey(key)) {
+        continue;
+      }
+      Object value = source.get(key);
+      if (value != null && !String.valueOf(value).isBlank()) {
+        out.put(key, value);
+      }
     }
     return out;
   }

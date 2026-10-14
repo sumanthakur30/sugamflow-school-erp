@@ -37,6 +37,19 @@ public interface StudentRecordRepository extends JpaRepository<StudentRecordEnti
   Optional<StudentRecordEntity> findByOrganizationIdAndAdmissionNoIgnoreCaseAndDeletedAtIsNull(
       String organizationId, String admissionNo);
 
+  @Query(
+      value =
+          """
+          SELECT * FROM student_record s
+          WHERE s.organization_id = :org
+            AND s.deleted_at IS NULL
+            AND lower(coalesce(s.answers->>'penNumber', '')) = lower(:pen)
+          LIMIT 1
+          """,
+      nativeQuery = true)
+  Optional<StudentRecordEntity> findActiveByPen(
+      @Param("org") String organizationId, @Param("pen") String pen);
+
   long countByOrganizationIdAndDeletedAtIsNull(String organizationId);
 
   long countByOrganizationIdAndStatusAndDeletedAtIsNull(String organizationId, String status);
