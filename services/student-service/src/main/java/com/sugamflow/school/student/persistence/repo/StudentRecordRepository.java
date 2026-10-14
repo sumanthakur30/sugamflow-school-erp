@@ -106,6 +106,18 @@ public interface StudentRecordRepository extends JpaRepository<StudentRecordEnti
               s.answers->>'classSection' = :classSection OR
               s.answers->>'classApplied' = :classSection
             )
+            AND (
+              :classLikeBlank = true OR
+              replace(replace(lower(coalesce(s.answers->>'classApplied', '')), ' ', ''), '-', '')
+                LIKE replace(replace(lower(cast(:classLike as text)), ' ', ''), '-', '') OR
+              replace(replace(lower(coalesce(s.answers->>'classSection', '')), ' ', ''), '-', '')
+                LIKE replace(replace(lower(cast(:classLike as text)), ' ', ''), '-', '') OR
+              replace(replace(lower(concat(
+                coalesce(s.answers->>'classGrade', ''),
+                coalesce(s.answers->>'sectionLetter', s.answers->>'section', '')
+              )), ' ', ''), '-', '')
+                LIKE replace(replace(lower(cast(:classLike as text)), ' ', ''), '-', '')
+            )
             AND (:genderBlank = true OR lower(coalesce(s.answers->>'gender', '')) = lower(cast(:gender as text)))
             AND (:categoryBlank = true OR lower(coalesce(s.answers->>'category', '')) = lower(cast(:category as text)))
             AND (:houseBlank = true OR lower(coalesce(s.answers->>'house', '')) = lower(cast(:house as text)))
@@ -159,6 +171,18 @@ public interface StudentRecordRepository extends JpaRepository<StudentRecordEnti
               s.answers->>'classSection' = :classSection OR
               s.answers->>'classApplied' = :classSection
             )
+            AND (
+              :classLikeBlank = true OR
+              replace(replace(lower(coalesce(s.answers->>'classApplied', '')), ' ', ''), '-', '')
+                LIKE replace(replace(lower(cast(:classLike as text)), ' ', ''), '-', '') OR
+              replace(replace(lower(coalesce(s.answers->>'classSection', '')), ' ', ''), '-', '')
+                LIKE replace(replace(lower(cast(:classLike as text)), ' ', ''), '-', '') OR
+              replace(replace(lower(concat(
+                coalesce(s.answers->>'classGrade', ''),
+                coalesce(s.answers->>'sectionLetter', s.answers->>'section', '')
+              )), ' ', ''), '-', '')
+                LIKE replace(replace(lower(cast(:classLike as text)), ' ', ''), '-', '')
+            )
             AND (:genderBlank = true OR lower(coalesce(s.answers->>'gender', '')) = lower(cast(:gender as text)))
             AND (:categoryBlank = true OR lower(coalesce(s.answers->>'category', '')) = lower(cast(:category as text)))
             AND (:houseBlank = true OR lower(coalesce(s.answers->>'house', '')) = lower(cast(:house as text)))
@@ -179,6 +203,8 @@ public interface StudentRecordRepository extends JpaRepository<StudentRecordEnti
       @Param("qBlank") boolean qBlank,
       @Param("classSection") String classSection,
       @Param("classBlank") boolean classBlank,
+      @Param("classLike") String classLike,
+      @Param("classLikeBlank") boolean classLikeBlank,
       @Param("gender") String gender,
       @Param("genderBlank") boolean genderBlank,
       @Param("category") String category,
@@ -190,4 +216,32 @@ public interface StudentRecordRepository extends JpaRepository<StudentRecordEnti
       @Param("scholarshipBlank") boolean scholarshipBlank,
       @Param("includeDeleted") Boolean includeDeleted,
       Pageable pageable);
+
+  @Query(
+      value =
+          """
+          SELECT DISTINCT coalesce(
+            nullif(btrim(s.answers->>'classApplied'), ''),
+            nullif(btrim(s.answers->>'classSection'), ''),
+            nullif(btrim(concat_ws('-',
+              nullif(btrim(s.answers->>'classGrade'), ''),
+              nullif(btrim(coalesce(s.answers->>'sectionLetter', s.answers->>'section')), '')
+            )), '')
+          )
+          FROM student_record s
+          WHERE s.organization_id = :org
+            AND s.deleted_at IS NULL
+            AND (:branchBlank = true OR s.branch_id = :branch)
+            AND (:sessionBlank = true OR s.academic_session_id = :session)
+            AND (:statusBlank = true OR s.status = :status)
+          """,
+      nativeQuery = true)
+  List<String> distinctClassLabels(
+      @Param("org") String org,
+      @Param("branch") String branch,
+      @Param("branchBlank") boolean branchBlank,
+      @Param("session") String session,
+      @Param("sessionBlank") boolean sessionBlank,
+      @Param("status") String status,
+      @Param("statusBlank") boolean statusBlank);
 }

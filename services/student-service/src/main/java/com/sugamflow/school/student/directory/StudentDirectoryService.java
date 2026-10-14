@@ -15,6 +15,7 @@ import com.sugamflow.school.student.service.StudentRecordService;
 import com.sugamflow.school.student.sheet.StudentGuardianSync;
 import com.sugamflow.school.student.sheet.StudentSheetCatalog;
 import com.sugamflow.school.student.web.StudentException;
+import java.util.ArrayList;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
@@ -97,6 +98,8 @@ public class StudentDirectoryService {
             blank(dq.q),
             nullToEmpty(dq.classSection),
             blank(dq.classSection),
+            nullToEmpty(dq.classLike),
+            blank(dq.classLike),
             nullToEmpty(dq.gender),
             blank(dq.gender),
             nullToEmpty(dq.category),
@@ -114,6 +117,41 @@ public class StudentDirectoryService {
       return PageResults.filterThenPage(items, access::allowsStudentDto, q.page(), q.size());
     }
     return PageResult.of(items, q.page(), q.size(), page.getTotalElements());
+  }
+
+  /** Distinct class and section labels stored on students in the current tenant scope. */
+  @Transactional(readOnly = true)
+  public Map<String, Object> classOptions(Map<String, String> params) {
+    TenantScope scope = TenantContext.require();
+    requireFeature(scope);
+    DirectoryQuery dq = DirectoryQuery.from(params, scope);
+    String status = dq.status() != null ? dq.status() : "ACTIVE";
+    List<String> labels =
+        repository.distinctClassLabels(
+            scope.organizationId(),
+            nullToEmpty(dq.branch()),
+            blank(dq.branch()),
+            nullToEmpty(dq.session()),
+            blank(dq.session()),
+            status,
+            false);
+    List<Map<String, Object>> classes = new ArrayList<>();
+    for (ClassLabelGroups.ClassGroup group : ClassLabelGroups.group(labels)) {
+      Map<String, Object> row = new LinkedHashMap<>();
+      row.put("name", group.name());
+      List<Map<String, Object>> sections = new ArrayList<>();
+      for (ClassLabelGroups.SectionGroup section : group.sections()) {
+        Map<String, Object> sectionRow = new LinkedHashMap<>();
+        sectionRow.put("name", section.name());
+        sectionRow.put("label", section.label());
+        sections.add(sectionRow);
+      }
+      row.put("sections", sections);
+      classes.add(row);
+    }
+    Map<String, Object> out = new LinkedHashMap<>();
+    out.put("classes", classes);
+    return out;
   }
 
   @Transactional(readOnly = true)
@@ -457,6 +495,7 @@ public class StudentDirectoryService {
       String status,
       String q,
       String classSection,
+      String classLike,
       String gender,
       String category,
       String house,
@@ -480,6 +519,7 @@ public class StudentDirectoryService {
           emptyToNull(p.get("status")),
           q,
           emptyToNull(first(p.get("classSection"), p.get("class"))),
+          classLike(p.get("classLike")),
           emptyToNull(p.get("gender")),
           emptyToNull(p.get("category")),
           emptyToNull(p.get("house")),
@@ -497,6 +537,16 @@ public class StudentDirectoryService {
 
     private static String emptyToNull(String v) {
       return v == null || v.isBlank() ? null : v.trim();
+    }
+
+    /** A pattern of only wildcards would match the whole school. Require some class text. */
+    private static String classLike(String raw) {
+      String value = emptyToNull(raw);
+      if (value == null) {
+        return null;
+      }
+      String bare = value.replace("%", "").replace("_", "").replace("\\", "").trim();
+      return bare.isEmpty() ? null : value;
     }
 
     private static boolean truthyFlag(String v) {
