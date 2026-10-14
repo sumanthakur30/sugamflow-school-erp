@@ -125,7 +125,7 @@ services:
 
   form-builder-service:
     <<: *jvm-service
-    image: ${IMAGE_PREFIX:-sumanthakur30}/form-builder-service:${IMAGE_TAG:-1.0.0}
+    image: ${IMAGE_PREFIX:-sumanthakur30}/form-builder-service:${FORM_BUILDER_IMAGE_TAG:-${IMAGE_TAG:-1.0.0}}
     environment:
       <<: *common-env
       EUREKA_INSTANCE_HOSTNAME: form-builder-service
