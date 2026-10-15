@@ -6,8 +6,10 @@ import com.sugamflow.school.common.tenant.TenantContext;
 import com.sugamflow.school.common.tenant.TenantScope;
 import com.sugamflow.school.fee.config.FeeProperties;
 import com.sugamflow.school.fee.finance.FeeConcessionCalculator;
+import com.sugamflow.school.fee.finance.FeeHeadRules;
 import com.sugamflow.school.fee.finance.FeePeriodFilter;
 import com.sugamflow.school.fee.finance.FeeStructureMatcher;
+import com.sugamflow.school.fee.finance.FeeStructureRules;
 import com.sugamflow.school.fee.finance.FinanceCatalog;
 import com.sugamflow.school.fee.finance.StudentDiscountRules;
 import com.sugamflow.school.fee.persistence.entity.StudentFeeAdjustmentEntity;
@@ -130,6 +132,19 @@ public class FinanceService {
     payload.put("definitionKey", key);
     payload.remove("id");
     payload.remove("version");
+    if (FinanceCatalog.TYPE_FEE_STRUCTURE.equals(type)) {
+      FeeStructureRules.validate(payload);
+    }
+    if (FinanceCatalog.TYPE_FEE_HEAD.equals(type)) {
+      List<Map<String, Object>> activeHeads =
+          definitionRepo
+              .findByOrganizationIdAndDefinitionTypeAndStatusOrderByDefinitionKeyAsc(
+                  scope.organizationId(), type, "ACTIVE")
+              .stream()
+              .map(FinanceDefinitionEntity::getPayload)
+              .toList();
+      FeeHeadRules.validateUniqueLabel(key, stringOr(payload.get("label"), ""), activeHeads);
+    }
 
     FinanceDefinitionEntity existing =
         definitionRepo
@@ -548,6 +563,10 @@ public class FinanceService {
         Map<String, Object> line = (Map<String, Object>) m;
         String headKey = stringOr(line.get("headKey"), "");
         if (headKey.isBlank()) continue;
+        if (Boolean.FALSE.equals(line.get("active"))
+            || "INACTIVE".equalsIgnoreCase(stringOr(line.get("status"), ""))) {
+          continue;
+        }
         BigDecimal amount = toDecimal(line.get("amount"));
         Map<String, Object> head = (Map<String, Object>) headIndex.getOrDefault(headKey, Map.of());
         String frequency =
@@ -1144,7 +1163,9 @@ public class FinanceService {
       }
       feeLines.add(
           new FeeConcessionCalculator.FeeLine(
-              stringOr(line.get("headKey"), ""), toDecimal(line.get("amount"))));
+              stringOr(line.get("headKey"), ""),
+              toDecimal(line.get("amount")),
+              !Boolean.FALSE.equals(line.get("discountAllowed"))));
     }
     FeeConcessionCalculator.SiblingPolicy policy = null;
     try {
@@ -1327,6 +1348,7 @@ public class FinanceService {
         "frequency",
         stringOr(line.get("frequency"), stringOr(head.get("frequency"), FinanceCatalog.FREQ_ONE_TIME)));
     out.put("optional", Boolean.TRUE.equals(line.get("optional")));
+    out.put("discountAllowed", !Boolean.FALSE.equals(line.get("discountAllowed")));
     if (line.get("source") != null) {
       out.put("source", line.get("source"));
     }

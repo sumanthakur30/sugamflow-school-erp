@@ -437,7 +437,7 @@
                 <div class="fin-line-list">
                   @for (line of payload(s).lines || []; track line.headKey) {
                     <div class="fin-line">
-                      <span>{{ line.headKey }}{{ line.frequency ? ' · ' + line.frequency : '' }}</span>
+                      <span>{{ headLabel(line.headKey) }}{{ line.frequency ? ' · ' + line.frequency : '' }}</span>
                       <strong class="money">{{ formatMoney(line.amount) }}</strong>
                     </div>
                   }
@@ -460,7 +460,7 @@
           <h3 class="form-section-title">
             {{ editingStructureKey ? 'Update structure' : 'Create structure' }}
           </h3>
-          <p class="muted">Lines format: <code>HEAD,amount,frequency</code> (one per line). Frequencies: M / Q / HY / Y / OT. Add <code>,INACTIVE</code> to turn a head off. Saving a new version does not change demands already issued.</p>
+          <p class="muted">Choose only the fee heads this class should pay. Saving a new version does not change demands already issued.</p>
           <div class="grid two">
             <label>
               Key
@@ -485,34 +485,89 @@
               <input [(ngModel)]="structureDraft.academicSessionId" name="structSession" placeholder="2025-26" />
             </label>
           </div>
-          <label>
-            Lines
+          <div class="structure-head-picker">
+            <div class="fin-section-head">
+              <span>Fee heads</span>
+              <input
+                class="fin-inline-search"
+                type="search"
+                [(ngModel)]="structureHeadQ"
+                name="structHeadSearch"
+                placeholder="Search fee heads"
+              />
+            </div>
+            <div class="structure-head-actions">
+              <button type="button" class="tiny secondary" (click)="selectVisibleStructureHeads()">Select all</button>
+              <button type="button" class="tiny secondary" (click)="clearStructureHeads()">Clear selection</button>
+              <button type="button" class="tiny" (click)="customHeadOpen = !customHeadOpen">Add custom fee head</button>
+            </div>
+            <div class="structure-head-list">
+              @for (choice of structureHeadChoices(); track choice.key) {
+                <label class="fin-check">
+                  <input
+                    type="checkbox"
+                    [name]="'pick_' + choice.key"
+                    [ngModel]="isStructureHeadSelected(choice.key)"
+                    (ngModelChange)="toggleStructureHead(choice.key, $event)"
+                  />
+                  {{ choice.label }}
+                </label>
+              } @empty {
+                <p class="muted">No fee heads match. Add a custom fee head for this school.</p>
+              }
+            </div>
+            @if (customHeadOpen) {
+              <div class="grid two custom-head-form">
+                <label>
+                  Name
+                  <input [(ngModel)]="customHead.label" name="customHeadLabel" placeholder="Robotics Fee" />
+                </label>
+                <label>
+                  Code
+                  <input [(ngModel)]="customHead.definitionKey" name="customHeadKey" placeholder="ROBOTICS" />
+                </label>
+                <label>
+                  Category
+                  <select [(ngModel)]="customHead.category" name="customHeadCategory">
+                    <option value="ACADEMIC">Academic</option>
+                    <option value="TRANSPORT">Transport</option>
+                    <option value="HOSTEL">Hostel</option>
+                    <option value="OPTIONAL">Optional</option>
+                    <option value="OTHER">Other</option>
+                  </select>
+                </label>
+                <label>
+                  Default frequency
+                  <select [(ngModel)]="customHead.frequency" name="customHeadFrequency">
+                    <option value="OT">One-time</option>
+                    <option value="M">Monthly</option>
+                    <option value="Q">Quarterly</option>
+                    <option value="HY">Half-yearly</option>
+                    <option value="Y">Yearly</option>
+                  </select>
+                </label>
+              </div>
+              <button type="button" class="tiny" (click)="saveCustomHead()" [disabled]="busy">Save custom fee head</button>
+            }
+          </div>
+          <div class="table-wrap">
             <table class="fee-quote-table">
               <thead>
                 <tr>
                   <th>Fee head</th>
                   <th>Frequency</th>
                   <th>Amount</th>
+                  <th>Discount</th>
                   <th>Status</th>
+                  <th></th>
                 </tr>
               </thead>
               <tbody>
-                @for (line of structureLines; track $index) {
+                @for (line of structureLines; track line.headKey) {
                   <tr>
+                    <td>{{ headLabel(line.headKey) }}</td>
                     <td>
-                      <input
-                        [ngModel]="line.headKey"
-                        (ngModelChange)="onStructureLineChange($index, 'headKey', $event)"
-                        [name]="'structHead' + $index"
-                        placeholder="TUITION"
-                      />
-                    </td>
-                    <td>
-                      <select
-                        [ngModel]="line.frequency"
-                        (ngModelChange)="onStructureLineChange($index, 'frequency', $event)"
-                        [name]="'structFreq' + $index"
-                      >
+                      <select [(ngModel)]="line.frequency" [name]="'structFreq' + line.headKey">
                         <option value="OT">One-time</option>
                         <option value="M">Monthly</option>
                         <option value="Q">Quarterly</option>
@@ -522,34 +577,50 @@
                     </td>
                     <td>
                       <input
-                        [ngModel]="line.amount"
-                        (ngModelChange)="onStructureLineChange($index, 'amount', $event)"
-                        [name]="'structAmt' + $index"
+                        [(ngModel)]="line.amount"
+                        [name]="'structAmt' + line.headKey"
                         inputmode="decimal"
                         placeholder="0"
                       />
                     </td>
                     <td>
-                      <button
-                        type="button"
-                        class="tiny secondary"
-                        (click)="onStructureLineChange($index, 'active', !line.active)"
-                      >
+                      <label class="fin-check">
+                        <input type="checkbox" [(ngModel)]="line.discountAllowed" [name]="'structDisc' + line.headKey" />
+                        Allowed
+                      </label>
+                    </td>
+                    <td>
+                      <button type="button" class="tiny secondary" (click)="line.active = !line.active">
                         {{ line.active ? 'Active' : 'Inactive' }}
                       </button>
                     </td>
+                    <td>
+                      <button type="button" class="tiny secondary" (click)="removeStructureLine($index)">Remove</button>
+                    </td>
+                  </tr>
+                } @empty {
+                  <tr>
+                    <td colspan="6" class="muted">Select the fee heads this structure should include.</td>
                   </tr>
                 }
               </tbody>
             </table>
-            <textarea
-              [(ngModel)]="structureDraft.linesText"
-              (ngModelChange)="onStructureTextChange()"
-              name="structLines"
-              rows="4"
-              placeholder="TUITION,amount,M"
-            ></textarea>
-          </label>
+          </div>
+          <p class="structure-total">
+            Active total {{ formatMoney(structureDraftTotal()) }}.
+            Each amount is the charge for that frequency. Monthly and yearly amounts are not multiplied together.
+          </p>
+          @if (structureLines.length) {
+            <ul class="structure-preview">
+              @for (line of structureLines; track line.headKey) {
+                <li>
+                  {{ headLabel(line.headKey) }} · {{ line.frequency }} · {{ formatMoney(line.amount || 0) }}
+                  · {{ line.active ? 'Active' : 'Inactive' }}
+                  · {{ line.discountAllowed ? 'Discount allowed' : 'No discount' }}
+                </li>
+              }
+            </ul>
+          }
           <label>
             Notes
             <input [(ngModel)]="structureDraft.notes" name="structNotes" />

@@ -22,7 +22,12 @@ public final class FeeConcessionCalculator {
 
   private FeeConcessionCalculator() {}
 
-  public record FeeLine(String headKey, BigDecimal amount) {}
+  public record FeeLine(String headKey, BigDecimal amount, boolean discountAllowed) {
+    /** Existing lines allow a discount unless a structure explicitly turns it off. */
+    public FeeLine(String headKey, BigDecimal amount) {
+      this(headKey, amount, true);
+    }
+  }
 
   public record StudentAdjustment(
       String id, String mode, BigDecimal value, List<String> appliesToHeads, String status) {}
@@ -449,6 +454,9 @@ public final class FeeConcessionCalculator {
     BigDecimal base = BigDecimal.ZERO;
     for (int i = 0; i < lines.size(); i++) {
       FeeLine line = lines.get(i);
+      if (!line.discountAllowed()) {
+        continue;
+      }
       if (named && !containsHead(heads, line.headKey())) {
         continue;
       }
@@ -495,12 +503,13 @@ public final class FeeConcessionCalculator {
   }
 
   private static BigDecimal eligible(List<FeeLine> lines, List<String> heads) {
-    if (heads == null || heads.isEmpty()) {
-      return sum(lines);
-    }
+    boolean named = heads != null && !heads.isEmpty();
     BigDecimal total = BigDecimal.ZERO;
     for (FeeLine line : lines) {
-      if (containsHead(heads, line.headKey())) {
+      if (!line.discountAllowed()) {
+        continue;
+      }
+      if (!named || containsHead(heads, line.headKey())) {
         total = total.add(nz(line.amount()));
       }
     }
@@ -513,6 +522,9 @@ public final class FeeConcessionCalculator {
     }
     BigDecimal total = BigDecimal.ZERO;
     for (FeeLine line : lines) {
+      if (!line.discountAllowed()) {
+        continue;
+      }
       boolean inLeft = left == null || left.isEmpty() || containsHead(left, line.headKey());
       boolean inRight = right == null || right.isEmpty() || containsHead(right, line.headKey());
       if (inLeft && inRight) {

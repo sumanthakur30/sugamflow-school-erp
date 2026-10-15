@@ -186,12 +186,17 @@ export class FinanceComponent implements OnInit, OnDestroy {
     classSection: '',
     academicSessionId: '',
     notes: '',
-    linesText: '',
   };
-  structureLines: Array<{ headKey: string; amount: string; frequency: string; active: boolean }> = [
-    { headKey: '', amount: '', frequency: 'M', active: true },
-  ];
-  private writingStructureLines = false;
+  structureLines: Array<{
+    headKey: string;
+    amount: string;
+    frequency: string;
+    active: boolean;
+    discountAllowed: boolean;
+  }> = [];
+  structureHeadQ = '';
+  customHeadOpen = false;
+  customHead = { label: '', definitionKey: '', category: 'ACADEMIC', frequency: 'Y' };
   editingStructureKey: string | null = null;
 
   adjustDraft = {
@@ -511,8 +516,9 @@ export class FinanceComponent implements OnInit, OnDestroy {
 
   get filteredHeads(): any[] {
     const q = this.headsQ.trim().toLowerCase();
-    if (!q) return this.heads;
-    return this.heads.filter((h) => {
+    const heads = this.uniqueHeads(this.heads);
+    if (!q) return heads;
+    return heads.filter((h) => {
       const p = this.payload(h);
       return (
         String(p.label || '')
@@ -718,18 +724,15 @@ export class FinanceComponent implements OnInit, OnDestroy {
     this.editingStructureKey = s.definitionKey || p.definitionKey || null;
     const elig = p.eligibility || {};
     const lines = Array.isArray(p.lines) ? p.lines : [];
-    this.structureLines = lines.length
-      ? lines.map((l: any) => ({
-          headKey: String(l.headKey || ''),
-          amount: String(l.amount ?? ''),
-          frequency: String(l.frequency || 'Y'),
-          active: l.active !== false && String(l.status || '').toUpperCase() !== 'INACTIVE',
-        }))
-      : [{ headKey: '', amount: '', frequency: 'M', active: true }];
-    this.structureLines = [
-      ...this.structureLines,
-      { headKey: '', amount: '', frequency: 'M', active: true },
-    ];
+    this.structureLines = lines
+      .map((l: any) => ({
+        headKey: String(l.headKey || '').trim().toUpperCase(),
+        amount: String(l.amount ?? ''),
+        frequency: String(l.frequency || 'Y'),
+        active: l.active !== false && String(l.status || '').toUpperCase() !== 'INACTIVE',
+        discountAllowed: l.discountAllowed !== false,
+      }))
+      .filter((line: { headKey: string }) => line.headKey);
     this.structureDraft = {
       definitionKey: String(this.editingStructureKey || ''),
       name: String(p.name || ''),
@@ -737,7 +740,6 @@ export class FinanceComponent implements OnInit, OnDestroy {
       classSection: String(elig.classSection || ''),
       academicSessionId: String(elig.academicSessionId || ''),
       notes: String(p.notes || ''),
-      linesText: this.formatStructureLines(),
     };
     this.setTab('structures');
     queueMicrotask(() =>
@@ -757,7 +759,9 @@ export class FinanceComponent implements OnInit, OnDestroy {
 
   resetStructureDraft(): void {
     this.editingStructureKey = null;
-    this.structureLines = [{ headKey: '', amount: '', frequency: 'M', active: true }];
+    this.structureLines = [];
+    this.structureHeadQ = '';
+    this.customHeadOpen = false;
     this.structureDraft = {
       definitionKey: '',
       name: '',
@@ -765,30 +769,177 @@ export class FinanceComponent implements OnInit, OnDestroy {
       classSection: '',
       academicSessionId: '',
       notes: '',
-      linesText: '',
     };
   }
 
-  onStructureLineChange(
-    index: number,
-    field: 'headKey' | 'amount' | 'frequency' | 'active',
-    value: string | boolean,
-  ): void {
-    const row = this.structureLines[index];
-    if (!row) return;
-    if (field === 'active') row.active = !!value;
-    else row[field] = String(value);
-    this.writingStructureLines = true;
-    this.structureDraft.linesText = this.formatStructureLines();
-    this.writingStructureLines = false;
-    if (index === this.structureLines.length - 1 && row.headKey.trim()) {
-      this.structureLines = [...this.structureLines, { headKey: '', amount: '', frequency: 'M', active: true }];
+  structureHeadChoices(): Array<{ key: string; label: string; frequency: string }> {
+    const q = this.structureHeadQ.trim().toLowerCase();
+    const choices = new Map<string, { key: string; label: string; frequency: string }>();
+    for (const head of this.uniqueHeads(this.heads)) {
+      const payload = this.payload(head);
+      if (payload.enabled === false) continue;
+      const key = String(payload.code || head.definitionKey || '').trim().toUpperCase();
+      if (!key) continue;
+      choices.set(key, {
+        key,
+        label: String(payload.label || key),
+        frequency: String(payload.frequency || 'M'),
+      });
+    }
+    for (const line of this.structureLines) {
+      if (line.headKey && !choices.has(line.headKey)) {
+        choices.set(line.headKey, { key: line.headKey, label: line.headKey, frequency: line.frequency || 'M' });
+      }
+    }
+    return [...choices.values()]
+      .filter((choice) => !q || choice.label.toLowerCase().includes(q) || choice.key.toLowerCase().includes(q))
+      .sort((a, b) => a.label.localeCompare(b.label));
+  }
+
+  isStructureHeadSelected(key: string): boolean {
+    return this.structureLines.some((line) => line.headKey === key);
+  }
+
+  toggleStructureHead(key: string, selected: boolean): void {
+    const code = key.trim().toUpperCase();
+    if (!code) return;
+    if (!selected) {
+      this.structureLines = this.structureLines.filter((line) => line.headKey !== code);
+      return;
+    }
+    if (this.isStructureHeadSelected(code)) return;
+    const choice = this.structureHeadChoices().find((item) => item.key === code);
+    this.structureLines = [
+      ...this.structureLines,
+      {
+        headKey: code,
+        amount: '',
+        frequency: choice?.frequency || 'M',
+        active: true,
+        discountAllowed: true,
+      },
+    ];
+  }
+
+  selectVisibleStructureHeads(): void {
+    for (const choice of this.structureHeadChoices()) {
+      this.toggleStructureHead(choice.key, true);
     }
   }
 
-  onStructureTextChange(): void {
-    if (this.writingStructureLines) return;
-    this.structureLines = this.parseStructureLines(this.structureDraft.linesText);
+  clearStructureHeads(): void {
+    this.structureLines = [];
+  }
+
+  removeStructureLine(index: number): void {
+    this.structureLines = this.structureLines.filter((_, i) => i !== index);
+  }
+
+  private uniqueHeads(heads: any[]): any[] {
+    const byName = new Map<string, any>();
+    for (const head of heads) {
+      const name = this.headName(head);
+      if (!name) continue;
+      const current = byName.get(name);
+      if (!current || this.preferHead(current, head)) byName.set(name, head);
+    }
+    return [...byName.values()];
+  }
+
+  private headName(head: any): string {
+    return String(this.payload(head).label || head.definitionKey || '')
+      .trim()
+      .replace(/\s+/g, ' ')
+      .toLowerCase();
+  }
+
+  private preferHead(current: any, candidate: any): boolean {
+    const currentKey = String(this.payload(current).code || current.definitionKey || '').toUpperCase();
+    const candidateKey = String(this.payload(candidate).code || candidate.definitionKey || '').toUpperCase();
+    const stamped = (key: string) => /_\d{4,}$/.test(key);
+    if (stamped(currentKey) && !stamped(candidateKey)) return true;
+    if (!stamped(currentKey) && stamped(candidateKey)) return false;
+    return candidateKey.length < currentKey.length;
+  }
+
+  private duplicateHeadName(label: string, key: string): boolean {
+    const name = label.trim().replace(/\s+/g, ' ').toLowerCase();
+    return this.heads.some((head) => {
+      const payload = this.payload(head);
+      const other = String(payload.code || head.definitionKey || '').trim().toUpperCase();
+      return other !== key && this.headName(head) === name;
+    });
+  }
+
+  headLabel(key: string): string {
+    const code = String(key || '').trim().toUpperCase();
+    const head = this.heads.find((item) => {
+      const payload = this.payload(item);
+      return String(payload.code || item.definitionKey || '').trim().toUpperCase() === code;
+    });
+    return head ? String(this.payload(head).label || code) : code;
+  }
+
+  structureDraftTotal(): number {
+    return this.structureLines
+      .filter((line) => line.active)
+      .reduce((sum, line) => sum + (Number(line.amount) || 0), 0);
+  }
+
+  saveCustomHead(): void {
+    const label = this.customHead.label.trim();
+    const key = (this.customHead.definitionKey || label)
+      .trim()
+      .toUpperCase()
+      .replace(/[^A-Z0-9]+/g, '_')
+      .replace(/^_|_$/g, '');
+    if (!label || !key) {
+      this.error = 'Custom fee head name is required';
+      return;
+    }
+    const known = this.heads.some((head) => {
+      const payload = this.payload(head);
+      return String(payload.code || head.definitionKey || '').trim().toUpperCase() === key;
+    });
+    if (this.duplicateHeadName(label, key)) {
+      this.error = `A fee head named "${label}" already exists`;
+      return;
+    }
+    if (known) {
+      this.toggleStructureHead(key, true);
+      this.customHeadOpen = false;
+      this.error = '';
+      return;
+    }
+    this.busy = true;
+    this.error = '';
+    this.api
+      .put(`/api/fee/finance/heads/${encodeURIComponent(key)}`, {
+        definitionKey: key,
+        code: key,
+        label,
+        category: this.customHead.category || 'OTHER',
+        frequency: this.customHead.frequency || 'Y',
+        refundable: true,
+        enabled: true,
+        gstRate: 0,
+        taxable: false,
+      })
+      .subscribe({
+        next: (saved: any) => {
+          this.busy = false;
+          this.heads = [...this.heads, saved?.data || saved || { definitionKey: key, payload: { label, code: key, frequency: this.customHead.frequency } }];
+          this.toggleStructureHead(key, true);
+          this.customHead = { label: '', definitionKey: '', category: 'ACADEMIC', frequency: 'Y' };
+          this.customHeadOpen = false;
+          this.status = `Added fee head ${label}`;
+          this.reload(true);
+        },
+        error: (err) => {
+          this.busy = false;
+          this.error = err?.error?.message ?? 'Could not add the fee head';
+        },
+      });
   }
 
   saveStructure(): void {
@@ -797,12 +948,14 @@ export class FinanceComponent implements OnInit, OnDestroy {
       this.error = 'Structure key and name are required';
       return;
     }
+    const allowedFrequency = new Set(['M', 'Q', 'HY', 'Y', 'OT']);
     const lines = this.structureLines
       .map((line) => ({
         headKey: line.headKey.trim().toUpperCase(),
         amount: Number(line.amount || 0),
         frequency: (line.frequency || 'M').trim().toUpperCase() || 'M',
         active: line.active !== false,
+        discountAllowed: line.discountAllowed !== false,
         optional: false,
       }))
       .filter((line) => line.headKey);
@@ -813,6 +966,10 @@ export class FinanceComponent implements OnInit, OnDestroy {
         return;
       }
       seen.add(line.headKey);
+      if (!allowedFrequency.has(line.frequency)) {
+        this.error = `Frequency for ${line.headKey} is not supported`;
+        return;
+      }
       if (line.amount < 0 || Number.isNaN(line.amount)) {
         this.error = `Amount for ${line.headKey} cannot be negative`;
         return;
@@ -852,37 +1009,6 @@ export class FinanceComponent implements OnInit, OnDestroy {
           this.error = err?.error?.message ?? 'Save structure failed';
         },
       });
-  }
-
-  private formatStructureLines(): string {
-    return this.structureLines
-      .filter((line) => line.headKey.trim() || String(line.amount).trim())
-      .map((line) => {
-        const status = line.active ? '' : ',INACTIVE';
-        return `${line.headKey.trim().toUpperCase()},${line.amount},${(line.frequency || 'M').toUpperCase()}${status}`;
-      })
-      .join('\n');
-  }
-
-  private parseStructureLines(
-    text: string,
-  ): Array<{ headKey: string; amount: string; frequency: string; active: boolean }> {
-    const rows = text
-      .split(/\r?\n/)
-      .map((row) => row.trim())
-      .filter(Boolean)
-      .map((row) => {
-        const [headKey, amount, frequency, status] = row.split(',').map((part) => part.trim());
-        const flag = String(status || '').toUpperCase();
-        return {
-          headKey: headKey || '',
-          amount: amount || '',
-          frequency: (frequency || 'M').toUpperCase(),
-          active: flag !== 'INACTIVE' && flag !== 'FALSE',
-        };
-      });
-    rows.push({ headKey: '', amount: '', frequency: 'M', active: true });
-    return rows;
   }
 
   postAdjustment(): void {
@@ -982,8 +1108,13 @@ export class FinanceComponent implements OnInit, OnDestroy {
     const key = String(this.headDraft.definitionKey || '')
       .trim()
       .toUpperCase();
-    if (!key || !String(this.headDraft.label || '').trim()) {
+    const label = String(this.headDraft.label || '').trim();
+    if (!key || !label) {
       this.error = 'Head key and label are required';
+      return;
+    }
+    if (this.duplicateHeadName(label, key)) {
+      this.error = `A fee head named "${label}" already exists`;
       return;
     }
     this.busy = true;
