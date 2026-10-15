@@ -31,6 +31,21 @@ public class LibraryCirculationService {
   }
 
   @Transactional(readOnly = true)
+  public Map<String, Object> findByBarcode(String code) {
+    if (code == null || code.isBlank()) {
+      throw new LibraryException("VALIDATION", "barcode is required");
+    }
+    String needle = code.trim();
+    return listBooks().stream()
+        .filter(
+            book ->
+                needle.equalsIgnoreCase(String.valueOf(book.get("isbn")))
+                    || needle.equalsIgnoreCase(String.valueOf(book.get("title"))))
+        .findFirst()
+        .orElseThrow(() -> new LibraryException("NOT_FOUND", "No book for barcode " + needle));
+  }
+
+  @Transactional(readOnly = true)
   public List<Map<String, Object>> listBooks() {
     TenantScope scope = TenantContext.require();
     return books.findByOrganizationIdOrderByTitleAsc(scope.organizationId()).stream()

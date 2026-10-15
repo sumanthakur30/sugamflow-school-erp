@@ -73,7 +73,7 @@ import {
 
         <div class="panel" style="margin-bottom: 1rem">
           <h3 style="margin-top: 0; font-size: 1.1rem">Gaps by field</h3>
-          @if (!readiness.gaps?.length) {
+          @if (!readiness.gaps.length) {
             <p class="muted">No open gaps. Run validation after data changes.</p>
           } @else {
             <table class="data">

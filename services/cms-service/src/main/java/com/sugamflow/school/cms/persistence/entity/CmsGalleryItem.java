@@ -16,6 +16,9 @@ public class CmsGalleryItem {
   @Column(name = "organization_id", nullable = false, length = 64)
   private String organizationId;
 
+  @Column(name = "site_id")
+  private UUID siteId;
+
   @Column(nullable = false, length = 256)
   private String title;
 
@@ -47,6 +50,8 @@ public class CmsGalleryItem {
   public void setId(UUID id) { this.id = id; }
   public String getOrganizationId() { return organizationId; }
   public void setOrganizationId(String organizationId) { this.organizationId = organizationId; }
+  public UUID getSiteId() { return siteId; }
+  public void setSiteId(UUID siteId) { this.siteId = siteId; }
   public String getTitle() { return title; }
   public void setTitle(String title) { this.title = title; }
   public String getCaption() { return caption; }

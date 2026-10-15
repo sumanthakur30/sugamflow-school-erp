@@ -66,6 +66,8 @@ export class LifecycleComponent implements OnInit, OnDestroy {
   ];
   tcRemarks = '';
   clearance: any = null;
+  targetClass = '';
+  lifecycleReason = '';
 
   mapDraftKey = 'default_grade_map';
   mapRows: MapRow[] = [];
@@ -307,6 +309,9 @@ export class LifecycleComponent implements OnInit, OnDestroy {
       TC_ISSUED: 'Transfer certificate issued',
       TC: 'Transfer certificate issued',
       STATUS_CHANGE: 'Status changed',
+      SECTION_CHANGE: 'Section changed',
+      DROPOUT: 'Marked dropout',
+      ALUMNI: 'Marked alumni',
     };
     return labels[type] || type.replace(/_/g, ' ').toLowerCase() || 'Event';
   }
@@ -506,6 +511,69 @@ export class LifecycleComponent implements OnInit, OnDestroy {
         error: (err) => {
           this.busy = false;
           this.error = err?.error?.message ?? 'Clearance check failed';
+        },
+      });
+  }
+
+  changeSection(): void {
+    if (!this.selectedStudentId || !this.targetClass) {
+      this.error = 'Select a student and a class';
+      return;
+    }
+    this.busy = true;
+    this.error = '';
+    this.api
+      .post<any>('/api/student/lifecycle/section-change', {
+        studentId: this.selectedStudentId,
+        targetClass: this.targetClass,
+        reason: this.lifecycleReason,
+      })
+      .subscribe({
+        next: () => {
+          this.busy = false;
+          this.status = `${this.studentName(this.selectedStudentId)} moved to ${this.targetClass}`;
+          this.loadStudents();
+          this.loadEvents();
+        },
+        error: (err) => {
+          this.busy = false;
+          this.error = err?.error?.message ?? 'Section change failed';
+        },
+      });
+  }
+
+  markAlumni(): void {
+    this.markLeaving('alumni', 'ALUMNI');
+  }
+
+  markDropout(): void {
+    this.markLeaving('dropout', 'DROPOUT');
+  }
+
+  private markLeaving(path: 'alumni' | 'dropout', label: string): void {
+    if (!this.selectedStudentId) {
+      this.error = 'Select a student';
+      return;
+    }
+    const name = this.studentName(this.selectedStudentId);
+    if (!confirm(`Mark ${name} as ${label.toLowerCase()}?`)) return;
+    this.busy = true;
+    this.error = '';
+    this.api
+      .post<any>(`/api/student/lifecycle/${path}`, {
+        studentId: this.selectedStudentId,
+        reason: this.lifecycleReason || label,
+      })
+      .subscribe({
+        next: () => {
+          this.busy = false;
+          this.status = `${name} marked ${label.toLowerCase()}`;
+          this.loadStudents();
+          this.loadEvents();
+        },
+        error: (err) => {
+          this.busy = false;
+          this.error = err?.error?.message ?? `Could not mark ${label.toLowerCase()}`;
         },
       });
   }

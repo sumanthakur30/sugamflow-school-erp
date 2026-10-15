@@ -104,6 +104,16 @@ public class ReportTemplateService {
   @Transactional
   public Map<String, Object> render(String org, String key, Map<String, Object> body) {
     requireFeature();
+    return renderDocument(org, key, body);
+  }
+
+  /** Parent ID card and transfer certificate. Caller already checked the child. */
+  @Transactional
+  public Map<String, Object> renderIssued(String org, String key, Map<String, Object> body) {
+    return renderDocument(org, key, body);
+  }
+
+  private Map<String, Object> renderDocument(String org, String key, Map<String, Object> body) {
     Map<String, Object> template = get(org, key);
     if (template == null) {
       throw new IllegalArgumentException("Template not found: " + key);
@@ -139,6 +149,10 @@ public class ReportTemplateService {
       throw new IllegalArgumentException(
           "Unsupported format: " + format + " (provide data.columns + data.rows for EXCEL/CSV)");
     }
+    List<Map<String, Object>> records = recordPages(body);
+    if (records != null) {
+      return pdfRenderService.renderMany(template, records);
+    }
     return pdfRenderService.render(template, data);
   }
 
@@ -146,12 +160,37 @@ public class ReportTemplateService {
   public Map<String, Object> previewLayout(Map<String, Object> body) {
     requireFeature();
     Map<String, Object> template = normalizeTemplate(body != null ? body : Map.of());
+    template.remove("records");
+    template.remove("data");
+    template.remove("format");
+    List<Map<String, Object>> records = recordPages(body);
+    if (records != null) {
+      return pdfRenderService.renderMany(template, records);
+    }
     @SuppressWarnings("unchecked")
     Map<String, Object> data =
         body != null && body.get("data") instanceof Map<?, ?> m
             ? (Map<String, Object>) m
             : ReportElementCatalog.samplePreviewData();
     return pdfRenderService.render(template, data);
+  }
+
+  /** Runtime pages. Empty when the caller did not send a records list. Capped so one request cannot load the whole school. */
+  @SuppressWarnings("unchecked")
+  private List<Map<String, Object>> recordPages(Map<String, Object> body) {
+    if (body == null || !(body.get("records") instanceof List<?> list) || list.isEmpty()) {
+      return null;
+    }
+    List<Map<String, Object>> pages = new ArrayList<>();
+    for (Object item : list) {
+      if (item instanceof Map<?, ?> map) {
+        pages.add(new LinkedHashMap<>((Map<String, Object>) map));
+      }
+      if (pages.size() >= 80) {
+        break;
+      }
+    }
+    return pages.isEmpty() ? null : pages;
   }
 
   private void requireFeature() {
@@ -190,6 +229,7 @@ public class ReportTemplateService {
           List.of(
               "certificate",
               "id_card",
+              "admit_card",
               "fee_receipt",
               "salary_slip",
               "report_card",
@@ -280,6 +320,9 @@ public class ReportTemplateService {
     }
     if ("id_card".equals(key)) {
       return idCardTemplate();
+    }
+    if ("admit_card".equals(key)) {
+      return admitCardTemplate();
     }
     if ("attendance_register".equals(key)
         || "admission_register".equals(key)
@@ -506,7 +549,9 @@ public class ReportTemplateService {
   }
 
   private void ensureStudentDocumentTemplates() {
-    upsertCanonicalTemplate("id_card", idCardTemplate(), "context.verifyUrl");
+    refreshIdCardTemplates(idCardTemplate());
+    upsertCanonicalTemplate("admit_card", admitCardTemplate(), "ADMIT CARD");
+    upsertCanonicalTemplate("transfer_certificate", transferCertificateTemplate(), "TRANSFER CERTIFICATE");
     upsertCanonicalTemplate(
         "bonafide",
         certificateTemplate(
@@ -523,6 +568,35 @@ public class ReportTemplateService {
         "context.verifyUrl");
   }
 
+  /** Replace seeded ID cards that are still the old A4 block. Leave a saved CR80 design alone. */
+  private void refreshIdCardTemplates(Map<String, Object> canonical) {
+    boolean hasGlobal = false;
+    for (ReportTemplateEntity row : repo.findByTemplateKey("id_card")) {
+      if (row.getOrganizationId() == null) {
+        hasGlobal = true;
+      }
+      String payload = String.valueOf(row.getPayload());
+      if (payload.contains("cr80-v7")) {
+        continue;
+      }
+      Map<String, Object> copy = new LinkedHashMap<>(canonical);
+      if (row.getOrganizationId() != null) {
+        copy.put("organizationId", row.getOrganizationId());
+      }
+      row.setPayload(copy);
+      row.setUpdatedAt(Instant.now());
+      repo.save(row);
+    }
+    if (!hasGlobal) {
+      ReportTemplateEntity created = new ReportTemplateEntity();
+      created.setOrganizationId(null);
+      created.setTemplateKey("id_card");
+      created.setPayload(canonical);
+      created.setUpdatedAt(Instant.now());
+      repo.save(created);
+    }
+  }
+
   private void upsertCanonicalTemplate(
       String key, Map<String, Object> canonical, String marker) {
     repo.findByOrganizationIdIsNullAndTemplateKey(key)
@@ -535,6 +609,9 @@ public class ReportTemplateService {
                   "id_card".equals(key)
                       && (!payload.contains("photoBase64") || !payload.contains("penNumber"));
               if (hasQr && !needsPhoto) {
+                if ("id_card".equals(key) && !payload.contains("photoDirectUrl")) {
+                  rewriteIdCardPhotoBind(e);
+                }
                 return;
               }
               e.setPayload(canonical);
@@ -551,35 +628,134 @@ public class ReportTemplateService {
             });
   }
 
+  @SuppressWarnings("unchecked")
+  private void rewriteIdCardPhotoBind(ReportTemplateEntity entity) {
+    Map<String, Object> payload = entity.getPayload();
+    if (payload == null) {
+      return;
+    }
+    Object raw = payload.get("elements");
+    if (!(raw instanceof List<?> list)) {
+      return;
+    }
+    List<Object> elements = new ArrayList<>();
+    boolean changed = false;
+    for (Object item : list) {
+      if (!(item instanceof Map<?, ?> source)) {
+        elements.add(item);
+        continue;
+      }
+      Map<String, Object> el = new LinkedHashMap<>((Map<String, Object>) source);
+      String text = String.valueOf(el.getOrDefault("text", ""));
+      String bind = String.valueOf(el.getOrDefault("bind", ""));
+      if (text.contains("student.photoBase64") || "student.photoBase64".equals(bind)) {
+        el.put("text", "{{student.photoDirectUrl}}");
+        el.put("bind", "student.photoDirectUrl");
+        el.putIfAbsent("objectFit", "cover");
+        changed = true;
+      }
+      elements.add(el);
+    }
+    if (!changed) {
+      return;
+    }
+    Map<String, Object> copy = new LinkedHashMap<>(payload);
+    copy.put("elements", elements);
+    entity.setPayload(copy);
+    entity.setUpdatedAt(Instant.now());
+    repo.save(entity);
+  }
+
+  /**
+   * CR80 landscape card. Canvas is 324×204 CSS px (3.375in × 2.125in at 96dpi). The PDF page is
+   * the same size in points, so print at 100% matches a physical ID card.
+   */
   private Map<String, Object> idCardTemplate() {
     Map<String, Object> t = new LinkedHashMap<>();
     t.put("templateKey", "id_card");
     t.put("name", "Student ID Card");
-    t.put("layout", Map.of("width", 794, "height", 1123, "units", "px", "paper", "A4"));
+    t.put("layoutVersion", "cr80-v7");
+    t.put("layout", Map.of("width", 324, "height", 204, "units", "px", "paper", "CR80"));
     t.put(
         "elements",
         List.of(
-            element("heading", "STUDENT IDENTITY CARD", 40, 48, 18, 420, 28),
-            element("box", "", 40, 90, 11, 520, 220),
-            element("image", "{{student.photoBase64}}", 400, 110, 11, 120, 140),
-            element("text", "Name: {{student.name}}", 60, 110, 12, 300, 24),
-            element("text", "Admission No: {{student.admissionNo}}", 60, 140, 11, 300, 24),
-            element("text", "Class: {{student.classSection}}", 60, 170, 11, 300, 24),
-            element("text", "PEN: {{student.penNumber}}", 60, 200, 10, 300, 20),
-            element("text", "APAAR: {{student.apaarId}}", 60, 220, 10, 300, 20),
-            element("text", "Session: {{context.academicSessionId}}", 60, 245, 11, 300, 20),
-            element("text", "Ref: {{document.referenceNo}}", 60, 265, 10, 300, 20),
-            element("qr", "{{context.verifyUrl}}", 420, 270, 11, 100, 100),
-            element("text", "Scan to verify", 420, 380, 9, 120, 20),
-            element(
-                "text",
-                "Organization: {{context.organizationId}} · Branch: {{context.branchId}}",
-                40,
-                420,
-                10,
-                520,
-                24),
-            element("text", "Issued at {{context.issuedAt}}", 40, 450, 10, 400, 24)));
+            styled(element("box", "", 0, 0, 0, 324, 204), "z", 0, "fillColor", "#FFFFFF", "borderWidth", 0),
+            styled(element("box", "", 0, 0, 0, 324, 36), "z", 1, "fillColor", "#0E3A5D", "borderWidth", 0),
+            styled(
+                element("image", "{{context.logoUrl}}", 6, 5, 8, 26, 26),
+                "z", 2,
+                "bind", "context.logoUrl",
+                "fillColor", "#FFFFFF",
+                "borderRadius", 4,
+                "borderWidth", 0,
+                "objectFit", "cover"),
+            styled(
+                element("heading", "{{context.organizationName}}", 38, 5, 10, 278, 14),
+                "z", 2, "bold", true, "color", "#FFFFFF"),
+            styled(
+                element(
+                    "text",
+                    "{{context.branchName}}  ·  {{context.sessionLabel}}",
+                    38,
+                    20,
+                    7,
+                    278,
+                    12),
+                "z", 2, "color", "#E2E8F0"),
+            styled(
+                element("image", "{{student.photoDirectUrl}}", 8, 42, 8, 48, 64),
+                "z", 2,
+                "bind", "student.photoDirectUrl",
+                "objectFit", "cover",
+                "borderWidth", 1,
+                "borderColor", "#CBD5E1",
+                "borderRadius", 4),
+            styled(
+                element("text", "{{student.name}}", 62, 52, 11, 180, 14),
+                "z", 2, "bold", true, "color", "#0F172A"),
+            styled(
+                element("id-fields", "", 62, 68, 8, 182, 84),
+                "z", 2, "bind", "student.idCardLines", "color", "#1E293B"),
+            styled(
+                element("box", "", 250, 68, 0, 66, 68),
+                "z", 2,
+                "fillColor", "#FFFFFF",
+                "borderWidth", 1,
+                "borderColor", "#E2E8F0",
+                "borderRadius", 6),
+            styled(
+                element("qr", "{{context.verifyUrl}}", 258, 74, 8, 48, 48),
+                "z", 3, "bind", "context.verifyUrl", "quietZone", 4),
+            styled(
+                element("text", "Scan to verify", 250, 122, 7, 66, 12),
+                "z", 3, "align", "center", "color", "#1E293B"),
+            styled(element("box", "", 0, 156, 0, 324, 48), "z", 1, "fillColor", "#F4F7FB", "borderWidth", 0),
+            styled(
+                element("text", "Issued  {{context.issuedAt}}", 8, 164, 7, 140, 12),
+                "z", 2, "color", "#1E293B"),
+            styled(
+                element("text", "Valid  {{context.expiresAt}}", 8, 188, 7, 140, 12),
+                "z", 2, "color", "#1E293B"),
+            styled(element("line", "", 168, 176, 6, 70, 2), "z", 2, "color", "#334155", "borderWidth", 0.8),
+            styled(
+                element("text", "Principal", 156, 186, 6, 94, 12),
+                "z", 2, "align", "center", "color", "#334155"),
+            styled(
+                element("box", "", 286, 164, 0, 26, 26),
+                "z", 2,
+                "fillColor", "#FFFFFF",
+                "borderWidth", 1,
+                "borderColor", "#94A3B8",
+                "borderRadius", 13),
+            styled(
+                element("text", "Seal", 286, 171, 6, 26, 12),
+                "z", 3, "align", "center", "color", "#334155"),
+            styled(
+                element("box", "", 1, 1, 0, 322, 202),
+                "z", 9,
+                "borderWidth", 1.25,
+                "borderColor", "#C5D0DC",
+                "borderRadius", 10)));
     t.put("charts", List.of());
     t.put("filters", List.of());
     t.put("calculatedFields", List.of());
@@ -641,6 +817,30 @@ public class ReportTemplateService {
     return normalizeTemplate(t);
   }
 
+  private Map<String, Object> admitCardTemplate() {
+    Map<String, Object> t = new LinkedHashMap<>();
+    t.put("templateKey", "admit_card");
+    t.put("name", "Admit Card");
+    t.put("layout", Map.of("width", 794, "height", 1123, "units", "px", "paper", "A4"));
+    t.put(
+        "elements",
+        List.of(
+            element("heading", "ADMIT CARD", 40, 48, 18, 420, 28),
+            element("text", "Name: {{student.name}}", 40, 110, 12, 420, 24),
+            element("text", "Admission No: {{student.admissionNo}}", 40, 140, 12, 420, 24),
+            element("text", "Class: {{student.classSection}}", 40, 170, 12, 420, 24),
+            element("text", "Exam: {{exam.name}}", 40, 210, 12, 420, 24),
+            element("text", "Roll No: {{student.rollNo}}", 40, 240, 12, 420, 24),
+            element("text", "Session: {{context.academicSessionId}}", 40, 280, 11, 420, 24),
+            element("text", "Bring this card to the examination hall.", 40, 330, 11, 480, 24),
+            element("qr", "{{context.verifyUrl}}", 40, 380, 11, 100, 100)));
+    t.put("charts", List.of());
+    t.put("filters", List.of());
+    t.put("calculatedFields", List.of());
+    t.put("schedule", Map.of("enabled", false, "channels", List.of("EMAIL")));
+    return normalizeTemplate(t);
+  }
+
   private static Map<String, Object> element(
       String type, String text, int x, int y, int fontSize, int width, int height) {
     Map<String, Object> el = new LinkedHashMap<>();
@@ -651,6 +851,13 @@ public class ReportTemplateService {
     el.put("fontSize", fontSize);
     el.put("width", width);
     el.put("height", height);
+    return el;
+  }
+
+  private static Map<String, Object> styled(Map<String, Object> el, Object... pairs) {
+    for (int i = 0; i + 1 < pairs.length; i += 2) {
+      el.put(String.valueOf(pairs[i]), pairs[i + 1]);
+    }
     return el;
   }
 }

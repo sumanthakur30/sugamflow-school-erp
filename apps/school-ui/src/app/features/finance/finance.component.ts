@@ -6,15 +6,14 @@ import { Subscription, forkJoin, of } from 'rxjs';
 import { catchError } from 'rxjs/operators';
 import { ApiService } from '../../core/api.service';
 import { TenantContextService } from '../../core/tenant-context.service';
+import { isDemoOrganization } from '../../core/tenant-context.util';
 import { ModuleBootstrapService } from '../../core/module-bootstrap.service';
 import { ListToolbarComponent } from '../../shared/list-toolbar/list-toolbar.component';
 import { ListPagerComponent } from '../../shared/list-toolbar/list-pager.component';
 import { ListSortOption, sortRows } from '../../shared/list-toolbar/list-controls';
 import { StudentLookupComponent } from '../../shared/student-lookup/student-lookup.component';
 import { StudentLookupRow } from '../../shared/student-lookup/student-lookup.models';
-import { FinanceKpiCardComponent } from '../../shared/finance-ui/finance-kpi-card.component';
-import { FinanceBarChartComponent } from '../../shared/finance-ui/finance-bar-chart.component';
-import { FinanceDonutChartComponent } from '../../shared/finance-ui/finance-donut-chart.component';
+import { FinanceTrendChartComponent } from '../../shared/finance-ui/finance-trend-chart.component';
 import {
   ActivityItem,
   ChartSlice,
@@ -22,12 +21,15 @@ import {
   FinanceKpi,
   OutstandingRow,
   PaymentModeCard,
+  TrendPoint,
 } from '../../shared/finance-ui/finance-dashboard.models';
 import {
   buildActivity,
   buildAlerts,
   buildFinanceKpis,
   buildOutstanding,
+  collectionTrend,
+  executiveNumbers,
   feeHeadSlices,
   formatInr,
   monthlyCollectionSeries,
@@ -56,9 +58,7 @@ export type FinanceTab =
     ListToolbarComponent,
     ListPagerComponent,
     StudentLookupComponent,
-    FinanceKpiCardComponent,
-    FinanceBarChartComponent,
-    FinanceDonutChartComponent,
+    FinanceTrendChartComponent,
   ],
   templateUrl: './finance.component.html',
   styleUrls: [
@@ -82,6 +82,7 @@ export class FinanceComponent implements OnInit, OnDestroy {
   tab: FinanceTab = 'overview';
   globalQ = '';
 
+  readonly demoTenant = isDemoOrganization();
   paymentGatewayEnabled = false;
   accountingEnabled = false;
   paymentMode = 'simulate';
@@ -89,6 +90,13 @@ export class FinanceComponent implements OnInit, OnDestroy {
   heads: any[] = [];
   structures: any[] = [];
   concessions: any[] = [];
+  siblingEnabled = true;
+  siblingStacking = 'STUDENT_THEN_SIBLING';
+  siblingHeads = 'TUITION,ANNUAL';
+  siblingRulesText = '1,PERCENT,0\n2,PERCENT,10\n3,PERCENT,15';
+  siblingSubsequent = 15;
+  siblingMessage = '';
+  feeAdjustments: any[] = [];
   providers: any[] = [];
   transactions: any[] = [];
   collections: any[] = [];
@@ -104,9 +112,22 @@ export class FinanceComponent implements OnInit, OnDestroy {
   modeCards: PaymentModeCard[] = [];
   alerts: FinanceAlert[] = [];
   activity: ActivityItem[] = [];
+  trend: TrendPoint[] = [];
+  range: 'year' | 'month' = 'year';
+  snapshot = {
+    totalCollected: 0,
+    pendingFees: 0,
+    todayCollection: 0,
+    onlineAmount: 0,
+    offlineAmount: 0,
+    monthDelta: 0,
+    progress: 0,
+  };
 
   headsQ = '';
   structuresQ = '';
+  structureClassQ = '';
+  structureSessionQ = '';
   dueQ = '';
   duePageIndex = 0;
   duePageSize = 10;
@@ -165,8 +186,12 @@ export class FinanceComponent implements OnInit, OnDestroy {
     classSection: '',
     academicSessionId: '',
     notes: '',
-    linesText: 'TUITION,12000,M\nLIBRARY,500,Y',
+    linesText: '',
   };
+  structureLines: Array<{ headKey: string; amount: string; frequency: string; active: boolean }> = [
+    { headKey: '', amount: '', frequency: 'M', active: true },
+  ];
+  private writingStructureLines = false;
   editingStructureKey: string | null = null;
 
   adjustDraft = {
@@ -334,6 +359,8 @@ export class FinanceComponent implements OnInit, OnDestroy {
         this.heads = boot.heads ?? [];
         this.structures = boot.structures ?? [];
         this.concessions = boot.concessions ?? [];
+        this.syncSiblingDraft();
+        this.loadAdjustments();
         this.providers = boot.providers ?? [];
         if (this.providers.length) {
           const keys = this.providers.map((p: any) => p.definitionKey || p.payload?.definitionKey);
@@ -380,6 +407,68 @@ export class FinanceComponent implements OnInit, OnDestroy {
       dueStudents: new Set(this.outstanding.map((r) => r.admissionNo)).size,
     });
     this.activity = buildActivity(this.collections, this.transactions, this.heads);
+    this.snapshot = executiveNumbers({
+      collections: this.collections,
+      transactions: this.transactions,
+    });
+    this.trend = collectionTrend(this.collections, this.range);
+  }
+
+  setRange(range: 'year' | 'month'): void {
+    this.range = range;
+    this.trend = collectionTrend(this.collections, range);
+  }
+
+  exportOverview(): void {
+    const lines = [
+      'metric,value',
+      `Total collected,${this.snapshot.totalCollected}`,
+      `Pending,${this.snapshot.pendingFees}`,
+      `Today,${this.snapshot.todayCollection}`,
+      `Online,${this.snapshot.onlineAmount}`,
+      `Cash,${this.snapshot.offlineAmount}`,
+      '',
+      'period,collected,pending',
+      ...this.trend.map((p) => `${p.label},${p.collected},${p.pending}`),
+      '',
+      'student,class,pending',
+      ...this.outstanding.slice(0, 20).map((r) => `${r.studentName},${r.classSection},${r.dueAmount}`),
+    ];
+    const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'fee-dashboard.csv';
+    link.click();
+    URL.revokeObjectURL(url);
+  }
+
+  printOverview(): void {
+    window.print();
+  }
+
+  remind(row: OutstandingRow): void {
+    this.router.navigate(['/admin/comms'], {
+      queryParams: { student: row.studentName, mobile: row.mobile },
+    });
+  }
+
+  headWidth(value: number): number {
+    const max = Math.max(1, ...this.headSlices.slice(0, 5).map((s) => s.value));
+    return Math.round((value / max) * 100);
+  }
+
+  sparkline(): string {
+    const values = this.trend.map((p) => p.collected);
+    const max = Math.max(1, ...values);
+    if (!values.length) return '';
+    return values
+      .map((v, i) => {
+        const x = (i / Math.max(1, values.length - 1)) * 88;
+        const y = 28 - (v / max) * 24;
+        return `${x},${y}`;
+      })
+      .join(' ');
   }
 
   applyGlobalSearch(): void {
@@ -441,16 +530,24 @@ export class FinanceComponent implements OnInit, OnDestroy {
 
   get filteredStructures(): any[] {
     const q = this.structuresQ.trim().toLowerCase();
-    if (!q) return this.structures;
+    const classQ = this.structureClassQ.trim().toLowerCase();
+    const sessionQ = this.structureSessionQ.trim().toLowerCase();
     return this.structures.filter((s) => {
       const p = this.payload(s);
+      const elig = p.eligibility || {};
+      const className = String(elig.classSection || '').toLowerCase();
+      const session = String(elig.academicSessionId || '').toLowerCase();
+      if (classQ && !className.includes(classQ)) return false;
+      if (sessionQ && !session.includes(sessionQ)) return false;
+      if (!q) return true;
       return (
         String(p.name || '')
           .toLowerCase()
           .includes(q) ||
         String(s.definitionKey || '')
           .toLowerCase()
-          .includes(q)
+          .includes(q) ||
+        className.includes(q)
       );
     });
   }
@@ -621,6 +718,18 @@ export class FinanceComponent implements OnInit, OnDestroy {
     this.editingStructureKey = s.definitionKey || p.definitionKey || null;
     const elig = p.eligibility || {};
     const lines = Array.isArray(p.lines) ? p.lines : [];
+    this.structureLines = lines.length
+      ? lines.map((l: any) => ({
+          headKey: String(l.headKey || ''),
+          amount: String(l.amount ?? ''),
+          frequency: String(l.frequency || 'Y'),
+          active: l.active !== false && String(l.status || '').toUpperCase() !== 'INACTIVE',
+        }))
+      : [{ headKey: '', amount: '', frequency: 'M', active: true }];
+    this.structureLines = [
+      ...this.structureLines,
+      { headKey: '', amount: '', frequency: 'M', active: true },
+    ];
     this.structureDraft = {
       definitionKey: String(this.editingStructureKey || ''),
       name: String(p.name || ''),
@@ -628,9 +737,7 @@ export class FinanceComponent implements OnInit, OnDestroy {
       classSection: String(elig.classSection || ''),
       academicSessionId: String(elig.academicSessionId || ''),
       notes: String(p.notes || ''),
-      linesText: lines
-        .map((l: any) => `${l.headKey},${l.amount},${l.frequency || 'Y'}`)
-        .join('\n'),
+      linesText: this.formatStructureLines(),
     };
     this.setTab('structures');
     queueMicrotask(() =>
@@ -638,8 +745,19 @@ export class FinanceComponent implements OnInit, OnDestroy {
     );
   }
 
+  copyStructure(s: any): void {
+    this.editStructure(s);
+    this.editingStructureKey = null;
+    this.structureDraft = {
+      ...this.structureDraft,
+      definitionKey: `${this.structureDraft.definitionKey}_COPY`,
+      name: `${this.structureDraft.name} copy`,
+    };
+  }
+
   resetStructureDraft(): void {
     this.editingStructureKey = null;
+    this.structureLines = [{ headKey: '', amount: '', frequency: 'M', active: true }];
     this.structureDraft = {
       definitionKey: '',
       name: '',
@@ -647,8 +765,30 @@ export class FinanceComponent implements OnInit, OnDestroy {
       classSection: '',
       academicSessionId: '',
       notes: '',
-      linesText: 'TUITION,12000,M\nLIBRARY,500,Y',
+      linesText: '',
     };
+  }
+
+  onStructureLineChange(
+    index: number,
+    field: 'headKey' | 'amount' | 'frequency' | 'active',
+    value: string | boolean,
+  ): void {
+    const row = this.structureLines[index];
+    if (!row) return;
+    if (field === 'active') row.active = !!value;
+    else row[field] = String(value);
+    this.writingStructureLines = true;
+    this.structureDraft.linesText = this.formatStructureLines();
+    this.writingStructureLines = false;
+    if (index === this.structureLines.length - 1 && row.headKey.trim()) {
+      this.structureLines = [...this.structureLines, { headKey: '', amount: '', frequency: 'M', active: true }];
+    }
+  }
+
+  onStructureTextChange(): void {
+    if (this.writingStructureLines) return;
+    this.structureLines = this.parseStructureLines(this.structureDraft.linesText);
   }
 
   saveStructure(): void {
@@ -657,22 +797,33 @@ export class FinanceComponent implements OnInit, OnDestroy {
       this.error = 'Structure key and name are required';
       return;
     }
-    const lines = this.structureDraft.linesText
-      .split(/\r?\n/)
-      .map((row) => row.trim())
-      .filter(Boolean)
-      .map((row) => {
-        const [headKey, amount, frequency] = row.split(',').map((x) => x.trim());
-        return {
-          headKey: (headKey || '').toUpperCase(),
-          amount: Number(amount || 0),
-          frequency: (frequency || 'Y').toUpperCase(),
-          optional: false,
-        };
-      })
-      .filter((l) => l.headKey && l.amount > 0);
-    if (!lines.length) {
-      this.error = 'Add at least one line as HEAD,amount,frequency';
+    const lines = this.structureLines
+      .map((line) => ({
+        headKey: line.headKey.trim().toUpperCase(),
+        amount: Number(line.amount || 0),
+        frequency: (line.frequency || 'M').trim().toUpperCase() || 'M',
+        active: line.active !== false,
+        optional: false,
+      }))
+      .filter((line) => line.headKey);
+    const seen = new Set<string>();
+    for (const line of lines) {
+      if (seen.has(line.headKey)) {
+        this.error = `Duplicate fee head ${line.headKey}`;
+        return;
+      }
+      seen.add(line.headKey);
+      if (line.amount < 0 || Number.isNaN(line.amount)) {
+        this.error = `Amount for ${line.headKey} cannot be negative`;
+        return;
+      }
+      if (line.active && line.amount <= 0) {
+        this.error = `Active fee head ${line.headKey} needs an amount greater than zero`;
+        return;
+      }
+    }
+    if (!lines.some((line) => line.active)) {
+      this.error = 'Add at least one active fee head';
       return;
     }
     this.busy = true;
@@ -701,6 +852,37 @@ export class FinanceComponent implements OnInit, OnDestroy {
           this.error = err?.error?.message ?? 'Save structure failed';
         },
       });
+  }
+
+  private formatStructureLines(): string {
+    return this.structureLines
+      .filter((line) => line.headKey.trim() || String(line.amount).trim())
+      .map((line) => {
+        const status = line.active ? '' : ',INACTIVE';
+        return `${line.headKey.trim().toUpperCase()},${line.amount},${(line.frequency || 'M').toUpperCase()}${status}`;
+      })
+      .join('\n');
+  }
+
+  private parseStructureLines(
+    text: string,
+  ): Array<{ headKey: string; amount: string; frequency: string; active: boolean }> {
+    const rows = text
+      .split(/\r?\n/)
+      .map((row) => row.trim())
+      .filter(Boolean)
+      .map((row) => {
+        const [headKey, amount, frequency, status] = row.split(',').map((part) => part.trim());
+        const flag = String(status || '').toUpperCase();
+        return {
+          headKey: headKey || '',
+          amount: amount || '',
+          frequency: (frequency || 'M').toUpperCase(),
+          active: flag !== 'INACTIVE' && flag !== 'FALSE',
+        };
+      });
+    rows.push({ headKey: '', amount: '', frequency: 'M', active: true });
+    return rows;
   }
 
   postAdjustment(): void {
@@ -763,7 +945,37 @@ export class FinanceComponent implements OnInit, OnDestroy {
   }
 
   reminderStub(row: OutstandingRow, channel: string): void {
-    this.status = `${channel} reminder queued for ${row.studentName} (${row.mobile}) — wire notification template next.`;
+    const admissionNo = row.admissionNo && row.admissionNo !== '—' ? row.admissionNo : '';
+    if (!admissionNo) {
+      this.error = 'This demand has no admission number, so a reminder cannot be queued';
+      return;
+    }
+    this.busy = true;
+    this.error = '';
+    this.api
+      .post<any>('/api/fee/due-reminders/run', {
+        admissionNo,
+        channel: channel.toUpperCase() === 'WHATSAPP' ? 'WHATSAPP' : channel.toUpperCase(),
+      })
+      .subscribe({
+        next: (result) => {
+          this.busy = false;
+          if (result?.disabled) {
+            this.status = 'Due reminders are turned off in fee settings';
+            return;
+          }
+          const reminded = Number(result?.reminded || 0);
+          const skipped = Number(result?.skipped || 0);
+          this.status =
+            reminded > 0
+              ? `${channel} reminder queued for ${row.studentName} (${reminded} demand${reminded === 1 ? '' : 's'})`
+              : `No reminder queued for ${row.studentName}. ${skipped} demand${skipped === 1 ? '' : 's'} skipped.`;
+        },
+        error: (err) => {
+          this.busy = false;
+          this.error = err?.error?.message ?? 'Could not queue the fee reminder';
+        },
+      });
   }
 
   saveHead(): void {
@@ -1018,6 +1230,79 @@ export class FinanceComponent implements OnInit, OnDestroy {
     return this.collections
       .filter((c) => String(c.status).toUpperCase() === 'APPROVED')
       .slice(0, 8);
+  }
+
+  syncSiblingDraft(): void {
+    const row = this.concessions.find((c) => c.definitionKey === 'sibling_policy');
+    const payload = row ? this.payload(row) : null;
+    if (!payload) return;
+    this.siblingEnabled = payload.enabled !== false;
+    this.siblingStacking = payload.stacking || 'STUDENT_THEN_SIBLING';
+    this.siblingHeads = (payload.appliesToHeads || []).join(',');
+    this.siblingSubsequent = Number(payload.subsequent?.value ?? 15);
+    const rules = payload.childRules || [];
+    if (rules.length) {
+      this.siblingRulesText = rules
+        .map((rule: any) => `${rule.order},${rule.type},${rule.value}`)
+        .join('\n');
+    }
+  }
+
+  saveSiblingPolicy(): void {
+    const childRules = this.siblingRulesText
+      .split(/\r?\n/)
+      .map((row) => row.trim())
+      .filter(Boolean)
+      .map((row) => {
+        const [order, type, value] = row.split(',').map((part) => part.trim());
+        return { order: Number(order), type: (type || 'PERCENT').toUpperCase(), value: Number(value || 0) };
+      })
+      .filter((rule) => rule.order > 0);
+    this.busy = true;
+    this.error = '';
+    this.siblingMessage = '';
+    this.api
+      .put('/api/fee/finance/concessions/sibling_policy', {
+        definitionKey: 'sibling_policy',
+        name: 'Sibling concession by child order',
+        kind: 'SIBLING',
+        enabled: this.siblingEnabled,
+        stacking: this.siblingStacking,
+        maxDiscountPercent: 100,
+        appliesToHeads: this.siblingHeads
+          .split(',')
+          .map((head) => head.trim().toUpperCase())
+          .filter(Boolean),
+        childRules,
+        subsequent: { type: 'PERCENT', value: Number(this.siblingSubsequent || 0) },
+      })
+      .subscribe({
+        next: () => {
+          this.busy = false;
+          this.siblingMessage = 'Sibling concession saved. It applies to the next demand, not to receipts already issued.';
+          this.reload();
+        },
+        error: (err) => {
+          this.busy = false;
+          this.error = err?.error?.message ?? 'Could not save sibling concession';
+        },
+      });
+  }
+
+  loadAdjustments(): void {
+    this.api.get<any[]>('/api/fee/finance/adjustments').subscribe({
+      next: (rows) => (this.feeAdjustments = rows ?? []),
+      error: () => (this.feeAdjustments = []),
+    });
+  }
+
+  decideAdjustment(row: any, status: string): void {
+    this.api
+      .post(`/api/fee/finance/adjustments/${row.id}/decision`, { status, reason: row.reason })
+      .subscribe({
+        next: () => this.loadAdjustments(),
+        error: (err) => (this.error = err?.error?.message ?? 'Could not update the adjustment'),
+      });
   }
 
   exportHeadsCsv(): void {

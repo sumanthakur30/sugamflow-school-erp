@@ -2,15 +2,20 @@ package com.sugamflow.school.academic.service;
 
 import com.sugamflow.school.academic.persistence.entity.TimetablePeriodEntity;
 import com.sugamflow.school.academic.persistence.entity.TimetableSlotEntity;
+import com.sugamflow.school.academic.persistence.entity.TimetableSubstituteEntity;
 import com.sugamflow.school.academic.persistence.repo.ClassSectionRepository;
 import com.sugamflow.school.academic.persistence.repo.TimetablePeriodRepository;
 import com.sugamflow.school.academic.persistence.repo.TimetableSlotRepository;
+import com.sugamflow.school.academic.persistence.repo.TimetableSubstituteRepository;
 import com.sugamflow.school.academic.web.AcademicException;
 import com.sugamflow.school.common.security.PersonaRoles;
 import com.sugamflow.school.common.tenant.TenantContext;
 import com.sugamflow.school.common.tenant.TenantScope;
 import java.time.Instant;
+import java.time.LocalDate;
+import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -27,16 +32,19 @@ public class TimetableService {
   private final TimetableSlotRepository slots;
   private final ClassSectionRepository sections;
   private final TimetableGenerationService generation;
+  private final TimetableSubstituteRepository substitutes;
 
   public TimetableService(
       TimetablePeriodRepository periods,
       TimetableSlotRepository slots,
       ClassSectionRepository sections,
-      TimetableGenerationService generation) {
+      TimetableGenerationService generation,
+      TimetableSubstituteRepository substitutes) {
     this.periods = periods;
     this.slots = slots;
     this.sections = sections;
     this.generation = generation;
+    this.substitutes = substitutes;
   }
 
   // ---- periods --------------------------------------------------------------
@@ -120,10 +128,11 @@ public class TimetableService {
     if (sectionId == null) {
       throw AcademicException.badRequest("sectionId is required");
     }
-    return slots
-        .findByOrganizationIdAndSectionIdOrderByDayOfWeekAsc(scope.organizationId(), sectionId)
-        .stream()
-        .map(AcademicMapper::slotToMap)
+    List<TimetableSlotEntity> rows =
+        slots.findByOrganizationIdAndSectionIdOrderByDayOfWeekAsc(scope.organizationId(), sectionId);
+    Map<UUID, TimetableSubstituteEntity> nextCover = nextCovers(rows);
+    return rows.stream()
+        .map(slot -> withCover(AcademicMapper.slotToMap(slot), nextCover.get(slot.getId())))
         .collect(Collectors.toList());
   }
 
@@ -137,11 +146,68 @@ public class TimetableService {
     if (teacher == null || teacher.isBlank()) {
       return List.of();
     }
-    return slots
-        .findByOrganizationIdAndTeacherUsernameOrderByDayOfWeekAsc(scope.organizationId(), teacher)
-        .stream()
-        .map(AcademicMapper::slotToMap)
-        .collect(Collectors.toList());
+    List<Map<String, Object>> mine =
+        slots
+            .findByOrganizationIdAndTeacherUsernameOrderByDayOfWeekAsc(
+                scope.organizationId(), teacher)
+            .stream()
+            .map(AcademicMapper::slotToMap)
+            .collect(Collectors.toList());
+    LocalDate today = LocalDate.now();
+    for (TimetableSubstituteEntity cover :
+        substitutes.findByOrganizationIdAndTeacherUsernameAndSubstituteDate(
+            scope.organizationId(), teacher, today)) {
+      slots
+          .findByIdAndOrganizationId(cover.getSlotId(), scope.organizationId())
+          .ifPresent(
+              slot -> {
+                Map<String, Object> mapped = withCover(AcademicMapper.slotToMap(slot), cover);
+                mapped.put("substitute", true);
+                mine.add(mapped);
+              });
+    }
+    return mine;
+  }
+
+  /** Covers one period on one date. The weekly teacher on the slot is left as-is. */
+  @Transactional
+  public Map<String, Object> assignSubstitute(UUID slotId, Map<String, Object> body) {
+    TenantScope scope = requireStaff();
+    TimetableSlotEntity slot =
+        slots
+            .findByIdAndOrganizationId(slotId, scope.organizationId())
+            .orElseThrow(() -> AcademicException.badRequest("Unknown timetable slot"));
+    String teacher = body == null ? null : string(body.get("teacherUsername"));
+    LocalDate date = date(body == null ? null : body.get("substituteDate"));
+    if (teacher == null || teacher.isBlank() || date == null) {
+      throw AcademicException.badRequest("teacherUsername and substituteDate are required");
+    }
+    if (date.getDayOfWeek().getValue() != slot.getDayOfWeek()) {
+      throw AcademicException.badRequest(
+          "Substitute date must fall on the same weekday as this period");
+    }
+    if (teacher.equalsIgnoreCase(slot.getTeacherUsername())) {
+      throw AcademicException.badRequest("Pick a teacher other than the weekly teacher");
+    }
+    assertSubstituteFree(scope, slot, teacher, date);
+    Instant now = Instant.now();
+    TimetableSubstituteEntity row =
+        substitutes
+            .findBySlotIdAndSubstituteDate(slot.getId(), date)
+            .orElseGet(
+                () -> {
+                  TimetableSubstituteEntity created = new TimetableSubstituteEntity();
+                  created.setId(UUID.randomUUID());
+                  created.setOrganizationId(scope.organizationId());
+                  created.setSlotId(slot.getId());
+                  created.setCreatedAt(now);
+                  return created;
+                });
+    row.setSubstituteDate(date);
+    row.setTeacherUsername(teacher.trim());
+    row.setNote(string(body.get("note")));
+    row.setUpdatedAt(now);
+    return withCover(AcademicMapper.slotToMap(slot), substitutes.save(row));
   }
 
   /** Replaces the entire weekly grid for a section in one call. */
@@ -207,7 +273,75 @@ public class TimetableService {
         .collect(Collectors.toList());
   }
 
-  // ---- helpers --------------------------------------------------------------
+  private Map<UUID, TimetableSubstituteEntity> nextCovers(List<TimetableSlotEntity> rows) {
+    Map<UUID, TimetableSubstituteEntity> next = new LinkedHashMap<>();
+    if (rows.isEmpty()) {
+      return next;
+    }
+    List<UUID> ids = rows.stream().map(TimetableSlotEntity::getId).toList();
+    for (TimetableSubstituteEntity cover :
+        substitutes.findBySlotIdInAndSubstituteDateGreaterThanEqual(ids, LocalDate.now())) {
+      TimetableSubstituteEntity existing = next.get(cover.getSlotId());
+      if (existing == null || cover.getSubstituteDate().isBefore(existing.getSubstituteDate())) {
+        next.put(cover.getSlotId(), cover);
+      }
+    }
+    return next;
+  }
+
+  private void assertSubstituteFree(
+      TenantScope scope, TimetableSlotEntity slot, String teacher, LocalDate date) {
+    for (TimetableSlotEntity other :
+        slots.findByOrganizationIdAndDayOfWeekAndPeriodId(
+            scope.organizationId(), slot.getDayOfWeek(), slot.getPeriodId())) {
+      if (other.getId().equals(slot.getId())) {
+        continue;
+      }
+      if (teacher.equalsIgnoreCase(other.getTeacherUsername())) {
+        throw AcademicException.badRequest(
+            "That teacher already has this period on the weekly timetable");
+      }
+      substitutes
+          .findBySlotIdAndSubstituteDate(other.getId(), date)
+          .filter(cover -> teacher.equalsIgnoreCase(cover.getTeacherUsername()))
+          .ifPresent(
+              cover -> {
+                throw AcademicException.badRequest(
+                    "That teacher is already covering another class in this period");
+              });
+    }
+  }
+
+  private static Map<String, Object> withCover(
+      Map<String, Object> slot, TimetableSubstituteEntity cover) {
+    if (cover == null) {
+      return slot;
+    }
+    slot.put("substituteDate", cover.getSubstituteDate().toString());
+    slot.put("substituteTeacher", cover.getTeacherUsername());
+    slot.put("substituteNote", cover.getNote());
+    return slot;
+  }
+
+  private static String string(Object value) {
+    if (value == null) {
+      return null;
+    }
+    String text = String.valueOf(value).trim();
+    return text.isEmpty() || "null".equalsIgnoreCase(text) ? null : text;
+  }
+
+  private static LocalDate date(Object value) {
+    String text = string(value);
+    if (text == null) {
+      return null;
+    }
+    try {
+      return LocalDate.parse(text);
+    } catch (DateTimeParseException ex) {
+      throw AcademicException.badRequest("substituteDate must be yyyy-MM-dd");
+    }
+  }
 
   private void assertPeriodNoAvailable(TenantScope scope, int periodNo, UUID exceptId) {
     Optional<TimetablePeriodEntity> existing =

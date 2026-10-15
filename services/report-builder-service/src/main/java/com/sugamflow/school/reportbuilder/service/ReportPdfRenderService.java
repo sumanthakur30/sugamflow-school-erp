@@ -7,6 +7,7 @@ import com.lowagie.text.FontFactory;
 import com.lowagie.text.Image;
 import com.lowagie.text.PageSize;
 import com.lowagie.text.Phrase;
+import com.lowagie.text.Rectangle;
 import com.lowagie.text.pdf.ColumnText;
 import com.lowagie.text.pdf.PdfContentByte;
 import com.lowagie.text.pdf.PdfWriter;
@@ -18,10 +19,15 @@ import com.google.zxing.qrcode.QRCodeWriter;
 import java.awt.Color;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayOutputStream;
+import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -29,19 +35,27 @@ import javax.imageio.ImageIO;
 import org.springframework.stereotype.Service;
 
 /**
- * Template-driven PDF render. Layout/elements come from report template JSON — no school-specific
- * hardcoding. Uses canvas coordinates (layout width/height) scaled onto A4.
+ * Template-driven PDF render. Layout/elements come from report template JSON. Canvas coordinates
+ * scale onto the page named by {@code layout.paper}. CR80 is a landscape ID card (3.375in x
+ * 2.125in). Every other paper stays A4 so existing certificates keep their page.
  */
 @Service
 public class ReportPdfRenderService {
 
   private static final Pattern PLACEHOLDER = Pattern.compile("\\{\\{([^}]+)\\}\\}");
-  private static final float PAGE_W = PageSize.A4.getWidth();
-  private static final float PAGE_H = PageSize.A4.getHeight();
+  /** ISO/IEC 7810 ID-1, landscape. 3.375in x 2.125in in PDF points. */
+  static final float CR80_WIDTH = 3.375f * 72f;
+  static final float CR80_HEIGHT = 2.125f * 72f;
 
   public Map<String, Object> render(Map<String, Object> template, Map<String, Object> data) {
+    return renderMany(template, List.of(data != null ? data : Map.of()));
+  }
+
+  /** One page per data context. The template is rendered again for each record and is not modified. */
+  public Map<String, Object> renderMany(Map<String, Object> template, List<Map<String, Object>> pages) {
     String templateKey = String.valueOf(template.getOrDefault("templateKey", "report"));
-    byte[] pdf = toPdf(template, data != null ? data : Map.of());
+    List<Map<String, Object>> safe = pages == null || pages.isEmpty() ? List.of(Map.of()) : pages;
+    byte[] pdf = toPdf(template, safe);
     String base64 = java.util.Base64.getEncoder().encodeToString(pdf);
     Map<String, Object> out = new LinkedHashMap<>();
     out.put("templateKey", templateKey);
@@ -49,43 +63,25 @@ public class ReportPdfRenderService {
     out.put("fileName", templateKey + ".pdf");
     out.put("contentBase64", base64);
     out.put("byteLength", pdf.length);
+    out.put("pageCount", safe.size());
     return out;
   }
 
-  private byte[] toPdf(Map<String, Object> template, Map<String, Object> data) {
+  private byte[] toPdf(Map<String, Object> template, List<Map<String, Object>> pages) {
     ByteArrayOutputStream baos = new ByteArrayOutputStream();
-    Document document = new Document(PageSize.A4, 0, 0, 0, 0);
+    Rectangle page = pageSize(template);
+    Document document = new Document(page, 0, 0, 0, 0);
     try {
       PdfWriter writer = PdfWriter.getInstance(document, baos);
       document.open();
       PdfContentByte cb = writer.getDirectContent();
-
-      float layoutW = floatOr(layout(template).get("width"), 794f);
-      float layoutH = floatOr(layout(template).get("height"), 1123f);
-      float scaleX = PAGE_W / Math.max(layoutW, 1f);
-      float scaleY = PAGE_H / Math.max(layoutH, 1f);
-
-      List<Map<String, Object>> elements = elements(template);
-      elements.sort(Comparator.comparingInt(e -> intOr(e.get("y"), 0)));
-
-      for (Map<String, Object> el : elements) {
-        String type = String.valueOf(el.getOrDefault("type", "text")).toLowerCase();
-        float x = floatOr(el.get("x"), 40f) * scaleX;
-        float yTop = floatOr(el.get("y"), 40f) * scaleY;
-        float w = floatOr(el.get("width"), 200f) * scaleX;
-        float h = floatOr(el.get("height"), 20f) * scaleY;
-        // PDF origin is bottom-left; designer uses top-left.
-        float yPdf = PAGE_H - yTop;
-
-        switch (type) {
-          case "line" -> drawLine(cb, x, yPdf, w);
-          case "box" -> drawBox(cb, x, yPdf - h, w, h, false);
-          case "image" -> drawImage(cb, el, data, x, yPdf - h, w, h);
-          case "qr" -> drawQr(cb, el, data, x, yPdf - h, w, h);
-          case "heading", "text", "field" ->
-              drawText(cb, el, data, x, yPdf - h * 0.25f, w, h, scaleY);
-          default -> drawText(cb, el, data, x, yPdf - h * 0.25f, w, h, scaleY);
+      boolean first = true;
+      for (Map<String, Object> data : pages) {
+        if (!first) {
+          document.newPage();
         }
+        first = false;
+        drawPage(cb, template, data != null ? data : Map.of(), page.getWidth(), page.getHeight());
       }
       document.close();
       return baos.toByteArray();
@@ -94,13 +90,81 @@ public class ReportPdfRenderService {
     }
   }
 
-  private void drawLine(PdfContentByte cb, float x, float y, float w) {
+  static Rectangle pageSize(Map<String, Object> template) {
+    String paper = String.valueOf(layout(template).getOrDefault("paper", "A4"));
+    if ("CR80".equalsIgnoreCase(paper)) {
+      return new Rectangle(CR80_WIDTH, CR80_HEIGHT);
+    }
+    return PageSize.A4;
+  }
+
+  private void drawPage(
+      PdfContentByte cb,
+      Map<String, Object> template,
+      Map<String, Object> data,
+      float pageW,
+      float pageH) {
+
+      float layoutW = floatOr(layout(template).get("width"), 794f);
+      float layoutH = floatOr(layout(template).get("height"), 1123f);
+      float scaleX = pageW / Math.max(layoutW, 1f);
+      float scaleY = pageH / Math.max(layoutH, 1f);
+      float scale = Math.min(scaleX, scaleY);
+
+      List<Map<String, Object>> elements = elements(template);
+      elements.sort(
+          Comparator.comparingInt((Map<String, Object> e) -> intOr(e.get("z"), 0))
+              .thenComparingInt(e -> intOr(e.get("y"), 0)));
+
+      for (Map<String, Object> el : elements) {
+        String type = String.valueOf(el.getOrDefault("type", "text")).toLowerCase();
+        float x = floatOr(el.get("x"), 40f) * scaleX;
+        float yTop = floatOr(el.get("y"), 40f) * scaleY;
+        float w = floatOr(el.get("width"), 200f) * scaleX;
+        float h = floatOr(el.get("height"), 20f) * scaleY;
+        // PDF origin is bottom-left; designer uses top-left.
+        float yPdf = pageH - yTop;
+
+        switch (type) {
+          case "line" -> drawLine(cb, el, x, yPdf, w);
+          case "box" -> drawBox(cb, el, x, yPdf - h, w, h);
+          case "image" -> drawImage(cb, el, data, x, yPdf - h, w, h);
+          case "qr" -> drawQr(cb, el, data, x, yPdf - h, w, h, scale);
+          case "id-fields", "idfields" -> drawIdFields(cb, el, data, x, yPdf, w, h, scaleY);
+          case "heading", "text", "field" ->
+              drawText(cb, el, data, x, yPdf - h * 0.25f, w, h, scaleY);
+          default -> drawText(cb, el, data, x, yPdf - h * 0.25f, w, h, scaleY);
+        }
+      }
+  }
+
+  private void drawLine(PdfContentByte cb, Map<String, Object> el, float x, float y, float w) {
     cb.saveState();
-    cb.setColorStroke(Color.DARK_GRAY);
-    cb.setLineWidth(1f);
+    cb.setColorStroke(colorOr(el.get("color"), Color.DARK_GRAY));
+    cb.setLineWidth(Math.max(0.4f, floatOr(el.get("borderWidth"), 0.8f)));
     cb.moveTo(x, y);
     cb.lineTo(x + w, y);
     cb.stroke();
+    cb.restoreState();
+  }
+
+  private void drawBox(PdfContentByte cb, Map<String, Object> el, float x, float y, float w, float h) {
+    Color fill = colorOr(el.get("fillColor"), null);
+    float radius = floatOr(el.get("borderRadius"), 0f);
+    float r = Math.max(0f, Math.min(radius, Math.min(w, h) / 2f));
+    float border = floatOr(el.get("borderWidth"), fill == null ? 0.8f : 0f);
+    cb.saveState();
+    if (fill != null) {
+      cb.setColorFill(fill);
+      traceRoundRect(cb, x, y, w, h, r);
+      cb.fill();
+    }
+    if (border > 0f) {
+      cb.setLineWidth(border);
+      cb.setColorStroke(colorOr(el.get("borderColor"), Color.GRAY));
+      traceRoundRect(cb, x, y, w, h, r);
+      cb.stroke();
+    }
     cb.restoreState();
   }
 
@@ -123,9 +187,17 @@ public class ReportPdfRenderService {
     cb.restoreState();
   }
 
+  private static void traceRoundRect(PdfContentByte cb, float x, float y, float w, float h, float r) {
+    if (r > 0f) {
+      cb.roundRectangle(x, y, w, h, r);
+    } else {
+      cb.rectangle(x, y, w, h);
+    }
+  }
+
   /**
-   * Renders an image from a bound data field. Accepts raw base64, {@code data:image/...;base64,...},
-   * or empty (draws a placeholder box). Template text/bind typically {@code {{student.photoBase64}}}.
+   * Renders an image from a bound field. Accepts raw base64, {@code data:image/...;base64,...},
+   * {@code {{student.photoDirectUrl}}}, or the element fallback image. Empty draws a placeholder.
    */
   private void drawImage(
       PdfContentByte cb,
@@ -135,26 +207,154 @@ public class ReportPdfRenderService {
       float y,
       float w,
       float h) {
-    String raw =
-        el.containsKey("text")
-            ? String.valueOf(el.get("text"))
-            : bindValue(data, String.valueOf(el.getOrDefault("bind", "student.photoBase64")));
-    if ((raw == null || raw.isBlank()) && el.get("bind") != null) {
-      raw = "{{" + el.get("bind") + "}}";
-    }
-    String payload = substitute(raw, data);
-    byte[] bytes = decodeImageBytes(payload);
+    byte[] bytes = decodeImageBytes(resolveImagePayload(el, data));
     if (bytes == null || bytes.length == 0) {
-      drawBox(cb, x, y, w, h, true);
+      if (el.get("fillColor") != null) {
+        drawBox(cb, el, x, y, w, h);
+      } else {
+        drawBox(cb, x, y, w, h, true);
+        strokeImageBorder(cb, el, x, y, w, h);
+      }
       return;
     }
     try {
       Image image = Image.getInstance(bytes);
-      image.setAbsolutePosition(x, y);
-      image.scaleAbsolute(w, h);
-      cb.addImage(image);
+      String fit = String.valueOf(el.getOrDefault("objectFit", "cover")).toLowerCase();
+      placeFittedImage(cb, image, x, y, w, h, fit, floatOr(el.get("borderRadius"), 0f));
+      strokeImageBorder(cb, el, x, y, w, h);
     } catch (Exception ex) {
       drawBox(cb, x, y, w, h, true);
+      strokeImageBorder(cb, el, x, y, w, h);
+    }
+  }
+
+  private static String resolveImagePayload(Map<String, Object> el, Map<String, Object> data) {
+    String raw =
+        el.containsKey("text")
+            ? String.valueOf(el.get("text"))
+            : bindValue(data, String.valueOf(el.getOrDefault("bind", "student.photoDirectUrl")));
+    if ((raw == null || raw.isBlank()) && el.get("bind") != null) {
+      raw = "{{" + el.get("bind") + "}}";
+    }
+    String payload = substitute(raw, data);
+    if (usableImage(payload)) {
+      return payload;
+    }
+    String bind = String.valueOf(el.getOrDefault("bind", ""));
+    boolean studentPhoto =
+        bind.isBlank() || "null".equals(bind) || bind.contains("photo");
+    if (!studentPhoto) {
+      return payload;
+    }
+    String direct = bindValue(data, "student.photoDirectUrl");
+    if (usableImage(direct)) {
+      return direct;
+    }
+    String base64 = bindValue(data, "student.photoBase64");
+    if (usableImage(base64)) {
+      return base64;
+    }
+    Object fallback = el.get("fallbackSrc");
+    if (fallback != null && usableImage(String.valueOf(fallback))) {
+      return String.valueOf(fallback);
+    }
+    return payload;
+  }
+
+  private static boolean usableImage(String payload) {
+    if (payload == null || payload.isBlank() || payload.contains("{{")) {
+      return false;
+    }
+    String trimmed = payload.trim();
+    if (trimmed.startsWith("/")) {
+      return false;
+    }
+    return true;
+  }
+
+  private static void placeFittedImage(
+      PdfContentByte cb,
+      Image image,
+      float x,
+      float y,
+      float w,
+      float h,
+      String fit,
+      float radius)
+      throws DocumentException {
+    float iw = image.getWidth();
+    float ih = image.getHeight();
+    float scale = 1f;
+    if (iw > 0f && ih > 0f) {
+      float sx = w / iw;
+      float sy = h / ih;
+      scale = "contain".equals(fit) ? Math.min(sx, sy) : Math.max(sx, sy);
+    }
+    float sw = Math.max(1f, iw * scale);
+    float sh = Math.max(1f, ih * scale);
+    float dx = x + (w - sw) / 2f;
+    float dy = y + (h - sh) / 2f;
+    cb.saveState();
+    float r = Math.max(0f, Math.min(radius, Math.min(w, h) / 2f));
+    if (r > 0f) {
+      cb.roundRectangle(x, y, w, h, r);
+    } else {
+      cb.rectangle(x, y, w, h);
+    }
+    cb.clip();
+    cb.newPath();
+    image.scaleAbsolute(sw, sh);
+    image.setAbsolutePosition(dx, dy);
+    cb.addImage(image);
+    cb.restoreState();
+  }
+
+  private static void strokeImageBorder(
+      PdfContentByte cb, Map<String, Object> el, float x, float y, float w, float h) {
+    float width = floatOr(el.get("borderWidth"), 0f);
+    if (width <= 0f) {
+      return;
+    }
+    cb.saveState();
+    cb.setLineWidth(width);
+    cb.setColorStroke(colorOr(el.get("borderColor"), Color.DARK_GRAY));
+    float radius = floatOr(el.get("borderRadius"), 0f);
+    float r = Math.max(0f, Math.min(radius, Math.min(w, h) / 2f));
+    if (r > 0f) {
+      cb.roundRectangle(x, y, w, h, r);
+    } else {
+      cb.rectangle(x, y, w, h);
+    }
+    cb.stroke();
+    cb.restoreState();
+  }
+
+  private static Color colorOr(Object value, Color fallback) {
+    if (value == null) {
+      return fallback;
+    }
+    String raw = String.valueOf(value).trim();
+    if (!raw.startsWith("#")) {
+      return fallback;
+    }
+    String hex = raw.substring(1);
+    if (hex.length() == 3) {
+      hex =
+          ""
+              + hex.charAt(0)
+              + hex.charAt(0)
+              + hex.charAt(1)
+              + hex.charAt(1)
+              + hex.charAt(2)
+              + hex.charAt(2);
+    }
+    if (hex.length() != 6) {
+      return fallback;
+    }
+    try {
+      return new Color(Integer.parseInt(hex, 16));
+    } catch (NumberFormatException ex) {
+      return fallback;
     }
   }
 
@@ -181,7 +381,8 @@ public class ReportPdfRenderService {
       float x,
       float y,
       float w,
-      float h) {
+      float h,
+      float scale) {
     String raw =
         el.containsKey("text")
             ? String.valueOf(el.get("text"))
@@ -195,17 +396,29 @@ public class ReportPdfRenderService {
       return;
     }
     try {
-      int size = Math.max(64, Math.round(Math.min(w, h)));
+      float quiet = Math.max(0f, floatOr(el.get("quietZone"), 0f) * scale);
+      float pad = Math.min(quiet, Math.min(w, h) / 4f);
+      cb.saveState();
+      cb.setColorFill(Color.WHITE);
+      cb.rectangle(x, y, w, h);
+      cb.fill();
+      cb.restoreState();
+      float qx = x + pad;
+      float qy = y + pad;
+      float qw = Math.max(8f, w - pad * 2f);
+      float qh = Math.max(8f, h - pad * 2f);
+      int size = Math.max(64, Math.round(Math.min(qw, qh)));
       Map<EncodeHintType, Object> hints = new LinkedHashMap<>();
       hints.put(EncodeHintType.MARGIN, 1);
+      hints.put(EncodeHintType.ERROR_CORRECTION, com.google.zxing.qrcode.decoder.ErrorCorrectionLevel.M);
       BitMatrix matrix =
           new QRCodeWriter().encode(payload, BarcodeFormat.QR_CODE, size, size, hints);
       BufferedImage buffered = MatrixToImageWriter.toBufferedImage(matrix);
       ByteArrayOutputStream png = new ByteArrayOutputStream();
       ImageIO.write(buffered, "png", png);
       Image image = Image.getInstance(png.toByteArray());
-      image.setAbsolutePosition(x, y);
-      image.scaleAbsolute(w, h);
+      image.setAbsolutePosition(qx, qy);
+      image.scaleAbsolute(qw, qh);
       cb.addImage(image);
     } catch (Exception ex) {
       drawBox(cb, x, y, w, h, true);
@@ -236,10 +449,13 @@ public class ReportPdfRenderService {
     boolean bold =
         Boolean.TRUE.equals(el.get("bold"))
             || "heading".equalsIgnoreCase(String.valueOf(el.get("type")));
+    Color ink = colorOr(el.get("color"), Color.BLACK);
     Font font =
-        bold
-            ? FontFactory.getFont(FontFactory.HELVETICA_BOLD, size)
-            : FontFactory.getFont(FontFactory.HELVETICA, size);
+        FontFactory.getFont(
+            bold ? FontFactory.HELVETICA_BOLD : FontFactory.HELVETICA,
+            size,
+            bold ? Font.BOLD : Font.NORMAL,
+            ink);
     String align = String.valueOf(el.getOrDefault("align", "left")).toLowerCase();
     int alignment =
         switch (align) {
@@ -253,8 +469,9 @@ public class ReportPdfRenderService {
           case com.lowagie.text.Element.ALIGN_RIGHT -> x + w;
           default -> x;
         };
-    // Wrap long text into a column when height allows more than one line.
-    if (h > size * 1.8f && w > 40f) {
+    // Wrap only when the box is tall enough for two lines. Shorter boxes stay one line
+    // so a label cannot drop below the card edge.
+    if (h > size * 2.4f && w > 40f) {
       ColumnText ct = new ColumnText(cb);
       ct.setSimpleColumn(new Phrase(text, font), x, baseline - h, x + w, baseline + size, size + 2f, alignment);
       try {
@@ -265,6 +482,94 @@ public class ReportPdfRenderService {
     } else {
       ColumnText.showTextAligned(cb, alignment, new Phrase(text, font), tx, baseline, 0);
     }
+  }
+
+  /** Form fields marked showOnIdCard, stacked inside the reserved column. */
+  @SuppressWarnings("unchecked")
+  private void drawIdFields(
+      PdfContentByte cb,
+      Map<String, Object> el,
+      Map<String, Object> data,
+      float x,
+      float top,
+      float w,
+      float h,
+      float scaleY) {
+    Object student = data.get("student");
+    if (!(student instanceof Map<?, ?> studentMap)) {
+      return;
+    }
+    Object raw = studentMap.get("idCardLines");
+    List<?> lines = raw instanceof List<?> list ? list : List.of();
+    if (lines.isEmpty() || lines.stream().noneMatch(ReportPdfRenderService::lineHasValue)) {
+      lines = fallbackIdCardLines(studentMap);
+    }
+    if (lines.isEmpty()) {
+      return;
+    }
+    int count = lines.size();
+    float row = h / count;
+    float requested = floatOr(el.get("fontSize"), 8f);
+    float size = Math.min(requested * Math.max(scaleY, 0.7f), Math.max(6.5f, row * 0.78f));
+    Color ink = colorOr(el.get("color"), Color.BLACK);
+    Font font = FontFactory.getFont(FontFactory.HELVETICA, size, Font.NORMAL, ink);
+    float baseline = top - row + size * 0.2f;
+    for (Object item : lines) {
+      if (!(item instanceof Map<?, ?> line)) {
+        baseline -= row;
+        continue;
+      }
+      String label = line.get("label") == null ? "" : String.valueOf(line.get("label")).trim();
+      String value = line.get("value") == null ? "" : String.valueOf(line.get("value")).trim();
+      if (value.isEmpty()) {
+        value = "—";
+      }
+      String text = label.isEmpty() ? value : label + "  " + value;
+      ColumnText.showTextAligned(cb, com.lowagie.text.Element.ALIGN_LEFT, new Phrase(text, font), x, baseline, 0);
+      baseline -= row;
+    }
+  }
+
+  private static boolean lineHasValue(Object item) {
+    if (!(item instanceof Map<?, ?> line)) {
+      return false;
+    }
+    String value = line.get("value") == null ? "" : String.valueOf(line.get("value")).trim();
+    return !value.isEmpty() && !"\u2014".equals(value) && !"—".equals(value);
+  }
+
+  /** Prints the standard card rows when the form has not marked any ID-card fields. */
+  private static List<Map<String, Object>> fallbackIdCardLines(Map<?, ?> student) {
+    List<Map<String, Object>> lines = new ArrayList<>();
+    addFallback(lines, "classApplied", "Class", textOf(student, "classSection", "classApplied"));
+    addFallback(lines, "admissionNo", "Admission No", textOf(student, "admissionNo"));
+    addFallback(lines, "dateOfBirth", "Date of birth", textOf(student, "dob", "dateOfBirth"));
+    addFallback(lines, "bloodGroup", "Blood group", textOf(student, "bloodGroup"));
+    addFallback(lines, "mobile", "Mobile", textOf(student, "mobile", "mobileNo"));
+    addFallback(lines, "fatherName", "Father", textOf(student, "fatherName"));
+    return lines;
+  }
+
+  private static void addFallback(List<Map<String, Object>> lines, String key, String label, String value) {
+    Map<String, Object> line = new LinkedHashMap<>();
+    line.put("key", key);
+    line.put("label", label);
+    line.put("value", value == null || value.isBlank() || "—".equals(value.trim()) ? "—" : value.trim());
+    lines.add(line);
+  }
+
+  private static String textOf(Map<?, ?> student, String... keys) {
+    for (String key : keys) {
+      Object value = student.get(key);
+      if (value == null) {
+        continue;
+      }
+      String text = String.valueOf(value).trim();
+      if (!text.isEmpty() && !"\u2014".equals(text) && !"—".equals(text)) {
+        return text;
+      }
+    }
+    return "";
   }
 
   @SuppressWarnings("unchecked")
@@ -321,7 +626,47 @@ public class ReportPdfRenderService {
         return "";
       }
     }
-    return String.valueOf(cur);
+    return formatBound(path, String.valueOf(cur));
+  }
+
+  /** Issued/expiry print as "16 Jul 2026". Date of birth prints as DD/MM/YYYY. */
+  private static String formatBound(String path, String value) {
+    String key = path == null ? "" : path.toLowerCase(Locale.ROOT);
+    boolean dob = key.endsWith("dateofbirth") || key.endsWith(".dob");
+    boolean cardDate = key.endsWith("issuedat") || key.endsWith("expiresat") || key.endsWith("validuntil");
+    if (value == null || value.isBlank()) {
+      return dob || cardDate ? "—" : (value == null ? "" : value);
+    }
+    if (!dob && !cardDate) {
+      return value;
+    }
+    if ("—".equals(value.trim())) {
+      return "—";
+    }
+    try {
+      if (dob && value.matches("\\d{2}[-/]\\d{2}[-/]\\d{4}")) {
+        String[] parts = value.split("[-/]");
+        return parts[0] + "/" + parts[1] + "/" + parts[2];
+      }
+      if (value.length() >= 20 && value.contains("T")) {
+        Instant instant = Instant.parse(value);
+        DateTimeFormatter fmt =
+            dob
+                ? DateTimeFormatter.ofPattern("dd/MM/yyyy").withZone(ZoneId.of("Asia/Kolkata"))
+                : DateTimeFormatter.ofPattern("dd MMM yyyy", Locale.ENGLISH)
+                    .withZone(ZoneId.of("Asia/Kolkata"));
+        return fmt.format(instant);
+      }
+      if (value.length() >= 10 && value.charAt(4) == '-' && value.charAt(7) == '-') {
+        LocalDate date = LocalDate.parse(value.substring(0, 10));
+        return dob
+            ? date.format(DateTimeFormatter.ofPattern("dd/MM/yyyy"))
+            : date.format(DateTimeFormatter.ofPattern("dd MMM yyyy", Locale.ENGLISH));
+      }
+    } catch (RuntimeException ignored) {
+      return value;
+    }
+    return value;
   }
 
   private static int intOr(Object v, int d) {

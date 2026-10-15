@@ -21,7 +21,13 @@ import org.springframework.web.multipart.MultipartFile;
 import com.sugamflow.school.common.api.ApiResponse;
 import com.sugamflow.school.compliance.dto.ComplianceDocumentRequest;
 import com.sugamflow.school.compliance.dto.ComplianceDocumentResponse;
+import com.sugamflow.school.compliance.dto.DocumentAuditResponse;
+import com.sugamflow.school.compliance.dto.DocumentCategoryResponse;
+import com.sugamflow.school.compliance.dto.DocumentFolderRequest;
+import com.sugamflow.school.compliance.dto.DocumentFolderResponse;
 import com.sugamflow.school.compliance.dto.DocumentVaultSummaryResponse;
+import com.sugamflow.school.compliance.dto.DocumentVersionResponse;
+import com.sugamflow.school.compliance.dto.RejectDocumentRequest;
 import com.sugamflow.school.compliance.dto.InfrastructureAssetRequest;
 import com.sugamflow.school.compliance.dto.InfrastructureAssetResponse;
 import com.sugamflow.school.compliance.dto.InfrastructureSummaryResponse;
@@ -74,8 +80,27 @@ public class ComplianceInventoryController {
   @GetMapping("/documents")
   public ApiResponse<List<ComplianceDocumentResponse>> listDocuments(
       @RequestParam(required = false) String docType,
-      @RequestParam(required = false) String status) {
-    return ApiResponse.ok(documentVaultService.list(docType, status));
+      @RequestParam(required = false) String status,
+      @RequestParam(required = false) String q,
+      @RequestParam(required = false) String category,
+      @RequestParam(required = false) String area) {
+    return ApiResponse.ok(documentVaultService.list(docType, status, q, category, area));
+  }
+
+  @GetMapping("/documents/categories")
+  public ApiResponse<List<DocumentCategoryResponse>> documentCategories() {
+    return ApiResponse.ok(documentVaultService.categories());
+  }
+
+  @GetMapping("/documents/folders")
+  public ApiResponse<List<DocumentFolderResponse>> documentFolders() {
+    return ApiResponse.ok(documentVaultService.folders());
+  }
+
+  @PostMapping("/documents/folders")
+  public ApiResponse<DocumentFolderResponse> createDocumentFolder(
+      @Valid @RequestBody DocumentFolderRequest request) {
+    return ApiResponse.ok(documentVaultService.createFolder(request));
   }
 
   @GetMapping("/documents/summary")
@@ -109,18 +134,66 @@ public class ComplianceInventoryController {
 
   @PostMapping(value = "/documents/{id}/file", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
   public ApiResponse<ComplianceDocumentResponse> uploadDocumentFile(
-      @PathVariable Long id, @RequestPart("file") MultipartFile file) throws IOException {
-    return ApiResponse.ok(documentVaultService.upload(id, file));
+      @PathVariable Long id,
+      @RequestPart("file") MultipartFile file,
+      @RequestParam(defaultValue = "true") boolean asNewVersion,
+      @RequestParam(defaultValue = "false") boolean force,
+      @RequestParam(required = false) String reason)
+      throws IOException {
+    return ApiResponse.ok(documentVaultService.upload(id, file, asNewVersion, force, reason));
+  }
+
+  @PostMapping("/documents/{id}/submit")
+  public ApiResponse<ComplianceDocumentResponse> submitDocument(@PathVariable Long id) {
+    return ApiResponse.ok(documentVaultService.submit(id));
+  }
+
+  @PostMapping("/documents/{id}/approve")
+  public ApiResponse<ComplianceDocumentResponse> approveDocument(@PathVariable Long id) {
+    return ApiResponse.ok(documentVaultService.approve(id));
+  }
+
+  @PostMapping("/documents/{id}/reject")
+  public ApiResponse<ComplianceDocumentResponse> rejectDocument(
+      @PathVariable Long id, @Valid @RequestBody RejectDocumentRequest request) {
+    return ApiResponse.ok(documentVaultService.reject(id, request.reason()));
+  }
+
+  @PostMapping("/documents/{id}/archive")
+  public ApiResponse<ComplianceDocumentResponse> archiveDocument(@PathVariable Long id) {
+    return ApiResponse.ok(documentVaultService.archive(id));
+  }
+
+  @PostMapping("/documents/{id}/restore")
+  public ApiResponse<ComplianceDocumentResponse> restoreDocument(@PathVariable Long id) {
+    return ApiResponse.ok(documentVaultService.restore(id));
+  }
+
+  @GetMapping("/documents/{id}/versions")
+  public ApiResponse<List<DocumentVersionResponse>> documentVersions(@PathVariable Long id) {
+    return ApiResponse.ok(documentVaultService.versions(id));
+  }
+
+  @GetMapping("/documents/{id}/audit")
+  public ApiResponse<List<DocumentAuditResponse>> documentAudit(@PathVariable Long id) {
+    return ApiResponse.ok(documentVaultService.audit(id));
   }
 
   @GetMapping("/documents/{id}/file")
   public ResponseEntity<org.springframework.core.io.Resource> downloadDocumentFile(
-      @PathVariable Long id) throws IOException {
-    DocumentVaultService.FilePayload payload = documentVaultService.download(id);
+      @PathVariable Long id,
+      @RequestParam(required = false) Integer version,
+      @RequestParam(defaultValue = "false") boolean inline)
+      throws IOException {
+    DocumentVaultService.FilePayload payload =
+        version == null
+            ? documentVaultService.download(id)
+            : documentVaultService.downloadVersion(id, version);
+    String disposition = inline ? "inline" : "attachment";
     return ResponseEntity.ok()
         .header(
             HttpHeaders.CONTENT_DISPOSITION,
-            "attachment; filename=\"" + payload.fileName().replace("\"", "") + "\"")
+            disposition + "; filename=\"" + payload.fileName().replace("\"", "") + "\"")
         .contentType(MediaType.parseMediaType(payload.contentType()))
         .body(payload.resource());
   }

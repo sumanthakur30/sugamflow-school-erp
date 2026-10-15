@@ -34,9 +34,12 @@ class GradebookServiceTest {
 
   @Mock private ExamDefinitionRepository definitions;
   @Mock private ExamMarkRepository marks;
+  @Mock private com.sugamflow.school.exam.persistence.repo.ExamMarkAuditRepository audits;
+  @Mock private com.sugamflow.school.exam.persistence.repo.ExamEntryPolicyRepository policies;
   @Mock private AcademicClient academic;
   @Mock private StudentDirectoryClient directory;
   @Mock private StudentAccessClient studentAccess;
+  @Mock private GradingSupport grading;
   @InjectMocks private GradebookService service;
 
   @AfterEach

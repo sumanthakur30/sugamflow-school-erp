@@ -8,11 +8,14 @@ import { TenantContextService } from '../../core/tenant-context.service';
 import { ModuleBootstrapService } from '../../core/module-bootstrap.service';
 
 interface SlotDraft {
+  id?: string;
   dayOfWeek: number;
   periodId: string;
   subjectId: string;
   teacherUsername: string;
   room: string;
+  substituteDate?: string;
+  substituteTeacher?: string;
 }
 
 interface TeacherOption {
@@ -458,17 +461,22 @@ export class TimetableComponent implements OnInit, OnDestroy {
           subjectId: '',
           teacherUsername: '',
           room: '',
+          substituteDate: '',
+          substituteTeacher: '',
         };
       }
     }
     for (const s of this.slots) {
       const key = this.cellKey(s.dayOfWeek, s.periodId);
       next[key] = {
+        id: s.id,
         dayOfWeek: s.dayOfWeek,
         periodId: s.periodId,
         subjectId: s.subjectId || '',
         teacherUsername: s.teacherUsername || '',
         room: s.room || '',
+        substituteDate: s.substituteDate || '',
+        substituteTeacher: s.substituteTeacher || '',
       };
     }
     this.grid = next;
@@ -487,6 +495,8 @@ export class TimetableComponent implements OnInit, OnDestroy {
         subjectId: '',
         teacherUsername: '',
         room: '',
+        substituteDate: '',
+        substituteTeacher: '',
       };
     }
     return this.grid[key];
@@ -662,6 +672,35 @@ export class TimetableComponent implements OnInit, OnDestroy {
         error: (err) => {
           this.busy = false;
           this.error = err?.error?.message ?? 'Conflict check failed';
+        },
+      });
+  }
+
+  saveSubstitute(day: number, periodId: string): void {
+    const slot = this.cell(day, periodId);
+    if (!slot.id) {
+      this.error = 'Save the weekly timetable before setting a substitute';
+      return;
+    }
+    if (!slot.substituteDate || !slot.substituteTeacher) {
+      this.error = 'Choose a date and a covering teacher';
+      return;
+    }
+    this.busy = true;
+    this.error = '';
+    this.api
+      .post(`/api/academic/timetable/slots/${slot.id}/substitute`, {
+        substituteDate: slot.substituteDate,
+        teacherUsername: slot.substituteTeacher,
+      })
+      .subscribe({
+        next: () => {
+          this.busy = false;
+          this.status = 'Substitute set for one period';
+        },
+        error: (err) => {
+          this.busy = false;
+          this.error = err?.error?.message ?? 'Could not set the substitute';
         },
       });
   }

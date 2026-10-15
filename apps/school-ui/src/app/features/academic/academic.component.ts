@@ -32,6 +32,21 @@ export class AcademicComponent implements OnInit, OnDestroy {
   subjectsError = '';
   assignmentsError = '';
 
+  readonly weekDays = [
+    { key: 'MON', label: 'Mon' },
+    { key: 'TUE', label: 'Tue' },
+    { key: 'WED', label: 'Wed' },
+    { key: 'THU', label: 'Thu' },
+    { key: 'FRI', label: 'Fri' },
+    { key: 'SAT', label: 'Sat' },
+    { key: 'SUN', label: 'Sun' },
+  ];
+  workingDays: string[] = ['MON', 'TUE', 'WED', 'THU', 'FRI'];
+  holidays: Array<{ date: string; name: string }> = [];
+  holidayDate = '';
+  holidayName = '';
+  calendarError = '';
+
   classes: any[] = [];
   /** Sections for the current class filter (table). */
   sections: any[] = [];
@@ -126,12 +141,19 @@ export class AcademicComponent implements OnInit, OnDestroy {
           return of([] as any[]);
         }),
       ),
+      calendar: this.api.get<any>('/api/academic/calendar').pipe(
+        catchError((err) => {
+          this.calendarError = err?.error?.message ?? 'Failed to load the calendar';
+          return of(null);
+        }),
+      ),
     }).subscribe({
-      next: ({ classes, subjects, sections, assignments }) => {
+      next: ({ classes, subjects, sections, assignments, calendar }) => {
         this.classes = classes ?? [];
         this.subjects = subjects ?? [];
         this.allSections = sections ?? [];
         this.assignments = assignments ?? [];
+        this.applyCalendar(calendar);
         this.applySectionFilter();
         this.loading = false;
         this.error = [
@@ -453,6 +475,73 @@ export class AcademicComponent implements OnInit, OnDestroy {
         this.error = err?.error?.message ?? 'Delete assignment failed';
       },
     });
+  }
+
+  toggleWorkingDay(day: string): void {
+    if (!this.canManage) return;
+    if (this.workingDays.includes(day)) {
+      this.workingDays = this.workingDays.filter((item) => item !== day);
+    } else {
+      this.workingDays = [...this.workingDays, day];
+    }
+  }
+
+  addHoliday(): void {
+    const date = this.holidayDate.trim();
+    const name = this.holidayName.trim();
+    if (!date || !name) {
+      this.calendarError = 'Holiday date and name are required';
+      return;
+    }
+    if (this.holidays.some((row) => row.date === date)) {
+      this.calendarError = 'That date is already a holiday';
+      return;
+    }
+    this.holidays = [...this.holidays, { date, name }].sort((a, b) => a.date.localeCompare(b.date));
+    this.holidayDate = '';
+    this.holidayName = '';
+    this.calendarError = '';
+  }
+
+  removeHoliday(date: string): void {
+    this.holidays = this.holidays.filter((row) => row.date !== date);
+  }
+
+  saveCalendar(): void {
+    if (!this.workingDays.length) {
+      this.calendarError = 'Choose at least one working day';
+      return;
+    }
+    this.busy = true;
+    this.calendarError = '';
+    this.api
+      .put<any>('/api/academic/calendar', {
+        workingDays: this.workingDays,
+        holidays: this.holidays,
+      })
+      .subscribe({
+        next: (calendar) => {
+          this.busy = false;
+          this.applyCalendar(calendar);
+          this.status = 'Working days and holidays saved';
+        },
+        error: (err) => {
+          this.busy = false;
+          this.calendarError = err?.error?.message ?? 'Could not save the calendar';
+        },
+      });
+  }
+
+  private applyCalendar(calendar: any): void {
+    if (!calendar) return;
+    const days = Array.isArray(calendar.workingDays) ? calendar.workingDays : [];
+    this.workingDays = days.map((day: unknown) => String(day));
+    this.holidays = Array.isArray(calendar.holidays)
+      ? calendar.holidays.map((row: any) => ({
+          date: String(row.date || ''),
+          name: String(row.name || ''),
+        }))
+      : [];
   }
 
   className(id: string | null | undefined): string {

@@ -8,6 +8,10 @@ import java.util.UUID;
 /** Palette + normalization for drag-drop report designer elements (metadata-driven). */
 public final class ReportElementCatalog {
 
+  /** Designer sample portrait so {{student.photoDirectUrl}} previews before a student photo exists. */
+  public static final String SAMPLE_PHOTO_DATA_URL =
+      "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAADAAAABACAYAAABcIPRGAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsMAAA7DAcdvqGQAAAFQSURBVGhD7dQxDsIwDEZhDssRuAVHZGXmCqAMldBrVduJG6eNh29Bavy/hdvr/fme2Y0/nE0GRMuAaBkQLQPo/niK+E0LtwCO1OAbNVwCOMyCb1k1B3BQDb5p0RTAIS34tlZ1AAd44A2NOQN42BNvSTLAG29J5gvgQW+8JzEHFDzqibckGeCNtyRzBhQ87IE3NOYNKDigBd/WagooOKQG37RoDig4yIJvWbkEFBymwTdquAUsOHILv2nhHtBbBkTLgGgZEM0lgP/zFnzLqjqAQzzwhoY5gEePwJt71AE80gM3bFEF8OGeuIXEAD4YgZvUAXwoEreJAXxgBNx43QB+OBJuzYDeuHUVwA9Gw72rgNEjuDUDeuPWzYBRI7jx2gGjRXCbKmCUCG4yBURHcAupAgo+3AM3bFEHLHjkCLy5xxyw4FEPvKFRHfCPQyz4ltUP8fzWUNoQNcsAAAAASUVORK5CYII=";
+
   private ReportElementCatalog() {}
 
   public static final List<Map<String, Object>> ELEMENT_TYPES =
@@ -56,7 +60,11 @@ public final class ReportElementCatalog {
       }
       case "line" -> el.put("text", "");
       case "box" -> el.put("text", "");
-      case "image" -> el.put("text", "[Image]");
+      case "image" -> {
+        el.put("text", "{{student.photoDirectUrl}}");
+        el.put("bind", "student.photoDirectUrl");
+        el.put("objectFit", "cover");
+      }
       case "qr" -> {
         el.put("bind", "context.verifyUrl");
         el.put("text", "{{context.verifyUrl}}");
@@ -94,6 +102,20 @@ public final class ReportElementCatalog {
       }
       if (!el.containsKey("text") && el.containsKey("bind")) {
         el.put("text", "{{" + el.get("bind") + "}}");
+      }
+      if ("image".equals(type)) {
+        String text = String.valueOf(el.getOrDefault("text", ""));
+        String bind = String.valueOf(el.getOrDefault("bind", ""));
+        if (text.contains("student.photoBase64") || "student.photoBase64".equals(bind)) {
+          el.put("text", "{{student.photoDirectUrl}}");
+          el.put("bind", "student.photoDirectUrl");
+        } else if (text.contains("student.photoDirectUrl")
+            && (bind.isBlank() || "null".equals(bind))) {
+          el.put("bind", "student.photoDirectUrl");
+        }
+        if (!el.containsKey("objectFit") || String.valueOf(el.get("objectFit")).isBlank()) {
+          el.put("objectFit", "cover");
+        }
       }
       out.add(el);
     }
@@ -136,12 +158,25 @@ public final class ReportElementCatalog {
   public static Map<String, Object> samplePreviewData() {
     Map<String, Object> student = new LinkedHashMap<>();
     student.put("name", "Priya Nair");
+    student.put("grade", "Grade 8");
+    student.put("section", "A");
     student.put("admissionNo", "ADM-1001");
     student.put("classApplied", "Grade 8");
-    student.put("classSection", "Grade 8-A");
+    student.put("classSection", "Grade 8 - A");
+    student.put("rollLine", "Adm  ADM-1001");
+    student.put("dob", "10/12/2007");
+    student.put("dateOfBirth", "10/12/2007");
+    student.put("bloodGroup", "O+");
+    student.put("mobileNo", "9999900001");
+    student.put("emergencyNo", "9871986210");
+    student.put("emergencyContact", "9871986210");
+    student.put("pen", "PEN1234567");
+    student.put("transportMode", "Bus");
     student.put("penNumber", "PEN1234567");
     student.put("apaarId", "APAAR-998877");
     student.put("photoBase64", "");
+    student.put("photoDirectUrl", SAMPLE_PHOTO_DATA_URL);
+    student.put("photoContentUrl", "");
     Map<String, Object> application = new LinkedHashMap<>();
     application.put("fullName", "Priya Nair");
     application.put("classApplied", "Grade 8");
@@ -155,9 +190,13 @@ public final class ReportElementCatalog {
     payment.put("paymentMode", "UPI");
     Map<String, Object> context = new LinkedHashMap<>();
     context.put("organizationId", "demo-school");
+    context.put("organizationName", "Demo School");
     context.put("branchId", "main");
+    context.put("branchName", "Main");
     context.put("academicSessionId", "2025-26");
-    context.put("issuedAt", "2026-07-16T10:00:00Z");
+    context.put("sessionLabel", "2025-2026");
+    context.put("issuedAt", "16 Jul 2026");
+    context.put("expiresAt", "31 Mar 2027");
     context.put("offerLetterUrl", "https://example.local/offer.pdf");
     context.put("feeReceiptUrl", "https://example.local/receipt.pdf");
     context.put("verifyUrl", "https://example.local/verify/document/demo-token");

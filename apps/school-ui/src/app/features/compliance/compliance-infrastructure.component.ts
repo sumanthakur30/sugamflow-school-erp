@@ -20,7 +20,15 @@ import {
           <h2>Infrastructure</h2>
           <p>Classrooms, labs, toilets, safety and other CBSE facility inventory.</p>
         </div>
-        <a routerLink="/admin/compliance" class="btn">Dashboard</a>
+        <div style="display: flex; gap: 0.5rem">
+          <a routerLink="/admin/compliance" class="btn">Dashboard</a>
+          <a class="btn" routerLink="/admin/compliance/documents" [queryParams]="{ docType: 'BUILDING_SAFETY' }">
+            Building certificate
+          </a>
+          <a class="btn" routerLink="/admin/compliance/documents" [queryParams]="{ docType: 'FIRE_NOC' }">
+            Fire certificate
+          </a>
+        </div>
       </div>
 
       @if (error) {
@@ -36,7 +44,7 @@ import {
           </div>
           <div class="panel">
             <div class="field-title">Missing recommended</div>
-            @if (!summary.missingRecommendedCategories?.length) {
+            @if (!summary.missingRecommendedCategories.length) {
               <p class="muted">All recommended categories present.</p>
             } @else {
               <p>{{ summary.missingRecommendedCategories.join(', ') }}</p>

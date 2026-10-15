@@ -112,12 +112,31 @@ public class PayrollProperties {
       this.notificationDeliveryBaseUrl = notificationDeliveryBaseUrl;
     }
 
+    private String attendanceBaseUrl = "http://localhost:8192";
+    private String studentBaseUrl = "http://localhost:8191";
+
     public String getPublicApiBaseUrl() {
       return publicApiBaseUrl;
     }
 
     public void setPublicApiBaseUrl(String publicApiBaseUrl) {
       this.publicApiBaseUrl = publicApiBaseUrl;
+    }
+
+    public String getAttendanceBaseUrl() {
+      return attendanceBaseUrl;
+    }
+
+    public void setAttendanceBaseUrl(String attendanceBaseUrl) {
+      this.attendanceBaseUrl = attendanceBaseUrl;
+    }
+
+    public String getStudentBaseUrl() {
+      return studentBaseUrl;
+    }
+
+    public void setStudentBaseUrl(String studentBaseUrl) {
+      this.studentBaseUrl = studentBaseUrl;
     }
   }
 }

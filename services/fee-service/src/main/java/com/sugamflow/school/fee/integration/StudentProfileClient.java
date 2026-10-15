@@ -134,6 +134,38 @@ public class StudentProfileClient {
     }
   }
 
+  /** Hostel bed and transport route from Student 360, used to price the next demand. */
+  @SuppressWarnings("unchecked")
+  public Map<String, Object> opsByAdmissionNo(TenantScope scope, String admissionNo) {
+    Map<String, Object> profile = byAdmissionNo(scope, admissionNo);
+    Object id = profile.get("id");
+    if (id == null || scope == null) {
+      return Map.of();
+    }
+    String base = properties.getIntegrations().getStudentBaseUrl();
+    if (base == null || base.isBlank()) {
+      return Map.of();
+    }
+    String url = base.replaceAll("/$", "") + "/api/student/students/" + id + "/360";
+    try {
+      Map<String, Object> envelope =
+          restClientBuilder
+              .build()
+              .get()
+              .uri(url)
+              .headers(h -> TenantHeaders.apply(h, scope))
+              .retrieve()
+              .body(MAP_TYPE);
+      Map<String, Object> data = unwrap(envelope);
+      if (data != null && data.get("ops") instanceof Map<?, ?> ops) {
+        return new LinkedHashMap<>((Map<String, Object>) ops);
+      }
+    } catch (Exception ex) {
+      log.debug("student ops lookup failed for {}: {}", admissionNo, ex.getMessage());
+    }
+    return Map.of();
+  }
+
   @SuppressWarnings("unchecked")
   private static Map<String, Object> unwrap(Map<String, Object> envelope) {
     if (envelope == null) {

@@ -68,7 +68,8 @@ x-common-env: &common-env
   SPRING_DATASOURCE_HIKARI_MINIMUM_IDLE: ${DB_POOL_MIN_IDLE:-0}
   SPRING_DATASOURCE_HIKARI_IDLE_TIMEOUT: ${DB_POOL_IDLE_TIMEOUT_MS:-120000}
   SPRING_DATASOURCE_HIKARI_MAX_LIFETIME: ${DB_POOL_MAX_LIFETIME_MS:-600000}
-  SPRING_DATASOURCE_HIKARI_CONNECTION_TIMEOUT: ${DB_POOL_CONNECTION_TIMEOUT_MS:-30000}
+  # No underscore: CONNECTION_TIMEOUT binds to hikari.connection (a JDBC Connection) and the JVM will not start.
+  SPRING_DATASOURCE_HIKARI_CONNECTIONTIMEOUT: ${DB_POOL_CONNECTION_TIMEOUT_MS:-30000}
   SECURITY_JWT_ENFORCE: "${SECURITY_JWT_ENFORCE:-true}"
   SECURITY_JWT_SECRET: "${SECURITY_JWT_SECRET}"
   SECURITY_INVITE_INTERNAL_KEY: "${SECURITY_INVITE_INTERNAL_KEY:-}"
@@ -175,7 +176,7 @@ services:
 
   fee-service:
     <<: *jvm-service
-    image: ${IMAGE_PREFIX:-sumanthakur30}/fee-service:${IMAGE_TAG:-1.0.0}
+    image: ${IMAGE_PREFIX:-sumanthakur30}/fee-service:${FEE_IMAGE_TAG:-${IMAGE_TAG:-1.0.0}}
     environment:
       <<: *common-env
       EUREKA_INSTANCE_HOSTNAME: fee-service
@@ -197,7 +198,7 @@ services:
 
   student-service:
     <<: *jvm-service
-    image: ${IMAGE_PREFIX:-sumanthakur30}/student-service:${IMAGE_TAG:-1.0.0}
+    image: ${IMAGE_PREFIX:-sumanthakur30}/student-service:${STUDENT_IMAGE_TAG:-${IMAGE_TAG:-1.0.0}}
     environment:
       <<: *common-env
       EUREKA_INSTANCE_HOSTNAME: student-service
@@ -213,6 +214,27 @@ services:
       STUDENT_ACADEMIC_URL: http://academic-structure-service:8199
       STUDENT_FEE_URL: http://fee-service:8190
       STUDENT_FORMS_URL: http://form-builder-service:8183
+      STUDENT_REPORTS_URL: http://report-builder-service:8186
+
+  report-builder-service:
+    <<: *jvm-service
+    image: ${IMAGE_PREFIX:-sumanthakur30}/report-builder-service:${REPORTS_IMAGE_TAG:-${IMAGE_TAG:-1.0.0}}
+    environment:
+      <<: *common-env
+      EUREKA_INSTANCE_HOSTNAME: report-builder-service
+      SERVER_PORT: 8186
+      SCHOOL_REPORTS_DB_URL: ${SCHOOL_REPORTS_DB_URL}
+      SCHOOL_REPORTS_DB_USERNAME: ${SCHOOL_REPORTS_DB_USERNAME}
+      SCHOOL_REPORTS_DB_PASSWORD: ${SCHOOL_REPORTS_DB_PASSWORD}
+      SPRING_DATASOURCE_URL: ${SCHOOL_REPORTS_DB_URL}
+      SPRING_DATASOURCE_USERNAME: ${SCHOOL_REPORTS_DB_USERNAME}
+      SPRING_DATASOURCE_PASSWORD: ${SCHOOL_REPORTS_DB_PASSWORD}
+      SPRING_FLYWAY_SCHEMAS: reports
+      SPRING_FLYWAY_DEFAULT_SCHEMA: reports
+      SPRING_FLYWAY_CREATE_SCHEMAS: "true"
+      SPRING_JPA_PROPERTIES_HIBERNATE_DEFAULT_SCHEMA: reports
+      REPORT_SUBSCRIPTION_URL: http://subscription-service:8182
+      REPORT_STUDENT_URL: http://student-service:8191
 
   staff-service:
     <<: *jvm-service
@@ -310,6 +332,7 @@ services:
       PAYROLL_WORKFLOWS_URL: http://workflow-service:8184
       PAYROLL_PUBLIC_API_URL: http://gateway-service:9090
       PAYROLL_NOTIF_DELIVERY_URL: http://notification-service:8087
+      PAYROLL_ATTENDANCE_URL: http://attendance-service:8192
 
   attendance-service:
     <<: *jvm-service

@@ -153,6 +153,58 @@ export interface ComplianceDocument {
   notes?: string;
   active?: boolean;
   updatedAt?: string;
+  publicCode?: string;
+  categoryCode?: string;
+  complianceArea?: string;
+  folderId?: number;
+  academicSessionId?: string;
+  visibility?: string;
+  workflowStatus?: string;
+  versionNo?: number;
+  tags?: string;
+  description?: string;
+  rejectionReason?: string;
+  relatedEntity?: string;
+  relatedEntityId?: string;
+  daysUntilExpiry?: number | null;
+  expiryBand?: string;
+}
+
+export interface DocumentCategory {
+  id: number;
+  code: string;
+  name: string;
+  complianceArea?: string;
+}
+
+export interface DocumentFolder {
+  id: number;
+  parentId?: number;
+  name: string;
+  description?: string;
+  visibility?: string;
+  complianceArea?: string;
+  depth: number;
+}
+
+export interface DocumentVersion {
+  id: number;
+  versionNo: number;
+  fileName?: string;
+  contentType?: string;
+  fileSize?: number;
+  changeReason?: string;
+  uploadedBy?: string;
+  uploadedAt?: string;
+  current: boolean;
+}
+
+export interface DocumentAudit {
+  id: number;
+  action: string;
+  actorUserId?: string;
+  detail?: string;
+  createdAt?: string;
 }
 
 export interface DocumentVaultSummary {
@@ -162,6 +214,10 @@ export interface DocumentVaultSummary {
   expiredCount: number;
   missingRecommendedTypes: string[];
   expiringSoon: ComplianceDocument[];
+  approvedCount?: number;
+  pendingCount?: number;
+  draftCount?: number;
+  storageUsedBytes?: number;
 }
 
 export interface CampaignApproval {
@@ -447,12 +503,63 @@ export class ComplianceApiService {
       .pipe(map((r) => r.data));
   }
 
-  listDocuments(params?: { docType?: string; status?: string }): Observable<ComplianceDocument[]> {
+  listDocuments(params?: {
+    docType?: string;
+    status?: string;
+    q?: string;
+    category?: string;
+    area?: string;
+  }): Observable<ComplianceDocument[]> {
     const q: Record<string, string> = {};
     if (params?.docType) q['docType'] = params.docType;
     if (params?.status) q['status'] = params.status;
+    if (params?.q) q['q'] = params.q;
+    if (params?.category) q['category'] = params.category;
+    if (params?.area) q['area'] = params.area;
     return this.http
       .get<ApiResponse<ComplianceDocument[]>>(`${this.base}/documents`, { params: q })
+      .pipe(map((r) => r.data));
+  }
+
+  documentCategories(): Observable<DocumentCategory[]> {
+    return this.http
+      .get<ApiResponse<DocumentCategory[]>>(`${this.base}/documents/categories`)
+      .pipe(map((r) => r.data));
+  }
+
+  documentFolders(): Observable<DocumentFolder[]> {
+    return this.http
+      .get<ApiResponse<DocumentFolder[]>>(`${this.base}/documents/folders`)
+      .pipe(map((r) => r.data));
+  }
+
+  createFolder(body: { name: string; description?: string; parentId?: number; complianceArea?: string }): Observable<DocumentFolder> {
+    return this.http
+      .post<ApiResponse<DocumentFolder>>(`${this.base}/documents/folders`, body)
+      .pipe(map((r) => r.data));
+  }
+
+  documentAction(id: number, action: 'submit' | 'approve' | 'archive' | 'restore', body?: unknown): Observable<ComplianceDocument> {
+    return this.http
+      .post<ApiResponse<ComplianceDocument>>(`${this.base}/documents/${id}/${action}`, body ?? {})
+      .pipe(map((r) => r.data));
+  }
+
+  rejectDocument(id: number, reason: string): Observable<ComplianceDocument> {
+    return this.http
+      .post<ApiResponse<ComplianceDocument>>(`${this.base}/documents/${id}/reject`, { reason })
+      .pipe(map((r) => r.data));
+  }
+
+  documentVersions(id: number): Observable<DocumentVersion[]> {
+    return this.http
+      .get<ApiResponse<DocumentVersion[]>>(`${this.base}/documents/${id}/versions`)
+      .pipe(map((r) => r.data));
+  }
+
+  documentAudit(id: number): Observable<DocumentAudit[]> {
+    return this.http
+      .get<ApiResponse<DocumentAudit[]>>(`${this.base}/documents/${id}/audit`)
       .pipe(map((r) => r.data));
   }
 
@@ -471,16 +578,28 @@ export class ComplianceApiService {
     return this.http.delete(`${this.base}/documents/${id}`);
   }
 
-  uploadDocumentFile(id: number, file: File): Observable<ComplianceDocument> {
+  uploadDocumentFile(
+    id: number,
+    file: File,
+    options?: { asNewVersion?: boolean; force?: boolean; reason?: string },
+  ): Observable<ComplianceDocument> {
     const form = new FormData();
     form.append('file', file, file.name);
+    const params: Record<string, string> = {
+      asNewVersion: String(options?.asNewVersion !== false),
+      force: String(!!options?.force),
+    };
+    if (options?.reason) params['reason'] = options.reason;
     return this.http
-      .post<ApiResponse<ComplianceDocument>>(`${this.base}/documents/${id}/file`, form)
+      .post<ApiResponse<ComplianceDocument>>(`${this.base}/documents/${id}/file`, form, { params })
       .pipe(map((r) => r.data));
   }
 
-  downloadDocumentFile(id: number): Observable<Blob> {
-    return this.http.get(`${this.base}/documents/${id}/file`, { responseType: 'blob' });
+  downloadDocumentFile(id: number, version?: number, inline = false): Observable<Blob> {
+    const params: Record<string, string> = {};
+    if (version != null) params['version'] = String(version);
+    if (inline) params['inline'] = 'true';
+    return this.http.get(`${this.base}/documents/${id}/file`, { params, responseType: 'blob' });
   }
 
   listCampaigns(): Observable<ComplianceCampaign[]> {

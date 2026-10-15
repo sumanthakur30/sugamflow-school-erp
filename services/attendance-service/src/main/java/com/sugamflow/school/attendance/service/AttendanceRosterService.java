@@ -30,7 +30,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class AttendanceRosterService {
 
   private static final Set<String> MARK_STATUSES =
-      Set.of("PRESENT", "ABSENT", "LATE", "LEAVE");
+      Set.of("PRESENT", "ABSENT", "LATE", "LEAVE", "HALF_DAY");
 
   private final AttendanceSessionRepository sessions;
   private final AttendanceMarkRepository marks;
@@ -118,6 +118,74 @@ public class AttendanceRosterService {
     result.put("session", session == null ? null : sessionToMap(session));
     result.put("students", students);
     return result;
+  }
+
+  /** Present-day share for a section over the last 180 daily rosters, for report cards. */
+  @Transactional(readOnly = true)
+  public Map<String, Object> sectionSummary(UUID sectionId) {
+    TenantScope scope = TenantContext.require();
+    if (sectionId == null) {
+      throw new AttendanceException("VALIDATION", "sectionId is required");
+    }
+    requireSectionAccess(scope, sectionId);
+    LocalDate to = LocalDate.now();
+    LocalDate from = to.minusDays(180);
+    List<AttendanceSessionEntity> found =
+        sessions.findByOrganizationIdAndSectionIdAndAttendanceDateBetweenOrderByAttendanceDateDesc(
+            scope.organizationId(), sectionId, from, to);
+    List<AttendanceSessionEntity> daily =
+        found.stream().filter(s -> s.getPeriodId() == null).toList();
+    List<AttendanceSessionEntity> use = daily.isEmpty() ? found : daily;
+
+    Map<String, double[]> tally = new LinkedHashMap<>();
+    Map<String, String> studentIds = new LinkedHashMap<>();
+    Map<String, String> admissions = new LinkedHashMap<>();
+    for (AttendanceSessionEntity session : use) {
+      for (AttendanceMarkEntity mark : marks.findBySessionIdOrderByStudentNameAsc(session.getId())) {
+        String key =
+            mark.getStudentId() != null
+                ? "id:" + mark.getStudentId()
+                : "adm:" + mark.getAdmissionNo();
+        if (key.endsWith("null") || key.endsWith(":")) {
+          continue;
+        }
+        double[] box = tally.computeIfAbsent(key, k -> new double[2]);
+        box[1] += 1;
+        String status = mark.getStatus() == null ? "" : mark.getStatus().trim().toUpperCase(Locale.ROOT);
+        if ("PRESENT".equals(status) || "LATE".equals(status)) {
+          box[0] += 1;
+        } else if ("HALF_DAY".equals(status)) {
+          box[0] += 0.5;
+        }
+        if (mark.getStudentId() != null) {
+          studentIds.put(key, mark.getStudentId().toString());
+        }
+        if (mark.getAdmissionNo() != null) {
+          admissions.put(key, mark.getAdmissionNo());
+        }
+      }
+    }
+
+    List<Map<String, Object>> rows = new ArrayList<>();
+    for (Map.Entry<String, double[]> entry : tally.entrySet()) {
+      double present = entry.getValue()[0];
+      double working = entry.getValue()[1];
+      Map<String, Object> row = new LinkedHashMap<>();
+      row.put("studentId", studentIds.get(entry.getKey()));
+      row.put("admissionNo", admissions.get(entry.getKey()));
+      row.put("presentDays", present);
+      row.put("workingDays", (int) working);
+      row.put(
+          "percentage",
+          working <= 0 ? null : Math.round((present * 1000.0) / working) / 10.0);
+      rows.add(row);
+    }
+    Map<String, Object> out = new LinkedHashMap<>();
+    out.put("sectionId", sectionId.toString());
+    out.put("from", from.toString());
+    out.put("to", to.toString());
+    out.put("students", rows);
+    return out;
   }
 
   /** Printable class attendance register (PDF/Excel/CSV via report-builder tabular export). */
@@ -242,6 +310,71 @@ public class AttendanceRosterService {
     return transition(sessionId, "LOCKED");
   }
 
+  /** Students the absent or low-attendance rules still match, from the last 30 days of marks. */
+  @Transactional(readOnly = true)
+  public List<Map<String, Object>> exceptions() {
+    TenantScope scope = TenantContext.require();
+    Instant since = Instant.now().minus(java.time.Duration.ofDays(30));
+    Map<String, int[]> tally = new LinkedHashMap<>();
+    Map<String, AttendanceMarkEntity> latest = new LinkedHashMap<>();
+    for (AttendanceMarkEntity mark :
+        marks.findTop2000ByOrganizationIdAndMarkedAtAfterOrderByMarkedAtDesc(
+            scope.organizationId(), since)) {
+      String key =
+          mark.getStudentId() != null ? mark.getStudentId().toString() : mark.getAdmissionNo();
+      if (key == null || key.isBlank()) {
+        continue;
+      }
+      int[] box = tally.computeIfAbsent(key, ignored -> new int[2]);
+      String status = mark.getStatus() == null ? "" : mark.getStatus().toUpperCase(Locale.ROOT);
+      if ("PRESENT".equals(status) || "LATE".equals(status)) {
+        box[0] += 2;
+      } else if ("HALF_DAY".equals(status)) {
+        box[0] += 1;
+      }
+      if (!"LEAVE".equals(status)) {
+        box[1] += 2;
+      }
+      latest.putIfAbsent(key, mark);
+    }
+    List<Map<String, Object>> rows = new ArrayList<>();
+    for (Map.Entry<String, int[]> entry : tally.entrySet()) {
+      if (rows.size() >= 25) {
+        break;
+      }
+      int[] box = entry.getValue();
+      if (box[1] <= 0) {
+        continue;
+      }
+      int percent = (int) Math.round((100.0 * box[0]) / box[1]);
+      AttendanceMarkEntity mark = latest.get(entry.getKey());
+      String status = mark.getStatus() == null ? "" : mark.getStatus().toUpperCase(Locale.ROOT);
+      if (!"ABSENT".equals(status) && percent >= 75) {
+        continue;
+      }
+      Map<String, Object> attendance = new LinkedHashMap<>();
+      attendance.put("percent", percent);
+      attendance.put("status", status);
+      boolean matched;
+      try {
+        List<String> actions = engines.evaluateRules(scope, Map.of("attendance", attendance));
+        matched = actions.contains("NOTIFY_ABSENT") || actions.contains("BLOCK_EXAM");
+      } catch (RuntimeException ex) {
+        matched = "ABSENT".equals(status) || percent < 75;
+      }
+      if (!matched) {
+        continue;
+      }
+      Map<String, Object> row = new LinkedHashMap<>();
+      row.put("studentName", mark.getStudentName());
+      row.put("admissionNo", mark.getAdmissionNo());
+      row.put("status", status);
+      row.put("percent", percent);
+      rows.add(row);
+    }
+    return rows;
+  }
+
   @Transactional(readOnly = true)
   public List<Map<String, Object>> sessionAlerts(UUID sessionId) {
     TenantScope scope = TenantContext.require();
@@ -327,7 +460,7 @@ public class AttendanceRosterService {
     String status = asString(mark.get("status"));
     if (status == null || !MARK_STATUSES.contains(status.toUpperCase(Locale.ROOT))) {
       throw new AttendanceException(
-          "VALIDATION", "status must be one of PRESENT, ABSENT, LATE, LEAVE");
+          "VALIDATION", "status must be one of PRESENT, ABSENT, LATE, LEAVE, HALF_DAY");
     }
     status = status.toUpperCase(Locale.ROOT);
     UUID studentId = parseUuid(mark.get("studentId"));

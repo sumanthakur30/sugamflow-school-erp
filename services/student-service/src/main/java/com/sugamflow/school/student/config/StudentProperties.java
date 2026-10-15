@@ -34,6 +34,7 @@ public class StudentProperties {
     private String settingsBaseUrl = "http://localhost:8181";
     private String reportsBaseUrl = "http://localhost:8186";
     private String rulesBaseUrl = "http://localhost:8185";
+    private String workflowsBaseUrl = "http://localhost:8184";
     private String feeBaseUrl = "http://localhost:8190";
     private String libraryBaseUrl = "http://localhost:8194";
     private String hostelBaseUrl = "http://localhost:8195";
@@ -83,6 +84,14 @@ public class StudentProperties {
 
     public void setRulesBaseUrl(String rulesBaseUrl) {
       this.rulesBaseUrl = rulesBaseUrl;
+    }
+
+    public String getWorkflowsBaseUrl() {
+      return workflowsBaseUrl;
+    }
+
+    public void setWorkflowsBaseUrl(String workflowsBaseUrl) {
+      this.workflowsBaseUrl = workflowsBaseUrl;
     }
 
     public String getFeeBaseUrl() {

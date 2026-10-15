@@ -1,6 +1,7 @@
 import { Component, OnInit, inject } from '@angular/core';
 import { NgIf } from '@angular/common';
-import { RouterLink } from '@angular/router';
+import { ActivatedRoute, RouterLink } from '@angular/router';
+import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
 import { WebsiteApiService } from '../core/website-api.service';
 
 /** CMS admission page + CTA to online apply and ERP portals. */
@@ -12,7 +13,7 @@ import { WebsiteApiService } from '../core/website-api.service';
     <article *ngIf="page as p" class="card">
       <h1>{{ p['title'] }}</h1>
       <p class="summary" *ngIf="p['summary']">{{ p['summary'] }}</p>
-      <div class="body" [innerHTML]="p['bodyHtml']"></div>
+      <div class="body" [innerHTML]="trusted(p['bodyHtml'])"></div>
       <div class="actions">
         <a routerLink="/admission/apply" class="primary">Apply online</a>
         <a [href]="parentLogin" class="ghost" target="_blank" rel="noopener">Parent login</a>
@@ -56,16 +57,23 @@ import { WebsiteApiService } from '../core/website-api.service';
 })
 export class AdmissionHubPageComponent implements OnInit {
   private readonly api = inject(WebsiteApiService);
+  private readonly route = inject(ActivatedRoute);
+  private readonly sanitizer = inject(DomSanitizer);
   page: Record<string, unknown> | null = null;
   parentLogin = '#';
   teacherLogin = '#';
+  private lastScrolledFragment: string | null = null;
+  private scrollTimer: ReturnType<typeof setTimeout> | null = null;
 
   ngOnInit(): void {
     this.api.resolve().subscribe(() => {
       this.parentLogin = this.api.erpLoginUrl('parent', '/parent');
       this.teacherLogin = this.api.erpLoginUrl('teacher', '/teacher');
       this.api.getPage('admission').subscribe({
-        next: (p) => (this.page = p),
+        next: (p) => {
+          this.page = p;
+          this.scrollTo(this.route.snapshot.fragment);
+        },
         error: () =>
           (this.page = {
             title: 'Admission',
@@ -73,5 +81,22 @@ export class AdmissionHubPageComponent implements OnInit {
           }),
       });
     });
+    this.route.fragment.subscribe((id) => this.scrollTo(id));
+  }
+
+  trusted(html: unknown): SafeHtml {
+    const raw = String(html || '').replace(/<script[\s\S]*?>[\s\S]*?<\/script>/gi, '');
+    return this.sanitizer.bypassSecurityTrustHtml(raw);
+  }
+
+  private scrollTo(id: string | null): void {
+    if (!id || id === this.lastScrolledFragment) return;
+    if (this.scrollTimer) clearTimeout(this.scrollTimer);
+    this.scrollTimer = setTimeout(() => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      this.lastScrolledFragment = id;
+      el.scrollIntoView({ behavior: 'auto', block: 'start' });
+    }, 60);
   }
 }

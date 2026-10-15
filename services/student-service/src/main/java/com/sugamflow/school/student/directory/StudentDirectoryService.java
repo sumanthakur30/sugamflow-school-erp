@@ -11,6 +11,7 @@ import com.sugamflow.school.student.integration.ConfigEngineClient;
 import com.sugamflow.school.student.persistence.entity.StudentRecordEntity;
 import com.sugamflow.school.student.persistence.repo.StudentRecordRepository;
 import com.sugamflow.school.student.service.RelationshipAccessService;
+import com.sugamflow.school.student.service.StudentRecordService;
 import com.sugamflow.school.student.web.StudentException;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
@@ -32,14 +33,17 @@ public class StudentDirectoryService {
   private final StudentRecordRepository repository;
   private final ConfigEngineClient engines;
   private final RelationshipAccessService relationshipAccess;
+  private final SensitiveExportAuditService exportAudit;
 
   public StudentDirectoryService(
       StudentRecordRepository repository,
       ConfigEngineClient engines,
-      RelationshipAccessService relationshipAccess) {
+      RelationshipAccessService relationshipAccess,
+      SensitiveExportAuditService exportAudit) {
     this.repository = repository;
     this.engines = engines;
     this.relationshipAccess = relationshipAccess;
+    this.exportAudit = exportAudit;
   }
 
   @Transactional(readOnly = true)
@@ -118,6 +122,7 @@ public class StudentDirectoryService {
         notBlank(scope.branchId()) && notBlank(scope.academicSessionId());
     long total;
     long active;
+    long inactive;
     long alumni;
     long tc;
     if (scoped) {
@@ -127,6 +132,9 @@ public class StudentDirectoryService {
       active =
           repository.countByOrganizationIdAndBranchIdAndAcademicSessionIdAndStatusAndDeletedAtIsNull(
               scope.organizationId(), scope.branchId(), scope.academicSessionId(), "ACTIVE");
+      inactive =
+          repository.countByOrganizationIdAndBranchIdAndAcademicSessionIdAndStatusAndDeletedAtIsNull(
+              scope.organizationId(), scope.branchId(), scope.academicSessionId(), "INACTIVE");
       alumni =
           repository.countByOrganizationIdAndBranchIdAndAcademicSessionIdAndStatusAndDeletedAtIsNull(
               scope.organizationId(), scope.branchId(), scope.academicSessionId(), "ALUMNI");
@@ -136,6 +144,8 @@ public class StudentDirectoryService {
     } else {
       total = repository.countByOrganizationIdAndDeletedAtIsNull(scope.organizationId());
       active = repository.countByOrganizationIdAndStatusAndDeletedAtIsNull(scope.organizationId(), "ACTIVE");
+      inactive =
+          repository.countByOrganizationIdAndStatusAndDeletedAtIsNull(scope.organizationId(), "INACTIVE");
       alumni = repository.countByOrganizationIdAndStatusAndDeletedAtIsNull(scope.organizationId(), "ALUMNI");
       tc = repository.countByOrganizationIdAndStatusAndDeletedAtIsNull(scope.organizationId(), "TC_ISSUED");
     }
@@ -175,6 +185,7 @@ public class StudentDirectoryService {
     Map<String, Object> out = new LinkedHashMap<>();
     out.put("total", total);
     out.put("active", active);
+    out.put("inactive", inactive);
     out.put("alumni", alumni);
     out.put("tcIssued", tc);
     out.put("boys", boys);
@@ -223,6 +234,7 @@ public class StudentDirectoryService {
           .append(csv(row.get("branchId"))).append(',')
           .append(csv(row.get("academicSessionId"))).append('\n');
     }
+    exportAudit.record("DIRECTORY_CSV", false, page.items().size());
     return sb.toString().getBytes(StandardCharsets.UTF_8);
   }
 
@@ -259,6 +271,7 @@ public class StudentDirectoryService {
     if (rendered == null || rendered.get("contentBase64") == null) {
       throw new StudentException("RENDER_FAILED", "Directory export render returned no content");
     }
+    exportAudit.record("DIRECTORY_WORKBOOK", false, page.items().size());
     return rendered;
   }
 
@@ -278,18 +291,20 @@ public class StudentDirectoryService {
     row.put("category", stringVal(answers, "category"));
     row.put("house", stringVal(answers, "house"));
     row.put("rollNo", stringVal(answers, "rollNo"));
-    row.put("aadhaar", stringVal(answers, "aadhaar"));
+    row.put(
+        "aadhaar",
+        StudentRecordService.maskAadhaar(
+            firstNonBlank(stringVal(answers, "aadhaar"), stringVal(answers, "aadhaarNumber"))));
     row.put("penNumber", stringVal(answers, "penNumber"));
     row.put("apaarId", firstNonBlank(stringVal(answers, "apaarId"), stringVal(answers, "apaarNumber")));
     row.put("samagraId", stringVal(answers, "samagraId"));
     row.put("schoolStudentId", stringVal(answers, "schoolStudentId"));
-    row.put(
-        "photoUrl",
-        firstNonBlank(
-            stringVal(answers, "photoUrl"),
-            stringVal(answers, "photo"),
-            stringVal(answers, "studentPhoto")));
+    row.put("photoUrl", StudentRecordService.displayPhotoUrl(answers));
     row.put("parentName", parentName(answers));
+    row.put("fatherName", stringVal(answers, "fatherName"));
+    row.put("rte", truthy(answers.get("rte")) || "RTE".equalsIgnoreCase(stringVal(answers, "category")));
+    row.put("householdId", stringVal(answers, "householdId"));
+    row.put("siblingAdmissionNos", answers.get("siblingAdmissionNos"));
     row.put("transport", truthy(answers.get("transport")));
     row.put("hostel", truthy(answers.get("hostel")));
     row.put("scholarship", truthy(answers.get("scholarship")));
@@ -402,7 +417,7 @@ public class StudentDirectoryService {
     return s;
   }
 
-  private record DirectoryQuery(
+  record DirectoryQuery(
       String branch,
       String session,
       String status,

@@ -86,6 +86,47 @@
                   fees; enroll after the application is approved for full student records.
                 </p>
               }
+              @if (feeQuoteError) {
+                <p class="student-card-hint fee-quote-warn">{{ feeQuoteError }}</p>
+              }
+              @if (feeQuote) {
+                <div class="fee-quote">
+                  <p class="student-card-hint">
+                    {{ feeQuote.structureName || feeQuote.structureKey }}
+                    @if (feeQuote.classSection) {
+                      · {{ feeQuote.classSection }}
+                    }
+                    · discount {{ formatMoney(feeQuote.discountAmount || 0) }}
+                    · payable {{ formatMoney(feeQuote.netAmount || 0) }}
+                  </p>
+                  <table class="fee-quote-table">
+                    <thead>
+                      <tr>
+                        <th>Fee head</th>
+                        <th>Frequency</th>
+                        <th>Original</th>
+                        <th>Discount</th>
+                        <th>Payable</th>
+                        <th>This month</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      @for (line of feeQuote.lines || []; track line.headKey) {
+                        @if (line.source !== 'lateFee') {
+                          <tr [class.muted]="!isDueThisMonth(line)">
+                            <td>{{ line.label || line.headKey }}</td>
+                            <td>{{ line.frequency || '—' }}</td>
+                            <td class="money">{{ formatMoney(line.amount) }}</td>
+                            <td class="money">{{ formatMoney(lineDiscount(line)) }}</td>
+                            <td class="money">{{ formatMoney(linePayable(line)) }}</td>
+                            <td>{{ isDueThisMonth(line) ? 'Due' : 'Not due' }}</td>
+                          </tr>
+                        }
+                      }
+                    </tbody>
+                  </table>
+                </div>
+              }
             </div>
           </div>
         } @else {
@@ -115,6 +156,7 @@
                 } @else if (field.key === 'feeHead' && feeHeads.length) {
                   <select
                     [(ngModel)]="answers[field.key]"
+                    (ngModelChange)="onQuoteSelectionChange()"
                     [name]="field.key"
                     [disabled]="submitting"
                   >
@@ -126,6 +168,7 @@
                 } @else if (field.key === 'feeMonth') {
                   <select
                     [(ngModel)]="answers[field.key]"
+                    (ngModelChange)="onQuoteSelectionChange()"
                     [name]="field.key"
                     [disabled]="submitting"
                   >

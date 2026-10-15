@@ -15,6 +15,11 @@ public interface CmsNewsRepository extends JpaRepository<CmsNews, UUID> {
 
   Optional<CmsNews> findByOrganizationIdAndSlug(String organizationId, String slug);
 
+  List<CmsNews> findAllByOrganizationIdAndSlug(String organizationId, String slug);
+
+  List<CmsNews> findAllByOrganizationIdAndSlugAndStatus(
+      String organizationId, String slug, String status);
+
   List<CmsNews> findByOrganizationIdOrderByUpdatedAtDesc(String organizationId);
 
   Optional<CmsNews> findByIdAndOrganizationId(UUID id, String organizationId);

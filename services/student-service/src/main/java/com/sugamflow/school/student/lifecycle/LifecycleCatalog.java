@@ -20,6 +20,8 @@ public final class LifecycleCatalog {
   public static final String EVENT_TC = "TC_ISSUE";
   public static final String EVENT_DROPOUT = "DROPOUT";
   public static final String EVENT_ALUMNI = "ALUMNI";
+  public static final String EVENT_SECTION_CHANGE = "SECTION_CHANGE";
+  public static final String EVENT_CAMPUS_TRANSFER = "CAMPUS_TRANSFER";
 
   public static final String ACTION_BLOCK_TC = "BLOCK_TC";
 

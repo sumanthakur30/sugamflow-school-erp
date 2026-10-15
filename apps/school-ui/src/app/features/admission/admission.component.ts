@@ -837,6 +837,101 @@ export class AdmissionComponent implements OnInit, OnDestroy {
     return this.formatAnswer(app?.answers?.[key]);
   }
 
+  imagePreview(key: string): string {
+    return this.imagePreviewFrom({ answers: this.answers }, key);
+  }
+
+  imagePreviewFrom(app: any, key: string): string {
+    const value = String(app?.answers?.[key] ?? '');
+    return value.startsWith('data:image/') ? value : '';
+  }
+
+  imageHelp(field: FormField): string {
+    const key = field.key.toLowerCase();
+    if (key === 'photo' || key === 'studentphoto' || field.label.toLowerCase().includes('photo')) {
+      return "Upload a recent passport-size photograph. This photo will be used for the student's ID Card, Admit Card and other school documents.";
+    }
+    return 'JPG, JPEG, PNG, or WebP. Large photos are resized to fit the student record.';
+  }
+
+  onImageSelected(field: FormField, ev: Event): void {
+    const input = ev.target as HTMLInputElement;
+    const file = input.files?.[0];
+    input.value = '';
+    if (!file) return;
+    const type = (file.type || '').toLowerCase();
+    const namedOk = /\.(jpe?g|png|webp)$/i.test(file.name);
+    if (!['image/jpeg', 'image/jpg', 'image/png', 'image/webp'].includes(type) && !namedOk) {
+      this.fieldErrors = { ...this.fieldErrors, [field.key]: 'Use JPG, JPEG, PNG, or WebP' };
+      return;
+    }
+    if (file.size > 8 * 1024 * 1024) {
+      this.fieldErrors = { ...this.fieldErrors, [field.key]: 'Photo must be 8 MB or smaller' };
+      return;
+    }
+    void this.readStudentPhoto(file)
+      .then((dataUrl) => {
+        this.answers[field.key] = dataUrl;
+        const next = { ...this.fieldErrors };
+        delete next[field.key];
+        this.fieldErrors = next;
+        this.cdr.markForCheck();
+      })
+      .catch((message: string) => {
+        this.fieldErrors = { ...this.fieldErrors, [field.key]: message };
+        this.cdr.markForCheck();
+      });
+  }
+
+  /** Fit the photograph under the student vault limit without stretching it. */
+  private readStudentPhoto(file: File): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const url = URL.createObjectURL(file);
+      const img = new Image();
+      img.onload = () => {
+        URL.revokeObjectURL(url);
+        if (img.width < 120 || img.height < 120) {
+          reject('Photo must be at least 120 pixels on each side');
+          return;
+        }
+        const maxSide = 800;
+        const scale = Math.min(1, maxSide / Math.max(img.width, img.height));
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.max(1, Math.round(img.width * scale));
+        canvas.height = Math.max(1, Math.round(img.height * scale));
+        const ctx = canvas.getContext('2d');
+        if (!ctx) {
+          reject('Could not read that image');
+          return;
+        }
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.82);
+        if (dataUrl.length > 700_000) {
+          const smaller = canvas.toDataURL('image/jpeg', 0.62);
+          if (smaller.length > 700_000) {
+            reject('Photo is still too large after compression. Use a smaller image.');
+            return;
+          }
+          resolve(smaller);
+          return;
+        }
+        resolve(dataUrl);
+      };
+      img.onerror = () => {
+        URL.revokeObjectURL(url);
+        reject('Could not read that image');
+      };
+      img.src = url;
+    });
+  }
+
+  clearImage(field: FormField): void {
+    this.answers[field.key] = '';
+    const next = { ...this.fieldErrors };
+    delete next[field.key];
+    this.fieldErrors = next;
+  }
+
   /** Normalize class labels for the list (Grade 10-B, Grade 9, IV, …). */
   formatClass(app: any): string {
     const fromPartsGrade = this.formatAnswer(app?.answers?.classGrade ?? app?.answers?.grade);
@@ -893,7 +988,9 @@ export class AdmissionComponent implements OnInit, OnDestroy {
     if (v === true) return 'Yes';
     if (v === false) return 'No';
     if (v == null || String(v).trim() === '') return '—';
-    return String(v);
+    const text = String(v);
+    if (text.startsWith('data:image/')) return 'Photo uploaded';
+    return text;
   }
 
   applicantName(app: any): string {
@@ -938,6 +1035,17 @@ export class AdmissionComponent implements OnInit, OnDestroy {
       hour: '2-digit',
       minute: '2-digit',
       hour12: false,
+    });
+  }
+
+  formatListDate(raw: unknown): string {
+    if (!raw) return '—';
+    const d = new Date(String(raw));
+    if (Number.isNaN(d.getTime())) return String(raw);
+    return d.toLocaleDateString('en-GB', {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
     });
   }
 
@@ -1078,6 +1186,13 @@ export class AdmissionComponent implements OnInit, OnDestroy {
       const raw = this.answers[f.key];
       if (f.type === 'CHECKBOX') {
         if (f.mandatory && !raw) {
+          errors[f.key] = `${f.label} is required`;
+        }
+        continue;
+      }
+      if (f.type === 'IMAGE') {
+        const preview = raw == null ? '' : String(raw).trim();
+        if (f.mandatory && !preview.startsWith('data:image/')) {
           errors[f.key] = `${f.label} is required`;
         }
         continue;

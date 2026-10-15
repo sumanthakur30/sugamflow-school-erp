@@ -53,6 +53,9 @@ public class BusinessRuleService {
   @Transactional
   public void ensureDefaults(){
     upsertSystem(sample("attendance_exam_block","IF Attendance < 75% THEN Block Exam","attendance.percent","LT",75,"BLOCK_EXAM"));
+    upsertSystem(sample("attendance_absent_notify","IF Student is absent THEN Notify the desk","attendance.status","EQ","ABSENT","NOTIFY_ABSENT"));
+    upsertSystem(sample("fee_due_notify","IF Fee due amount > 0 THEN Notify the fee desk","fees.dueAmount","GT",0,"NOTIFY_FEE"));
+    upsertSystem(sample("document_expiring_notify","IF Document expires within 30 days THEN Notify the desk","document.daysToExpiry","LTE",30,"NOTIFY_DOCUMENT"));
     upsertSystem(sample("fees_id_disable","IF Fees Pending > 90 Days THEN Disable ID Card","fees.pendingDays","GT",90,"DISABLE_ID_CARD"));
     upsertSystem(sample("birthday_whatsapp","IF Student Birthday THEN Send WhatsApp","student.isBirthday","EQ",true,"SEND_WHATSAPP"));
     // Phase 5 — admission vertical slice (config rules, not hardcoded in admission-service)

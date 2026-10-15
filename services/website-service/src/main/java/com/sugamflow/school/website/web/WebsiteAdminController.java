@@ -48,21 +48,20 @@ public class WebsiteAdminController {
   }
 
   @GetMapping("/bootstrap")
-  public ApiResponse<Map<String, Object>> bootstrap() {
+  public ApiResponse<Map<String, Object>> bootstrap(
+      @RequestParam(value = "siteId", required = false) String siteId) {
     String organizationId = orgId();
-    WebsiteSite site =
-        resolveService
-            .findSite(organizationId)
-            .orElseThrow(
-                () ->
-                    new ResponseStatusException(
-                        HttpStatus.NOT_FOUND, "No website configured for this organization"));
+    WebsiteSite site = resolveService.requireEditableSite(organizationId, siteId);
 
     List<WebsiteDomain> domains = resolveService.listDomains(organizationId);
 
     Map<String, Object> payload = new LinkedHashMap<>();
     payload.put("organizationId", site.getOrganizationId());
+    payload.put("siteId", site.getId().toString());
+    payload.put("branchId", site.getBranchId());
+    payload.put("defaultSite", site.isDefaultSite());
     payload.put("status", site.getStatus());
+    payload.put("navigation", readJsonList(site.getNavigationJson()));
     payload.put("templateCode", site.getTemplateCode());
     payload.put("displayName", site.getDisplayName());
     payload.put("erpLoginUrl", site.getErpLoginUrl());
@@ -107,18 +106,30 @@ public class WebsiteAdminController {
 
   @PutMapping("/homepage")
   public ApiResponse<List<Map<String, Object>>> updateHomepage(
-      @RequestBody List<Map<String, Object>> sections) {
-    return ApiResponse.ok(resolveService.updateHomepage(orgId(), sections));
+      @RequestBody List<Map<String, Object>> sections,
+      @RequestParam(value = "siteId", required = false) String siteId) {
+    return ApiResponse.ok(resolveService.updateHomepage(orgId(), siteId, sections));
   }
 
   @PutMapping("/theme")
-  public ApiResponse<Map<String, Object>> updateTheme(@RequestBody Map<String, Object> theme) {
-    return ApiResponse.ok(resolveService.updateTheme(orgId(), theme));
+  public ApiResponse<Map<String, Object>> updateTheme(
+      @RequestBody Map<String, Object> theme,
+      @RequestParam(value = "siteId", required = false) String siteId) {
+    return ApiResponse.ok(resolveService.updateTheme(orgId(), siteId, theme));
   }
 
   @PutMapping("/seo")
-  public ApiResponse<Map<String, Object>> updateSeo(@RequestBody Map<String, Object> seo) {
-    return ApiResponse.ok(resolveService.updateSeo(orgId(), seo));
+  public ApiResponse<Map<String, Object>> updateSeo(
+      @RequestBody Map<String, Object> seo,
+      @RequestParam(value = "siteId", required = false) String siteId) {
+    return ApiResponse.ok(resolveService.updateSeo(orgId(), siteId, seo));
+  }
+
+  @PutMapping("/navigation")
+  public ApiResponse<List<Map<String, Object>>> updateNavigation(
+      @RequestBody List<Map<String, Object>> navigation,
+      @RequestParam(value = "siteId", required = false) String siteId) {
+    return ApiResponse.ok(resolveService.updateNavigation(orgId(), siteId, navigation));
   }
 
   @PostMapping("/domains")

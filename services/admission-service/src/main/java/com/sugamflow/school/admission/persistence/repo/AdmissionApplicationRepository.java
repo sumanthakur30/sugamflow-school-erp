@@ -95,4 +95,25 @@ public interface AdmissionApplicationRepository extends JpaRepository<AdmissionA
       @Param("sortKey") String sortKey,
       @Param("sortAsc") boolean sortAsc,
       Pageable pageable);
+
+  @Query(
+      value =
+          """
+          SELECT * FROM admission_application a
+          WHERE a.organization_id = :org
+            AND (:branchBlank = true OR a.branch_id = :branch)
+            AND (:sessionBlank = true OR a.academic_session_id = :session)
+            AND lower(coalesce(a.answers->>'mobile', '')) = lower(:mobile)
+            AND upper(coalesce(a.status, '')) NOT IN
+              ('REJECTED', 'ENROLLED', 'ADMITTED', 'CANCELLED', 'CLOSED', 'WITHDRAWN')
+          ORDER BY a.created_at DESC
+          """,
+      nativeQuery = true)
+  List<AdmissionApplicationEntity> findOpenByMobile(
+      @Param("org") String org,
+      @Param("branch") String branch,
+      @Param("branchBlank") boolean branchBlank,
+      @Param("session") String session,
+      @Param("sessionBlank") boolean sessionBlank,
+      @Param("mobile") String mobile);
 }

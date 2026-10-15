@@ -63,6 +63,7 @@
         </div>
       </div>
 
+      <sf-student-global-search />
       <div class="context-actions">
         <div class="user-chip">
           <span class="user-name">{{ sessionChip() }}</span>
@@ -139,7 +140,7 @@
       [ngStyle]="dropdownStyle"
       (click)="$event.stopPropagation()"
     >
-      @for (item of openGroupItems(); track item.path) {
+      @for (item of openGroupItems(); track item.label) {
         <a
           role="menuitem"
           [routerLink]="item.path"
@@ -203,7 +204,7 @@
                 </button>
                 @if (isSideExpanded('m-' + group.id)) {
                   <div class="side-links">
-                    @for (item of group.items; track item.path) {
+                    @for (item of group.items; track item.label) {
                       <a
                         [routerLink]="item.path"
                         routerLinkActive="active"
@@ -233,7 +234,7 @@
               </button>
               @if (isSideExpanded(group.id)) {
                 <div class="side-links">
-                  @for (item of group.items; track item.path) {
+                  @for (item of group.items; track item.label) {
                     <a
                       [routerLink]="item.path"
                       routerLinkActive="active"

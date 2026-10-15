@@ -11,4 +11,8 @@ public record EventResponse(
     String bodyHtml,
     String locationText,
     Instant startsAt,
-    Instant endsAt) {}
+    Instant endsAt,
+    String status,
+    String category,
+    Integer priority,
+    String audience) {}

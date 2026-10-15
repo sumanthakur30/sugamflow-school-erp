@@ -46,6 +46,12 @@ public class StaffController {
     return ApiResponse.ok(service.create(body));
   }
 
+  @PostMapping("/staff/{id}/campus-transfer")
+  public ApiResponse<Map<String, Object>> campusTransfer(
+      @PathVariable("id") UUID id, @RequestBody Map<String, Object> body) {
+    return ApiResponse.ok(service.transferCampus(id, body));
+  }
+
   @PutMapping("/staff/{id}")
   public ApiResponse<Map<String, Object>> update(
       @PathVariable("id") UUID id, @RequestBody Map<String, Object> body) {

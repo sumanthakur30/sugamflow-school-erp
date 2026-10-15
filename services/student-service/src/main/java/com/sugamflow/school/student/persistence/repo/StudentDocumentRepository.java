@@ -14,4 +14,7 @@ public interface StudentDocumentRepository extends JpaRepository<StudentDocument
   Optional<StudentDocumentEntity> findByIdAndOrganizationId(UUID id, String organizationId);
 
   Optional<StudentDocumentEntity> findByVerificationToken(String verificationToken);
+
+  List<StudentDocumentEntity> findTop200ByOrganizationIdAndStatusOrderByIssuedAtDesc(
+      String organizationId, String status);
 }

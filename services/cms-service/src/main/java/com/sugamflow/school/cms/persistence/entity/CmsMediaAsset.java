@@ -16,6 +16,9 @@ public class CmsMediaAsset {
   @Column(name = "organization_id", nullable = false, length = 64)
   private String organizationId;
 
+  @Column(name = "site_id")
+  private UUID siteId;
+
   @Column(name = "file_name", nullable = false, length = 256)
   private String fileName;
 
@@ -35,6 +38,8 @@ public class CmsMediaAsset {
   public void setId(UUID id) { this.id = id; }
   public String getOrganizationId() { return organizationId; }
   public void setOrganizationId(String organizationId) { this.organizationId = organizationId; }
+  public UUID getSiteId() { return siteId; }
+  public void setSiteId(UUID siteId) { this.siteId = siteId; }
   public String getFileName() { return fileName; }
   public void setFileName(String fileName) { this.fileName = fileName; }
   public String getContentType() { return contentType; }

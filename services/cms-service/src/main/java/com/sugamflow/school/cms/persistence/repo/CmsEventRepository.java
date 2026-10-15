@@ -13,4 +13,6 @@ public interface CmsEventRepository extends JpaRepository<CmsEvent, UUID> {
   List<CmsEvent> findByOrganizationIdOrderByStartsAtDesc(String organizationId);
 
   Optional<CmsEvent> findByIdAndOrganizationId(UUID id, String organizationId);
+
+  List<CmsEvent> findAllByOrganizationIdAndSlug(String organizationId, String slug);
 }

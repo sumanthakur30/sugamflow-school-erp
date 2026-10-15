@@ -2,12 +2,13 @@ import { Component, OnInit, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ApiService } from '../../core/api.service';
+import { RouterLink } from '@angular/router';
 import { ReportCardInsightsComponent } from '../../shared/report-card-insights/report-card-insights.component';
 
 @Component({
   selector: 'sf-teacher-report-cards',
   standalone: true,
-  imports: [CommonModule, FormsModule, ReportCardInsightsComponent],
+  imports: [CommonModule, FormsModule, RouterLink, ReportCardInsightsComponent],
   templateUrl: './teacher-report-cards.component.html',
   styleUrls: ['../../shared/admin-page.scss', './teacher-report-cards.component.scss'],
 })
@@ -28,6 +29,7 @@ export class TeacherReportCardsComponent implements OnInit {
   insights: Record<string, any> = {};
   insightLoading = new Set<string>();
   expandedInsightKey = '';
+  missingPhotos = 0;
 
   ngOnInit(): void {
     this.api.get<any[]>('/api/academic/sections').subscribe({
@@ -120,6 +122,62 @@ export class TeacherReportCardsComponent implements OnInit {
         this.insightLoading.delete(key);
         this.expandedInsightKey = '';
         this.error = err?.error?.message ?? 'Could not generate report-card insights';
+      },
+    });
+  }
+
+  attendanceCell(student: any): string {
+    if (student?.attendancePercent == null) return '–';
+    return `${student.attendancePercent}%`;
+  }
+
+  downloadDateSheet(): void {
+    if (!this.sectionId) return;
+    const term = this.termKey.trim();
+    const path =
+      `/api/exam/date-sheets/pdf?sectionId=${encodeURIComponent(this.sectionId)}` +
+      (term ? `&termKey=${encodeURIComponent(term)}` : '');
+    this.busy = true;
+    this.error = '';
+    this.api.getBlob(path).subscribe({
+      next: (blob) => {
+        this.busy = false;
+        this.saveBlob(blob, `date-sheet-${term || 'class'}.pdf`);
+      },
+      error: () => {
+        this.busy = false;
+        this.error = 'Could not download the date sheet';
+      },
+    });
+  }
+
+  downloadAdmitCards(): void {
+    if (!this.sectionId) return;
+    const term = this.termKey.trim();
+    const query =
+      `sectionId=${encodeURIComponent(this.sectionId)}` +
+      (term ? `&termKey=${encodeURIComponent(term)}` : '');
+    this.busy = true;
+    this.error = '';
+    this.missingPhotos = 0;
+    this.api.get<any>(`/api/exam/admit-cards?${query}`).subscribe({
+      next: (pack) => {
+        this.missingPhotos = Number(pack?.missingPhotoCount || 0);
+        this.fetchAdmitPdf(query, term);
+      },
+      error: () => this.fetchAdmitPdf(query, term),
+    });
+  }
+
+  private fetchAdmitPdf(query: string, term: string): void {
+    this.api.getBlob(`/api/exam/admit-cards/pdf?${query}`).subscribe({
+      next: (blob) => {
+        this.busy = false;
+        this.saveBlob(blob, `admit-cards-${term || 'class'}.pdf`);
+      },
+      error: () => {
+        this.busy = false;
+        this.error = 'Could not download admit cards';
       },
     });
   }

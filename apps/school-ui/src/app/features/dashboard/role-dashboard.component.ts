@@ -1,7 +1,7 @@
 import { CommonModule } from '@angular/common';
 import { ChangeDetectorRef, Component, OnDestroy, OnInit, inject } from '@angular/core';
 import { RouterLink } from '@angular/router';
-import { Observable, Subscription, catchError, of, switchMap, timer, timeout } from 'rxjs';
+import { Observable, Subscription, catchError, forkJoin, of, switchMap, timer, timeout } from 'rxjs';
 import { ApiService, PageResult } from '../../core/api.service';
 import { AuthSessionService } from '../../core/auth-session.service';
 import { TenantContextService } from '../../core/tenant-context.service';
@@ -74,6 +74,7 @@ export class RoleDashboardComponent implements OnInit, OnDestroy {
   metrics: Metric[] = [];
   actions: Action[] = [];
   activity: ActivityItem[] = [];
+  exceptionGroups: { title: string; rows: ActivityItem[] }[] = [];
   unavailable = 0;
 
   private wantsFinance = false;
@@ -152,6 +153,7 @@ export class RoleDashboardComponent implements OnInit, OnDestroy {
     );
     this.track(generation, orgAtStart, 'attendance', this.safePage('/api/attendance/records'));
     this.track(generation, orgAtStart, 'fees', this.safePage('/api/fee/collections'));
+    this.loadExceptions();
 
     if (this.wantsTeacher) {
       this.track(generation, orgAtStart, 'teacherScope', this.safeGet('/api/academic/teacher-scope'));
@@ -325,6 +327,53 @@ export class RoleDashboardComponent implements OnInit, OnDestroy {
     );
   }
 
+  private loadExceptions(): void {
+    if (!this.isLeadershipRole() && !this.isFinanceRole()) {
+      this.exceptionGroups = [];
+      return;
+    }
+    const generation = this.loadGeneration;
+    this.requestSub.add(
+      forkJoin({
+        fees: this.api.get<any[]>('/api/fee/exceptions').pipe(catchError(() => of([]))),
+        attendance: this.api
+          .get<any[]>('/api/attendance/exceptions')
+          .pipe(catchError(() => of([]))),
+        documents: this.api
+          .get<any[]>('/api/student/documents/expiring')
+          .pipe(catchError(() => of([]))),
+      }).subscribe((result) => {
+        if (generation !== this.loadGeneration) {
+          return;
+        }
+        const fees = (result.fees || []).slice(0, 8).map((row) => ({
+          label: row.studentName || row.admissionNo || 'Fee due',
+          value: row.amount != null ? `Due ${row.amount}` : 'Fee due',
+          route: '/admin/fee',
+        }));
+        const attendance = (result.attendance || []).slice(0, 8).map((row) => ({
+          label: row.studentName || row.admissionNo || 'Student',
+          value: row.percent != null ? `${row.status} · ${row.percent}%` : String(row.status || 'Absent'),
+          route: '/admin/attendance',
+        }));
+        const documents = (result.documents || []).slice(0, 8).map((row) => ({
+          label: row.studentName || row.admissionNo || row.documentType || 'Document',
+          value:
+            row.daysToExpiry != null
+              ? `${row.documentType} · ${row.daysToExpiry} days`
+              : String(row.documentType || 'Expiring'),
+          route: '/admin/students',
+        }));
+        this.exceptionGroups = [
+          { title: 'Low attendance', rows: attendance },
+          { title: 'Fee risk', rows: fees },
+          { title: 'Expiring documents', rows: documents },
+        ];
+        this.cdr.detectChanges();
+      }),
+    );
+  }
+
   private isLeadershipRole(): boolean {
     return ['SHOP_OWNER', 'SUPER_ADMIN', 'ADMIN', 'PRINCIPAL'].includes(this.role);
   }
@@ -385,13 +434,40 @@ export class RoleDashboardComponent implements OnInit, OnDestroy {
         route: '/admin/student-directory',
         tone: 'green',
       },
+      inactiveStudents: {
+        id: 'inactiveStudents',
+        label: 'Inactive students',
+        value: data.students == null ? '—' : Number(data.students.inactive ?? 0),
+        hint:
+          data.students == null
+            ? 'Count unavailable — check student service / network'
+            : 'Status INACTIVE for this campus',
+        route: '/admin/student-directory',
+        queryParams: { status: 'INACTIVE' },
+        tone: 'amber',
+      },
       staff: {
         id: 'staff',
         label: 'Active staff',
-        value: data.staff?.active ?? data.staff?.total ?? '—',
-        hint: `${data.staff?.total ?? 0} total records`,
+        value: data.staff == null ? '—' : (data.staff.active ?? data.staff.total ?? 0),
+        hint:
+          data.staff == null
+            ? 'Count unavailable — check staff service / network'
+            : `${data.staff.total ?? 0} total records`,
         route: '/admin/staff-directory',
         tone: 'blue',
+      },
+      inactiveStaff: {
+        id: 'inactiveStaff',
+        label: 'Inactive staff',
+        value: data.staff == null ? '—' : Number(data.staff.inactive ?? 0),
+        hint:
+          data.staff == null
+            ? 'Count unavailable — check staff service / network'
+            : 'Status INACTIVE for this campus',
+        route: '/admin/staff-directory',
+        queryParams: { status: 'INACTIVE' },
+        tone: 'purple',
       },
       admissions: {
         id: 'admissions',
@@ -490,18 +566,43 @@ export class RoleDashboardComponent implements OnInit, OnDestroy {
     };
 
     const roleMetricIds: Record<string, string[]> = {
-      PRINCIPAL: ['students', 'staff', 'admissions', 'feeIncome', 'pendingFees', 'attendance'],
-      ACCOUNTANT: ['feeIncome', 'pendingFees', 'netProfit', 'salary', 'students'],
-      ACCOUNTS: ['feeIncome', 'pendingFees', 'netProfit', 'salary', 'students'],
-      FINANCE: ['feeIncome', 'pendingFees', 'netProfit', 'salary', 'students'],
-      RECEPTION: ['admissions', 'students', 'attendance', 'staff'],
-      RECEPTIONIST: ['admissions', 'students', 'attendance', 'staff'],
-      LIBRARIAN: ['library', 'students', 'staff', 'attendance'],
+      PRINCIPAL: [
+        'students',
+        'inactiveStudents',
+        'staff',
+        'inactiveStaff',
+        'admissions',
+        'feeIncome',
+        'pendingFees',
+        'attendance',
+      ],
+      ACCOUNTANT: ['feeIncome', 'pendingFees', 'netProfit', 'salary', 'students', 'inactiveStudents'],
+      ACCOUNTS: ['feeIncome', 'pendingFees', 'netProfit', 'salary', 'students', 'inactiveStudents'],
+      FINANCE: ['feeIncome', 'pendingFees', 'netProfit', 'salary', 'students', 'inactiveStudents'],
+      RECEPTION: ['admissions', 'students', 'inactiveStudents', 'attendance', 'staff', 'inactiveStaff'],
+      RECEPTIONIST: [
+        'admissions',
+        'students',
+        'inactiveStudents',
+        'attendance',
+        'staff',
+        'inactiveStaff',
+      ],
+      LIBRARIAN: ['library', 'students', 'inactiveStudents', 'staff', 'inactiveStaff', 'attendance'],
       TEACHER: ['classes', 'scopedStudents', 'slots', 'attendance'],
     };
     const ids =
       roleMetricIds[this.role] ??
-      ['students', 'staff', 'admissions', 'feeIncome', 'pendingFees', 'attendance'];
+      [
+        'students',
+        'inactiveStudents',
+        'staff',
+        'inactiveStaff',
+        'admissions',
+        'feeIncome',
+        'pendingFees',
+        'attendance',
+      ];
     this.metrics = ids.map((id) => all[id]).filter(Boolean);
   }
 

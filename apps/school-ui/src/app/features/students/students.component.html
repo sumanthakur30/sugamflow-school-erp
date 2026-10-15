@@ -12,8 +12,8 @@
       <header class="profile-hero">
         <div class="profile-hero-main">
           <div class="profile-avatar" [attr.aria-label]="'Photo of ' + studentName(selected)">
-            @if (studentPhotoUrl()) {
-              <img [src]="studentPhotoUrl()" alt="" />
+            @if (photoState('STUDENT_PHOTO') === 'ready') {
+              <img [src]="photoObject('STUDENT_PHOTO')" alt="" />
             } @else {
               <span class="avatar-initials">{{ studentInitials(selected) }}</span>
             }
@@ -342,10 +342,23 @@
                   @if (identity.enableStudentPhoto) {
                     <div class="photo-card">
                       <span class="read-label">Student photo</span>
-                      @if (studentPhotoUrl()) {
-                        <img class="student-photo" [src]="studentPhotoUrl()" alt="Student photo" />
-                      } @else {
-                        <div class="photo-placeholder">No photo</div>
+                      <span class="muted">
+                        Upload a recent passport-size photograph. This photo will be used for the
+                        student's ID Card, Admit Card and other school documents.
+                      </span>
+                      @switch (photoState('STUDENT_PHOTO')) {
+                        @case ('loading') {
+                          <div class="photo-placeholder">Loading photo...</div>
+                        }
+                        @case ('ready') {
+                          <img class="student-photo" [src]="photoObject('STUDENT_PHOTO')" alt="Student photo" />
+                        }
+                        @case ('error') {
+                          <div class="photo-placeholder">Photo unavailable</div>
+                        }
+                        @default {
+                          <div class="photo-placeholder">No photo</div>
+                        }
                       }
                       <div class="doc-actions">
                         <label class="tiny file-btn" [class.disabled]="uploadingAttachment || selected.deleted">
@@ -379,10 +392,19 @@
                     @for (slot of guardianPhotoSlots; track slot.type) {
                       <div class="photo-card">
                         <span class="read-label">{{ slot.label }}</span>
-                        @if (attachmentUrl(slot.type)) {
-                          <img class="student-photo" [src]="attachmentUrl(slot.type)" [alt]="slot.label" />
-                        } @else {
-                          <div class="photo-placeholder">No photo</div>
+                        @switch (photoState(slot.type)) {
+                          @case ('loading') {
+                            <div class="photo-placeholder">Loading photo...</div>
+                          }
+                          @case ('ready') {
+                            <img class="student-photo" [src]="photoObject(slot.type)" [alt]="slot.label" />
+                          }
+                          @case ('error') {
+                            <div class="photo-placeholder">Photo unavailable</div>
+                          }
+                          @default {
+                            <div class="photo-placeholder">No photo</div>
+                          }
                         }
                         <div class="doc-actions">
                           <label class="tiny file-btn" [class.disabled]="uploadingAttachment || selected.deleted">
@@ -441,7 +463,7 @@
                                 <span class="muted"> · {{ att.fileName }} · {{ att.byteLength }} bytes</span>
                               </div>
                               <div class="doc-actions">
-                                <a class="tiny-link" [href]="att.contentUrl" target="_blank" rel="noopener">Open</a>
+                                <button type="button" class="tiny-link" (click)="openAttachment(att)">Open</button>
                                 <button type="button" class="tiny secondary" (click)="removeAttachment(att)">
                                   Remove
                                 </button>

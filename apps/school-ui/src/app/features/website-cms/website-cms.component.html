@@ -1021,6 +1021,54 @@
       </div>
     </div>
 
+    <div class="wb-panel panel" *ngIf="tab === 'navigation'">
+      <h2>Navigation</h2>
+      <p class="hint">These links appear in the public header. ERP Login stays in the header button.</p>
+      <div class="list">
+        <article *ngFor="let item of navItems; let i = index">
+          <label>Label <input [(ngModel)]="item.label" /></label>
+          <label>Path <input [(ngModel)]="item.path" placeholder="/about" /></label>
+          <button type="button" (click)="navItems.splice(i, 1)">Remove</button>
+        </article>
+      </div>
+      <button type="button" (click)="addNavItem()">Add link</button>
+      <button type="button" class="primary" (click)="saveNavigation()" [disabled]="saving">Save navigation</button>
+    </div>
+
+    <div class="wb-panel panel" *ngIf="tab === 'events'">
+      <h2>Events</h2>
+      <form (ngSubmit)="saveEvent()">
+        <label>Slug <input [(ngModel)]="eventDraft.slug" name="eventSlug" required /></label>
+        <label>Title <input [(ngModel)]="eventDraft.title" name="eventTitle" required /></label>
+        <label>Summary <input [(ngModel)]="eventDraft.summary" name="eventSummary" /></label>
+        <label>Location <input [(ngModel)]="eventDraft.locationText" name="eventLocation" /></label>
+        <label>Starts <input type="datetime-local" [(ngModel)]="eventDraft.startsAt" name="eventStarts" required /></label>
+        <label>Ends <input type="datetime-local" [(ngModel)]="eventDraft.endsAt" name="eventEnds" /></label>
+        <button type="submit" [disabled]="saving">Save draft</button>
+      </form>
+      <article *ngFor="let row of events">
+        <strong>{{ row['title'] }}</strong>
+        <span>{{ row['status'] }}</span>
+        <button type="button" *ngIf="row['status'] !== 'PUBLISHED'" (click)="publishEvent(row)">Publish</button>
+      </article>
+    </div>
+
+    <div class="wb-panel panel" *ngIf="tab === 'downloads'">
+      <h2>Downloads</h2>
+      <form (ngSubmit)="saveDocument()">
+        <label>Title <input [(ngModel)]="documentDraft.title" name="docTitle" required /></label>
+        <label>Category <input [(ngModel)]="documentDraft.category" name="docCategory" /></label>
+        <label>File URL <input [(ngModel)]="documentDraft.fileUrl" name="docUrl" required /></label>
+        <label>Summary <input [(ngModel)]="documentDraft.summary" name="docSummary" /></label>
+        <button type="submit" [disabled]="saving">Save draft</button>
+      </form>
+      <article *ngFor="let row of documents">
+        <strong>{{ row['title'] }}</strong>
+        <span>{{ row['status'] }}</span>
+        <button type="button" *ngIf="row['status'] !== 'PUBLISHED'" (click)="publishDocument(row)">Publish</button>
+      </article>
+    </div>
+
     <!-- Phase 2+ placeholders for soon modules -->
     <div class="wb-panel soon-panel" *ngIf="isSoonModule(tab)">
       <div class="soon-badge">Phase 2+</div>

@@ -14,7 +14,9 @@ import { ComplianceApiService, DisclosurePackage } from './compliance-api.servic
       <div class="page-head">
         <div>
           <h2>Disclosure Preview</h2>
-          <p>Build and publish mandatory public disclosure to the school website CMS.</p>
+          <p>
+            Published disclosure uses approved Documents Vault files. It does not store a second copy.
+          </p>
         </div>
         <div style="display: flex; gap: 0.5rem; flex-wrap: wrap">
           <a routerLink="/admin/compliance" class="btn">Dashboard</a>
@@ -66,7 +68,7 @@ import { ComplianceApiService, DisclosurePackage } from './compliance-api.servic
       }
 
       @if (pack) {
-        @if (pack.warnings?.length) {
+        @if (pack.warnings.length) {
           <div class="panel" style="margin-bottom: 1rem">
             <h3 style="margin-top: 0; font-size: 1.1rem">Warnings</h3>
             <ul>

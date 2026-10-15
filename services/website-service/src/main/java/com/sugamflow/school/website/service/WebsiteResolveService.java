@@ -104,7 +104,8 @@ public class WebsiteResolveService {
         readMap(site.getThemeJson()),
         readList(site.getHomepageJson()),
         readList(site.getNavigationJson()),
-        readMap(site.getSeoJson()));
+        readMap(site.getSeoJson()),
+        site.isDefaultSite());
   }
 
   public List<WebsiteDomain> listDomains(String organizationId) {
@@ -305,10 +306,40 @@ public class WebsiteResolveService {
         .toList();
   }
 
+  public WebsiteSite requireEditableSite(String organizationId, String siteId) {
+    if (siteId != null && !siteId.isBlank()) {
+      WebsiteSite site =
+          siteRepository
+              .findById(java.util.UUID.fromString(siteId.trim()))
+              .filter(row -> organizationId.equals(row.getOrganizationId()))
+              .orElseThrow(
+                  () -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Website site not found"));
+      return site;
+    }
+    String branch =
+        com.sugamflow.school.common.tenant.TenantContext.get()
+            .map(com.sugamflow.school.common.tenant.TenantScope::branchId)
+            .orElse("");
+    if (branch != null && !branch.isBlank() && !"main".equalsIgnoreCase(branch)) {
+      Optional<WebsiteSite> campus =
+          siteRepository.findByOrganizationIdAndBranchId(organizationId, branch.trim());
+      if (campus.isPresent()) {
+        return campus.get();
+      }
+    }
+    return requireSite(organizationId);
+  }
+
   @org.springframework.transaction.annotation.Transactional
   public List<Map<String, Object>> updateHomepage(
       String organizationId, List<Map<String, Object>> sections) {
-    WebsiteSite site = requireSite(organizationId);
+    return updateHomepage(organizationId, null, sections);
+  }
+
+  @org.springframework.transaction.annotation.Transactional
+  public List<Map<String, Object>> updateHomepage(
+      String organizationId, String siteId, List<Map<String, Object>> sections) {
+    WebsiteSite site = requireEditableSite(organizationId, siteId);
     List<Map<String, Object>> normalized = normalizeSections(sections);
     try {
       site.setHomepageJson(objectMapper.writeValueAsString(normalized));
@@ -322,7 +353,13 @@ public class WebsiteResolveService {
 
   @org.springframework.transaction.annotation.Transactional
   public Map<String, Object> updateTheme(String organizationId, Map<String, Object> theme) {
-    WebsiteSite site = requireSite(organizationId);
+    return updateTheme(organizationId, null, theme);
+  }
+
+  @org.springframework.transaction.annotation.Transactional
+  public Map<String, Object> updateTheme(
+      String organizationId, String siteId, Map<String, Object> theme) {
+    WebsiteSite site = requireEditableSite(organizationId, siteId);
     // Merge so partial admin clients (colors/logo only) do not wipe contact/brand keys.
     Map<String, Object> merged = new java.util.LinkedHashMap<>(readMap(site.getThemeJson()));
     if (theme != null) {
@@ -350,7 +387,13 @@ public class WebsiteResolveService {
 
   @org.springframework.transaction.annotation.Transactional
   public Map<String, Object> updateSeo(String organizationId, Map<String, Object> seo) {
-    WebsiteSite site = requireSite(organizationId);
+    return updateSeo(organizationId, null, seo);
+  }
+
+  @org.springframework.transaction.annotation.Transactional
+  public Map<String, Object> updateSeo(
+      String organizationId, String siteId, Map<String, Object> seo) {
+    WebsiteSite site = requireEditableSite(organizationId, siteId);
     Map<String, Object> safe = seo == null ? Collections.emptyMap() : seo;
     try {
       site.setSeoJson(objectMapper.writeValueAsString(safe));
@@ -360,6 +403,21 @@ public class WebsiteResolveService {
     site.setUpdatedAt(java.time.Instant.now());
     siteRepository.save(site);
     return safe;
+  }
+
+  @org.springframework.transaction.annotation.Transactional
+  public List<Map<String, Object>> updateNavigation(
+      String organizationId, String siteId, List<Map<String, Object>> navigation) {
+    WebsiteSite site = requireEditableSite(organizationId, siteId);
+    List<Map<String, Object>> normalized = navigation == null ? List.of() : navigation;
+    try {
+      site.setNavigationJson(objectMapper.writeValueAsString(normalized));
+    } catch (Exception ex) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid navigation JSON");
+    }
+    site.setUpdatedAt(java.time.Instant.now());
+    siteRepository.save(site);
+    return normalized;
   }
 
   private WebsiteSite requireSite(String organizationId) {

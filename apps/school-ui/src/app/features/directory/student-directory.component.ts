@@ -1,7 +1,7 @@
 import { Component, OnDestroy, OnInit, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { RouterLink } from '@angular/router';
+import { ActivatedRoute, RouterLink } from '@angular/router';
 import { Subscription, catchError, finalize, map, timeout } from 'rxjs';
 import { ApiService, PageResult } from '../../core/api.service';
 import { TenantContextService } from '../../core/tenant-context.service';
@@ -29,6 +29,7 @@ import {
 })
 export class StudentDirectoryComponent implements OnInit, OnDestroy {
   private readonly api = inject(ApiService);
+  private readonly route = inject(ActivatedRoute);
   private readonly tenantContext = inject(TenantContextService);
   private readonly modules = inject(ModuleBootstrapService);
   private campusReadySub?: Subscription;
@@ -59,10 +60,24 @@ export class StudentDirectoryComponent implements OnInit, OnDestroy {
   hostel = false;
   /** Trash mode — elevated roles; lists soft-deleted students only. */
   trashMode = false;
+  /** Students who still need a photo before ID cards or admit cards are printed. */
+  missingPhotoOnly = false;
   selectedIds = new Set<string>();
   showAdvancedFilters = false;
   bulkBusy = false;
   bulkReason = '';
+  bulkStatus = 'PASSED_OUT';
+  householdAdmissionNos = '';
+  readonly lifecycleStatuses = [
+    { value: 'ACTIVE', label: 'Active' },
+    { value: 'SUSPENDED', label: 'Suspended' },
+    { value: 'PASSED_OUT', label: 'Passed' },
+    { value: 'DROPOUT', label: 'Dropped' },
+    { value: 'TRANSFERRED', label: 'Transferred' },
+    { value: 'LEFT_SCHOOL', label: 'Left school' },
+    { value: 'TC_ISSUED', label: 'TC issued' },
+    { value: 'ALUMNI', label: 'Alumni' },
+  ];
   showBulkDeleteConfirm = false;
   statusMsg = '';
   sortBy = 'updatedAt';
@@ -86,6 +101,11 @@ export class StudentDirectoryComponent implements OnInit, OnDestroy {
   ];
 
   ngOnInit(): void {
+    const status = (this.route.snapshot.queryParamMap.get('status') || '').trim();
+    if (status) {
+      this.status = status.toUpperCase();
+    }
+    this.missingPhotoOnly = this.route.snapshot.queryParamMap.get('missingPhoto') === '1';
     this.campusReadySub = this.tenantContext.whenCampusReady().subscribe(() => this.reload());
   }
 
@@ -226,8 +246,9 @@ export class StudentDirectoryComponent implements OnInit, OnDestroy {
   search(page = 0): void {
     this.searching = true;
     this.error = '';
+    const size = this.missingPhotoOnly ? 200 : this.page.size || 50;
     this.api
-      .getPage<any>('/api/student/directory/students', page, this.page.size || 50, {
+      .getPage<any>('/api/student/directory/students', page, size, {
         ...this.filterParams(),
         sort: this.sortBy,
         dir: this.sortDir,
@@ -241,12 +262,18 @@ export class StudentDirectoryComponent implements OnInit, OnDestroy {
       )
       .subscribe({
         next: (p) => {
+          let items = sortRows(p.items || [], this.sortBy, this.sortDir, (row, key) => {
+            if (key === 'fullName') return row.fullName || row.studentName;
+            return row?.[key];
+          });
+          if (this.missingPhotoOnly) {
+            items = items.filter((row) => !this.hasStudentPhoto(row));
+          }
           this.page = {
             ...p,
-            items: sortRows(p.items || [], this.sortBy, this.sortDir, (row, key) => {
-              if (key === 'fullName') return row.fullName || row.studentName;
-              return row?.[key];
-            }),
+            items,
+            totalElements: this.missingPhotoOnly ? items.length : p.totalElements,
+            hasNext: this.missingPhotoOnly ? false : p.hasNext,
           };
           this.rebuildClassSectionOptions();
           this.selectedIds.clear();
@@ -455,7 +482,7 @@ export class StudentDirectoryComponent implements OnInit, OnDestroy {
     this.search(0);
   }
 
-  applySummaryFilter(kind: 'all' | 'active' | 'tc' | 'new' | 'trash'): void {
+  applySummaryFilter(kind: 'all' | 'active' | 'inactive' | 'tc' | 'new' | 'trash'): void {
     this.q = '';
     this.classSection = '';
     this.gender = '';
@@ -468,6 +495,8 @@ export class StudentDirectoryComponent implements OnInit, OnDestroy {
       this.trashMode = false;
       if (kind === 'active') {
         this.status = 'ACTIVE';
+      } else if (kind === 'inactive') {
+        this.status = 'INACTIVE';
       } else if (kind === 'tc') {
         this.status = 'TC_ISSUED';
       } else {
@@ -475,6 +504,16 @@ export class StudentDirectoryComponent implements OnInit, OnDestroy {
       }
     }
     this.search(0);
+  }
+
+  toggleMissingPhotos(): void {
+    this.missingPhotoOnly = !this.missingPhotoOnly;
+    this.search(0);
+  }
+
+  hasStudentPhoto(row: any): boolean {
+    const url = String(row?.photoUrl ?? '');
+    return url.startsWith('/api/') || url.startsWith('http') || url.startsWith('data:image/');
   }
 
   toggleTrash(): void {
@@ -504,6 +543,58 @@ export class StudentDirectoryComponent implements OnInit, OnDestroy {
 
   isSelected(id: string): boolean {
     return this.selectedIds.has(id);
+  }
+
+  applyBulkStatus(): void {
+    if (!this.selectedCount || this.bulkBusy || this.trashMode) return;
+    this.bulkBusy = true;
+    this.error = '';
+    this.statusMsg = '';
+    this.api
+      .post<any>('/api/student/students/bulk-status', {
+        studentIds: [...this.selectedIds],
+        status: this.bulkStatus,
+        reason: `Bulk status ${this.bulkStatus}`,
+      })
+      .subscribe({
+        next: (res) => {
+          this.bulkBusy = false;
+          this.statusMsg = `Updated ${res?.updated ?? 0} of ${res?.requested ?? 0} students`;
+          this.selectedIds.clear();
+          this.search(this.page.page);
+        },
+        error: (err) => {
+          this.bulkBusy = false;
+          this.error = err?.error?.message ?? 'Bulk status update failed';
+        },
+      });
+  }
+
+  linkHousehold(): void {
+    const admissionNos = this.householdAdmissionNos
+      .split(/[\s,]+/)
+      .map((value) => value.trim())
+      .filter(Boolean);
+    if (admissionNos.length < 2) {
+      this.error = 'Enter at least two admission numbers to link siblings.';
+      return;
+    }
+    this.bulkBusy = true;
+    this.error = '';
+    this.statusMsg = '';
+    this.api.post<any>('/api/student/households', { admissionNos }).subscribe({
+      next: (res) => {
+        this.bulkBusy = false;
+        this.statusMsg = `Linked ${admissionNos.length} students as one household`;
+        this.householdAdmissionNos = '';
+        this.search(this.page.page);
+        return res;
+      },
+      error: (err) => {
+        this.bulkBusy = false;
+        this.error = err?.error?.message ?? 'Could not link siblings';
+      },
+    });
   }
 
   openBulkDelete(): void {
@@ -596,6 +687,27 @@ export class StudentDirectoryComponent implements OnInit, OnDestroy {
         URL.revokeObjectURL(url);
       },
       error: (err) => (this.error = err?.error?.message ?? 'Export failed'),
+    });
+  }
+
+  exportUdise(): void {
+    const qs = new URLSearchParams();
+    const filters = this.filterParams();
+    for (const [k, v] of Object.entries(filters)) {
+      if (v !== null && v !== undefined && v !== '') {
+        qs.set(k, String(v));
+      }
+    }
+    this.api.getBlob(`/api/student/directory/export-udise.csv?${qs.toString()}`).subscribe({
+      next: (blob) => {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'udise-students.csv';
+        a.click();
+        URL.revokeObjectURL(url);
+      },
+      error: (err) => (this.error = err?.error?.message ?? 'UDISE+ export failed'),
     });
   }
 

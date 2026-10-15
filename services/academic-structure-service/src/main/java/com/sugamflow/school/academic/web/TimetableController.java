@@ -97,6 +97,12 @@ public class TimetableController {
     return ApiResponse.ok(generation.validate(sectionId, body));
   }
 
+  @PostMapping("/slots/{slotId}/substitute")
+  public ApiResponse<Map<String, Object>> substitute(
+      @PathVariable("slotId") UUID slotId, @RequestBody Map<String, Object> body) {
+    return ApiResponse.ok(service.assignSubstitute(slotId, body));
+  }
+
   @PutMapping("/sections/{sectionId}")
   public ApiResponse<List<Map<String, Object>>> replaceSectionTimetable(
       @PathVariable("sectionId") UUID sectionId, @RequestBody Map<String, Object> body) {

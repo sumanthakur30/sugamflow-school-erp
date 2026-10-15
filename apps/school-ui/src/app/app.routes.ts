@@ -6,6 +6,16 @@ import { UnknownRouteComponent } from './core/unknown-route.component';
 import { unknownRouteGuard } from './core/unknown-route.guard';
 import { LoginComponent } from './features/login/login.component';
 
+function portalPage(path: string, title: string, mode: string, feature?: string) {
+  return {
+    path,
+    canActivate: feature ? [featureGuard] : [],
+    data: { title, mode, ...(feature ? { feature } : {}) },
+    loadComponent: () =>
+      import('./features/portals/portal-extra.component').then((m) => m.PortalExtraComponent),
+  };
+}
+
 const PLATFORM_ADMIN_ROLES = ['SHOP_OWNER', 'SUPER_ADMIN', 'ADMIN'];
 const CAMPUS_ADMIN_ROLES = [...PLATFORM_ADMIN_ROLES, 'PRINCIPAL'];
 const STAFF_DASHBOARD_ROLES = [
@@ -26,6 +36,14 @@ export const routes: Routes = [
     path: 'login',
     // Eager: logout → /login must never hang on a lazy chunk after deploy.
     component: LoginComponent,
+  },
+  {
+    path: 'modules-unavailable',
+    canActivate: [authGuard],
+    loadComponent: () =>
+      import('./features/entitlements/modules-unavailable.component').then(
+        (m) => m.ModulesUnavailableComponent,
+      ),
   },
   {
     path: 'onboarding/set-password',
@@ -93,6 +111,14 @@ export const routes: Routes = [
             (m) => m.ParentHomeworkComponent,
           ),
       },
+      portalPage('study', 'Study', 'study', 'FEATURE_LMS'),
+      portalPage('quiz', 'Quiz', 'quiz', 'FEATURE_LMS'),
+      portalPage('calendar', 'Calendar', 'calendar', 'FEATURE_LMS'),
+      portalPage('timetable', 'Timetable', 'timetable'),
+      portalPage('notices', 'Notices', 'notices'),
+      portalPage('documents', 'Documents', 'documents', 'FEATURE_EXAM'),
+      portalPage('leave', 'Leave', 'leave', 'FEATURE_STUDENT_MASTER'),
+      portalPage('siblings', 'Siblings', 'siblings', 'FEATURE_STUDENT_MASTER'),
     ],
   },
   {
@@ -149,6 +175,12 @@ export const routes: Routes = [
             (m) => m.TeacherHomeworkComponent,
           ),
       },
+      portalPage('study', 'Study material', 'study', 'FEATURE_LMS'),
+      portalPage('quiz', 'Quiz', 'quiz', 'FEATURE_LMS'),
+      portalPage('lessons', 'Lesson plans', 'lessons', 'FEATURE_LMS'),
+      portalPage('calendar', 'Calendar', 'calendar', 'FEATURE_LMS'),
+      portalPage('timetable', 'Timetable', 'timetable'),
+      portalPage('notices', 'Notices', 'notices'),
     ],
   },
   {
@@ -167,6 +199,13 @@ export const routes: Routes = [
           ),
       },
       {
+        path: 'admin/leads',
+        canActivate: [featureGuard],
+        data: { feature: 'FEATURE_ADMISSION' },
+        loadComponent: () =>
+          import('./features/leads/leads.component').then((m) => m.LeadsComponent),
+      },
+      {
         path: 'admin/admission',
         canActivate: [featureGuard],
         data: { feature: 'FEATURE_ADMISSION' },
@@ -174,10 +213,41 @@ export const routes: Routes = [
           import('./features/admission/admission.component').then((m) => m.AdmissionComponent),
       },
       {
+        path: 'admin/privacy',
+        canActivate: [featureGuard],
+        data: {
+          feature: 'FEATURE_STUDENT_MASTER',
+          roles: ['SHOP_OWNER', 'SUPER_ADMIN', 'ADMIN', 'PRINCIPAL', 'OWNER'],
+        },
+        loadComponent: () =>
+          import('./features/privacy/school-privacy.component').then((m) => m.SchoolPrivacyComponent),
+      },
+      {
         path: 'admin/fee',
         canActivate: [featureGuard],
         data: { feature: 'FEATURE_FEE' },
         loadComponent: () => import('./features/fee/fee.component').then((m) => m.FeeComponent),
+      },
+      {
+        path: 'admin/fee-desk',
+        canActivate: [featureGuard],
+        data: { feature: 'FEATURE_FEE' },
+        loadComponent: () =>
+          import('./features/fee/fee-desk.component').then((m) => m.FeeDeskComponent),
+      },
+      {
+        path: 'admin/leave',
+        canActivate: [featureGuard],
+        data: { feature: 'FEATURE_STUDENT_MASTER', kind: 'LEAVE', title: 'Leave' },
+        loadComponent: () =>
+          import('./features/desk/campus-desk.component').then((m) => m.CampusDeskComponent),
+      },
+      {
+        path: 'admin/gate-pass',
+        canActivate: [featureGuard],
+        data: { feature: 'FEATURE_STUDENT_MASTER', kind: 'GATE_PASS', title: 'Gate pass' },
+        loadComponent: () =>
+          import('./features/desk/campus-desk.component').then((m) => m.CampusDeskComponent),
       },
       {
         path: 'admin/finance',
@@ -212,6 +282,13 @@ export const routes: Routes = [
           ),
       },
       {
+        path: 'admin/biometric',
+        canActivate: [featureGuard],
+        data: { feature: 'FEATURE_ATTENDANCE', roles: CAMPUS_ADMIN_ROLES },
+        loadComponent: () =>
+          import('./features/biometric/biometric.component').then((m) => m.BiometricComponent),
+      },
+      {
         path: 'admin/offline',
         canActivate: [featureGuard],
         data: { feature: 'FEATURE_OFFLINE_MODE', roles: CAMPUS_ADMIN_ROLES },
@@ -230,6 +307,29 @@ export const routes: Routes = [
         canActivate: [featureGuard],
         data: { feature: 'FEATURE_LMS' },
         loadComponent: () => import('./features/lms/lms.component').then((m) => m.LmsComponent),
+      },
+      {
+        path: 'admin/classroom',
+        canActivate: [featureGuard],
+        data: { feature: 'FEATURE_LMS' },
+        loadComponent: () =>
+          import('./features/classroom/classroom.component').then((m) => m.ClassroomComponent),
+      },
+      {
+        path: 'admin/online-classes',
+        canActivate: [featureGuard],
+        data: { roles: [...CAMPUS_ADMIN_ROLES, 'TEACHER', 'STAFF'] },
+        loadComponent: () =>
+          import('./features/online-classes/online-classes.component').then(
+            (m) => m.OnlineClassesComponent,
+          ),
+      },
+      {
+        path: 'admin/app-users',
+        canActivate: [featureGuard],
+        data: { feature: 'FEATURE_STUDENT_MASTER' },
+        loadComponent: () =>
+          import('./features/classroom/app-users.component').then((m) => m.AppUsersComponent),
       },
       {
         path: 'admin/library',
@@ -253,6 +353,11 @@ export const routes: Routes = [
           import('./features/transport/transport.component').then((m) => m.TransportComponent),
       },
       {
+        path: 'admin/addons',
+        loadComponent: () =>
+          import('./features/addons/addons.component').then((m) => m.AddonsComponent),
+      },
+      {
         path: 'admin/payroll',
         canActivate: [featureGuard],
         data: { feature: 'FEATURE_PAYROLL' },
@@ -267,6 +372,13 @@ export const routes: Routes = [
           import('./features/directory/student-directory.component').then(
             (m) => m.StudentDirectoryComponent,
           ),
+      },
+      {
+        path: 'admin/udise-export',
+        canActivate: [featureGuard],
+        data: { feature: 'FEATURE_STUDENT_MASTER' },
+        loadComponent: () =>
+          import('./features/directory/udise-export.component').then((m) => m.UdiseExportComponent),
       },
       {
         path: 'admin/students/:id/360',
@@ -366,6 +478,15 @@ export const routes: Routes = [
         data: { roles: CAMPUS_ADMIN_ROLES },
         loadComponent: () =>
           import('./features/timetable/timetable.component').then((m) => m.TimetableComponent),
+      },
+      {
+        path: 'admin/school-calendar',
+        canActivate: [featureGuard],
+        data: { roles: [...CAMPUS_ADMIN_ROLES, 'TEACHER', 'STAFF'] },
+        loadComponent: () =>
+          import('./features/school-calendar/school-calendar.component').then(
+            (m) => m.SchoolCalendarComponent,
+          ),
       },
       {
         path: 'admin/ops',

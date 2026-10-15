@@ -4,6 +4,7 @@ import { RouterLink } from '@angular/router';
 import {
   ComplianceApiService,
   ComplianceDashboard,
+  ComplianceDocument,
 } from './compliance-api.service';
 
 @Component({
@@ -21,6 +22,7 @@ import {
       @if (error) {
         <div class="panel" style="border-color: #c45c5c">
           <p>{{ error }}</p>
+          <button type="button" class="btn" (click)="reload()">Retry</button>
         </div>
       }
 
@@ -31,12 +33,25 @@ import {
       @if (dash && !loading) {
         <div class="grid two" style="margin-bottom: 1rem">
           <div class="panel">
-            <div class="field-title">Compliance score</div>
+            <div class="field-title">Board readiness score</div>
             <div style="font-size: 2rem; font-weight: 700">{{ dash.complianceScore }}%</div>
+            <div
+              style="height: 8px; background: #e2e8f0; border-radius: 999px; overflow: hidden; margin: 0.5rem 0"
+              role="meter"
+              [attr.aria-valuenow]="dash.complianceScore"
+              aria-valuemin="0"
+              aria-valuemax="100"
+              aria-label="Board readiness score"
+            >
+              <div
+                [style.width.%]="dash.complianceScore"
+                style="height: 100%; background: #14532d"
+              ></div>
+            </div>
             <p class="muted">Profile {{ dash.profileCompletenessPercent }}% complete</p>
           </div>
           <div class="panel">
-            <div class="field-title">Campaigns</div>
+            <div class="field-title">Pending submissions</div>
             <p>Pending: <strong>{{ dash.pendingCampaigns }}</strong></p>
             <p>Submitted: <strong>{{ dash.submittedCampaigns }}</strong></p>
             <p>Overdue: <strong>{{ dash.overdueCampaigns }}</strong></p>
@@ -44,19 +59,7 @@ import {
         </div>
 
         <div class="panel" style="margin-bottom: 1rem">
-          <div class="page-head" style="margin-bottom: 0.5rem">
-            <h3 style="margin: 0; font-size: 1.1rem">Principal action items</h3>
-            <div style="display: flex; gap: 0.5rem; flex-wrap: wrap">
-              <a routerLink="/admin/compliance/readiness" class="btn">Data Readiness</a>
-              <a routerLink="/admin/compliance/import" class="btn">Import Center</a>
-              <a routerLink="/admin/compliance/infrastructure" class="btn">Infrastructure</a>
-              <a routerLink="/admin/compliance/documents" class="btn">Documents Vault</a>
-              <a routerLink="/admin/compliance/campaigns" class="btn">Campaign Workspace</a>
-              <a routerLink="/admin/compliance/disclosure" class="btn">Disclosure Preview</a>
-              <a routerLink="/admin/compliance/profile" class="btn">Edit school profile</a>
-              <a routerLink="/admin/compliance/platform-templates" class="btn">Platform Templates</a>
-            </div>
-          </div>
+          <h3 style="margin-top: 0; font-size: 1.1rem">Principal actions</h3>
           <ul>
             @for (item of dash.principalActionItems; track item) {
               <li>{{ item }}</li>
@@ -67,9 +70,51 @@ import {
           }
         </div>
 
+        <div class="grid two" style="margin-bottom: 1rem">
+          <a class="panel" routerLink="/admin/compliance/infrastructure">Infrastructure</a>
+          <a class="panel" routerLink="/admin/compliance/documents">Documents Vault</a>
+          <a class="panel" routerLink="/admin/compliance/disclosure">Disclosure Preview</a>
+          <a class="panel" routerLink="/admin/compliance/readiness">Data Readiness</a>
+          <a class="panel" routerLink="/admin/compliance/import">Import Center</a>
+          <a class="panel" routerLink="/admin/compliance/campaigns">Campaign Workspace</a>
+          <a class="panel" routerLink="/admin/compliance/profile">School profile</a>
+          <a class="panel" routerLink="/admin/compliance/platform-templates">Platform Templates</a>
+        </div>
+
+        <div class="panel" style="margin-bottom: 1rem">
+          <h3 style="margin-top: 0; font-size: 1.1rem">Required documents</h3>
+          <p class="muted">These rows use the Documents Vault. Upload once, then approve there.</p>
+          <table class="data">
+            <thead>
+              <tr>
+                <th>Requirement</th>
+                <th>Document</th>
+                <th>Status</th>
+                <th>Expiry</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (row of requirementRows; track row.type) {
+                <tr>
+                  <td>{{ row.type }}</td>
+                  <td>{{ row.doc?.title || 'Missing' }}</td>
+                  <td>{{ row.doc?.status || 'Missing' }}</td>
+                  <td>{{ row.doc?.expiresOn || '—' }}</td>
+                  <td>
+                    <a class="btn" [routerLink]="['/admin/compliance/documents']" [queryParams]="{ docType: row.type }">
+                      {{ row.doc ? 'Open' : 'Upload document' }}
+                    </a>
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+
         <div class="panel">
-          <h3 style="margin-top: 0; font-size: 1.1rem">Recent campaigns</h3>
-          @if (!dash.recentCampaigns?.length) {
+          <h3 style="margin-top: 0; font-size: 1.1rem">Pending submissions</h3>
+          @if (!dash.recentCampaigns.length) {
             <p class="muted">No campaigns yet. Run validation from Data Readiness to create one.</p>
           } @else {
             <table class="data">
@@ -102,11 +147,35 @@ import {
 })
 export class ComplianceDashboardComponent implements OnInit {
   private readonly api = inject(ComplianceApiService);
+  private readonly requiredTypes = [
+    'AFFILIATION_LETTER',
+    'RECOGNITION',
+    'FIRE_NOC',
+    'BUILDING_SAFETY',
+  ];
   loading = true;
   error = '';
   dash: ComplianceDashboard | null = null;
+  vaultDocs: ComplianceDocument[] = [];
+
+  get requirementRows() {
+    return this.requiredTypes.map((type) => ({
+      type,
+      doc: this.vaultDocs.find((d) => d.docType === type),
+    }));
+  }
 
   ngOnInit(): void {
+    this.reload();
+  }
+
+  reload(): void {
+    this.loading = true;
+    this.error = '';
+    this.api.listDocuments().subscribe({
+      next: (rows) => (this.vaultDocs = rows || []),
+      error: () => (this.vaultDocs = []),
+    });
     this.api.dashboard().subscribe({
       next: (d) => {
         this.dash = d;
@@ -114,6 +183,7 @@ export class ComplianceDashboardComponent implements OnInit {
       },
       error: (err) => {
         this.loading = false;
+        this.dash = null;
         this.error =
           err?.error?.message ||
           err?.message ||

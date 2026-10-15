@@ -40,18 +40,21 @@ public class ExamRecordService {
   private final NotificationDeliveryClient notificationDelivery;
   private final ExamProperties properties;
   private final StudentAccessClient studentAccess;
+  private final GradebookService gradebook;
 
   public ExamRecordService(
       ExamRecordRepository repository,
       ConfigEngineClient engines,
       NotificationDeliveryClient notificationDelivery,
       ExamProperties properties,
-      StudentAccessClient studentAccess) {
+      StudentAccessClient studentAccess,
+      GradebookService gradebook) {
     this.repository = repository;
     this.engines = engines;
     this.notificationDelivery = notificationDelivery;
     this.properties = properties;
     this.studentAccess = studentAccess;
+    this.gradebook = gradebook;
   }
 
   @Transactional(readOnly = true)
@@ -193,7 +196,13 @@ public class ExamRecordService {
       intents.add(recordNotification(scope, entity, "EXAM_RULE_NOTIFY"));
     }
     entity.setNotificationIntents(intents);
-    return toDto(repository.save(entity));
+    ExamRecordEntity saved = repository.save(entity);
+    try {
+      gradebook.syncIndividual(answers);
+    } catch (RuntimeException ex) {
+      // The workflow record is the individual-entry contract. A missing gradebook match must not fail it.
+    }
+    return toDto(saved);
   }
 
   @Transactional

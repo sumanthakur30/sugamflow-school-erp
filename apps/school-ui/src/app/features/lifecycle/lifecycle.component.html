@@ -195,6 +195,50 @@
       </section>
     </div>
 
+    <section class="panel task-card">
+      <h3>Section change, alumni, and dropout</h3>
+      <p class="muted">
+        Move the selected student into another section, or mark them as alumni or dropout. The
+        student record stays on file.
+        @if (selectedStudentId) {
+          This applies to <strong>{{ studentName(selectedStudentId) }}</strong>.
+        } @else {
+          Select the student in “Promote one student” first.
+        }
+      </p>
+      <div class="grid two">
+        <label>
+          New class / section
+          <select [(ngModel)]="targetClass" name="targetClass">
+            <option value="">Select a class…</option>
+            @for (c of classOptions; track c) {
+              <option [value]="c">{{ c }}</option>
+            }
+          </select>
+        </label>
+        <label>
+          Reason
+          <input [(ngModel)]="lifecycleReason" name="lifecycleReason" placeholder="Optional note" />
+        </label>
+      </div>
+      <div class="actions">
+        <button
+          type="button"
+          class="primary-btn"
+          (click)="changeSection()"
+          [disabled]="busy || !selectedStudentId || !targetClass"
+        >
+          Move section
+        </button>
+        <button type="button" class="ghost-btn" (click)="markAlumni()" [disabled]="busy || !selectedStudentId">
+          Mark alumni
+        </button>
+        <button type="button" class="ghost-btn" (click)="markDropout()" [disabled]="busy || !selectedStudentId">
+          Mark dropout
+        </button>
+      </div>
+    </section>
+
     <!-- Transfer certificate -->
     <section class="panel task-card">
       <h3>Transfer certificate (TC)</h3>

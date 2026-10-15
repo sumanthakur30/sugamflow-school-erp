@@ -657,6 +657,35 @@ export class PayrollComponent implements OnInit, OnDestroy {
     });
   }
 
+  issuePayslip(row: any): void {
+    if (!row?.id || row.status !== 'APPROVED') return;
+    this.submitting = true;
+    this.error = '';
+    this.api.getBlob(`/api/payroll/records/${row.id}/payslip.pdf`).subscribe({
+      next: (blob) => {
+        this.submitting = false;
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `payslip-${row.id}.pdf`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        this.statusMsg = 'Payslip issued.';
+        this.api.get<any>(`/api/payroll/records/${row.id}`).subscribe({
+          next: (fresh) => {
+            if (this.selectedId === row.id) this.selected = fresh;
+          },
+        });
+      },
+      error: (err) => {
+        this.submitting = false;
+        this.error = err?.error?.message ?? 'Could not issue the payslip';
+      },
+    });
+  }
+
   markPaid(row: any, event?: Event): void {
     event?.stopPropagation();
     if (!this.canMarkPaid(row)) return;

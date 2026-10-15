@@ -1,0 +1,132 @@
+<section class="page">
+  <header class="page-head">
+    <div>
+      <h2>Fee desk</h2>
+      <p>Defaulters, follow-up reminders, and demand bills for the current campus.</p>
+    </div>
+    <a routerLink="/admin/fee">Fee collection</a>
+  </header>
+
+  @if (error) {
+    <div class="notice error-notice" role="alert">{{ error }}</div>
+  }
+  @if (status) {
+    <div class="notice success-notice" role="status">{{ status }}</div>
+  }
+
+  <div class="chip-list" role="tablist">
+    <button type="button" class="chip" [class.active]="tab === 'defaulters'" (click)="setTab('defaulters')">
+      Defaulters
+    </button>
+    <button type="button" class="chip" [class.active]="tab === 'followups'" (click)="setTab('followups')">
+      Follow-ups
+    </button>
+    <button type="button" class="chip" [class.active]="tab === 'demand'" (click)="setTab('demand')">
+      Demand bill
+    </button>
+  </div>
+
+  @if (loading && tab === 'defaulters') {
+    <div class="panel">Loading defaulters…</div>
+  } @else if (tab === 'defaulters' && !error) {
+    <section class="panel">
+      <table>
+        <thead>
+          <tr>
+            <th>Student</th>
+            <th>Admission no</th>
+            <th>Class</th>
+            <th>Head</th>
+            <th>Due</th>
+            <th>Amount</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (row of defaulters; track row.id) {
+            <tr>
+              <td>{{ nameOf(row) }}</td>
+              <td>{{ row.admissionNo || row.answers?.admissionNo }}</td>
+              <td>{{ row.classSection || row.answers?.classSection }}</td>
+              <td>{{ row.feeHead || row.answers?.feeHead }}</td>
+              <td>{{ row.dueDate || row.answers?.dueDate || '—' }}</td>
+              <td>{{ amountOf(row) }}</td>
+            </tr>
+          } @empty {
+            <tr>
+              <td colspan="6">No open dues for this campus.</td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </section>
+  } @else if (tab === 'followups') {
+    <section class="panel">
+      <button type="button" (click)="sendReminders()" [disabled]="busy">
+        {{ busy ? 'Sending…' : 'Send due reminders' }}
+      </button>
+      <table>
+        <thead>
+          <tr>
+            <th>Admission no</th>
+            <th>Channel</th>
+            <th>Status</th>
+            <th>When</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (row of followUps; track row.id || $index) {
+            <tr>
+              <td>{{ row.admissionNo || row.studentKey }}</td>
+              <td>{{ row.channel }}</td>
+              <td>{{ row.status }}</td>
+              <td>{{ row.createdAt || row.sentAt }}</td>
+            </tr>
+          } @empty {
+            <tr>
+              <td colspan="4">No follow-up history yet.</td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </section>
+  } @else {
+    <section class="panel">
+      <form class="grid three" (ngSubmit)="previewDemand()">
+        <label>
+          Fee structure
+          <select [(ngModel)]="structureKey" name="structureKey">
+            <option value="">Select</option>
+            @for (structure of structures; track structure.definitionKey || structure.key || $index) {
+              <option [value]="structure.definitionKey || structure.key">
+                {{ structure.payload?.label || structure.label || structure.definitionKey || structure.key }}
+              </option>
+            }
+          </select>
+        </label>
+        <label>
+          Admission no
+          <input [(ngModel)]="studentRef" name="studentRef" />
+        </label>
+        <label>
+          Student name
+          <input [(ngModel)]="studentName" name="studentName" />
+        </label>
+        <label>
+          Class / section
+          <input [(ngModel)]="classSection" name="classSection" />
+        </label>
+        <label>
+          Period
+          <input [(ngModel)]="periodKey" name="periodKey" placeholder="2026-04" />
+        </label>
+        <div class="filter-apply">
+          <button type="submit" class="secondary" [disabled]="busy">Preview</button>
+          <button type="button" (click)="createDemand()" [disabled]="busy">Create demand</button>
+        </div>
+      </form>
+      @if (demand) {
+        <p>Net amount: {{ demand.netAmount ?? demand.amount ?? '—' }}</p>
+      }
+    </section>
+  }
+</section>

@@ -50,6 +50,11 @@ function shopIdFromJwt(): string {
  * Important: when logged out, do NOT write the "demo-school" fallback into
  * localStorage — that poisoned the next HCP login (Saraswati branding + 50 students).
  */
+export function isDemoOrganization(orgId?: string): boolean {
+  const org = (orgId ?? resolveOrganizationId()).trim().toLowerCase();
+  return org === 'demo-school' || org.includes('demo');
+}
+
 export function resolveOrganizationId(): string {
   const session = readSessionSnapshot();
   const fromJwt = shopIdFromJwt();

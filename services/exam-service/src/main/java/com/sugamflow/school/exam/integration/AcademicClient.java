@@ -46,6 +46,14 @@ public class AcademicClient {
     return list(scope, "/api/academic/subjects");
   }
 
+  public List<Map<String, Object>> listAssignments(TenantScope scope) {
+    return list(scope, "/api/academic/assignments");
+  }
+
+  public List<Map<String, Object>> listClasses(TenantScope scope) {
+    return list(scope, "/api/academic/classes");
+  }
+
   public Map<String, Object> teacherScope(TenantScope scope) {
     String url = properties.getIntegrations().getAcademicBaseUrl() + "/api/academic/teacher-scope";
     try {

@@ -2,6 +2,26 @@
   max-width: 1280px;
 }
 
+.exception-panel {
+  margin-top: 1rem;
+}
+
+.exception-panel h4 {
+  margin: 0 0 0.4rem;
+}
+
+.exception-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+@media (max-width: 900px) {
+  .exception-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 .dashboard-head {
   display: flex;
   align-items: flex-start;

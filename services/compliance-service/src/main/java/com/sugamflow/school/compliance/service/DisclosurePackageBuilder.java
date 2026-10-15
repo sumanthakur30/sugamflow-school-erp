@@ -46,7 +46,13 @@ public class DisclosurePackageBuilder {
     List<InfrastructureAssetEntity> infra =
         infrastructureRepository.findByOrganizationIdAndActiveTrueOrderByCategoryAscNameAsc(org);
     List<ComplianceDocumentEntity> docs =
-        documentRepository.findByOrganizationIdAndActiveTrueOrderByExpiresOnAscTitleAsc(org);
+        documentRepository.findByOrganizationIdAndActiveTrueOrderByExpiresOnAscTitleAsc(org).stream()
+            .filter(
+                d ->
+                    d.getWorkflowStatus() == null
+                        || d.getWorkflowStatus().isBlank()
+                        || "APPROVED".equalsIgnoreCase(d.getWorkflowStatus()))
+            .toList();
     List<Map<String, Object>> staff = masterDataClient.listStaffProjections(scope);
 
     List<String> warnings = new ArrayList<>();

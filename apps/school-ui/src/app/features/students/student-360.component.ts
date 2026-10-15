@@ -2,7 +2,9 @@ import { Component, OnInit, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, RouterLink } from '@angular/router';
+import { HttpClient } from '@angular/common/http';
 import { ApiService } from '../../core/api.service';
+import { AuthSessionService } from '../../core/auth-session.service';
 
 @Component({
   selector: 'sf-student-360',
@@ -13,19 +15,42 @@ import { ApiService } from '../../core/api.service';
 })
 export class Student360Component implements OnInit {
   private readonly api = inject(ApiService);
+  private readonly http = inject(HttpClient);
+  private readonly auth = inject(AuthSessionService);
   private readonly route = inject(ActivatedRoute);
 
   loading = true;
   error = '';
+  resetMessage = '';
+  portalUsername = '';
   tab = 'profile';
   data: any = null;
   studentId = '';
+  remarkBody = '';
+  messageBody = '';
+  messageChannel = 'DESK';
+  savingNote = false;
+  apaarConsent = 'PENDING';
+  apaarId = '';
+  savingApaar = false;
+  campuses: Array<{ branchKey: string; name: string }> = [];
+  campusesLoaded = false;
+  targetBranchId = '';
+  transferring = false;
+  feeQuote: any = null;
+  feeAdjustment: any = null;
+  feeMode = 'CUSTOM_PAYABLE';
+  feeValue: number | null = null;
+  feeHeads = 'TUITION';
+  feeReason = '';
+  feeMessage = '';
 
   ngOnInit(): void {
     this.route.paramMap.subscribe((pm) => {
       this.studentId = pm.get('id') || '';
       if (this.studentId) {
         this.load();
+        this.loadCampuses();
       }
     });
   }
@@ -36,7 +61,13 @@ export class Student360Component implements OnInit {
     this.api.get<any>(`/api/student/students/${this.studentId}/360`).subscribe({
       next: (d) => {
         this.data = d;
+        const answers = d?.student?.answers ?? {};
+        this.apaarConsent = answers.apaarConsent || 'PENDING';
+        this.apaarId = answers.apaarId || '';
+        this.syncCampusTarget();
+        this.portalUsername = this.admissionNo() || this.portalUsername;
         this.loading = false;
+        this.loadFeeQuote();
       },
       error: (err) => {
         this.loading = false;
@@ -47,6 +78,126 @@ export class Student360Component implements OnInit {
 
   setTab(t: string): void {
     this.tab = t;
+  }
+
+  loadCampuses(): void {
+    this.campusesLoaded = false;
+    this.api.get<any>('/api/config/branches/bootstrap').subscribe({
+      next: (boot) => {
+        this.campuses = (boot?.branches ?? [])
+          .map((b: any) => ({
+            branchKey: String(b.branchKey || ''),
+            name: String(b.name || b.branchKey || ''),
+          }))
+          .filter((b: { branchKey: string }) => !!b.branchKey);
+        this.campusesLoaded = true;
+        this.syncCampusTarget();
+      },
+      error: () => {
+        this.campusesLoaded = true;
+      },
+    });
+  }
+
+  private syncCampusTarget(): void {
+    const current = String(this.data?.student?.branchId || this.auth.getBranchId() || '');
+    if (!this.targetBranchId || this.targetBranchId === current) {
+      this.targetBranchId = this.campuses.find((b) => b.branchKey !== current)?.branchKey || '';
+    }
+  }
+
+  currentCampusName(): string {
+    const key = String(this.data?.student?.branchId || '');
+    const match = this.campuses.find((b) => b.branchKey === key);
+    return match?.name || key || 'This campus';
+  }
+
+  otherCampuses(): Array<{ branchKey: string; name: string }> {
+    const key = String(this.data?.student?.branchId || '');
+    return this.campuses.filter((b) => b.branchKey !== key);
+  }
+
+  transferCampus(): void {
+    if (!this.studentId || !this.targetBranchId) return;
+    this.transferring = true;
+    this.error = '';
+    this.api
+      .post('/api/student/lifecycle/campus-transfer', {
+        studentId: this.studentId,
+        targetBranchId: this.targetBranchId,
+      })
+      .subscribe({
+        next: () => {
+          this.transferring = false;
+          this.load();
+        },
+        error: (err) => {
+          this.transferring = false;
+          this.error = err?.error?.message ?? 'Could not move the student to that campus';
+        },
+      });
+  }
+
+  saveApaar(): void {
+    if (!this.studentId) return;
+    this.savingApaar = true;
+    this.error = '';
+    this.api
+      .post(`/api/student/students/${this.studentId}/apaar-consent`, {
+        apaarConsent: this.apaarConsent,
+        apaarId: this.apaarId,
+      })
+      .subscribe({
+        next: () => {
+          this.savingApaar = false;
+          this.load();
+        },
+        error: (err) => {
+          this.savingApaar = false;
+          this.error = err?.error?.message ?? 'Could not save APAAR status';
+        },
+      });
+  }
+
+  addRemark(): void {
+    const body = this.remarkBody.trim();
+    if (!body || !this.studentId) return;
+    this.savingNote = true;
+    this.api.post(`/api/student/students/${this.studentId}/remarks`, { body }).subscribe({
+      next: () => {
+        this.remarkBody = '';
+        this.savingNote = false;
+        this.load();
+        this.tab = 'remarks';
+      },
+      error: (err) => {
+        this.savingNote = false;
+        this.error = err?.error?.message ?? 'Could not save the remark';
+      },
+    });
+  }
+
+  addMessage(): void {
+    const body = this.messageBody.trim();
+    if (!body || !this.studentId) return;
+    this.savingNote = true;
+    this.api
+      .post(`/api/student/students/${this.studentId}/messages`, {
+        body,
+        channel: this.messageChannel,
+      })
+      .subscribe({
+        next: () => {
+          this.messageBody = '';
+          this.savingNote = false;
+          this.load();
+          this.tab = 'communication';
+        },
+        error: (err) => {
+          this.savingNote = false;
+          this.error = err?.error?.message ?? 'Could not log the message';
+        },
+      });
   }
 
   houseName(): string {
@@ -65,6 +216,100 @@ export class Student360Component implements OnInit {
         this.data?.student?.answers?.admissionNo ||
         '',
     ).trim();
+  }
+
+  resetPortalPassword(): void {
+    const username = this.portalUsername.trim();
+    if (!username) {
+      this.error = 'Enter the portal username';
+      return;
+    }
+    const session = this.auth.getSession();
+    this.api
+      .post('/api/student/app-users/reset-password', {
+        username,
+        roleCode: 'STUDENT',
+        displayName: this.data?.summary?.displayName,
+        subjectRef: this.admissionNo(),
+        installed: true,
+      })
+      .subscribe({
+        next: () => {
+          this.http
+            .post('/api/v1/auth/password-reset/admin', {
+              shopId: session?.shopId || '',
+              username,
+              sendEmail: false,
+              actorUsername: session?.username || '',
+            })
+            .subscribe({
+              next: () => {
+                this.resetMessage = `Password reset started for ${username}`;
+              },
+              error: (err) => {
+                this.error = err?.error?.message ?? 'Auth password reset failed';
+              },
+            });
+        },
+        error: (err) => {
+          this.error = err?.error?.message ?? 'Could not record the app user';
+        },
+      });
+  }
+
+  loadFeeQuote(): void {
+    const admissionNo = this.admissionNo();
+    if (!admissionNo) return;
+    this.api
+      .post<any>('/api/fee/finance/demands/preview', { studentRef: admissionNo })
+      .subscribe({ next: (quote) => (this.feeQuote = quote), error: () => (this.feeQuote = null) });
+    this.api.get<any[]>(`/api/fee/finance/adjustments?admissionNo=${encodeURIComponent(admissionNo)}`).subscribe({
+      next: (rows) => (this.feeAdjustment = (rows ?? []).find((row) => row.status === 'APPROVED' || row.status === 'PENDING') ?? null),
+      error: () => (this.feeAdjustment = null),
+    });
+  }
+
+  saveFeeAdjustment(): void {
+    const admissionNo = this.admissionNo();
+    if (!admissionNo || this.feeValue == null || !this.feeReason.trim()) {
+      this.feeMessage = 'Enter the new amount and a reason.';
+      return;
+    }
+    this.feeMessage = '';
+    this.api
+      .post('/api/fee/finance/adjustments', {
+        admissionNo,
+        mode: this.feeMode,
+        value: this.feeValue,
+        appliesToHeads: this.feeHeads
+          .split(',')
+          .map((head) => head.trim().toUpperCase())
+          .filter(Boolean),
+        reason: this.feeReason.trim(),
+      })
+      .subscribe({
+        next: () => {
+          this.feeMessage = 'Fee adjustment saved for this student only. Earlier receipts are unchanged.';
+          this.feeReason = '';
+          this.loadFeeQuote();
+        },
+        error: (err) => (this.feeMessage = err?.error?.message ?? 'Could not save the fee adjustment'),
+      });
+  }
+
+  removeFeeAdjustment(): void {
+    if (!this.feeAdjustment?.id) return;
+    this.api
+      .post(`/api/fee/finance/adjustments/${this.feeAdjustment.id}/remove`, {
+        reason: this.feeReason.trim() || 'Removed from student fee profile',
+      })
+      .subscribe({
+        next: () => {
+          this.feeMessage = 'Adjustment removed. The next demand uses the standard fee.';
+          this.loadFeeQuote();
+        },
+        error: (err) => (this.feeMessage = err?.error?.message ?? 'Could not remove the adjustment'),
+      });
   }
 
   admissionQuery(): Record<string, string> {
@@ -95,6 +340,9 @@ export class Student360Component implements OnInit {
       gender: 'Gender',
       house: 'House',
       dob: 'Date of birth',
+      apaarId: 'APAAR ID',
+      apaarConsent: 'APAAR consent',
+      apaarConsentAt: 'APAAR recorded',
     };
     if (map[key]) return map[key];
     return key

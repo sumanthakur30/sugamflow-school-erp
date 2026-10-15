@@ -17,7 +17,15 @@ public interface ComplianceDocumentRepository extends JpaRepository<ComplianceDo
 
   Optional<ComplianceDocumentEntity> findByIdAndOrganizationId(Long id, String organizationId);
 
+  List<ComplianceDocumentEntity> findByOrganizationIdAndActiveFalseOrderByUpdatedAtDesc(
+      String organizationId);
+
+  long countByOrganizationId(String organizationId);
+
   long countByOrganizationIdAndActiveTrue(String organizationId);
+
+  List<ComplianceDocumentEntity> findByOrganizationIdAndChecksumSha256AndActiveTrue(
+      String organizationId, String checksumSha256);
 
   long countByOrganizationIdAndActiveTrueAndStatus(String organizationId, String status);
 

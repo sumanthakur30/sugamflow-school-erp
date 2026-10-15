@@ -91,6 +91,24 @@ public class StudentController {
     return ApiResponse.ok(student360.profile(id));
   }
 
+  @PostMapping("/students/{id}/apaar-consent")
+  public ApiResponse<Map<String, Object>> apaarConsent(
+      @PathVariable("id") UUID id, @RequestBody Map<String, Object> body) {
+    return ApiResponse.ok(service.recordApaarConsent(id, body));
+  }
+
+  @PostMapping("/students/{id}/remarks")
+  public ApiResponse<Map<String, Object>> addRemark(
+      @PathVariable("id") UUID id, @RequestBody Map<String, Object> body) {
+    return ApiResponse.ok(student360.addRemark(id, body));
+  }
+
+  @PostMapping("/students/{id}/messages")
+  public ApiResponse<Map<String, Object>> addMessage(
+      @PathVariable("id") UUID id, @RequestBody Map<String, Object> body) {
+    return ApiResponse.ok(student360.addMessage(id, body));
+  }
+
   @GetMapping("/students/{id}/audit")
   public ApiResponse<PageResult<Map<String, Object>>> audit(
       @PathVariable("id") UUID id,
@@ -152,6 +170,23 @@ public class StudentController {
   public ApiResponse<Map<String, Object>> bulkSoftDelete(
       @RequestBody Map<String, Object> body, HttpServletRequest request) {
     return ApiResponse.ok(service.bulkSoftDelete(withClientMeta(body, request)));
+  }
+
+  @PostMapping("/students/bulk-status")
+  public ApiResponse<Map<String, Object>> bulkStatus(
+      @RequestBody Map<String, Object> body, HttpServletRequest request) {
+    return ApiResponse.ok(service.bulkChangeStatus(withClientMeta(body, request)));
+  }
+
+  @GetMapping("/households")
+  public ApiResponse<Map<String, Object>> household(
+      @RequestParam("admissionNo") String admissionNo) {
+    return ApiResponse.ok(service.listHousehold(admissionNo));
+  }
+
+  @PostMapping("/households")
+  public ApiResponse<Map<String, Object>> linkHousehold(@RequestBody Map<String, Object> body) {
+    return ApiResponse.ok(service.linkHousehold(body));
   }
 
   @PostMapping("/students/bulk-restore")

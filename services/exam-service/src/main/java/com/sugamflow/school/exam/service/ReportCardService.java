@@ -5,6 +5,7 @@ import com.sugamflow.school.common.security.PersonaRoles;
 import com.sugamflow.school.common.tenant.TenantContext;
 import com.sugamflow.school.common.tenant.TenantScope;
 import com.sugamflow.school.exam.integration.AcademicClient;
+import com.sugamflow.school.exam.integration.AttendanceSummaryClient;
 import com.sugamflow.school.exam.integration.StudentAccessClient;
 import com.sugamflow.school.exam.integration.StudentDirectoryClient;
 import com.sugamflow.school.exam.persistence.entity.ExamDefinitionEntity;
@@ -15,6 +16,7 @@ import com.sugamflow.school.exam.web.ExamException;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -37,18 +39,24 @@ public class ReportCardService {
   private final AcademicClient academic;
   private final StudentDirectoryClient directory;
   private final StudentAccessClient studentAccess;
+  private final GradingSupport grading;
+  private final AttendanceSummaryClient attendance;
 
   public ReportCardService(
       ExamDefinitionRepository definitions,
       ExamMarkRepository marks,
       AcademicClient academic,
       StudentDirectoryClient directory,
-      StudentAccessClient studentAccess) {
+      StudentAccessClient studentAccess,
+      GradingSupport grading,
+      AttendanceSummaryClient attendance) {
     this.definitions = definitions;
     this.marks = marks;
     this.academic = academic;
     this.directory = directory;
     this.studentAccess = studentAccess;
+    this.grading = grading;
+    this.attendance = attendance;
   }
 
   /** Staff view: full section report card grid for a term. */
@@ -193,9 +201,6 @@ public class ReportCardService {
       String admission = asString(row.get("admissionNo"));
       String studentName =
           firstNonBlank(asString(row.get("fullName")), asString(row.get("studentName")), admission);
-      if (onlyStudentKey != null && !matchesStudent(onlyStudentKey, studentId, admission)) {
-        continue;
-      }
 
       List<Map<String, Object>> subjectRows = new ArrayList<>();
       BigDecimal totalObtained = BigDecimal.ZERO;
@@ -218,7 +223,7 @@ public class ReportCardService {
         sr.put("name", subjectNames.getOrDefault(subjectId, "Subject"));
         sr.put("marksObtained", obtained);
         sr.put("maxMarks", hasMark ? max : null);
-        sr.put("grade", hasMark ? gradeBand(percentage(obtained, max)) : null);
+        sr.put("grade", hasMark ? gradeBand(scope, percentage(obtained, max)) : null);
         subjectRows.add(sr);
         if (hasMark) {
           totalObtained = totalObtained.add(obtained);
@@ -238,9 +243,18 @@ public class ReportCardService {
       student.put("totalObtained", attempted > 0 ? totalObtained : null);
       student.put("totalMax", attempted > 0 ? totalMax : null);
       student.put("percentage", attempted > 0 ? pct : null);
-      student.put("overallGrade", attempted > 0 ? gradeBand(pct) : null);
-      student.put("result", attempted > 0 ? (pct.compareTo(new BigDecimal("33")) >= 0 ? "PASS" : "FAIL") : null);
+      student.put("overallGrade", attempted > 0 ? gradeBand(scope, pct) : null);
+      student.put("result", attempted > 0 ? resultLabel(scope, pct) : null);
       students.add(student);
+    }
+
+    attachAttendance(scope, sectionId, students);
+    assignSectionRank(students);
+    if (onlyStudentKey != null) {
+      students.removeIf(
+          s ->
+              !matchesStudent(
+                  onlyStudentKey, parseUuid(s.get("studentId")), asString(s.get("admissionNo"))));
     }
 
     Map<String, Object> result = new LinkedHashMap<>();
@@ -251,6 +265,55 @@ public class ReportCardService {
     result.put("subjects", subjectColumns);
     result.put("students", students);
     return result;
+  }
+
+  private void attachAttendance(
+      TenantScope scope, UUID sectionId, List<Map<String, Object>> students) {
+    Map<String, Map<String, Object>> byStudent = attendance.byStudent(scope, sectionId);
+    for (Map<String, Object> student : students) {
+      Map<String, Object> row = null;
+      String id = asString(student.get("studentId"));
+      String admission = asString(student.get("admissionNo"));
+      if (id != null) {
+        row = byStudent.get(id.toLowerCase(Locale.ROOT));
+      }
+      if (row == null && admission != null) {
+        row = byStudent.get(admission.toLowerCase(Locale.ROOT));
+      }
+      if (row == null) {
+        student.put("attendancePercent", null);
+        student.put("presentDays", null);
+        student.put("workingDays", null);
+        continue;
+      }
+      student.put("attendancePercent", row.get("percentage"));
+      student.put("presentDays", row.get("presentDays"));
+      student.put("workingDays", row.get("workingDays"));
+    }
+  }
+
+  /** Competition rank: ties share a place and the next place is skipped. */
+  private static void assignSectionRank(List<Map<String, Object>> students) {
+    List<Map<String, Object>> ranked =
+        students.stream()
+            .filter(s -> s.get("percentage") instanceof BigDecimal)
+            .sorted(
+                Comparator.comparing(
+                        (Map<String, Object> s) -> (BigDecimal) s.get("percentage"))
+                    .reversed())
+            .toList();
+    int place = 0;
+    int seen = 0;
+    BigDecimal previous = null;
+    for (Map<String, Object> student : ranked) {
+      seen++;
+      BigDecimal pct = (BigDecimal) student.get("percentage");
+      if (previous == null || pct.compareTo(previous) != 0) {
+        place = seen;
+        previous = pct;
+      }
+      student.put("rank", place);
+    }
   }
 
   private Map<String, String> subjectNames(TenantScope scope) {
@@ -313,19 +376,22 @@ public class ReportCardService {
     return obtained.multiply(new BigDecimal("100")).divide(max, 2, RoundingMode.HALF_UP);
   }
 
-  private static String gradeBand(BigDecimal pct) {
-    if (pct == null) {
-      return null;
+  private String gradeBand(TenantScope scope, BigDecimal pct) {
+    Object grade = assess(scope, pct).get("grade");
+    return grade == null ? null : String.valueOf(grade);
+  }
+
+  private String resultLabel(TenantScope scope, BigDecimal pct) {
+    return Boolean.TRUE.equals(assess(scope, pct).get("pass")) ? "PASS" : "FAIL";
+  }
+
+  private Map<String, Object> assess(TenantScope scope, BigDecimal pct) {
+    List<Map<String, Object>> bands =
+        grading == null ? GradingSupport.defaultBands() : grading.bandsFor(scope);
+    if (bands == null || bands.isEmpty()) {
+      bands = GradingSupport.defaultBands();
     }
-    double p = pct.doubleValue();
-    if (p >= 90) return "A+";
-    if (p >= 80) return "A";
-    if (p >= 70) return "B+";
-    if (p >= 60) return "B";
-    if (p >= 50) return "C";
-    if (p >= 40) return "D";
-    if (p >= 33) return "E";
-    return "F";
+    return GradingSupport.apply(pct, bands);
   }
 
   private void requireSectionAccess(TenantScope scope, UUID sectionId) {

@@ -73,6 +73,10 @@ public class ReportCardPdfService {
       infoCell(info, nz(str(student.get("classSection")), "-"), valueFont);
       infoCell(info, "Result", labelFont);
       infoCell(info, nz(str(student.get("result")), "-"), valueFont);
+      infoCell(info, "Rank", labelFont);
+      infoCell(info, nz(str(student.get("rank")), "-"), valueFont);
+      infoCell(info, "Attendance", labelFont);
+      infoCell(info, attendanceText(student), valueFont);
       info.setSpacingAfter(16f);
       doc.add(info);
 
@@ -113,6 +117,10 @@ public class ReportCardPdfService {
                   + pctText(student.get("percentage"))
                   + "  ·  Grade "
                   + nz(str(student.get("overallGrade")), "-")
+                  + "  ·  Rank "
+                  + nz(str(student.get("rank")), "-")
+                  + "  ·  Attendance "
+                  + attendanceText(student)
                   + "  ·  "
                   + nz(str(student.get("result")), "-"),
               FontFactory.getFont(FontFactory.HELVETICA_BOLD, 12, HEADER_BG));
@@ -235,6 +243,19 @@ public class ReportCardPdfService {
     } catch (NumberFormatException ex) {
       return "-";
     }
+  }
+
+  private static String attendanceText(Map<String, Object> student) {
+    Object pct = student.get("attendancePercent");
+    if (pct == null) {
+      return "-";
+    }
+    Object present = student.get("presentDays");
+    Object working = student.get("workingDays");
+    if (present != null && working != null) {
+      return pct + "% (" + present + "/" + working + ")";
+    }
+    return pct + "%";
   }
 
   private static String pctText(Object pct) {

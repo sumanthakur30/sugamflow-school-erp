@@ -57,7 +57,8 @@ class StudentRecordServiceTenantIsolationTest {
             engines,
             new StudentProperties(),
             relationshipAccess,
-            domainSnapshots);
+            domainSnapshots,
+            null);
     when(relationshipAccess.resolve(any())).thenReturn(AccessScope.elevated());
   }
 

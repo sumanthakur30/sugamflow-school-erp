@@ -6,7 +6,11 @@ import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.UUID;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 @Entity
 @Table(name = "exam_mark")
@@ -35,6 +39,19 @@ public class ExamMarkEntity {
   @Column(length = 32)
   private String grade;
 
+  @Column(name = "entry_status", length = 32)
+  private String entryStatus;
+
+  @Column(length = 500)
+  private String remarks;
+
+  @Column(name = "roll_no", length = 64)
+  private String rollNo;
+
+  @JdbcTypeCode(SqlTypes.JSON)
+  @Column(name = "component_marks", nullable = false, columnDefinition = "jsonb")
+  private Map<String, Object> componentMarks = new LinkedHashMap<>();
+
   @Column(name = "updated_by", length = 128)
   private String updatedBy;
 
@@ -60,6 +77,16 @@ public class ExamMarkEntity {
   public void setMarksObtained(BigDecimal marksObtained) { this.marksObtained = marksObtained; }
   public String getGrade() { return grade; }
   public void setGrade(String grade) { this.grade = grade; }
+  public String getEntryStatus() { return entryStatus; }
+  public void setEntryStatus(String entryStatus) { this.entryStatus = entryStatus; }
+  public String getRemarks() { return remarks; }
+  public void setRemarks(String remarks) { this.remarks = remarks; }
+  public String getRollNo() { return rollNo; }
+  public void setRollNo(String rollNo) { this.rollNo = rollNo; }
+  public Map<String, Object> getComponentMarks() { return componentMarks; }
+  public void setComponentMarks(Map<String, Object> componentMarks) {
+    this.componentMarks = componentMarks == null ? new LinkedHashMap<>() : componentMarks;
+  }
   public String getUpdatedBy() { return updatedBy; }
   public void setUpdatedBy(String updatedBy) { this.updatedBy = updatedBy; }
   public Instant getCreatedAt() { return createdAt; }

@@ -1,0 +1,89 @@
+<section class="page">
+  <div class="page-head">
+    <h2>Classroom</h2>
+    <p>Study material, question bank, quizzes, lesson plans, calendar, gallery, and offline test marks.</p>
+  </div>
+
+  <div class="panel" style="display:flex; gap:8px; flex-wrap:wrap;">
+    @for (item of tabs; track item.id) {
+      <button type="button" class="btn" [class.primary]="tab === item.id" (click)="select(item.id)">
+        {{ item.label }}
+      </button>
+    }
+  </div>
+
+  @if (error) {
+    <p class="error panel" role="alert">{{ error }}</p>
+  }
+  @if (message) {
+    <p class="panel">{{ message }}</p>
+  }
+
+  <form class="panel" (ngSubmit)="save()">
+    <label>Title <input name="title" [(ngModel)]="draft.title" required /></label>
+    <label>Subject <input name="subject" [(ngModel)]="draft.subject" /></label>
+    <label>Class <input name="classSection" [(ngModel)]="draft.classSection" /></label>
+    @if (tab === 'STUDY_MATERIAL' || tab === 'GALLERY') {
+      <label>
+        Type
+        <select name="mediaType" [(ngModel)]="draft.mediaType">
+          <option value="VIDEO">Video</option>
+          <option value="PDF">PDF</option>
+          <option value="IMAGE">Image</option>
+          <option value="NOTE">Note</option>
+        </select>
+      </label>
+      <label>Link <input name="url" [(ngModel)]="draft.url" placeholder="https:// or file note" /></label>
+    }
+    @if (tab === 'CALENDAR') {
+      <label>Date <input name="eventDate" type="date" [(ngModel)]="draft.eventDate" /></label>
+    }
+    <label>Note <textarea name="note" rows="3" [(ngModel)]="draft.note"></textarea></label>
+    <button type="submit" class="btn primary">Save</button>
+  </form>
+
+  @if (tab === 'OFFLINE_TEST') {
+    <form class="panel" (ngSubmit)="importMarks()">
+      <h3>Bulk marks</h3>
+      <p>Paste Excel rows as CSV: admission number, marks. A name column in the middle is optional.</p>
+      <label>
+        Test
+        <select name="marksItemId" [(ngModel)]="marksItemId">
+          @for (item of items; track item.id) {
+            <option [value]="item.id">{{ item.title }}</option>
+          }
+        </select>
+      </label>
+      <label>
+        CSV
+        <textarea name="csv" rows="6" [(ngModel)]="csv" placeholder="ADM-1001,18"></textarea>
+      </label>
+      <button type="submit" class="btn primary">Import marks</button>
+    </form>
+  }
+
+  @if (loading) {
+    <p class="panel">Loading…</p>
+  } @else if (!items.length) {
+    <p class="panel">Nothing saved on this tab yet.</p>
+  } @else {
+    <table class="data">
+      <thead>
+        <tr>
+          <th>Title</th>
+          <th>Status</th>
+          <th>Detail</th>
+        </tr>
+      </thead>
+      <tbody>
+        @for (item of items; track item.id) {
+          <tr>
+            <td>{{ item.title }}</td>
+            <td>{{ item.status }}</td>
+            <td>{{ item.note || item.payload?.subject || item.payload?.url || item.payload?.eventDate }}</td>
+          </tr>
+        }
+      </tbody>
+    </table>
+  }
+</section>

@@ -283,6 +283,7 @@ public class AdmissionApplicationService {
       throw new AdmissionException("FORM_MISSING", "Form definition not found: " + formKey);
     }
     validateMandatory(form, answers);
+    refuseOpenDuplicate(scope, stringOr(answers.get("mobile"), ""));
 
     Map<String, Object> workflow = engines.getWorkflow(scope, workflowKey);
     if (workflow == null) {
@@ -338,6 +339,32 @@ public class AdmissionApplicationService {
     return toDto(repository.save(entity));
   }
 
+  /** Public field list for the school's configured admission form. No workflow or internal ids. */
+  public Map<String, Object> publicFormSchema(String organizationId, String branchId) {
+    if (organizationId == null || organizationId.isBlank()) {
+      throw new AdmissionException("VALIDATION", "organizationId is required");
+    }
+    TenantScope scope =
+        new TenantScope(
+            organizationId.trim(),
+            branchId == null || branchId.isBlank() ? "main" : branchId.trim(),
+            "2025-26",
+            "website-public",
+            "PUBLIC");
+    TenantContext.set(scope);
+    try {
+      Map<String, Object> module = engines.getModuleSettings(scope, MODULE_ADMISSION);
+      String formKey = resolveFormKey(module);
+      Map<String, Object> form = engines.getForm(scope, formKey);
+      Map<String, Object> out = new LinkedHashMap<>();
+      out.put("formKey", formKey);
+      out.put("sections", sanitizeFormSections(form));
+      return out;
+    } finally {
+      TenantContext.clear();
+    }
+  }
+
   /**
    * Public website admission inquiry. Tenant comes from organizationId (already resolved by website
    * host mapping); does not trust client for anything beyond the applicant fields.
@@ -382,6 +409,7 @@ public class AdmissionApplicationService {
             "Online admission is not enabled for this school (FEATURE_WEBSITE_ADMISSION).");
       }
       requireModuleEnabled(scope);
+      refuseOpenDuplicate(scope, mobile);
 
       Map<String, Object> answers = new LinkedHashMap<>();
       answers.put("fullName", fullName);
@@ -397,6 +425,7 @@ public class AdmissionApplicationService {
       } else {
         answers.put("age", "0");
       }
+      mergePublicAnswers(body.get("answers"), answers);
 
       Map<String, Object> module = engines.getModuleSettings(scope, MODULE_ADMISSION);
       String formKey = resolveFormKey(module);
@@ -946,6 +975,79 @@ public class AdmissionApplicationService {
   }
 
   @SuppressWarnings("unchecked")
+  private static void mergePublicAnswers(Object raw, Map<String, Object> answers) {
+    if (!(raw instanceof Map<?, ?> map)) {
+      return;
+    }
+    for (Map.Entry<?, ?> entry : map.entrySet()) {
+      if (entry.getKey() == null || entry.getValue() == null) {
+        continue;
+      }
+      String key = String.valueOf(entry.getKey()).trim();
+      if (key.isBlank()
+          || "organizationId".equals(key)
+          || "captchaToken".equals(key)
+          || "branchId".equals(key)) {
+        continue;
+      }
+      String text = String.valueOf(entry.getValue()).trim();
+      if (!text.isBlank()) {
+        answers.put(key, entry.getValue());
+      }
+    }
+  }
+
+  @SuppressWarnings("unchecked")
+  private static List<Map<String, Object>> sanitizeFormSections(Map<String, Object> form) {
+    if (form == null) {
+      return List.of();
+    }
+    Object sectionsObj = form.get("sections");
+    if (!(sectionsObj instanceof List<?> sections)) {
+      return List.of();
+    }
+    List<Map<String, Object>> safe = new ArrayList<>();
+    for (Object sectionObj : sections) {
+      if (!(sectionObj instanceof Map<?, ?> section)) {
+        continue;
+      }
+      Object fieldsObj = section.get("fields");
+      if (!(fieldsObj instanceof List<?> fields)) {
+        continue;
+      }
+      List<Map<String, Object>> safeFields = new ArrayList<>();
+      for (Object fieldObj : fields) {
+        if (!(fieldObj instanceof Map<?, ?> field)) {
+          continue;
+        }
+        Object key = field.get("key");
+        if (key == null || String.valueOf(key).isBlank()) {
+          continue;
+        }
+        Map<String, Object> row = new LinkedHashMap<>();
+        row.put("key", String.valueOf(key));
+        row.put("label", field.get("label") == null ? String.valueOf(key) : field.get("label"));
+        row.put("type", field.get("type") == null ? "TEXTBOX" : field.get("type"));
+        row.put("mandatory", Boolean.TRUE.equals(field.get("mandatory")));
+        if (field.get("placeholder") != null) {
+          row.put("placeholder", field.get("placeholder"));
+        }
+        if (field.get("options") instanceof List<?> options) {
+          row.put("options", options);
+        }
+        safeFields.add(row);
+      }
+      if (!safeFields.isEmpty()) {
+        Map<String, Object> sectionRow = new LinkedHashMap<>();
+        sectionRow.put("title", section.get("title"));
+        sectionRow.put("fields", safeFields);
+        safe.add(sectionRow);
+      }
+    }
+    return safe;
+  }
+
+  @SuppressWarnings("unchecked")
   private void fillMissingMandatoryPlaceholders(
       Map<String, Object> form, Map<String, Object> answers) {
     Object sectionsObj = form.get("sections");
@@ -1207,6 +1309,43 @@ public class AdmissionApplicationService {
       out.add(slim);
     }
     return out;
+  }
+
+  private void refuseOpenDuplicate(TenantScope scope, String mobile) {
+    if (mobile == null || mobile.isBlank() || scope == null) {
+      return;
+    }
+    String branch = scope.branchId();
+    String session = scope.academicSessionId();
+    boolean branchBlank = branch == null || branch.isBlank();
+    boolean sessionBlank = session == null || session.isBlank();
+    List<AdmissionApplicationEntity> open =
+        repository.findOpenByMobile(
+            scope.organizationId(),
+            branchBlank ? "" : branch,
+            branchBlank,
+            sessionBlank ? "" : session,
+            sessionBlank,
+            mobile.trim());
+    if (open.isEmpty()) {
+      return;
+    }
+    AdmissionApplicationEntity existing = open.get(0);
+    String name = "applicant";
+    if (existing.getAnswers() != null && existing.getAnswers().get("fullName") != null) {
+      name = String.valueOf(existing.getAnswers().get("fullName"));
+    }
+    throw new AdmissionException(
+        "DUPLICATE_MOBILE",
+        "An open application already exists for "
+            + mobile.trim()
+            + ": "
+            + name
+            + " ("
+            + existing.getId()
+            + ", "
+            + existing.getStatus()
+            + ")");
   }
 
   private static String stringOr(Object value, String fallback) {

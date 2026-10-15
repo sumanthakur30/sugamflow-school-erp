@@ -76,6 +76,10 @@ export class ApiService {
     return this.http.post<ApiResponse<T>>(`${this.base}${path}`, body).pipe(map((r) => r.data));
   }
 
+  patch<T>(path: string, body: unknown): Observable<T> {
+    return this.http.patch<ApiResponse<T>>(`${this.base}${path}`, body).pipe(map((r) => r.data));
+  }
+
   delete<T>(path: string): Observable<T> {
     return this.http.delete<ApiResponse<T>>(`${this.base}${path}`).pipe(map((r) => r.data));
   }

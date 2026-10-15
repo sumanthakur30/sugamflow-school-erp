@@ -7,10 +7,15 @@ import com.sugamflow.school.common.api.PageResult;
 import com.sugamflow.school.payroll.config.PayrollProperties;
 import com.sugamflow.school.payroll.integration.ConfigEngineClient;
 import com.sugamflow.school.payroll.integration.NotificationDeliveryClient;
+import com.sugamflow.school.payroll.integration.ApprovedLeaveClient;
+import com.sugamflow.school.payroll.integration.StaffAttendanceClient;
 import com.sugamflow.school.payroll.persistence.entity.PayrollRecordEntity;
 import com.sugamflow.school.payroll.persistence.repo.PayrollRecordRepository;
 import com.sugamflow.school.payroll.web.PayrollException;
 import java.time.Instant;
+import java.time.YearMonth;
+import java.time.ZoneId;
+import java.util.Locale;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
@@ -44,18 +49,24 @@ public class PayrollRecordService {
   private final NotificationDeliveryClient notificationDelivery;
   private final PayrollProperties properties;
   private final PayrollOpsService opsService;
+  private final StaffAttendanceClient staffAttendance;
+  private final ApprovedLeaveClient approvedLeave;
 
   public PayrollRecordService(
       PayrollRecordRepository repository,
       ConfigEngineClient engines,
       NotificationDeliveryClient notificationDelivery,
       PayrollProperties properties,
-      PayrollOpsService opsService) {
+      PayrollOpsService opsService,
+      StaffAttendanceClient staffAttendance,
+      ApprovedLeaveClient approvedLeave) {
     this.repository = repository;
     this.engines = engines;
     this.notificationDelivery = notificationDelivery;
     this.properties = properties;
     this.opsService = opsService;
+    this.staffAttendance = staffAttendance;
+    this.approvedLeave = approvedLeave;
   }
 
   @Transactional(readOnly = true)
@@ -107,6 +118,41 @@ public class PayrollRecordService {
     TenantScope scope = TenantContext.require();
     requireFeature(scope);
     return toDto(requireRecord(id, scope.organizationId()));
+  }
+
+  /** Stamp the first issue time and return the amounts for the payslip PDF. */
+  @Transactional
+  public Map<String, Object> issuePayslip(UUID id) {
+    TenantScope scope = TenantContext.require();
+    requireFeature(scope);
+    PayrollRecordEntity entity = requireRecord(id, scope.organizationId());
+    String status = entity.getStatus() == null ? "" : entity.getStatus().trim().toUpperCase();
+    if (!"APPROVED".equals(status)) {
+      throw new PayrollException(
+          "NOT_APPROVED", "Issue a payslip only after the payroll run is approved");
+    }
+    Map<String, Object> answers = new LinkedHashMap<>();
+    if (entity.getAnswers() != null) {
+      answers.putAll(entity.getAnswers());
+    }
+    if (stringOr(answers.get("payslipIssuedAt"), "").isBlank()) {
+      answers.put("payslipIssuedAt", Instant.now().toString());
+      answers.put("payslipIssuedBy", scope.userId());
+      entity.setAnswers(answers);
+      entity.setUpdatedAt(Instant.now());
+      entity
+          .getHistory()
+          .add(
+              event(
+                  "PAYSLIP_ISSUED",
+                  scope.userId(),
+                  scope.roleCode(),
+                  "Payslip issued",
+                  entity.getCurrentStepSequence(),
+                  entity.getCurrentStepName()));
+      repository.save(entity);
+    }
+    return answers;
   }
 
   @Transactional
@@ -513,6 +559,7 @@ public class PayrollRecordService {
 
   private Map<String, Object> markPaid(
       PayrollRecordEntity entity, TenantScope scope, String comment) {
+    requireSubmittedStaffAttendance(scope, entity);
     String status = entity.getStatus() == null ? "" : entity.getStatus().trim().toUpperCase();
     if (!"APPROVED".equals(status)) {
       throw new PayrollException("NOT_PAYABLE", "Only APPROVED runs can be marked PAID.");
@@ -580,6 +627,7 @@ public class PayrollRecordService {
       TenantScope scope,
       Map<String, Object> workflow,
       String comment) {
+    requireSubmittedStaffAttendance(scope, entity);
     List<WorkflowStep> steps = steps(workflow);
     WorkflowStep current =
         steps.stream()
@@ -856,6 +904,62 @@ public class PayrollRecordService {
 
   private WorkflowStep firstStep(Map<String, Object> workflow) {
     return steps(workflow).get(0);
+  }
+
+  private void requireSubmittedStaffAttendance(TenantScope scope, PayrollRecordEntity entity) {
+    String yearMonth = payrollMonth(entity);
+    if (!staffAttendance.isMonthSubmitted(scope, yearMonth)) {
+      throw new PayrollException(
+          "ATTENDANCE_REQUIRED",
+          "Submit staff attendance for " + yearMonth + " before this payslip can be finalized");
+    }
+    Map<String, Object> answers =
+        entity.getAnswers() == null ? new LinkedHashMap<>() : new LinkedHashMap<>(entity.getAnswers());
+    String employeeId = String.valueOf(answers.getOrDefault("employeeId", "")).trim();
+    String employeeName = String.valueOf(answers.getOrDefault("employeeName", "")).trim();
+    answers.put(
+        "approvedLeaveDays",
+        approvedLeave.approvedDays(scope, yearMonth, employeeId, employeeName));
+    entity.setAnswers(answers);
+  }
+
+  private static String payrollMonth(PayrollRecordEntity entity) {
+    Map<String, Object> answers = entity.getAnswers() == null ? Map.of() : entity.getAnswers();
+    String name = String.valueOf(answers.getOrDefault("month", "")).trim();
+    String year = String.valueOf(answers.getOrDefault("year", "")).trim();
+    int month = monthNumber(name);
+    int yearNumber = yearNumber(year);
+    if (month > 0 && yearNumber > 0) {
+      return YearMonth.of(yearNumber, month).toString();
+    }
+    Instant created = entity.getCreatedAt() == null ? Instant.now() : entity.getCreatedAt();
+    return YearMonth.from(created.atZone(ZoneId.of("Asia/Kolkata"))).toString();
+  }
+
+  private static int monthNumber(String name) {
+    return switch (name.toLowerCase(Locale.ROOT)) {
+      case "january", "jan" -> 1;
+      case "february", "feb" -> 2;
+      case "march", "mar" -> 3;
+      case "april", "apr" -> 4;
+      case "may" -> 5;
+      case "june", "jun" -> 6;
+      case "july", "jul" -> 7;
+      case "august", "aug" -> 8;
+      case "september", "sep", "sept" -> 9;
+      case "october", "oct" -> 10;
+      case "november", "nov" -> 11;
+      case "december", "dec" -> 12;
+      default -> 0;
+    };
+  }
+
+  private static int yearNumber(String year) {
+    try {
+      return Integer.parseInt(year);
+    } catch (NumberFormatException ex) {
+      return 0;
+    }
   }
 
   private Map<String, Object> recordNotification(

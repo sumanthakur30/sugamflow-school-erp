@@ -13,13 +13,14 @@ import {
 } from '../../shared/list-toolbar/list-controls';
 import { StudentLookupComponent } from '../../shared/student-lookup/student-lookup.component';
 import { StudentLookupRow } from '../../shared/student-lookup/student-lookup.models';
+import { TransportDeskComponent } from './transport-desk.component';
 
-type TransportView = 'routes' | 'assign' | 'assignments' | 'workflow';
+type TransportView = 'desk' | 'routes' | 'assign' | 'assignments' | 'workflow';
 
 @Component({
   selector: 'sf-transport',
   standalone: true,
-  imports: [CommonModule, FormsModule, StudentLookupComponent],
+  imports: [CommonModule, FormsModule, StudentLookupComponent, TransportDeskComponent],
   templateUrl: './transport.component.html',
   styleUrls: [
     '../../shared/admin-page.scss',
@@ -37,7 +38,7 @@ export class TransportComponent implements OnInit, OnDestroy {
   error = '';
   statusMsg = '';
   featureEnabled = false;
-  view: TransportView = 'routes';
+  view: TransportView = 'desk';
   formKey = 'transport_route';
   workflowKey = 'transport';
   fields: Array<{ key: string; label: string; type: string; mandatory: boolean }> = [];
@@ -165,6 +166,11 @@ export class TransportComponent implements OnInit, OnDestroy {
   get routesAtCapacity(): number {
     return this.routes.filter((route) => this.routeOccupancy(route.id) >= Number(route.capacity || 0))
       .length;
+  }
+
+  openCreateRoute(): void {
+    this.selectView('routes');
+    this.showRouteForm = true;
   }
 
   openRouteSummary(): void {

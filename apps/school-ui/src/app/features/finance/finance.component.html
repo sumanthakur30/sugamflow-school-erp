@@ -6,10 +6,15 @@
         <p>Operational dashboard for collections, dues, structures, and payments.</p>
       </div>
       <div class="head-actions">
+        <button type="button" class="secondary" (click)="printOverview()">Export PDF</button>
+        <button type="button" class="secondary" (click)="exportOverview()">Export Excel</button>
+        <div class="range-switch" role="group" aria-label="Date range">
+          <button type="button" [class.is-on]="range === 'year'" (click)="setRange('year')">Academic year</button>
+          <button type="button" [class.is-on]="range === 'month'" (click)="setRange('month')">Month</button>
+        </div>
         <button type="button" (click)="runQuick({ label: 'Collect', link: ['/admin/fee'], query: { new: '1' } })">
-          Collect fee
+          Collect fee +
         </button>
-        <button type="button" class="secondary" (click)="setTab('demand')">Generate demand</button>
         <button type="button" class="secondary" (click)="reload()" [disabled]="loading || busy">
           Refresh
         </button>
@@ -60,123 +65,99 @@
     </div>
   } @else {
     @if (tab === 'overview') {
-      <section class="fin-kpi-grid" aria-label="Finance summary">
-        @for (k of kpis; track k.key) {
-          <sf-finance-kpi-card [kpi]="k" (action)="onKpiAction($event)" />
-        }
+      <section class="exec-kpis" aria-label="Fee summary">
+        <article class="exec-card">
+          <div class="exec-card-top">
+            <span>Total fee collected</span>
+            <strong class="delta" [class.down]="snapshot.monthDelta < 0">
+              {{ snapshot.monthDelta >= 0 ? '+' : '' }}{{ snapshot.monthDelta }}%
+            </strong>
+          </div>
+          <div class="exec-value">{{ formatMoney(snapshot.totalCollected) }}</div>
+          <svg class="spark" viewBox="0 0 88 32" aria-hidden="true">
+            <polyline [attr.points]="sparkline()" />
+          </svg>
+        </article>
+        <article class="exec-card warn">
+          <div class="exec-card-top"><span>Pending fees</span></div>
+          <div class="exec-value">{{ formatMoney(snapshot.pendingFees) }}</div>
+          <button type="button" class="text-link" (click)="setTab('collections')">View defaulters</button>
+        </article>
+        <article class="exec-card">
+          <div class="exec-card-top"><span>Today's collection</span></div>
+          <div class="exec-value">{{ formatMoney(snapshot.todayCollection) }}</div>
+          <p class="exec-hint">Approved receipts posted today</p>
+        </article>
+        <article class="exec-card">
+          <div class="exec-card-top"><span>Online vs cash</span></div>
+          <div class="exec-value">{{ formatMoney(snapshot.onlineAmount) }}</div>
+          <p class="exec-hint">Cash {{ formatMoney(snapshot.offlineAmount) }}</p>
+        </article>
+        <article class="exec-card">
+          <div class="exec-card-top"><span>Collection progress</span><strong>{{ snapshot.progress }}%</strong></div>
+          <div class="gauge" aria-hidden="true"><span [style.width.%]="snapshot.progress"></span></div>
+          <p class="exec-hint">Collected against collected plus pending</p>
+        </article>
       </section>
 
-      <section class="panel fin-quick" aria-label="Quick actions">
-        <h3 class="form-section-title">Quick actions</h3>
-        <div class="fin-quick-row">
-          @for (a of quickActions; track a.label) {
-            <button type="button" class="fin-chip-btn" (click)="runQuick(a)">{{ a.label }}</button>
+      <div class="exec-main">
+        <section class="panel exec-chart">
+          <h3 class="form-section-title">Collection and revenue</h3>
+          <p class="exec-hint">Bars are collected. The curve is pending for the same period.</p>
+          <sf-finance-trend-chart [points]="trend" />
+        </section>
+        <section class="panel exec-side">
+          <h3 class="form-section-title">Fee type breakdown</h3>
+          @if (!headSlices.length) {
+            <p class="muted">No approved fee heads in this view.</p>
           }
-        </div>
-      </section>
-
-      <div class="fin-overview-grid">
-        <section class="panel fin-panel-link" role="button" tabindex="0" (click)="openDestination({ link: ['/admin/fee'] })" (keyup.enter)="openDestination({ link: ['/admin/fee'] })">
-          <sf-finance-bar-chart title="Monthly fee collection" [slices]="monthlySeries" />
-          <span class="fin-panel-cta">Open fee list →</span>
-        </section>
-        <section class="panel fin-panel-link" role="button" tabindex="0" (click)="setTab('payments')" (keyup.enter)="setTab('payments')">
-          <sf-finance-donut-chart
-            title="Payment mode distribution"
-            [slices]="modeSlices"
-            [centerLabel]="modeSlices.length ? 'Modes' : ''"
-          />
-          <span class="fin-panel-cta">Open payments →</span>
-        </section>
-        <section class="panel fin-panel-link" role="button" tabindex="0" (click)="setTab('heads')" (keyup.enter)="setTab('heads')">
-          <sf-finance-bar-chart title="Collection by fee head" [slices]="headSlices" />
-          <span class="fin-panel-cta">Open fee heads →</span>
-        </section>
-        <section class="panel fin-panel-link" role="button" tabindex="0" (click)="setTab('collections')" (keyup.enter)="setTab('collections')">
-          <sf-finance-bar-chart title="Pending by class" [slices]="pendingClassSlices" fill="#c2410c" />
-          <span class="fin-panel-cta">Review dues →</span>
-        </section>
-      </div>
-
-      <div class="fin-overview-grid two">
-        <section class="panel">
-          <h3 class="form-section-title">Finance alerts</h3>
-          <ul class="fin-alert-list">
-            @for (a of alerts; track a.id) {
-              <li
-                [class]="'fin-alert tone-' + a.tone"
-                [class.is-clickable]="!!(a.actionTab || a.actionLink)"
-                (click)="a.actionTab || a.actionLink ? onAlertAction(a) : null"
-              >
-                <div>
-                  <strong>{{ a.title }}</strong>
-                  <p>{{ a.detail }}</p>
-                </div>
-                @if (a.actionLabel || a.actionTab || a.actionLink) {
-                  <button
-                    type="button"
-                    class="tiny"
-                    (click)="$event.stopPropagation(); onAlertAction(a)"
-                  >
-                    {{ a.actionLabel || 'Open' }}
-                  </button>
-                }
-              </li>
-            }
-          </ul>
-        </section>
-        <section class="panel">
-          <h3 class="form-section-title">Recent activity</h3>
-          <ol class="fin-timeline">
-            @for (ev of activity; track ev.id) {
-              <li
-                class="fin-timeline-item"
-                [class]="'tone-' + ev.tone"
-                [class.is-clickable]="ev.id.startsWith('c-') || ev.id.startsWith('t-') || ev.id.startsWith('h-')"
-                role="button"
-                tabindex="0"
-                (click)="openActivity(ev)"
-                (keyup.enter)="openActivity(ev)"
-              >
-                <div class="fin-timeline-title">{{ ev.title }}</div>
-                <div class="fin-timeline-detail">{{ ev.detail }}</div>
-                <div class="fin-timeline-at">{{ formatWhen(ev.at) }}</div>
-              </li>
-            }
-          </ol>
+          @for (head of headSlices.slice(0, 5); track head.key) {
+            <div class="head-row">
+              <div class="head-meta">
+                <span>{{ head.label }}</span>
+                <strong>{{ formatMoney(head.value) }}</strong>
+              </div>
+              <div class="head-track"><span [style.width.%]="headWidth(head.value)"></span></div>
+            </div>
+          }
+          <h3 class="form-section-title due-title">Top pending balances</h3>
+          @for (row of outstanding.slice(0, 5); track row.id) {
+            <div class="due-row">
+              <span class="avatar">{{ row.studentName.charAt(0) }}</span>
+              <div>
+                <strong>{{ row.studentName }}</strong>
+                <div class="exec-hint">{{ row.classSection }}</div>
+              </div>
+              <strong class="due-amt">{{ formatMoney(row.dueAmount) }}</strong>
+              <button type="button" class="tiny" (click)="remind(row)">Send reminder</button>
+            </div>
+          }
+          @if (!outstanding.length) {
+            <p class="muted">No pending student balances.</p>
+          }
         </section>
       </div>
 
       <section class="panel">
-        <h3 class="form-section-title">Payment mode summary</h3>
-        <div class="fin-mode-grid">
-          @for (m of modeCards; track m.mode) {
-            <article
-              class="fin-mode-card is-clickable"
-              role="button"
-              tabindex="0"
-              (click)="openModeCard(m)"
-              (keyup.enter)="openModeCard(m)"
-            >
-              <h4>{{ m.mode }}</h4>
-              <div class="fin-mode-metrics">
-                <div>
-                  <span>Today</span>
-                  <strong>{{ formatMoney(m.today) }}</strong>
-                </div>
-                <div>
-                  <span>Month</span>
-                  <strong>{{ formatMoney(m.month) }}</strong>
-                </div>
-                <div>
-                  <span>Count</span>
-                  <strong>{{ m.count }}</strong>
-                </div>
-              </div>
-              <span class="fin-mode-open">Open receipts →</span>
-            </article>
-          }
-        </div>
+        <h3 class="form-section-title">Real-time fee activity</h3>
+        <table class="data activity-table">
+          <thead>
+            <tr><th>Student / reference</th><th>Detail</th><th>Status</th><th>When</th></tr>
+          </thead>
+          <tbody>
+            @for (ev of activity; track ev.id) {
+              <tr class="is-clickable" (click)="openActivity(ev)">
+                <td>{{ ev.title }}</td>
+                <td>{{ ev.detail }}</td>
+                <td><span [class]="'pill tone-' + ev.tone">{{ ev.tone === 'ok' ? 'Success' : ev.tone === 'warn' ? 'Pending' : 'Info' }}</span></td>
+                <td>{{ formatWhen(ev.at) }}</td>
+              </tr>
+            }
+            @if (!activity.length) {
+              <tr><td colspan="4" class="muted">No recent fee activity.</td></tr>
+            }
+          </tbody>
+        </table>
       </section>
     }
 
@@ -422,6 +403,20 @@
               name="structuresQ"
               placeholder="Search structures…"
             />
+            <input
+              class="fin-inline-search"
+              type="search"
+              [(ngModel)]="structureClassQ"
+              name="structureClassQ"
+              placeholder="Class"
+            />
+            <input
+              class="fin-inline-search"
+              type="search"
+              [(ngModel)]="structureSessionQ"
+              name="structureSessionQ"
+              placeholder="Academic year"
+            />
           </div>
           <div class="fin-structure-grid">
             @for (s of filteredStructures; track s.definitionKey || s.id) {
@@ -430,6 +425,12 @@
                   <div>
                     <h4>{{ payload(s).name || s.definitionKey }}</h4>
                     <p class="muted mono">{{ s.definitionKey }} · v{{ s.version || 1 }}</p>
+                    @if (payload(s).eligibility?.classSection || payload(s).eligibility?.academicSessionId) {
+                      <p class="muted">
+                        {{ payload(s).eligibility?.classSection || 'Any class' }}
+                        · {{ payload(s).eligibility?.academicSessionId || 'Any year' }}
+                      </p>
+                    }
                   </div>
                   <div class="fin-structure-total money">{{ formatMoney(structureTotal(s)) }}</div>
                 </div>
@@ -443,6 +444,7 @@
                 </div>
                 <div class="fin-structure-actions">
                   <button type="button" class="tiny secondary" (click)="editStructure(s)">Edit</button>
+                  <button type="button" class="tiny secondary" (click)="copyStructure(s)">Copy</button>
                   <button type="button" class="tiny" (click)="structureKey = s.definitionKey; setTab('demand')">
                     Use in demand
                   </button>
@@ -458,7 +460,7 @@
           <h3 class="form-section-title">
             {{ editingStructureKey ? 'Update structure' : 'Create structure' }}
           </h3>
-          <p class="muted">Lines format: <code>HEAD,amount,frequency</code> (one per line). Frequencies: M / Q / HY / Y / OT.</p>
+          <p class="muted">Lines format: <code>HEAD,amount,frequency</code> (one per line). Frequencies: M / Q / HY / Y / OT. Add <code>,INACTIVE</code> to turn a head off. Saving a new version does not change demands already issued.</p>
           <div class="grid two">
             <label>
               Key
@@ -484,11 +486,67 @@
           </div>
           <label>
             Lines
+            <table class="fee-quote-table">
+              <thead>
+                <tr>
+                  <th>Fee head</th>
+                  <th>Frequency</th>
+                  <th>Amount</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (line of structureLines; track $index) {
+                  <tr>
+                    <td>
+                      <input
+                        [ngModel]="line.headKey"
+                        (ngModelChange)="onStructureLineChange($index, 'headKey', $event)"
+                        [name]="'structHead' + $index"
+                        placeholder="TUITION"
+                      />
+                    </td>
+                    <td>
+                      <select
+                        [ngModel]="line.frequency"
+                        (ngModelChange)="onStructureLineChange($index, 'frequency', $event)"
+                        [name]="'structFreq' + $index"
+                      >
+                        <option value="OT">One-time</option>
+                        <option value="M">Monthly</option>
+                        <option value="Q">Quarterly</option>
+                        <option value="HY">Half-yearly</option>
+                        <option value="Y">Yearly</option>
+                      </select>
+                    </td>
+                    <td>
+                      <input
+                        [ngModel]="line.amount"
+                        (ngModelChange)="onStructureLineChange($index, 'amount', $event)"
+                        [name]="'structAmt' + $index"
+                        inputmode="decimal"
+                        placeholder="0"
+                      />
+                    </td>
+                    <td>
+                      <button
+                        type="button"
+                        class="tiny secondary"
+                        (click)="onStructureLineChange($index, 'active', !line.active)"
+                      >
+                        {{ line.active ? 'Active' : 'Inactive' }}
+                      </button>
+                    </td>
+                  </tr>
+                }
+              </tbody>
+            </table>
             <textarea
               [(ngModel)]="structureDraft.linesText"
+              (ngModelChange)="onStructureTextChange()"
               name="structLines"
-              rows="6"
-              placeholder="ANNUAL,5000,Y&#10;TUITION,12000,M"
+              rows="4"
+              placeholder="TUITION,amount,M"
             ></textarea>
           </label>
           <label>
@@ -535,6 +593,61 @@
             </article>
           } @empty {
             <p class="muted">No concessions configured.</p>
+          }
+        </div>
+        <h3 class="form-section-title">Sibling concession</h3>
+        <p class="muted">
+          Linked siblings are ordered by admission number. Child 1 keeps the standard fee. Later children use the rules below. This does not change the class fee structure.
+        </p>
+        <div class="grid two">
+          <label>
+            Eligible fee heads
+            <input [(ngModel)]="siblingHeads" name="siblingHeads" placeholder="TUITION,ANNUAL" />
+          </label>
+          <label>
+            When both a student adjustment and a sibling concession apply
+            <select [(ngModel)]="siblingStacking" name="siblingStacking">
+              <option value="STUDENT_THEN_SIBLING">Apply the student adjustment, then the sibling concession</option>
+              <option value="EXCLUSIVE_STUDENT">Use only the student adjustment</option>
+              <option value="HIGHER_ONLY">Use whichever concession is larger</option>
+            </select>
+          </label>
+          <label>
+            Child rules (order, PERCENT or FIXED, value)
+            <textarea [(ngModel)]="siblingRulesText" name="siblingRules" rows="4"></textarea>
+          </label>
+          <label>
+            Percent for every later child
+            <input type="number" [(ngModel)]="siblingSubsequent" name="siblingSubsequent" min="0" max="100" />
+          </label>
+        </div>
+        <label class="check">
+          <input type="checkbox" [(ngModel)]="siblingEnabled" name="siblingEnabled" />
+          Apply this sibling policy on new demands
+        </label>
+        <div class="head-actions">
+          <button type="button" (click)="saveSiblingPolicy()" [disabled]="busy">Save sibling policy</button>
+        </div>
+        @if (siblingMessage) {
+          <p class="muted">{{ siblingMessage }}</p>
+        }
+        <h3 class="form-section-title">Student fee adjustments</h3>
+        <div class="fin-line-list">
+          @for (row of feeAdjustments; track row.id) {
+            <div class="fin-line">
+              <span>
+                {{ row.admissionNo }} · {{ row.mode }} {{ row.value }}
+                <span class="muted"> · {{ row.status }} · {{ row.reason }}</span>
+              </span>
+              @if (row.status === 'PENDING') {
+                <span>
+                  <button type="button" (click)="decideAdjustment(row, 'APPROVED')">Approve</button>
+                  <button type="button" class="secondary" (click)="decideAdjustment(row, 'REJECTED')">Reject</button>
+                </span>
+              }
+            </div>
+          } @empty {
+            <p class="muted">No individual fee adjustments yet. Grant one from the student fee tab.</p>
           }
         </div>
       </section>
@@ -644,6 +757,16 @@
                   <span>Discount</span>
                   <strong class="money">{{ formatMoney(demand.discountAmount) }}</strong>
                 </div>
+                @if (demand.concessionBreakdown) {
+                  <div>
+                    <span>Student adjustment</span>
+                    <strong class="money">{{ formatMoney(demand.concessionBreakdown.studentConcession) }}</strong>
+                  </div>
+                  <div>
+                    <span>Sibling concession</span>
+                    <strong class="money">{{ formatMoney(demand.concessionBreakdown.siblingConcession) }}</strong>
+                  </div>
+                }
                 <div>
                   <span>GST</span>
                   <strong class="money">{{ formatMoney(demand.gstAmount) }}</strong>
@@ -732,19 +855,21 @@
             </div>
             <div class="form-actions actions">
               <button type="button" (click)="createIntent()" [disabled]="busy">Create intent</button>
-              <button
-                type="button"
-                class="secondary"
-                (click)="simulateCapture()"
-                [disabled]="
-                  busy ||
-                  !lastIntent ||
-                  lastIntent.status !== 'PENDING' ||
-                  (lastIntent.adapter && lastIntent.adapter !== 'SIMULATED')
-                "
-              >
-                Simulate capture
-              </button>
+              @if (demoTenant) {
+                <button
+                  type="button"
+                  class="secondary"
+                  (click)="simulateCapture()"
+                  [disabled]="
+                    busy ||
+                    !lastIntent ||
+                    lastIntent.status !== 'PENDING' ||
+                    (lastIntent.adapter && lastIntent.adapter !== 'SIMULATED')
+                  "
+                >
+                  Simulate capture
+                </button>
+              }
             </div>
             @if (lastIntent) {
               <div class="fin-intent">

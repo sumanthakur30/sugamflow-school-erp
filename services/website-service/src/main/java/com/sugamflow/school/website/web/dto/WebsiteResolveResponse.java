@@ -18,4 +18,5 @@ public record WebsiteResolveResponse(
     Map<String, Object> theme,
     List<Map<String, Object>> homepage,
     List<Map<String, Object>> navigation,
-    Map<String, Object> seo) {}
+    Map<String, Object> seo,
+    boolean defaultSite) {}

@@ -218,7 +218,7 @@ public class SubscriptionPlan {
         "Polyclinic Starter",
         "POLY_STARTER",
         Map.of("maxUsers", 30L, "maxBranches", 2L, "maxStorageGb", 15L, "maxApiCalls", 80000L),
-        Map.of("POLY_OPD", true, "POLY_PHARMACY", true, "POLY_LAB", true));
+        Map.of("POLY_OPD", true, "POLY_PHARMACY", true, "POLY_LAB", true, "DOCTOR_LAB_REPORTS", true));
   }
 
   public static SubscriptionPlan pharmacyStarter() {

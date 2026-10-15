@@ -1,7 +1,8 @@
 import { Component, OnDestroy, OnInit, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { Subscription } from 'rxjs';
+import { Subscription, catchError, firstValueFrom, forkJoin, map, of, timeout } from 'rxjs';
+import { ActivatedRoute } from '@angular/router';
 import { ApiService } from '../../core/api.service';
 import { TenantContextService } from '../../core/tenant-context.service';
 import { ModuleBootstrapService } from '../../core/module-bootstrap.service';
@@ -18,7 +19,19 @@ export interface ReportElement {
   fontSize?: number;
   align?: string;
   bold?: boolean;
+  objectFit?: 'cover' | 'contain' | string;
+  fallbackSrc?: string;
+  borderWidth?: number;
+  borderColor?: string;
+  borderRadius?: number;
+  fillColor?: string;
+  color?: string;
+  quietZone?: number;
+  z?: number;
 }
+
+const SAMPLE_PHOTO_DATA_URL =
+  'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAADAAAABACAYAAABcIPRGAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsMAAA7DAcdvqGQAAAFQSURBVGhD7dQxDsIwDEZhDssRuAVHZGXmCqAMldBrVduJG6eNh29Bavy/hdvr/fme2Y0/nE0GRMuAaBkQLQPo/niK+E0LtwCO1OAbNVwCOMyCb1k1B3BQDb5p0RTAIS34tlZ1AAd44A2NOQN42BNvSTLAG29J5gvgQW+8JzEHFDzqibckGeCNtyRzBhQ87IE3NOYNKDigBd/WagooOKQG37RoDig4yIJvWbkEFBymwTdquAUsOHILv2nhHtBbBkTLgGgZEM0lgP/zFnzLqjqAQzzwhoY5gEePwJt71AE80gM3bFEF8OGeuIXEAD4YgZvUAXwoEreJAXxgBNx43QB+OBJuzYDeuHUVwA9Gw72rgNEjuDUDeuPWzYBRI7jx2gGjRXCbKmCUCG4yBURHcAupAgo+3AM3bFEHLHjkCLy5xxyw4FEPvKFRHfCPQyz4ltUP8fzWUNoQNcsAAAAASUVORK5CYII=';
 
 export interface ReportTemplate {
   templateKey: string;
@@ -32,6 +45,76 @@ export interface ReportTemplate {
   schedule?: unknown;
 }
 
+export interface IdCardField {
+  key: string;
+  label: string;
+  type: string;
+  showOnIdCard: boolean;
+}
+
+export interface IdCardLine {
+  key: string;
+  label: string;
+  value: string;
+}
+
+export interface IdCardStudent {
+  name: string;
+  grade: string;
+  section: string;
+  admissionNo: string;
+  dob: string;
+  bloodGroup: string;
+  mobileNo: string;
+  emergencyNo: string;
+  apaarId: string;
+  pen: string;
+}
+
+interface PersonHit {
+  id: string;
+  fullName?: string;
+  admissionNo?: string;
+  classSection?: string;
+  fatherName?: string;
+  parentName?: string;
+  penNumber?: string;
+  photoUrl?: string;
+  employeeNo?: string;
+  designation?: string;
+  department?: string;
+}
+
+interface ClassOption {
+  id: string;
+  name: string;
+}
+
+interface SectionOption {
+  id: string;
+  classId: string;
+  name: string;
+  studentLabel: string;
+}
+
+interface SessionOption {
+  id: string;
+  label: string;
+}
+
+interface BulkStudent {
+  id: string;
+  name: string;
+  admissionNo: string;
+  classSection: string;
+  penNumber: string;
+  photoUrl: string;
+  selected: boolean;
+  missingPhoto: boolean;
+  missingAdmission: boolean;
+  missingPen: boolean;
+}
+
 @Component({
   selector: 'sf-report-builder',
   standalone: true,
@@ -43,7 +126,9 @@ export class ReportBuilderComponent implements OnInit, OnDestroy {
   private readonly api = inject(ApiService);
   private readonly tenantContext = inject(TenantContextService);
   private readonly modules = inject(ModuleBootstrapService);
+  private readonly route = inject(ActivatedRoute);
   private campusReadySub?: Subscription;
+  private templateQuerySub?: Subscription;
 
   loading = true;
   featureEnabled = false;
@@ -60,12 +145,36 @@ export class ReportBuilderComponent implements OnInit, OnDestroy {
     hasText: boolean;
   }> = [];
   samplePreviewData: Record<string, unknown> = {};
+  idCardFormFields: IdCardField[] = [];
   formats: string[] = [];
 
   selectedKey = '';
   draft: ReportTemplate | null = null;
   selectedId: string | null = null;
   canvasScale = 0.72;
+
+  /** Runtime preview only. Never written back onto template elements. */
+  previewContext: Record<string, unknown> | null = null;
+  previewLabel = '';
+  photoWarning = '';
+  personQuery = '';
+  searchHits: PersonHit[] = [];
+  searchOpen = false;
+  searchBusy = false;
+  filterClassId = '';
+  filterSectionId = '';
+  classes: ClassOption[] = [];
+  sections: SectionOption[] = [];
+  sessions: SessionOption[] = [];
+
+  bulkOpen = false;
+  bulkSessionId = '';
+  bulkClassId = '';
+  bulkSectionId = '';
+  bulkStudents: BulkStudent[] = [];
+  bulkMissingOnly = false;
+  bulkAllowIncomplete = false;
+  bulkNote = '';
 
   private dragPaletteType: string | null = null;
   private moveState: {
@@ -75,13 +184,29 @@ export class ReportBuilderComponent implements OnInit, OnDestroy {
     origX: number;
     origY: number;
   } | null = null;
+  private searchTimer?: ReturnType<typeof setTimeout>;
+  private searchSub?: Subscription;
 
   ngOnInit(): void {
     this.campusReadySub = this.tenantContext.whenCampusReady().subscribe(() => this.bootstrap());
+    this.templateQuerySub = this.route.queryParamMap.subscribe((params) => {
+      const requested = params.get('template');
+      if (!requested || requested === this.selectedKey || !this.templates.length) {
+        return;
+      }
+      if (this.templates.some((template) => template.templateKey === requested)) {
+        this.selectTemplate(requested);
+      }
+    });
   }
 
   ngOnDestroy(): void {
     this.campusReadySub?.unsubscribe();
+    this.templateQuerySub?.unsubscribe();
+    this.searchSub?.unsubscribe();
+    if (this.searchTimer) {
+      clearTimeout(this.searchTimer);
+    }
   }
 
   bootstrap(): void {
@@ -92,11 +217,18 @@ export class ReportBuilderComponent implements OnInit, OnDestroy {
       this.featureEnabled = !!boot.featureEnabled;
       this.elementTypes = boot.elementTypes ?? [];
       this.samplePreviewData = boot.samplePreviewData ?? {};
+      this.ensureSamplePhoto();
       this.formats = boot.exportFormats ?? [];
       this.templates = boot.templates ?? [];
       this.loading = false;
+      if (this.featureEnabled) {
+        this.loadCatalogs();
+        this.loadIdCardForms();
+      }
       if (this.featureEnabled && this.templates.length) {
-        this.selectTemplate(this.templates[0].templateKey);
+        const requested = this.route.snapshot.queryParamMap.get('template');
+        const match = this.templates.find((t) => t.templateKey === requested);
+        this.selectTemplate(match?.templateKey || this.templates[0].templateKey);
       }
     };
     const peeked = this.modules.peek(path);
@@ -123,6 +255,7 @@ export class ReportBuilderComponent implements OnInit, OnDestroy {
     this.selectedKey = key;
     this.selectedId = null;
     this.status = '';
+    this.clearPreviewPerson();
     this.api.get<ReportTemplate>(`/api/reports/templates/${key}`).subscribe({
       next: (t) => {
         this.draft = this.cloneTemplate(t);
@@ -193,9 +326,15 @@ export class ReportBuilderComponent implements OnInit, OnDestroy {
             : type === 'field'
               ? '{{student.name}}'
               : type === 'image'
-                ? '[Image]'
+                ? '{{student.photoDirectUrl}}'
                 : '',
-      bind: type === 'field' ? 'student.name' : undefined,
+      bind:
+        type === 'field'
+          ? 'student.name'
+          : type === 'image'
+            ? 'student.photoDirectUrl'
+            : undefined,
+      objectFit: type === 'image' ? 'cover' : undefined,
     };
     this.draft.elements = [...this.draft.elements, el];
     this.selectedId = el.id;
@@ -307,19 +446,25 @@ export class ReportBuilderComponent implements OnInit, OnDestroy {
     if (!this.draft) {
       return;
     }
+    const data = this.runtimeData();
+    if (!data) {
+      return;
+    }
     this.busy = true;
     this.error = '';
     this.api
       .post<any>('/api/reports/preview', {
         ...this.draft,
-        data: this.samplePreviewData,
+        data,
         format: 'PDF',
       })
       .subscribe({
         next: (res) => {
           this.busy = false;
           this.openPdf(res);
-          this.status = 'Preview PDF opened';
+          this.status = this.previewLabel
+            ? `Preview PDF opened for ${this.previewLabel}`
+            : 'Preview PDF opened';
         },
         error: (err) => {
           this.busy = false;
@@ -332,17 +477,23 @@ export class ReportBuilderComponent implements OnInit, OnDestroy {
     if (!this.selectedKey) {
       return;
     }
+    const data = this.runtimeData();
+    if (!data) {
+      return;
+    }
     this.busy = true;
     this.api
       .post<any>(`/api/reports/templates/${this.selectedKey}/render`, {
         format: 'PDF',
-        data: this.samplePreviewData,
+        data,
       })
       .subscribe({
         next: (res) => {
           this.busy = false;
           this.openPdf(res);
-          this.status = 'Rendered saved template';
+          this.status = this.previewLabel
+            ? `Rendered saved template for ${this.previewLabel}`
+            : 'Rendered saved template';
         },
         error: (err) => {
           this.busy = false;
@@ -352,16 +503,63 @@ export class ReportBuilderComponent implements OnInit, OnDestroy {
   }
 
   displayLabel(el: ReportElement): string {
-    if (el.type === 'line') {
+    if (el.type === 'line' || el.type === 'box' || el.type === 'image') {
       return '';
     }
-    if (el.type === 'box') {
+    if (el.type === 'qr') {
+      return 'QR';
+    }
+    const raw = el.text || (el.bind ? `{{${el.bind}}}` : el.type);
+    if (!this.previewContext) {
+      return raw;
+    }
+    return this.resolvePlaceholders(raw);
+  }
+
+  imageSrc(el: ReportElement): string {
+    const raw = el.text?.trim() || (el.bind ? `{{${el.bind}}}` : '');
+    const resolved = this.resolvePlaceholders(raw);
+    if (this.isDrawableImage(resolved)) {
+      return resolved;
+    }
+    if (el.fallbackSrc && this.isDrawableImage(el.fallbackSrc)) {
+      return el.fallbackSrc;
+    }
+    if (this.previewContext || (el.bind ?? '').includes('logo')) {
       return '';
     }
-    if (el.type === 'image') {
-      return el.text || '[Image]';
+    return SAMPLE_PHOTO_DATA_URL;
+  }
+
+  onFallbackSelected(ev: Event): void {
+    const input = ev.target as HTMLInputElement;
+    const file = input.files?.[0];
+    const selected = this.selected;
+    if (!file || !selected) {
+      return;
     }
-    return el.text || (el.bind ? `{{${el.bind}}}` : el.type);
+    if (!file.type.startsWith('image/')) {
+      this.error = 'Fallback must be an image file';
+      input.value = '';
+      return;
+    }
+    if (file.size > 200_000) {
+      this.error = 'Fallback image must be under 200 KB';
+      input.value = '';
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      selected.fallbackSrc = String(reader.result || '');
+      this.error = '';
+    };
+    reader.readAsDataURL(file);
+  }
+
+  clearFallback(): void {
+    if (this.selected) {
+      this.selected.fallbackSrc = '';
+    }
   }
 
   private openPdf(res: { contentBase64?: string; fileName?: string }): void {
@@ -384,7 +582,1200 @@ export class ReportBuilderComponent implements OnInit, OnDestroy {
     return {
       ...t,
       layout: { ...(t.layout ?? { width: 794, height: 1123 }) },
-      elements: (t.elements ?? []).map((e) => ({ ...e })),
+      elements: (t.elements ?? []).map((e) => this.normalizeImageElement({ ...e })),
     };
+  }
+
+  private normalizeImageElement(el: ReportElement): ReportElement {
+    if (el.type !== 'image') {
+      return el;
+    }
+    const text = el.text ?? '';
+    const bind = el.bind ?? '';
+    if (text.includes('student.photoBase64') || bind === 'student.photoBase64') {
+      el.text = '{{student.photoDirectUrl}}';
+      el.bind = 'student.photoDirectUrl';
+    } else if (text.includes('student.photoDirectUrl') && !el.bind) {
+      el.bind = 'student.photoDirectUrl';
+    }
+    el.objectFit = el.objectFit || 'cover';
+    if (el.borderWidth == null) {
+      el.borderWidth = 1;
+    }
+    if (!el.borderColor) {
+      el.borderColor = '#94a3b8';
+    }
+    if (el.borderRadius == null) {
+      el.borderRadius = 0;
+    }
+    return el;
+  }
+
+  private ensureSamplePhoto(): void {
+    const student = {
+      ...((this.samplePreviewData['student'] as Record<string, unknown>) ?? {}),
+    };
+    const current = String(student['photoDirectUrl'] ?? '');
+    if (!current || current.includes('{{')) {
+      student['photoDirectUrl'] = SAMPLE_PHOTO_DATA_URL;
+    }
+    this.samplePreviewData = { ...this.samplePreviewData, student };
+  }
+
+  private resolvePlaceholders(template: string): string {
+    return template.replace(/\{\{([^}]+)\}\}/g, (_match, path: string) => {
+      const value = this.bindValue(path.trim());
+      return value ?? '';
+    });
+  }
+
+  private bindValue(path: string): string {
+    let cur: unknown = this.previewContext ?? this.samplePreviewData;
+    for (const part of path.split('.')) {
+      if (!cur || typeof cur !== 'object') {
+        return '';
+      }
+      cur = (cur as Record<string, unknown>)[part];
+      if (cur == null) {
+        return '';
+      }
+    }
+    return this.formatBound(path, String(cur));
+  }
+
+  /** Match the PDF: issued/expiry as "16 Jul 2026", DOB as DD/MM/YYYY. */
+  private formatBound(path: string, value: string): string {
+    const key = path.toLowerCase();
+    const dob = key.endsWith('dateofbirth') || key.endsWith('.dob');
+    const cardDate = key.endsWith('issuedat') || key.endsWith('expiresat') || key.endsWith('validuntil');
+    if (!dob && !cardDate) {
+      return value;
+    }
+    if (!value.trim() || value.trim() === '—') {
+      return '—';
+    }
+    const dmy = value.match(/^(\d{2})[-/](\d{2})[-/](\d{4})$/);
+    if (dob && dmy) {
+      return `${dmy[1]}/${dmy[2]}/${dmy[3]}`;
+    }
+    const iso = value.match(/^(\d{4})-(\d{2})-(\d{2})(?:T|$)/);
+    if (!iso) {
+      return value;
+    }
+    const day = iso[3];
+    const month = iso[2];
+    const year = iso[1];
+    if (dob) {
+      return `${day}/${month}/${year}`;
+    }
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    return `${day} ${months[Number(month) - 1]} ${year}`;
+  }
+
+  get idCardLines(): IdCardLine[] {
+    const student = ((this.previewContext ?? this.samplePreviewData)['student'] ?? {}) as Record<string, unknown>;
+    return this.composeIdCardLines(this.idCardFormFields, student);
+  }
+
+  private loadIdCardForms(): void {
+    const load = (key: string) =>
+      this.api.get<any>(`/api/forms/${encodeURIComponent(key)}`).pipe(catchError(() => of(null)));
+    forkJoin([load('student_master'), load('admission_form')]).subscribe(([studentForm, admissionForm]) => {
+      const fields = new Map<string, IdCardField>();
+      this.absorbIdCardFields(fields, studentForm);
+      this.absorbIdCardFields(fields, admissionForm);
+      this.idCardFormFields = [...fields.values()];
+    });
+  }
+
+  private absorbIdCardFields(fields: Map<string, IdCardField>, form: any): void {
+    const sections = form?.sections;
+    if (!Array.isArray(sections)) {
+      return;
+    }
+    for (const section of sections) {
+      const sectionFields = section?.fields;
+      if (!Array.isArray(sectionFields)) {
+        continue;
+      }
+      for (const field of sectionFields) {
+        if (!field || typeof field !== 'object' || !('showOnIdCard' in field)) {
+          continue;
+        }
+        const key = this.text(field.key);
+        if (!key) {
+          continue;
+        }
+        const on = field.showOnIdCard === true || String(field.showOnIdCard).toLowerCase() === 'true';
+        const existing = fields.get(key);
+        if (!existing) {
+          fields.set(key, {
+            key,
+            label: this.text(field.label) || key,
+            type: this.text(field.type) || 'TEXTBOX',
+            showOnIdCard: on,
+          });
+        } else if (on) {
+          existing.showOnIdCard = true;
+        }
+      }
+    }
+  }
+
+  private composeIdCardLines(fields: IdCardField[], student: Record<string, unknown>): IdCardLine[] {
+    const shown = fields.filter((field) => field.showOnIdCard);
+    const lines: IdCardLine[] = [];
+    const classField = shown.find((field) => field.key === 'classApplied' || field.key === 'classSection')
+      ?? shown.find((field) => field.key === 'classGrade');
+    if (classField) {
+      const klass = this.classDisplay(student);
+      lines.push({ key: classField.key, label: this.fieldLabel(classField, 'Class'), value: klass.classSection });
+    }
+    for (const field of shown) {
+      if (this.skipIdCardLine(field)) {
+        continue;
+      }
+      lines.push({
+        key: field.key,
+        label: this.fieldLabel(field, field.key),
+        value: this.idCardValue(field, student),
+      });
+    }
+    const fitted = this.fitIdCardLines(lines);
+    if (fitted.some((line) => this.blankDash(line.value))) {
+      return fitted;
+    }
+    return this.fitIdCardLines(this.defaultIdCardLines(student));
+  }
+
+  /** Used when the student and admission forms have not marked any ID-card fields. */
+  private defaultIdCardLines(student: Record<string, unknown>): IdCardLine[] {
+    const klass = this.classDisplay(student);
+    const father = this.text(student['fatherName']) || this.guardianName(student, 'Father');
+    return [
+      { key: 'classApplied', label: 'Class', value: klass.classSection },
+      { key: 'admissionNo', label: 'Admission No', value: this.dash(this.text(student['admissionNo'])) },
+      {
+        key: 'dateOfBirth',
+        label: 'Date of birth',
+        value: this.dash(this.text(student['dob'] || student['dateOfBirth'])),
+      },
+      { key: 'bloodGroup', label: 'Blood group', value: this.dash(this.text(student['bloodGroup'])) },
+      {
+        key: 'mobile',
+        label: 'Mobile',
+        value: this.dash(this.text(student['mobile'] || student['mobileNo'])),
+      },
+      { key: 'fatherName', label: 'Father', value: this.dash(father) },
+    ];
+  }
+
+  private fieldLabel(field: IdCardField, fallback: string): string {
+    const label = this.text(field.label);
+    return label && label !== field.key ? label : fallback;
+  }
+
+  /** CR80 field column is 98px tall. Keep filled values, then date of birth and blood group. */
+  private fitIdCardLines(lines: IdCardLine[]): IdCardLine[] {
+    const filled = lines.filter((line) => this.blankDash(line.value));
+    const blank = lines
+      .filter((line) => !this.blankDash(line.value))
+      .sort((a, b) => this.blankLinePriority(a.key) - this.blankLinePriority(b.key));
+    return [...filled, ...blank].slice(0, 8);
+  }
+
+  private blankLinePriority(key: string): number {
+    switch (key) {
+      case 'dob':
+      case 'dateOfBirth':
+        return 0;
+      case 'bloodGroup':
+        return 1;
+      case 'fatherName':
+        return 2;
+      case 'motherName':
+        return 3;
+      case 'mobile':
+      case 'mobileNo':
+        return 4;
+      default:
+        return 10;
+    }
+  }
+
+  private skipIdCardLine(field: IdCardField): boolean {
+    const type = field.type.toUpperCase();
+    return (
+      field.key === 'fullName' ||
+      field.key === 'name' ||
+      field.key === 'studentName' ||
+      field.key === 'photo' ||
+      field.key === 'studentPhoto' ||
+      field.key === 'section' ||
+      field.key === 'sectionLetter' ||
+      field.key === 'classGrade' ||
+      field.key === 'classApplied' ||
+      field.key === 'classSection' ||
+      type === 'IMAGE' ||
+      type === 'FILE'
+    );
+  }
+
+  private idCardValue(field: IdCardField, student: Record<string, unknown>): string {
+    if (field.key === 'dob' || field.key === 'dateOfBirth') {
+      return this.formatBound('student.dob', this.lookupText(student, ['dateOfBirth', 'dob', 'birthDate']));
+    }
+    if (field.type.toUpperCase() === 'CHECKBOX') {
+      const raw = this.lookupText(student, [field.key]);
+      if (!raw) {
+        return '—';
+      }
+      const on = raw.toLowerCase() === 'true' || raw.toLowerCase() === 'yes' || raw === '1';
+      return on ? 'Yes' : 'No';
+    }
+    let raw = this.lookupText(student, this.idCardAliases(field.key));
+    if (!raw && field.key === 'fatherName') {
+      raw = this.guardianName(student, 'Father');
+    }
+    if (!raw && field.key === 'motherName') {
+      raw = this.guardianName(student, 'Mother');
+    }
+    return this.dash(raw);
+  }
+
+  private idCardAliases(key: string): string[] {
+    switch (key) {
+      case 'mobile':
+      case 'mobileNo':
+        return ['mobile', 'mobileNo', 'contactNo', 'contactNumber', 'phone', 'studentMobile'];
+      case 'bloodGroup':
+        return ['bloodGroup', 'blood_group', 'bloodType'];
+      case 'penNumber':
+      case 'pen':
+        return ['penNumber', 'pen'];
+      case 'apaarId':
+        return ['apaarId', 'apaarNumber'];
+      case 'fatherName':
+        return ['fatherName', 'parentName'];
+      case 'motherName':
+        return ['motherName'];
+      default:
+        return [key];
+    }
+  }
+
+  private lookupText(answers: Record<string, unknown>, keys: string[]): string {
+    for (const key of keys) {
+      const value = this.blankDash(this.text(answers[key]));
+      if (value) {
+        return value;
+      }
+    }
+    return '';
+  }
+
+  private guardianName(answers: Record<string, unknown>, relation: string): string {
+    const guardians = answers['guardians'];
+    if (!Array.isArray(guardians)) {
+      return '';
+    }
+    for (const row of guardians) {
+      if (!row || typeof row !== 'object') {
+        continue;
+      }
+      const guardian = row as Record<string, unknown>;
+      if (this.text(guardian['relation']).toLowerCase() !== relation.toLowerCase()) {
+        continue;
+      }
+      return this.text(guardian['fullName'] || guardian['name']);
+    }
+    return '';
+  }
+
+  private dash(value: string): string {
+    return value.trim() && value.trim() !== '—' ? value.trim() : '—';
+  }
+
+  private blankDash(value: string): string {
+    return value.trim() === '—' ? '' : value.trim();
+  }
+
+  private idCardStudent(answers: Record<string, unknown>, admissionNo: string, name: string): IdCardStudent {
+    const klass = this.classDisplay(answers);
+    const mobileNo = this.dash(
+      this.firstText(answers, ['mobileNo', 'mobile', 'contactNo', 'contactNumber', 'phone', 'studentMobile']),
+    );
+    return {
+      name,
+      grade: klass.grade,
+      section: klass.section,
+      admissionNo,
+      dob: this.formatBound('student.dob', this.firstText(answers, ['dateOfBirth', 'dob', 'birthDate'])),
+      bloodGroup: this.dash(this.firstText(answers, ['bloodGroup', 'blood_group', 'bloodType'])),
+      mobileNo,
+      emergencyNo: this.emergencyNo(answers, mobileNo),
+      apaarId: this.dash(this.firstText(answers, ['apaarId', 'apaarNumber'])),
+      pen: this.dash(this.firstText(answers, ['penNumber', 'pen'])),
+    };
+  }
+
+  private classDisplay(answers: Record<string, unknown>): { grade: string; section: string; classSection: string } {
+    let grade = this.blankDash(this.firstText(answers, ['classGrade', 'grade', 'className']));
+    let section = this.blankDash(this.firstText(answers, ['sectionLetter', 'section']));
+    const combined = this.blankDash(this.firstText(answers, ['classSection', 'classApplied']));
+    if (!grade && combined) {
+      const parts = this.splitGradeSection(combined);
+      grade = parts[0];
+      if (!section) {
+        section = parts[1];
+      }
+    }
+    if (/^\d{1,2}$/.test(grade) || /^[IVX]+$/i.test(grade)) {
+      grade = `Grade ${grade}`;
+    }
+    if (section.length <= 3) {
+      section = section.toUpperCase();
+    }
+    return {
+      grade: grade || '—',
+      section: section || '—',
+      classSection: grade ? (section ? `${grade} - ${section}` : grade) : '—',
+    };
+  }
+
+  private splitGradeSection(raw: string): [string, string] {
+    const paren = raw.match(/^(.*?)\s*\(([A-Za-z0-9]+)\)\s*$/);
+    if (paren) {
+      return [paren[1].trim(), paren[2].trim()];
+    }
+    const spaced = raw.lastIndexOf(' - ');
+    if (spaced > 0) {
+      return [raw.slice(0, spaced).trim(), raw.slice(spaced + 3).trim()];
+    }
+    const dash = Math.max(raw.lastIndexOf('-'), raw.lastIndexOf('–'));
+    if (dash > 0 && raw.length - dash <= 3) {
+      return [raw.slice(0, dash).trim(), raw.slice(dash + 1).trim()];
+    }
+    return [raw.trim(), ''];
+  }
+
+  private firstText(answers: Record<string, unknown>, keys: string[]): string {
+    for (const key of keys) {
+      const value = this.text(answers[key]);
+      if (value) {
+        return value;
+      }
+    }
+    return '';
+  }
+
+  private emergencyNo(answers: Record<string, unknown>, mobileNo: string): string {
+    const direct = this.firstText(answers, [
+      'emergencyNo',
+      'emergencyContact',
+      'emergencyMobile',
+      'emergencyPhone',
+      'alternateMobile',
+    ]);
+    if (direct && !this.samePhone(direct, mobileNo)) {
+      return direct;
+    }
+    const guardian = this.guardianPhone(answers);
+    if (guardian && !this.samePhone(guardian, mobileNo)) {
+      return guardian;
+    }
+    return this.dash(direct);
+  }
+
+  private guardianPhone(answers: Record<string, unknown>): string {
+    const guardians = answers['guardians'];
+    if (!Array.isArray(guardians)) {
+      return '';
+    }
+    let fallback = '';
+    for (const row of guardians) {
+      if (!row || typeof row !== 'object') {
+        continue;
+      }
+      const guardian = row as Record<string, unknown>;
+      const mobile = this.text(guardian['mobile'] || guardian['phone']);
+      if (!mobile) {
+        continue;
+      }
+      if (guardian['isPrimary'] === true || String(guardian['isPrimary']).toLowerCase() === 'true') {
+        return mobile;
+      }
+      if (!fallback) {
+        fallback = mobile;
+      }
+    }
+    return fallback;
+  }
+
+  private samePhone(left: string, right: string): boolean {
+    const a = left.replace(/\D/g, '');
+    const b = right.replace(/\D/g, '');
+    return !!a && a === b;
+  }
+
+  private transportLabel(answers: Record<string, unknown>): string {
+    const mode = this.text(answers['transportMode'] || answers['modeOfTransport'] || answers['conveyance']);
+    if (mode) {
+      return mode;
+    }
+    if (!('transport' in answers)) {
+      return '—';
+    }
+    const flag = String(answers['transport']).toLowerCase();
+    return flag === 'true' || flag === 'yes' || flag === '1' ? 'Bus' : 'Walker';
+  }
+
+  private isDrawableImage(value: string): boolean {
+    const trimmed = value.trim();
+    return (
+      trimmed.startsWith('data:image/') ||
+      trimmed.startsWith('blob:') ||
+      trimmed.startsWith('http://') ||
+      trimmed.startsWith('https://')
+    );
+  }
+
+  get documentSubject(): 'student' | 'employee' | 'none' {
+    if (this.selectedKey === 'salary_slip' || this.selectedKey === 'offer_letter') {
+      return 'employee';
+    }
+    const blob = (this.draft?.elements ?? []).map((el) => `${el.text || ''} ${el.bind || ''}`).join('\n');
+    if (/\bstudent\./.test(blob)) {
+      return 'student';
+    }
+    if (/\b(?:employee|staff)\./.test(blob)) {
+      return 'employee';
+    }
+    return 'none';
+  }
+
+  get sectionChoices(): SectionOption[] {
+    if (!this.filterClassId) {
+      return this.sections;
+    }
+    return this.sections.filter((section) => section.classId === this.filterClassId);
+  }
+
+  get bulkSectionChoices(): SectionOption[] {
+    if (!this.bulkClassId) {
+      return this.sections;
+    }
+    return this.sections.filter((section) => section.classId === this.bulkClassId);
+  }
+
+  get visibleBulkStudents(): BulkStudent[] {
+    if (!this.bulkMissingOnly) {
+      return this.bulkStudents;
+    }
+    return this.bulkStudents.filter(
+      (student) => student.missingPhoto || student.missingAdmission || student.missingPen,
+    );
+  }
+
+  get bulkSelectedCount(): number {
+    return this.bulkStudents.filter((student) => student.selected).length;
+  }
+
+  get bulkWarnings(): string[] {
+    const selected = this.bulkStudents.filter((student) => student.selected);
+    const notes: string[] = [];
+    const photos = selected.filter((student) => student.missingPhoto).length;
+    const admissions = selected.filter((student) => student.missingAdmission).length;
+    const pens = selected.filter((student) => student.missingPen).length;
+    if (photos) {
+      notes.push(`${photos} student${photos === 1 ? '' : 's'} have no photo`);
+    }
+    if (admissions) {
+      notes.push(`${admissions} student${admissions === 1 ? '' : 's'} have missing Admission Number`);
+    }
+    if (pens) {
+      notes.push(`${pens} student${pens === 1 ? '' : 's'} have missing PEN`);
+    }
+    return notes;
+  }
+
+  onPersonQuery(): void {
+    if (this.searchTimer) {
+      clearTimeout(this.searchTimer);
+    }
+    const term = this.personQuery.trim();
+    if (term.length < 2) {
+      this.searchHits = [];
+      this.searchOpen = false;
+      return;
+    }
+    this.searchTimer = setTimeout(() => this.runPersonSearch(term), 300);
+  }
+
+  onClassFilterChange(): void {
+    if (this.filterSectionId && !this.sectionChoices.some((section) => section.id === this.filterSectionId)) {
+      this.filterSectionId = '';
+    }
+    this.onPersonQuery();
+  }
+
+  async selectPerson(hit: PersonHit): Promise<void> {
+    this.searchOpen = false;
+    this.searchHits = [];
+    this.busy = true;
+    this.error = '';
+    this.photoWarning = '';
+    try {
+      if (this.documentSubject === 'employee') {
+        const person = {
+          id: hit.id,
+          name: hit.fullName || '',
+          fullName: hit.fullName || '',
+          employeeNo: hit.employeeNo || hit.admissionNo || '',
+          designation: hit.designation || '',
+          department: hit.department || '',
+        };
+        this.previewContext = {
+          ...this.samplePreviewData,
+          employee: person,
+          staff: person,
+          student: {
+            ...person,
+            admissionNo: person.employeeNo,
+            classSection: person.designation,
+          },
+        };
+        this.previewLabel = [person.fullName, person.employeeNo, person.designation].filter(Boolean).join(' · ');
+        this.personQuery = person.fullName;
+        this.photoWarning = '';
+      } else {
+        const loaded = await this.loadStudentContext(hit.id);
+        this.previewContext = loaded.data;
+        this.previewLabel = loaded.label;
+        this.personQuery = this.text((loaded.data['student'] as Record<string, unknown>)?.['name']);
+        this.photoWarning = loaded.photoMissing ? 'Student photo is not available.' : '';
+      }
+    } catch (err: any) {
+      this.previewContext = null;
+      this.previewLabel = '';
+      this.error = err?.error?.message ?? 'Could not load this record';
+    } finally {
+      this.busy = false;
+    }
+  }
+
+  clearPreviewPerson(): void {
+    this.previewContext = null;
+    this.previewLabel = '';
+    this.photoWarning = '';
+    this.personQuery = '';
+    this.searchHits = [];
+    this.searchOpen = false;
+  }
+
+  openBulk(): void {
+    this.bulkOpen = true;
+    this.bulkNote = '';
+    this.bulkAllowIncomplete = false;
+    this.bulkMissingOnly = false;
+    this.bulkClassId = this.filterClassId;
+    this.bulkSectionId = this.filterSectionId;
+    if (!this.bulkStudents.length && (this.bulkClassId || this.bulkSectionId)) {
+      void this.loadBulkStudents();
+    }
+  }
+
+  closeBulk(): void {
+    this.bulkOpen = false;
+  }
+
+  onBulkClassChange(): void {
+    if (this.bulkSectionId && !this.bulkSectionChoices.some((section) => section.id === this.bulkSectionId)) {
+      this.bulkSectionId = '';
+    }
+    this.bulkAllowIncomplete = false;
+    void this.loadBulkStudents();
+  }
+
+  selectAllBulk(selected: boolean): void {
+    for (const student of this.visibleBulkStudents) {
+      student.selected = selected;
+    }
+    this.bulkAllowIncomplete = false;
+  }
+
+  toggleMissingView(): void {
+    this.bulkMissingOnly = !this.bulkMissingOnly;
+  }
+
+  async generateBulk(): Promise<void> {
+    const chosen = this.bulkStudents.filter((student) => student.selected);
+    if (!this.selectedKey || !chosen.length) {
+      this.bulkNote = 'Select at least one student.';
+      return;
+    }
+    if (this.bulkWarnings.length && !this.bulkAllowIncomplete) {
+      this.bulkNote = 'Review the missing data, then confirm to continue.';
+      return;
+    }
+    if (chosen.length > 80) {
+      this.bulkNote = 'Generate at most 80 students at a time. Narrow the class or section.';
+      return;
+    }
+    this.busy = true;
+    this.bulkNote = `Preparing ${chosen.length} pages…`;
+    this.error = '';
+    try {
+      const records: Record<string, unknown>[] = [];
+      for (const student of chosen) {
+        const loaded = await this.loadStudentContext(student.id);
+        records.push(this.withIdCardLines(loaded.data));
+      }
+      const res = await firstValueFrom(
+        this.api.post<any>(`/api/reports/templates/${this.selectedKey}/render`, {
+          format: 'PDF',
+          records,
+        }),
+      );
+      this.openPdf(res);
+      this.status = `Generated ${records.length} pages from the saved template`;
+      this.bulkNote = '';
+      this.bulkOpen = false;
+    } catch (err: any) {
+      this.bulkNote = err?.error?.message ?? 'Bulk generation failed';
+    } finally {
+      this.busy = false;
+    }
+  }
+
+  private runtimeData(): Record<string, unknown> | null {
+    if (this.documentSubject === 'none') {
+      return this.samplePreviewData;
+    }
+    if (!this.previewContext) {
+      this.error =
+        this.documentSubject === 'employee'
+          ? 'Please select an employee to preview this document.'
+          : 'Please select a student to preview this document.';
+      return null;
+    }
+    return this.withIdCardLines(this.previewContext);
+  }
+
+  /** The canvas computes these lines. The PDF renderer only prints student.idCardLines. */
+  private withIdCardLines(data: Record<string, unknown>): Record<string, unknown> {
+    const student = data['student'];
+    if (!student || typeof student !== 'object' || Array.isArray(student)) {
+      return data;
+    }
+    const record = student as Record<string, unknown>;
+    return {
+      ...data,
+      student: {
+        ...record,
+        idCardLines: this.composeIdCardLines(this.idCardFormFields, record),
+      },
+    };
+  }
+
+  private runPersonSearch(term: string): void {
+    this.searchSub?.unsubscribe();
+    this.searchBusy = true;
+    this.searchOpen = true;
+    const classSection = this.selectedSectionLabel(this.filterSectionId);
+    if (this.documentSubject === 'employee') {
+      this.searchSub = this.api
+        .getPage<PersonHit>('/api/staff/directory/staff', 0, 8, { q: term })
+        .pipe(
+          timeout(4000),
+          map((page) => page.items ?? []),
+          catchError(() => of([] as PersonHit[])),
+        )
+        .subscribe((items) => {
+          this.searchHits = items;
+          this.searchBusy = false;
+        });
+      return;
+    }
+    this.searchSub = this.api
+      .getPage<PersonHit>('/api/student/directory/students', 0, 8, {
+        q: term,
+        status: 'ACTIVE',
+        classSection: classSection || undefined,
+        includeDeleted: 'false',
+      })
+      .pipe(
+        timeout(4000),
+        map((page) => this.filterHits(page.items ?? [])),
+        catchError(() =>
+          this.api
+            .getPage<PersonHit>('/api/student/students/search', 0, 8, {
+              q: term,
+              classSection: classSection || undefined,
+            })
+            .pipe(
+              timeout(4000),
+              map((page) => this.filterHits(page.items ?? [])),
+              catchError(() => of([] as PersonHit[])),
+            ),
+        ),
+      )
+      .subscribe((items) => {
+        this.searchHits = items;
+        this.searchBusy = false;
+      });
+  }
+
+  private filterHits(items: PersonHit[]): PersonHit[] {
+    const labels = this.classFilterLabels();
+    if (!labels.length) {
+      return items;
+    }
+    return items.filter((item) => labels.includes(String(item.classSection || '').trim()));
+  }
+
+  private classFilterLabels(): string[] {
+    if (this.filterSectionId) {
+      const label = this.selectedSectionLabel(this.filterSectionId);
+      return label ? [label] : [];
+    }
+    if (!this.filterClassId) {
+      return [];
+    }
+    return this.sections
+      .filter((section) => section.classId === this.filterClassId)
+      .map((section) => section.studentLabel || section.name)
+      .filter(Boolean);
+  }
+
+  async loadBulkStudents(): Promise<void> {
+    const labels = this.bulkClassLabels();
+    if (!labels.length) {
+      this.bulkStudents = [];
+      this.bulkNote = 'Select a class or section.';
+      return;
+    }
+    this.bulkNote = 'Loading students…';
+    const merged = new Map<string, PersonHit>();
+    for (const label of labels) {
+      const page = await firstValueFrom(
+        this.api
+          .getPage<PersonHit>('/api/student/directory/students', 0, 80, {
+            classSection: label,
+            status: 'ACTIVE',
+            academicSessionId: this.bulkSessionId || undefined,
+            includeDeleted: 'false',
+          })
+          .pipe(
+            timeout(8000),
+            catchError(() =>
+              of({
+                items: [] as PersonHit[],
+                page: 0,
+                size: 0,
+                totalElements: 0,
+                totalPages: 0,
+                hasNext: false,
+              }),
+            ),
+          ),
+      );
+      for (const item of page.items ?? []) {
+        if (item.id) {
+          merged.set(item.id, item);
+        }
+      }
+      if (merged.size >= 80) {
+        break;
+      }
+    }
+    this.bulkStudents = [...merged.values()].slice(0, 80).map((item) => this.toBulkStudent(item));
+    this.bulkNote = this.bulkStudents.length
+      ? `${this.bulkStudents.length} students loaded. The saved template is not changed.`
+      : 'No students in this class or section.';
+  }
+
+  private bulkClassLabels(): string[] {
+    if (this.bulkSectionId) {
+      const label = this.selectedSectionLabel(this.bulkSectionId);
+      return label ? [label] : [];
+    }
+    if (!this.bulkClassId) {
+      return [];
+    }
+    const labels = this.sections
+      .filter((section) => section.classId === this.bulkClassId)
+      .map((section) => section.studentLabel || section.name)
+      .filter(Boolean);
+    if (labels.length) {
+      return labels;
+    }
+    const klass = this.classes.find((item) => item.id === this.bulkClassId);
+    return klass?.name ? [klass.name] : [];
+  }
+
+  private toBulkStudent(item: PersonHit): BulkStudent {
+    const photo = String(item.photoUrl || '');
+    const admission = String(item.admissionNo || '').trim();
+    const pen = String(item.penNumber || '').trim();
+    return {
+      id: item.id,
+      name: item.fullName || 'Student',
+      admissionNo: admission,
+      classSection: item.classSection || '',
+      penNumber: pen,
+      photoUrl: photo,
+      selected: true,
+      missingPhoto: !photo.startsWith('/api/') && !photo.startsWith('data:image/') && !photo.startsWith('http'),
+      missingAdmission: !admission,
+      missingPen: !pen,
+    };
+  }
+
+  private selectedSectionLabel(sectionId: string): string {
+    const section = this.sections.find((item) => item.id === sectionId);
+    return section ? section.studentLabel || section.name : '';
+  }
+
+  private async loadStudentContext(id: string): Promise<{
+    data: Record<string, unknown>;
+    label: string;
+    photoMissing: boolean;
+  }> {
+    const student = await firstValueFrom(this.api.get<any>(`/api/student/students/${id}`));
+    const answers = { ...((student?.answers ?? {}) as Record<string, unknown>) };
+    const admission = await this.fillBlankFromAdmission(answers, this.text(student?.sourceApplicationId));
+    const name = this.text(answers['fullName'] || answers['studentName']);
+    const admissionNo = this.text(student?.admissionNo || answers['admissionNo']);
+    const card = this.idCardStudent(answers, admissionNo, name);
+    const classSection = this.classDisplay(answers).classSection;
+    const fatherName = this.text(answers['fatherName'] || answers['parentName']);
+    const photoDirectUrl = await this.resolveStudentPhoto(this.text(student?.id || id), answers, admission);
+    const studentMap: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(answers)) {
+      if (typeof value === 'string' && (value.startsWith('data:') || value === 'on-file')) {
+        continue;
+      }
+      studentMap[key] = value;
+    }
+    studentMap['id'] = student?.id || id;
+    studentMap['name'] = name;
+    studentMap['fullName'] = name;
+    studentMap['studentName'] = name;
+    studentMap['admissionNo'] = card.admissionNo;
+    studentMap['grade'] = card.grade;
+    studentMap['section'] = card.section;
+    studentMap['classSection'] = classSection;
+    studentMap['classApplied'] = classSection;
+    studentMap['fatherName'] = fatherName;
+    studentMap['pen'] = card.pen;
+    studentMap['penNumber'] = card.pen;
+    studentMap['apaarId'] = card.apaarId;
+    studentMap['schoolStudentId'] = this.text(answers['schoolStudentId']);
+    studentMap['dob'] = card.dob;
+    studentMap['dateOfBirth'] = card.dob;
+    studentMap['bloodGroup'] = card.bloodGroup;
+    studentMap['mobileNo'] = card.mobileNo;
+    studentMap['mobile'] = card.mobileNo;
+    studentMap['emergencyNo'] = card.emergencyNo;
+    studentMap['emergencyContact'] = card.emergencyNo;
+    studentMap['transportMode'] = this.transportLabel(answers);
+    const rollNo = this.text(answers['rollNo']);
+    studentMap['rollLine'] = rollNo
+      ? `Roll  ${rollNo}  ·  ${admissionNo}`
+      : `Adm  ${admissionNo}`;
+    studentMap['photoDirectUrl'] = photoDirectUrl;
+    studentMap['photoBase64'] = photoDirectUrl;
+    studentMap['photoUrl'] = photoDirectUrl;
+    return {
+      data: {
+        ...this.samplePreviewData,
+        student: studentMap,
+        context: this.cardPreviewContext(student),
+      },
+      label: [name, admissionNo, classSection].filter(Boolean).join(' · '),
+      photoMissing: !photoDirectUrl,
+    };
+  }
+
+  /** Sample header dates stay on an empty preview. A selected student uses today's issue date. */
+  private cardPreviewContext(student: any): Record<string, unknown> {
+    const context: Record<string, unknown> = {
+      ...(((this.samplePreviewData['context'] as Record<string, unknown>) ?? {})),
+    };
+    const sessionId = this.text(student?.academicSessionId);
+    const session = this.sessions.find((item) => item.id === sessionId);
+    if (session?.label) {
+      context['sessionLabel'] = session.label;
+    } else if (/^\d{4}-\d{2}$/.test(sessionId)) {
+      const start = Number(sessionId.slice(0, 4));
+      context['sessionLabel'] = `${start}-${start + 1}`;
+    } else if (sessionId) {
+      context['sessionLabel'] = sessionId;
+    }
+    const branchId = this.text(student?.branchId);
+    if (branchId && !/^[0-9a-f-]{16,}$/i.test(branchId)) {
+      context['branchName'] = this.humanizeId(branchId);
+    }
+    context['issuedAt'] = new Intl.DateTimeFormat('en-GB', {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+      timeZone: 'Asia/Kolkata',
+    }).format(new Date());
+    const years = this.text(context['sessionLabel']).match(/^(\d{4})-(\d{4})$/);
+    if (years) {
+      context['expiresAt'] = `31 Mar ${years[2]}`;
+    }
+    return context;
+  }
+
+  private humanizeId(raw: string): string {
+    return raw
+      .replace(/[_-]+/g, ' ')
+      .split(/\s+/)
+      .filter(Boolean)
+      .map((part) => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
+      .join(' ');
+  }
+
+  /** Copy admission answers into blank student fields. A saved student value is left as-is. */
+  private async fillBlankFromAdmission(
+    answers: Record<string, unknown>,
+    applicationId: string,
+  ): Promise<Record<string, unknown>> {
+    if (!applicationId) {
+      return {};
+    }
+    try {
+      const app = await firstValueFrom(
+        this.api.get<any>(`/api/admission/applications/${applicationId}`).pipe(
+          timeout(8000),
+          catchError(() => of(null)),
+        ),
+      );
+      const source = (app?.answers ?? {}) as Record<string, unknown>;
+      for (const [key, value] of Object.entries(source)) {
+        if (value == null || typeof value === 'object') {
+          continue;
+        }
+        if (!this.blankDash(this.text(answers[key])) && this.blankDash(this.text(value))) {
+          answers[key] = value;
+        }
+      }
+      if (!this.blankDash(this.text(answers['dateOfBirth'])) && this.blankDash(this.text(answers['dob']))) {
+        answers['dateOfBirth'] = answers['dob'];
+      }
+      if (!this.blankDash(this.text(answers['dob'])) && this.blankDash(this.text(answers['dateOfBirth']))) {
+        answers['dob'] = answers['dateOfBirth'];
+      }
+      return source;
+    } catch {
+      return {};
+    }
+  }
+
+  /**
+   * Same photo the student profile uses: vault attachment first, then any image stored on the
+   * student or the admission form. Preview and PDF both receive the resulting data URL.
+   */
+  private async resolveStudentPhoto(
+    studentId: string,
+    answers: Record<string, unknown>,
+    admission: Record<string, unknown>,
+  ): Promise<string> {
+    const vaultUrl = studentId ? await this.vaultPhotoUrl(studentId) : '';
+    let dataUrl = '';
+    if (vaultUrl) {
+      try {
+        dataUrl = await this.photoDataUrl(vaultUrl);
+      } catch {
+        dataUrl = '';
+      }
+    }
+    if (!dataUrl) {
+      for (const ref of this.photoRefs(answers, admission)) {
+        try {
+          dataUrl = await this.photoDataUrl(ref);
+        } catch {
+          dataUrl = '';
+        }
+        if (dataUrl) {
+          break;
+        }
+      }
+    }
+    if (dataUrl.startsWith('data:image/') && dataUrl.length > 700_000) {
+      dataUrl = await this.shrinkDataUrl(dataUrl);
+    }
+    if (dataUrl.startsWith('data:image/') && studentId && !vaultUrl) {
+      await this.storeVaultPhoto(studentId, dataUrl);
+    }
+    return dataUrl;
+  }
+
+  private photoRefs(
+    answers: Record<string, unknown>,
+    admission: Record<string, unknown>,
+  ): string[] {
+    const out: string[] = [];
+    const seen = new Set<string>();
+    const push = (raw: unknown) => {
+      const value = this.text(raw);
+      if (!value || value === 'on-file' || seen.has(value)) {
+        return;
+      }
+      seen.add(value);
+      out.push(value);
+    };
+    for (const bag of [answers, admission]) {
+      push(bag['photoUrl']);
+      push(bag['photo']);
+      const attachmentId = this.text(bag['studentPhoto']);
+      if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(attachmentId)) {
+        push(`/api/student/attachments/${attachmentId}/content`);
+      }
+      for (const value of Object.values(bag)) {
+        if (typeof value === 'string' && value.startsWith('data:image/')) {
+          push(value);
+        }
+      }
+    }
+    return out;
+  }
+
+  private async vaultPhotoUrl(studentId: string): Promise<string> {
+    try {
+      const rows = await firstValueFrom(
+        this.api.get<Array<{ attachmentType?: string; contentUrl?: string }>>(
+          `/api/student/students/${studentId}/attachments`,
+        ),
+      );
+      const photo = (rows ?? []).find(
+        (row) => row.attachmentType === 'STUDENT_PHOTO' && !!row.contentUrl,
+      );
+      return photo?.contentUrl ? String(photo.contentUrl) : '';
+    } catch {
+      return '';
+    }
+  }
+
+  private async storeVaultPhoto(studentId: string, dataUrl: string): Promise<void> {
+    try {
+      const payload = dataUrl.length > 700_000 ? await this.shrinkDataUrl(dataUrl) : dataUrl;
+      if (!payload.startsWith('data:image/') || payload.length > 700_000) {
+        return;
+      }
+      await firstValueFrom(
+        this.api.post(`/api/student/students/${studentId}/attachments`, {
+          type: 'STUDENT_PHOTO',
+          fileName: 'student-photo.jpg',
+          contentType: 'image/jpeg',
+          contentBase64: payload,
+        }),
+      );
+    } catch {
+      // The card still renders the data URL when the vault write is rejected.
+    }
+  }
+
+  private shrinkDataUrl(dataUrl: string): Promise<string> {
+    return new Promise((resolve) => {
+      const img = new Image();
+      img.onload = () => {
+        const maxSide = 800;
+        const scale = Math.min(1, maxSide / Math.max(img.width, img.height, 1));
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.max(1, Math.round(img.width * scale));
+        canvas.height = Math.max(1, Math.round(img.height * scale));
+        const ctx = canvas.getContext('2d');
+        if (!ctx) {
+          resolve(dataUrl);
+          return;
+        }
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        resolve(canvas.toDataURL('image/jpeg', 0.72));
+      };
+      img.onerror = () => resolve('');
+      img.src = dataUrl;
+    });
+  }
+
+  private async photoDataUrl(raw: string): Promise<string> {
+    const value = raw.trim();
+    if (!value || value === 'on-file') {
+      return '';
+    }
+    if (value.startsWith('data:image/')) {
+      return value;
+    }
+    let path = value;
+    if (value.startsWith('http://') || value.startsWith('https://')) {
+      try {
+        const url = new URL(value);
+        path = `${url.pathname}${url.search}`;
+      } catch {
+        return '';
+      }
+    }
+    if (!path.startsWith('/api/')) {
+      return '';
+    }
+    const blob = await firstValueFrom(this.api.getBlob(path));
+    if (!blob.type.startsWith('image/')) {
+      return '';
+    }
+    return await this.blobToDataUrl(blob);
+  }
+
+  private blobToDataUrl(blob: Blob): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result || ''));
+      reader.onerror = () => reject(reader.error);
+      reader.readAsDataURL(blob);
+    });
+  }
+
+  private loadCatalogs(): void {
+    this.api.get<any[]>('/api/academic/classes').subscribe({
+      next: (rows) => {
+        this.classes = (rows ?? []).map((row) => ({
+          id: String(row.id),
+          name: String(row.name || row.label || 'Class'),
+        }));
+      },
+      error: () => {
+        this.classes = [];
+      },
+    });
+    this.api.get<any[]>('/api/academic/sections').subscribe({
+      next: (rows) => {
+        this.sections = (rows ?? []).map((row) => ({
+          id: String(row.id),
+          classId: String(row.classId || ''),
+          name: String(row.name || ''),
+          studentLabel: String(row.studentLabel || row.name || ''),
+        }));
+      },
+      error: () => {
+        this.sections = [];
+      },
+    });
+    this.api.get<any[]>('/api/student/lifecycle/sessions').subscribe({
+      next: (rows) => {
+        this.sessions = (rows ?? []).map((row) => ({
+          id: String(row.academicSessionId || row.definitionKey || row.id || ''),
+          label: String(row.name || row.label || row.definitionKey || 'Session'),
+        }));
+      },
+      error: () => {
+        this.sessions = [];
+      },
+    });
+  }
+
+  private text(value: unknown): string {
+    return value == null ? '' : String(value).trim();
   }
 }

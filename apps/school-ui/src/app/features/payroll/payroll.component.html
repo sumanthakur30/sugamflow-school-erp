@@ -240,6 +240,11 @@
               Cancel draft
             </button>
           }
+          @if (selected.status === 'APPROVED') {
+            <button type="button" class="secondary" (click)="issuePayslip(selected)" [disabled]="submitting">
+              Issue payslip
+            </button>
+          }
           @if (canReverse(selected)) {
             <button type="button" class="secondary" (click)="reverseRun(selected)" [disabled]="submitting">
               Reverse

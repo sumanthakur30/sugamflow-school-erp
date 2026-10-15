@@ -4,11 +4,17 @@ import com.sugamflow.school.cms.service.CmsAiAssistService;
 import com.sugamflow.school.cms.service.CmsAlumniService;
 import com.sugamflow.school.cms.service.CmsBlogService;
 import com.sugamflow.school.cms.service.CmsContentService;
+import com.sugamflow.school.cms.service.CmsDocumentService;
 import com.sugamflow.school.cms.service.CmsMediaService;
+import com.sugamflow.school.cms.service.CmsSiteScope;
 import com.sugamflow.school.cms.web.dto.AlumniResponse;
 import com.sugamflow.school.cms.web.dto.AlumniUpsertRequest;
 import com.sugamflow.school.cms.web.dto.BlogPostResponse;
 import com.sugamflow.school.cms.web.dto.BlogUpsertRequest;
+import com.sugamflow.school.cms.web.dto.DocumentResponse;
+import com.sugamflow.school.cms.web.dto.DocumentUpsertRequest;
+import com.sugamflow.school.cms.web.dto.EventResponse;
+import com.sugamflow.school.cms.web.dto.EventUpsertRequest;
 import com.sugamflow.school.cms.web.dto.GalleryItemResponse;
 import com.sugamflow.school.cms.web.dto.GalleryUpsertRequest;
 import com.sugamflow.school.cms.web.dto.MediaAssetResponse;
@@ -31,6 +37,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
@@ -44,28 +51,35 @@ public class CmsAdminController {
   private final CmsBlogService blogService;
   private final CmsAlumniService alumniService;
   private final CmsAiAssistService aiAssistService;
+  private final CmsDocumentService documentService;
 
   public CmsAdminController(
       CmsContentService contentService,
       CmsMediaService mediaService,
       CmsBlogService blogService,
       CmsAlumniService alumniService,
-      CmsAiAssistService aiAssistService) {
+      CmsAiAssistService aiAssistService,
+      CmsDocumentService documentService) {
     this.contentService = contentService;
     this.mediaService = mediaService;
     this.blogService = blogService;
     this.alumniService = alumniService;
     this.aiAssistService = aiAssistService;
+    this.documentService = documentService;
   }
 
   @GetMapping("/pages")
-  public ApiResponse<List<PageResponse>> listPages() {
-    return ApiResponse.ok(contentService.listAdminPages(orgId()));
+  public ApiResponse<List<PageResponse>> listPages(
+      @RequestParam(value = "siteId", required = false) String siteId,
+      @RequestParam(value = "includeLegacy", required = false) Boolean includeLegacy) {
+    return ApiResponse.ok(contentService.listAdminPages(orgId(), adminScope(siteId, includeLegacy)));
   }
 
   @PostMapping("/pages")
-  public ApiResponse<PageResponse> create(@Valid @RequestBody PageUpsertRequest request) {
-    return ApiResponse.ok(contentService.createPage(orgId(), request));
+  public ApiResponse<PageResponse> create(
+      @Valid @RequestBody PageUpsertRequest request,
+      @RequestParam(value = "siteId", required = false) String siteId) {
+    return ApiResponse.ok(contentService.createPage(orgId(), request, CmsSiteScope.parse(siteId, false)));
   }
 
   @PutMapping("/pages/{id}")
@@ -138,13 +152,17 @@ public class CmsAdminController {
   }
 
   @GetMapping("/news")
-  public ApiResponse<List<NewsResponse>> listNews() {
-    return ApiResponse.ok(contentService.listAdminNews(orgId()));
+  public ApiResponse<List<NewsResponse>> listNews(
+      @RequestParam(value = "siteId", required = false) String siteId,
+      @RequestParam(value = "includeLegacy", required = false) Boolean includeLegacy) {
+    return ApiResponse.ok(contentService.listAdminNews(orgId(), adminScope(siteId, includeLegacy)));
   }
 
   @PostMapping("/news")
-  public ApiResponse<NewsResponse> createNews(@Valid @RequestBody NewsUpsertRequest request) {
-    return ApiResponse.ok(contentService.createNews(orgId(), request));
+  public ApiResponse<NewsResponse> createNews(
+      @Valid @RequestBody NewsUpsertRequest request,
+      @RequestParam(value = "siteId", required = false) String siteId) {
+    return ApiResponse.ok(contentService.createNews(orgId(), request, CmsSiteScope.parse(siteId, false)));
   }
 
   @PutMapping("/news/{id}")
@@ -164,14 +182,18 @@ public class CmsAdminController {
   }
 
   @GetMapping("/gallery")
-  public ApiResponse<List<GalleryItemResponse>> listGallery() {
-    return ApiResponse.ok(contentService.listAdminGallery(orgId()));
+  public ApiResponse<List<GalleryItemResponse>> listGallery(
+      @RequestParam(value = "siteId", required = false) String siteId,
+      @RequestParam(value = "includeLegacy", required = false) Boolean includeLegacy) {
+    return ApiResponse.ok(contentService.listAdminGallery(orgId(), adminScope(siteId, includeLegacy)));
   }
 
   @PostMapping("/gallery")
   public ApiResponse<GalleryItemResponse> createGallery(
-      @Valid @RequestBody GalleryUpsertRequest request) {
-    return ApiResponse.ok(contentService.createGalleryItem(orgId(), request));
+      @Valid @RequestBody GalleryUpsertRequest request,
+      @RequestParam(value = "siteId", required = false) String siteId) {
+    return ApiResponse.ok(
+        contentService.createGalleryItem(orgId(), request, CmsSiteScope.parse(siteId, false)));
   }
 
   @PutMapping("/gallery/{id}")
@@ -194,6 +216,66 @@ public class CmsAdminController {
   public ApiResponse<Map<String, Object>> deleteGallery(@PathVariable("id") UUID id) {
     contentService.deleteGalleryItem(orgId(), id);
     return ApiResponse.ok(Map.of("deleted", true, "id", id.toString()));
+  }
+
+  @GetMapping("/events")
+  public ApiResponse<List<EventResponse>> listEvents(
+      @RequestParam(value = "siteId", required = false) String siteId,
+      @RequestParam(value = "includeLegacy", required = false) Boolean includeLegacy) {
+    return ApiResponse.ok(contentService.listAdminEvents(orgId(), adminScope(siteId, includeLegacy)));
+  }
+
+  @PostMapping("/events")
+  public ApiResponse<EventResponse> createEvent(
+      @Valid @RequestBody EventUpsertRequest request,
+      @RequestParam(value = "siteId", required = false) String siteId) {
+    return ApiResponse.ok(contentService.createEvent(orgId(), request, CmsSiteScope.parse(siteId, false)));
+  }
+
+  @PutMapping("/events/{id}")
+  public ApiResponse<EventResponse> updateEvent(
+      @PathVariable("id") UUID id, @Valid @RequestBody EventUpsertRequest request) {
+    return ApiResponse.ok(contentService.updateEvent(orgId(), id, request));
+  }
+
+  @PostMapping("/events/{id}/publish")
+  public ApiResponse<EventResponse> publishEvent(@PathVariable("id") UUID id) {
+    return ApiResponse.ok(contentService.publishEvent(orgId(), id));
+  }
+
+  @PostMapping("/events/{id}/unpublish")
+  public ApiResponse<EventResponse> unpublishEvent(@PathVariable("id") UUID id) {
+    return ApiResponse.ok(contentService.unpublishEvent(orgId(), id));
+  }
+
+  @GetMapping("/documents")
+  public ApiResponse<List<DocumentResponse>> listDocuments(
+      @RequestParam(value = "siteId", required = false) String siteId,
+      @RequestParam(value = "includeLegacy", required = false) Boolean includeLegacy) {
+    return ApiResponse.ok(documentService.listAdmin(orgId(), adminScope(siteId, includeLegacy)));
+  }
+
+  @PostMapping("/documents")
+  public ApiResponse<DocumentResponse> createDocument(
+      @Valid @RequestBody DocumentUpsertRequest request,
+      @RequestParam(value = "siteId", required = false) String siteId) {
+    return ApiResponse.ok(documentService.create(orgId(), request, CmsSiteScope.parse(siteId, false)));
+  }
+
+  @PutMapping("/documents/{id}")
+  public ApiResponse<DocumentResponse> updateDocument(
+      @PathVariable("id") UUID id, @Valid @RequestBody DocumentUpsertRequest request) {
+    return ApiResponse.ok(documentService.update(orgId(), id, request));
+  }
+
+  @PostMapping("/documents/{id}/publish")
+  public ApiResponse<DocumentResponse> publishDocument(@PathVariable("id") UUID id) {
+    return ApiResponse.ok(documentService.publish(orgId(), id));
+  }
+
+  @PostMapping("/documents/{id}/unpublish")
+  public ApiResponse<DocumentResponse> unpublishDocument(@PathVariable("id") UUID id) {
+    return ApiResponse.ok(documentService.unpublish(orgId(), id));
   }
 
   @GetMapping("/alumni")
@@ -224,5 +306,13 @@ public class CmsAdminController {
 
   private static String orgId() {
     return TenantContext.require().organizationId();
+  }
+
+  /** Missing site id keeps the legacy null-site bucket used by existing schools. */
+  private static CmsSiteScope adminScope(String siteId, Boolean includeLegacy) {
+    if (siteId == null || siteId.isBlank()) {
+      return CmsSiteScope.legacy();
+    }
+    return CmsSiteScope.parse(siteId, includeLegacy == null || includeLegacy);
   }
 }

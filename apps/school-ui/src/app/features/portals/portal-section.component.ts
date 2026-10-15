@@ -4,6 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { ActivatedRoute } from '@angular/router';
 import { Subscription, combineLatest } from 'rxjs';
 import { ApiService } from '../../core/api.service';
+import { isDemoOrganization } from '../../core/tenant-context.util';
 import { PortalContextService } from './portal-context.service';
 
 interface PortalRow extends Record<string, any> {
@@ -217,7 +218,12 @@ export class PortalSectionComponent implements OnInit, OnDestroy {
             this.openRazorpay(intent, row);
             return;
           }
-          // Simulate path (local/dev): capture immediately so parent sees APPROVED + receipt.
+          if (!isDemoOrganization()) {
+            this.busy = false;
+            this.error =
+              'Simulated payment is only available in the demo school. Use the live payment gateway.';
+            return;
+          }
           this.api
             .post(`/api/fee/finance/payments/intents/${intent.id}/simulate-capture`, {})
             .subscribe({

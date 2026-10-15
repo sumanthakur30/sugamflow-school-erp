@@ -16,6 +16,18 @@ public class CmsEvent {
   @Column(name = "organization_id", nullable = false, length = 64)
   private String organizationId;
 
+  @Column(name = "site_id")
+  private UUID siteId;
+
+  @Column(nullable = false, length = 64)
+  private String category = "EVENT";
+
+  @Column(nullable = false)
+  private int priority;
+
+  @Column(nullable = false, length = 32)
+  private String audience = "PUBLIC";
+
   @Column(nullable = false, length = 128)
   private String slug;
 
@@ -53,6 +65,14 @@ public class CmsEvent {
   public void setId(UUID id) { this.id = id; }
   public String getOrganizationId() { return organizationId; }
   public void setOrganizationId(String organizationId) { this.organizationId = organizationId; }
+  public UUID getSiteId() { return siteId; }
+  public void setSiteId(UUID siteId) { this.siteId = siteId; }
+  public String getCategory() { return category; }
+  public void setCategory(String category) { this.category = category; }
+  public int getPriority() { return priority; }
+  public void setPriority(int priority) { this.priority = priority; }
+  public String getAudience() { return audience; }
+  public void setAudience(String audience) { this.audience = audience; }
   public String getSlug() { return slug; }
   public void setSlug(String slug) { this.slug = slug; }
   public String getTitle() { return title; }

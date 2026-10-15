@@ -4,9 +4,13 @@ import com.sugamflow.school.common.api.ApiResponse;
 import com.sugamflow.school.common.api.PageResult;
 import com.sugamflow.school.payroll.service.PayrollRecordService;
 import com.sugamflow.school.payroll.service.PayrollReportService;
+import com.sugamflow.school.payroll.service.PayslipPdfService;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.UUID;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -22,10 +26,15 @@ public class PayrollController {
 
   private final PayrollRecordService service;
   private final PayrollReportService reportService;
+  private final PayslipPdfService payslipPdf;
 
-  public PayrollController(PayrollRecordService service, PayrollReportService reportService) {
+  public PayrollController(
+      PayrollRecordService service,
+      PayrollReportService reportService,
+      PayslipPdfService payslipPdf) {
     this.service = service;
     this.reportService = reportService;
+    this.payslipPdf = payslipPdf;
   }
 
   @GetMapping("/bootstrap")
@@ -42,6 +51,24 @@ public class PayrollController {
   @GetMapping("/records/{id}")
   public ApiResponse<Map<String, Object>> get(@PathVariable("id") UUID id) {
     return ApiResponse.ok(service.get(id));
+  }
+
+  @GetMapping(value = "/records/{id}/payslip.pdf", produces = MediaType.APPLICATION_PDF_VALUE)
+  public ResponseEntity<byte[]> payslip(@PathVariable("id") UUID id) {
+    Map<String, Object> answers = service.issuePayslip(id);
+    byte[] bytes = payslipPdf.render(answers);
+    String fileName =
+        "payslip-"
+            + String.valueOf(answers.getOrDefault("employeeId", id))
+            + "-"
+            + answers.getOrDefault("year", "")
+            + "-"
+            + answers.getOrDefault("month", "")
+            + ".pdf";
+    return ResponseEntity.ok()
+        .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + fileName + "\"")
+        .contentType(MediaType.APPLICATION_PDF)
+        .body(bytes);
   }
 
   @PostMapping("/records")

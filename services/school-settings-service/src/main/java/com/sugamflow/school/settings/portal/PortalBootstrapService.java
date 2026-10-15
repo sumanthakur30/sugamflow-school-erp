@@ -63,6 +63,17 @@ public class PortalBootstrapService {
     return out;
   }
 
+  /**
+   * School staff invites store auth role {@code SHOP_EMPLOYEE}. The Teacher App login uses that
+   * JWT; the gateway replaces any client role overlay with the signed role.
+   */
+  private static boolean isTeacherPortalRole(String role) {
+    return PersonaRoles.isTeacher(role)
+        || "CLASS_TEACHER".equals(role)
+        || "SHOP_EMPLOYEE".equals(role)
+        || "STAFF".equals(role);
+  }
+
   private static void requirePortalRole(String portalKey, String roleCode) {
     String role = PersonaRoles.normalize(roleCode);
     if (PersonaRoles.isElevated(role)) {
@@ -72,7 +83,7 @@ public class PortalBootstrapService {
         && !(PersonaRoles.isParent(role) || PersonaRoles.isStudent(role))) {
       throw new IllegalArgumentException("Parent portal requires PARENT / STUDENT role");
     }
-    if (PortalCatalog.TEACHER.equalsIgnoreCase(portalKey) && !PersonaRoles.isTeacher(role)) {
+    if (PortalCatalog.TEACHER.equalsIgnoreCase(portalKey) && !isTeacherPortalRole(role)) {
       throw new IllegalArgumentException("Teacher portal requires TEACHER role");
     }
   }

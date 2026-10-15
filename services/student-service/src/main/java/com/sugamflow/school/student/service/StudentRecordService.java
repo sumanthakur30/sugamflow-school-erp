@@ -27,6 +27,8 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import java.util.regex.Pattern;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -35,6 +37,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class StudentRecordService {
+
+  private static final Logger log = LoggerFactory.getLogger(StudentRecordService.class);
 
   public static final String FEATURE_STUDENT_MASTER = "FEATURE_STUDENT_MASTER";
   public static final String MODULE_STUDENT = "student";
@@ -67,6 +71,7 @@ public class StudentRecordService {
   private final StudentProperties properties;
   private final RelationshipAccessService relationshipAccess;
   private final DomainSnapshotClient domainSnapshots;
+  private final StudentAttachmentService attachments;
 
   public StudentRecordService(
       StudentRecordRepository repository,
@@ -74,13 +79,15 @@ public class StudentRecordService {
       ConfigEngineClient engines,
       StudentProperties properties,
       RelationshipAccessService relationshipAccess,
-      DomainSnapshotClient domainSnapshots) {
+      DomainSnapshotClient domainSnapshots,
+      StudentAttachmentService attachments) {
     this.repository = repository;
     this.fieldAuditRepository = fieldAuditRepository;
     this.engines = engines;
     this.properties = properties;
     this.relationshipAccess = relationshipAccess;
     this.domainSnapshots = domainSnapshots;
+    this.attachments = attachments;
   }
 
   @Transactional(readOnly = true)
@@ -311,6 +318,39 @@ public class StudentRecordService {
     return PageResult.of(result.map(this::toDto).getContent(), q.page(), q.size(), result.getTotalElements());
   }
 
+  @Transactional
+  public Map<String, Object> recordApaarConsent(UUID id, Map<String, Object> body) {
+    TenantScope scope = TenantContext.require();
+    requireFeature(scope);
+    StudentRecordEntity student = requireStudent(id, scope.organizationId());
+    String status =
+        stringOr(body == null ? null : body.get("apaarConsent"), "")
+            .trim()
+            .toUpperCase(Locale.ROOT);
+    if (!java.util.List.of("PENDING", "CONSENTED", "REFUSED", "NOGEN").contains(status)) {
+      throw new StudentException(
+          "VALIDATION", "APAAR consent must be PENDING, CONSENTED, REFUSED, or NOGEN");
+    }
+    String apaarId = stringOr(body == null ? null : body.get("apaarId"), "");
+    Map<String, Object> answers = new LinkedHashMap<>();
+    if (student.getAnswers() != null) {
+      answers.putAll(student.getAnswers());
+    }
+    answers.put("apaarConsent", status);
+    answers.put("apaarConsentAt", Instant.now().toString());
+    if (!apaarId.isBlank()) {
+      answers.put("apaarId", apaarId.trim().toUpperCase(Locale.ROOT));
+    }
+    student.setAnswers(answers);
+    student.setUpdatedAt(Instant.now());
+    repository.save(student);
+    Map<String, Object> out = new LinkedHashMap<>();
+    out.put("studentId", student.getId().toString());
+    out.put("apaarConsent", status);
+    out.put("apaarId", answers.get("apaarId"));
+    return out;
+  }
+
   @Transactional(readOnly = true)
   public Map<String, Object> get(UUID id) {
     TenantScope scope = TenantContext.require();
@@ -384,13 +424,7 @@ public class StudentRecordService {
     out.put("guardianName", guardianName(answers));
     out.put("mobile", stringVal(answers, "mobile"));
     out.put("email", stringVal(answers, "email"));
-    out.put(
-        "photoUrl",
-        firstNonBlank(
-            stringVal(answers, "photoUrl"),
-            stringVal(answers, "photo"),
-            stringVal(answers, "studentPhoto"),
-            ""));
+    out.put("photoUrl", displayPhotoUrl(answers));
     out.put("status", studentDto.get("status"));
     out.put("branchId", studentDto.get("branchId"));
     out.put("academicSessionId", studentDto.get("academicSessionId"));
@@ -402,7 +436,7 @@ public class StudentRecordService {
     out.put("schoolStudentId", stringVal(answers, "schoolStudentId"));
     String aadhaarRaw =
         firstNonBlank(stringVal(answers, "aadhaar"), stringVal(answers, "aadhaarNumber"));
-    out.put("aadhaar", aadhaarRaw);
+    out.put("aadhaar", maskAadhaar(aadhaarRaw));
     out.put("aadhaarMasked", maskAadhaar(aadhaarRaw));
     return out;
   }
@@ -561,10 +595,17 @@ public class StudentRecordService {
     requireModuleEnabled(scope);
 
     UUID applicationId = parseUuid(body.get("applicationId"), "applicationId");
+    @SuppressWarnings("unchecked")
+    Map<String, Object> sourceAnswers =
+        body.get("answers") instanceof Map<?, ?> m
+            ? new LinkedHashMap<>((Map<String, Object>) m)
+            : new LinkedHashMap<>();
     var existing =
         repository.findByOrganizationIdAndSourceApplicationIdAndDeletedAtIsNull(scope.organizationId(), applicationId);
     if (existing.isPresent()) {
-      return toDto(existing.get());
+      StudentRecordEntity row = existing.get();
+      promoteAdmissionPhoto(row, sourceAnswers);
+      return toDto(repository.findById(row.getId()).orElse(row));
     }
 
     Map<String, Object> module = engines.getModuleSettings(scope, MODULE_STUDENT);
@@ -579,12 +620,6 @@ public class StudentRecordService {
     }
 
     @SuppressWarnings("unchecked")
-    Map<String, Object> sourceAnswers =
-        body.get("answers") instanceof Map<?, ?> m
-            ? new LinkedHashMap<>((Map<String, Object>) m)
-            : new LinkedHashMap<>();
-
-    @SuppressWarnings("unchecked")
     Map<String, Object> fieldMap =
         body.get("fieldMap") instanceof Map<?, ?> m
             ? new LinkedHashMap<>((Map<String, Object>) m)
@@ -593,6 +628,7 @@ public class StudentRecordService {
                 : Map.of());
 
     Map<String, Object> answers = mapAnswers(form, sourceAnswers, fieldMap);
+    stripEmbeddedImages(answers);
     boolean generateNo =
         admissionSettings.get("generateAdmissionNo") == null
             || Boolean.TRUE.equals(admissionSettings.get("generateAdmissionNo"));
@@ -639,7 +675,9 @@ public class StudentRecordService {
     history.add(event);
     entity.setHistory(history);
 
-    return toDto(repository.save(entity));
+    StudentRecordEntity saved = repository.save(entity);
+    promoteAdmissionPhoto(saved, sourceAnswers);
+    return toDto(repository.findById(saved.getId()).orElse(saved));
   }
 
   /**
@@ -830,6 +868,9 @@ public class StudentRecordService {
     assertUniquePen(scope.organizationId(), answers, entity.getId());
     assertUniqueRollInClass(scope.organizationId(), answers, entity.getId());
 
+    Map<String, Object> photoSource = new LinkedHashMap<>(answers);
+    stripEmbeddedImages(answers);
+
     String reason = stringOr(body.get("reason"), "Student profile correction");
     List<Map<String, Object>> changes = diffAnswers(before, answers);
     if (!Objects.equals(stringOr(beforeAdmission, ""), stringOr(admissionNo, ""))) {
@@ -865,7 +906,9 @@ public class StudentRecordService {
     event.put("changes", changes);
     entity.getHistory().add(event);
 
-    return toDto(repository.save(entity));
+    StudentRecordEntity saved = repository.save(entity);
+    promoteAdmissionPhoto(saved, photoSource);
+    return toDto(repository.findById(saved.getId()).orElse(saved));
   }
 
   /** Soft delete — hides from normal lists. Body: { reason } required. */
@@ -1008,6 +1051,115 @@ public class StudentRecordService {
     entity.getHistory().add(event);
 
     return toDto(repository.save(entity));
+  }
+
+  @Transactional
+  public Map<String, Object> bulkChangeStatus(Map<String, Object> body) {
+    Object rawIds = body.get("studentIds");
+    if (!(rawIds instanceof List<?> ids) || ids.isEmpty()) {
+      throw new StudentException("VALIDATION", "studentIds is required");
+    }
+    int updated = 0;
+    List<String> failed = new ArrayList<>();
+    for (Object raw : ids) {
+      try {
+        changeStatus(UUID.fromString(String.valueOf(raw)), body);
+        updated++;
+      } catch (RuntimeException ex) {
+        failed.add(String.valueOf(raw) + ": " + ex.getMessage());
+      }
+    }
+    Map<String, Object> out = new LinkedHashMap<>();
+    out.put("requested", ids.size());
+    out.put("updated", updated);
+    out.put("failed", failed);
+    return out;
+  }
+
+  /** Link two or more students as one household (siblings under the same parents). */
+  @Transactional
+  public Map<String, Object> linkHousehold(Map<String, Object> body) {
+    TenantScope scope = TenantContext.require();
+    requireStaffWrite(scope);
+    requireFeature(scope);
+    Object raw = body.get("admissionNos");
+    if (!(raw instanceof List<?> list) || list.size() < 2) {
+      throw new StudentException("VALIDATION", "Provide at least two admission numbers");
+    }
+    List<String> admissionNos = new ArrayList<>();
+    List<StudentRecordEntity> students = new ArrayList<>();
+    for (Object item : list) {
+      String admissionNo = stringOr(item, null);
+      if (admissionNo == null) {
+        continue;
+      }
+      StudentRecordEntity entity =
+          repository
+              .findByOrganizationIdAndAdmissionNoIgnoreCaseAndDeletedAtIsNull(
+                  scope.organizationId(), admissionNo)
+              .orElseThrow(
+                  () -> new StudentException("NOT_FOUND", "Student not found: " + admissionNo));
+      admissionNos.add(entity.getAdmissionNo());
+      students.add(entity);
+    }
+    if (students.size() < 2) {
+      throw new StudentException("VALIDATION", "Provide at least two admission numbers");
+    }
+    String householdId = UUID.randomUUID().toString();
+    List<Map<String, Object>> linked = new ArrayList<>();
+    for (StudentRecordEntity entity : students) {
+      Map<String, Object> answers =
+          entity.getAnswers() == null ? new LinkedHashMap<>() : new LinkedHashMap<>(entity.getAnswers());
+      answers.put("householdId", householdId);
+      answers.put("siblingAdmissionNos", admissionNos);
+      entity.setAnswers(answers);
+      entity.setUpdatedAt(Instant.now());
+      repository.save(entity);
+      linked.add(toDto(entity));
+    }
+    Map<String, Object> out = new LinkedHashMap<>();
+    out.put("householdId", householdId);
+    out.put("admissionNos", admissionNos);
+    out.put("students", linked);
+    return out;
+  }
+
+  @Transactional(readOnly = true)
+  public Map<String, Object> listHousehold(String admissionNo) {
+    TenantScope scope = TenantContext.require();
+    if (admissionNo == null || admissionNo.isBlank()) {
+      throw new StudentException("VALIDATION", "admissionNo is required");
+    }
+    StudentRecordEntity entity =
+        repository
+            .findByOrganizationIdAndAdmissionNoIgnoreCaseAndDeletedAtIsNull(
+                scope.organizationId(), admissionNo.trim())
+            .orElseThrow(() -> new StudentException("NOT_FOUND", "Student not found"));
+    Map<String, Object> answers = entity.getAnswers() == null ? Map.of() : entity.getAnswers();
+    List<String> admissionNos = new ArrayList<>();
+    Object raw = answers.get("siblingAdmissionNos");
+    if (raw instanceof List<?> list) {
+      for (Object item : list) {
+        String value = stringOr(item, null);
+        if (value != null) {
+          admissionNos.add(value);
+        }
+      }
+    }
+    if (admissionNos.isEmpty()) {
+      admissionNos.add(entity.getAdmissionNo());
+    }
+    List<Map<String, Object>> students = new ArrayList<>();
+    for (String no : admissionNos) {
+      repository
+          .findByOrganizationIdAndAdmissionNoIgnoreCaseAndDeletedAtIsNull(scope.organizationId(), no)
+          .ifPresent(row -> students.add(toDto(row)));
+    }
+    Map<String, Object> out = new LinkedHashMap<>();
+    out.put("householdId", answers.get("householdId"));
+    out.put("admissionNos", admissionNos);
+    out.put("students", students);
+    return out;
   }
 
   /**
@@ -1712,6 +1864,123 @@ public class StudentRecordService {
     } catch (NumberFormatException ex) {
       return d;
     }
+  }
+
+  /**
+   * Copy the admission photograph into the student photo vault. The vault attachment is the
+   * current photo; the data URL is not kept on the student record.
+   */
+  private void promoteAdmissionPhoto(StudentRecordEntity student, Map<String, Object> source) {
+    if (student == null || student.getId() == null || hasVaultPhoto(student)) {
+      return;
+    }
+    String dataUrl = embeddedPhoto(source);
+    if (dataUrl == null) {
+      return;
+    }
+    int comma = dataUrl.indexOf(',');
+    if (comma < 0 || comma >= dataUrl.length() - 1) {
+      return;
+    }
+    String meta = dataUrl.substring("data:".length(), comma);
+    String contentType = meta.split(";", 2)[0].trim().toLowerCase(Locale.ROOT);
+    if (contentType.isBlank()) {
+      contentType = "image/jpeg";
+    }
+    String ext =
+        contentType.contains("png") ? "png" : contentType.contains("webp") ? "webp" : "jpg";
+    Map<String, Object> body = new LinkedHashMap<>();
+    body.put("type", StudentAttachmentService.TYPE_STUDENT_PHOTO);
+    body.put("fileName", "student-photo." + ext);
+    body.put("contentType", contentType);
+    body.put("contentBase64", dataUrl.substring(comma + 1));
+    try {
+      attachments.upload(student.getId(), body);
+    } catch (RuntimeException ex) {
+      log.warn("Student photo was not stored for {}: {}", student.getId(), ex.getMessage());
+    }
+  }
+
+  private static boolean hasVaultPhoto(StudentRecordEntity student) {
+    Map<String, Object> answers = student.getAnswers();
+    if (answers == null) {
+      return false;
+    }
+    String url = stringVal(answers, "photoUrl");
+    return url.startsWith("/api/student/attachments/");
+  }
+
+  /**
+   * Admission Form Builder stores the photograph under the school's field key, not only
+   * {@code photo} / {@code studentPhoto}. Prefer a photo-named field when several images exist.
+   */
+  private static String embeddedPhoto(Map<String, Object> source) {
+    if (source == null || source.isEmpty()) {
+      return null;
+    }
+    String only = null;
+    int images = 0;
+    for (Map.Entry<String, Object> entry : source.entrySet()) {
+      if (!(entry.getValue() instanceof String value) || !value.startsWith("data:image/")) {
+        continue;
+      }
+      images++;
+      only = value;
+      String key = entry.getKey() == null ? "" : entry.getKey().toLowerCase(Locale.ROOT);
+      if (key.equals("photo")
+          || key.equals("studentphoto")
+          || key.contains("photo")
+          || key.contains("picture")
+          || key.contains("image")) {
+        return value;
+      }
+    }
+    return images == 1 ? only : null;
+  }
+
+  /** Drop inline image payloads so the student row stores the vault reference only. */
+  private static void stripEmbeddedImages(Map<String, Object> answers) {
+    if (answers == null || answers.isEmpty()) {
+      return;
+    }
+    for (String key : new ArrayList<>(answers.keySet())) {
+      String value = stringVal(answers, key);
+      if (!value.startsWith("data:")) {
+        continue;
+      }
+      if ("photo".equals(key) || "studentPhoto".equals(key)) {
+        answers.put(key, "on-file");
+      } else {
+        answers.remove(key);
+      }
+    }
+  }
+
+  /** URL the directory, ID card, and admit card can render. Never a raw file path. */
+  public static String displayPhotoUrl(Map<String, Object> answers) {
+    if (answers == null) {
+      return "";
+    }
+    String url = stringVal(answers, "photoUrl");
+    if (isRenderablePhoto(url)) {
+      return url;
+    }
+    String embedded = stringVal(answers, "photo");
+    if (isRenderablePhoto(embedded)) {
+      return embedded;
+    }
+    String attachmentId = stringVal(answers, "studentPhoto");
+    if (attachmentId.matches("(?i)[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")) {
+      return "/api/student/attachments/" + attachmentId + "/content";
+    }
+    return "";
+  }
+
+  private static boolean isRenderablePhoto(String value) {
+    return value.startsWith("/api/")
+        || value.startsWith("http://")
+        || value.startsWith("https://")
+        || value.startsWith("data:image/");
   }
 
   private Map<String, Object> mapAnswers(

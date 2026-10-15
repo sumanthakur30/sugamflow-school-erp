@@ -5,7 +5,10 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sugamflow.school.common.tenant.TenantContext;
 import com.sugamflow.school.common.tenant.TenantScope;
 import com.sugamflow.school.fee.config.FeeProperties;
+import com.sugamflow.school.fee.finance.FeeConcessionCalculator;
+import com.sugamflow.school.fee.finance.FeeStructureMatcher;
 import com.sugamflow.school.fee.finance.FinanceCatalog;
+import com.sugamflow.school.fee.persistence.entity.StudentFeeAdjustmentEntity;
 import com.sugamflow.school.fee.integration.ConfigEngineClient;
 import com.sugamflow.school.fee.integration.StudentProfileClient;
 import com.sugamflow.school.fee.payment.GatewayOrderResult;
@@ -21,9 +24,12 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -43,6 +49,7 @@ public class FinanceService {
   private final PaymentGatewayRegistry gatewayRegistry;
   private final FeeCollectionService feeCollections;
   private final StudentProfileClient studentProfiles;
+  private final StudentFeeAdjustmentService feeAdjustments;
   private final ObjectMapper objectMapper;
 
   public FinanceService(
@@ -53,6 +60,7 @@ public class FinanceService {
       PaymentGatewayRegistry gatewayRegistry,
       @Lazy FeeCollectionService feeCollections,
       StudentProfileClient studentProfiles,
+      StudentFeeAdjustmentService feeAdjustments,
       ObjectMapper objectMapper) {
     this.definitionRepo = definitionRepo;
     this.transactionRepo = transactionRepo;
@@ -61,6 +69,7 @@ public class FinanceService {
     this.gatewayRegistry = gatewayRegistry;
     this.feeCollections = feeCollections;
     this.studentProfiles = studentProfiles;
+    this.feeAdjustments = feeAdjustments;
     this.objectMapper = objectMapper;
   }
 
@@ -114,6 +123,9 @@ public class FinanceService {
     payload.put("definitionKey", key);
     payload.remove("id");
     payload.remove("version");
+    if (FinanceCatalog.TYPE_FEE_STRUCTURE.equals(type)) {
+      validateStructureLines(payload);
+    }
 
     FinanceDefinitionEntity existing =
         definitionRepo
@@ -412,13 +424,6 @@ public class FinanceService {
     ensureDefaults(scope);
     Map<String, Object> settings = feeModuleSettings(scope);
 
-    String structureKey = stringOr(body.get("structureKey"), null);
-    if (structureKey == null || structureKey.isBlank()) {
-      structureKey = stringOr(settings.get("defaultStructureKey"), "grade_8_annual");
-    }
-    Map<String, Object> structure =
-        requireDefinition(scope, FinanceCatalog.TYPE_FEE_STRUCTURE, structureKey);
-
     String studentRef = stringOr(body.get("studentRef"), "");
     String studentName = stringOr(body.get("studentName"), "");
     String classSection = stringOr(body.get("classSection"), "");
@@ -440,6 +445,28 @@ public class FinanceService {
                 stringOr(studentAnswers.get("classSection"), stringOr(profile.get("classSection"), "")));
       }
     }
+    applyBedAndRoute(scope, studentRef, studentAnswers);
+
+    String structureKey = stringOr(body.get("structureKey"), null);
+    String structureMatch = "REQUESTED";
+    if (structureKey == null || structureKey.isBlank()) {
+      String matched = matchStructureKey(classSection, scope.academicSessionId());
+      if (matched != null) {
+        structureKey = matched;
+        structureMatch = "CLASS";
+      } else if (!classSection.isBlank()) {
+        throw new FeeException(
+            "VALIDATION",
+            "No fee structure is configured for "
+                + classSection
+                + ". Add one under Finance → Structures for this class and academic year.");
+      } else {
+        structureKey = stringOr(settings.get("defaultStructureKey"), "grade_8_annual");
+        structureMatch = "DEFAULT";
+      }
+    }
+    Map<String, Object> structure =
+        requireDefinition(scope, FinanceCatalog.TYPE_FEE_STRUCTURE, structureKey);
 
     Map<String, Object> headIndex = headIndex(scope);
     List<Map<String, Object>> lines = new ArrayList<>();
@@ -450,7 +477,7 @@ public class FinanceService {
         if (!(item instanceof Map<?, ?> m)) continue;
         Map<String, Object> line = (Map<String, Object>) m;
         String headKey = stringOr(line.get("headKey"), "");
-        if (headKey.isBlank()) continue;
+        if (headKey.isBlank() || !lineActive(line)) continue;
         BigDecimal amount = toDecimal(line.get("amount"));
         Map<String, Object> head = (Map<String, Object>) headIndex.getOrDefault(headKey, Map.of());
         Map<String, Object> outLine = enrichLine(headKey, amount, line, head, settings);
@@ -464,6 +491,7 @@ public class FinanceService {
       BigDecimal hostelFee =
           firstPositive(
               toDecimal(body.get("hostelMonthlyFee")),
+              toDecimal(studentAnswers.get("hostelMonthlyFee")),
               truthy(studentAnswers.get("hostel"))
                   ? toDecimal(settings.get("defaultHostelMonthlyFee"))
                   : BigDecimal.ZERO);
@@ -480,6 +508,7 @@ public class FinanceService {
       BigDecimal transportFare =
           firstPositive(
               toDecimal(body.get("transportFare")),
+              toDecimal(studentAnswers.get("transportFare")),
               truthy(studentAnswers.get("transport"))
                   ? toDecimal(settings.get("defaultTransportFare"))
                   : BigDecimal.ZERO);
@@ -506,6 +535,7 @@ public class FinanceService {
     BigDecimal discount = BigDecimal.ZERO;
     String concessionKey = stringOr(body.get("concessionKey"), null);
     Map<String, Object> concessionApplied = null;
+    List<String> otherHeads = List.of();
     if ((concessionKey == null || concessionKey.isBlank())
         && bool(settings.get("autoApplyScholarship"), true)
         && truthy(studentAnswers.get("scholarship"))) {
@@ -516,19 +546,24 @@ public class FinanceService {
         Map<String, Object> concession =
             requireDefinition(scope, FinanceCatalog.TYPE_CONCESSION, concessionKey);
         discount = computeConcession(concession, lines, gross);
+        otherHeads = FeeConcessionCalculator.heads(concession.get("appliesToHeads"));
         concessionApplied =
-            Map.of(
-                "definitionKey",
-                concessionKey,
-                "name",
-                stringOr(concession.get("name"), concessionKey),
-                "discountAmount",
-                discount);
+            new LinkedHashMap<>(
+                Map.of(
+                    "definitionKey",
+                    concessionKey,
+                    "name",
+                    stringOr(concession.get("name"), concessionKey),
+                    "discountAmount",
+                    discount));
       } catch (FeeException ex) {
         if (forPersist) throw ex;
         log.debug("Concession {} skipped: {}", concessionKey, ex.getMessage());
       }
     }
+    Map<String, Object> concessionBreakdown =
+        familyConcessions(scope, studentRef, studentAnswers, lines, concessionKey, otherHeads, discount);
+    discount = toDecimal(concessionBreakdown.get("totalConcession")).min(gross).max(BigDecimal.ZERO);
 
     BigDecimal taxableBase = gross.subtract(discount).max(BigDecimal.ZERO);
     // Re-scale GST proportionally after discount when GST is enabled.
@@ -587,6 +622,7 @@ public class FinanceService {
 
     Map<String, Object> out = new LinkedHashMap<>();
     out.put("structureKey", structureKey);
+    out.put("structureMatch", structureMatch);
     out.put("structureName", stringOr(structure.get("name"), structureKey));
     out.put("studentRef", studentRef.isBlank() ? null : studentRef);
     out.put("studentName", studentName.isBlank() ? null : studentName);
@@ -596,6 +632,7 @@ public class FinanceService {
     out.put("lines", lines);
     out.put("grossAmount", gross.setScale(2, RoundingMode.HALF_UP));
     out.put("discountAmount", discount.setScale(2, RoundingMode.HALF_UP));
+    out.put("concessionBreakdown", concessionBreakdown);
     out.put("gstAmount", gstAmount.setScale(2, RoundingMode.HALF_UP));
     out.put("lateFeeAmount", lateFee.setScale(2, RoundingMode.HALF_UP));
     out.put("netAmount", net);
@@ -716,6 +753,10 @@ public class FinanceService {
   @Transactional
   public Map<String, Object> simulateCapture(UUID intentId) {
     TenantScope scope = TenantContext.require();
+    if (!demoOrganization(scope.organizationId())) {
+      throw new FeeException(
+          "DEMO_ONLY", "Simulated payment capture is only available for the demo school");
+    }
     requireFee(scope);
     if (!engines.isFeatureEnabled(scope, FinanceCatalog.FEATURE_MULTI_PAYMENT_GATEWAY)) {
       throw new FeeException(
@@ -889,6 +930,12 @@ public class FinanceService {
   }
 
   @Transactional
+  public boolean concessionApprovalRequired() {
+    TenantScope scope = TenantContext.require();
+    requireFee(scope);
+    return bool(feeModuleSettings(scope).get("concessionApprovalRequired"), false);
+  }
+
   public void ensureDefaults(TenantScope scope) {
     seedMissing(
         scope, FinanceCatalog.TYPE_FEE_HEAD, FinanceCatalog.defaultHeads());
@@ -971,6 +1018,136 @@ public class FinanceService {
             scope.organizationId(), type, key, "ACTIVE")
         .map(FinanceDefinitionEntity::getPayload)
         .orElseThrow(() -> new FeeException("NOT_FOUND", type + " not found: " + key));
+  }
+
+  private String matchStructureKey(String classSection, String academicSessionId) {
+    List<FeeStructureMatcher.Candidate> candidates = new ArrayList<>();
+    for (Map<String, Object> dto : listDefinitions(FinanceCatalog.TYPE_FEE_STRUCTURE)) {
+      Object payload = dto.get("payload");
+      if (!(payload instanceof Map<?, ?> raw)) {
+        continue;
+      }
+      String className = "";
+      String session = "";
+      if (raw.get("eligibility") instanceof Map<?, ?> eligibility) {
+        className = stringOr(eligibility.get("classSection"), "");
+        session = stringOr(eligibility.get("academicSessionId"), "");
+      }
+      candidates.add(
+          new FeeStructureMatcher.Candidate(
+              stringOr(dto.get("definitionKey"), ""), className, session));
+    }
+    return FeeStructureMatcher.pick(candidates, classSection, academicSessionId);
+  }
+
+  private static boolean lineActive(Map<String, Object> line) {
+    Object active = line.get("active");
+    if (active instanceof Boolean flag) {
+      return flag;
+    }
+    String status = stringOr(line.get("status"), "");
+    return !"INACTIVE".equalsIgnoreCase(status) && !"false".equalsIgnoreCase(String.valueOf(active));
+  }
+
+  private void validateStructureLines(Map<String, Object> payload) {
+    Object raw = payload.get("lines");
+    if (!(raw instanceof List<?> list) || list.isEmpty()) {
+      throw new FeeException("VALIDATION", "A fee structure needs at least one fee head");
+    }
+    Set<String> seen = new HashSet<>();
+    boolean anyActive = false;
+    for (Object item : list) {
+      if (!(item instanceof Map<?, ?> rawLine)) {
+        throw new FeeException("VALIDATION", "Each fee line must include a fee head and amount");
+      }
+      @SuppressWarnings("unchecked")
+      Map<String, Object> line = (Map<String, Object>) rawLine;
+      String headKey = stringOr(line.get("headKey"), "").trim().toUpperCase(Locale.ROOT);
+      if (headKey.isBlank()) {
+        throw new FeeException("VALIDATION", "Each fee line needs a fee head");
+      }
+      if (!seen.add(headKey)) {
+        throw new FeeException("VALIDATION", "Duplicate fee head " + headKey + " in this structure");
+      }
+      line.put("headKey", headKey);
+      BigDecimal amount = toDecimal(line.get("amount"));
+      if (amount.compareTo(BigDecimal.ZERO) < 0) {
+        throw new FeeException("VALIDATION", "Fee amount cannot be negative for " + headKey);
+      }
+      if (lineActive(line)) {
+        anyActive = true;
+        if (amount.compareTo(BigDecimal.ZERO) <= 0) {
+          throw new FeeException("VALIDATION", "Active fee head " + headKey + " needs an amount greater than zero");
+        }
+      }
+    }
+    if (!anyActive) {
+      throw new FeeException("VALIDATION", "At least one fee head must stay active");
+    }
+  }
+
+  private Map<String, Object> familyConcessions(
+      TenantScope scope,
+      String studentRef,
+      Map<String, Object> studentAnswers,
+      List<Map<String, Object>> lines,
+      String concessionKey,
+      List<String> otherHeads,
+      BigDecimal otherDiscount) {
+    List<FeeConcessionCalculator.FeeLine> feeLines = new ArrayList<>();
+    for (Map<String, Object> line : lines) {
+      if ("lateFee".equals(String.valueOf(line.get("source")))) {
+        continue;
+      }
+      feeLines.add(
+          new FeeConcessionCalculator.FeeLine(
+              stringOr(line.get("headKey"), ""), toDecimal(line.get("amount"))));
+    }
+    FeeConcessionCalculator.SiblingPolicy policy = null;
+    try {
+      policy =
+          FeeConcessionCalculator.siblingPolicy(
+              requireDefinition(scope, FinanceCatalog.TYPE_CONCESSION, "sibling_policy"));
+    } catch (FeeException ex) {
+      log.debug("Sibling policy not configured: {}", ex.getMessage());
+    }
+    StudentFeeAdjustmentEntity row = feeAdjustments.approvedFor(scope, studentRef);
+    FeeConcessionCalculator.StudentAdjustment adjustment = null;
+    if (row != null) {
+      adjustment =
+          FeeConcessionCalculator.studentAdjustment(
+              row.getId(),
+              row.getMode(),
+              row.getAdjustmentValue(),
+              row.getAppliesToHeads(),
+              row.getStatus());
+    }
+    boolean skipSibling =
+        concessionKey != null
+            && (concessionKey.equalsIgnoreCase("sibling_policy")
+                || concessionKey.equalsIgnoreCase("sibling_10"));
+    FeeConcessionCalculator.Result result =
+        FeeConcessionCalculator.calculate(
+            feeLines,
+            otherDiscount,
+            otherHeads,
+            adjustment,
+            policy,
+            FeeConcessionCalculator.admissionNos(studentAnswers.get("siblingAdmissionNos")),
+            studentRef,
+            skipSibling);
+    Map<String, Object> breakdown = result.toMap();
+    if (row != null) {
+      breakdown.put("studentAdjustmentId", row.getId());
+      breakdown.put("studentAdjustmentStatus", row.getStatus());
+      breakdown.put("studentReason", row.getReason());
+      breakdown.put("studentMode", row.getMode());
+      breakdown.put("studentHeads", row.getAppliesToHeads() == null ? List.of() : row.getAppliesToHeads());
+    }
+    if (policy != null && policy.appliesToHeads() != null) {
+      breakdown.put("siblingHeads", policy.appliesToHeads());
+    }
+    return breakdown;
   }
 
   private BigDecimal computeConcession(
@@ -1113,6 +1290,33 @@ public class FinanceService {
     return BigDecimal.ZERO;
   }
 
+  private static BigDecimal firstPositive(BigDecimal a, BigDecimal b, BigDecimal c) {
+    return firstPositive(a, firstPositive(b, c));
+  }
+
+  @SuppressWarnings("unchecked")
+  private void applyBedAndRoute(
+      TenantScope scope, String studentRef, Map<String, Object> studentAnswers) {
+    if (studentRef == null || studentRef.isBlank()) {
+      return;
+    }
+    Map<String, Object> ops = studentProfiles.opsByAdmissionNo(scope, studentRef);
+    if (ops.get("bed") instanceof Map<?, ?> bed && !bed.isEmpty() && bed.get("releasedAt") == null) {
+      studentAnswers.put("hostel", true);
+      if (bed.get("monthlyFee") != null) {
+        studentAnswers.put("hostelMonthlyFee", bed.get("monthlyFee"));
+      }
+    }
+    if (ops.get("route") instanceof Map<?, ?> route
+        && !route.isEmpty()
+        && !"ENDED".equalsIgnoreCase(String.valueOf(route.get("status")))) {
+      studentAnswers.put("transport", true);
+      if (route.get("fareAmount") != null) {
+        studentAnswers.put("transportFare", route.get("fareAmount"));
+      }
+    }
+  }
+
   private static boolean truthy(Object v) {
     if (v == null) return false;
     if (v instanceof Boolean b) return b;
@@ -1204,6 +1408,14 @@ public class FinanceService {
     } catch (NumberFormatException ex) {
       return BigDecimal.ZERO;
     }
+  }
+
+  private static boolean demoOrganization(String organizationId) {
+    if (organizationId == null) {
+      return false;
+    }
+    String org = organizationId.trim().toLowerCase(java.util.Locale.ROOT);
+    return "demo-school".equals(org) || org.contains("demo");
   }
 
   private static String stringOr(Object raw, String fallback) {

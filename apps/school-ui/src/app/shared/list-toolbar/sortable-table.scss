@@ -1,15 +1,13 @@
 /* Shared column-header pattern for list tables.
-   Header cells (th.list-th) render as a distinct dark band using the theme's
-   menu colour, so they never blend into data rows. Sortable headings are
-   buttons with the ↕ / ↑ / ↓ indicators; the active column gets an accent
-   underline. */
+   Pale green-gray header, dark text, left-aligned with the cell values.
+   Sortable headings show the ↕ / ↑ / ↓ indicators; the active column gets a green underline. */
 
-$thead-bg: var(--sf-menu, #0b3d2e);
-$thead-bg-hover: color-mix(in srgb, var(--sf-menu, #0b3d2e) 82%, #fff);
-$thead-border: color-mix(in srgb, var(--sf-menu, #0b3d2e) 75%, #000);
-$thead-text: color-mix(in srgb, #fff 82%, var(--sf-menu, #0b3d2e));
-$thead-text-active: #ffffff;
-$thead-accent: var(--sf-accent, #e9b44c);
+$thead-bg: var(--sf-table-head, #e8efeb);
+$thead-bg-hover: color-mix(in srgb, var(--sf-table-head, #e8efeb) 72%, #fff);
+$thead-border: var(--sf-border, #dce4df);
+$thead-text: var(--sf-text, #26352e);
+$thead-text-active: var(--sf-text, #26352e);
+$thead-accent: var(--sf-primary, #176b45);
 
 thead tr th.list-th {
   padding: 0;

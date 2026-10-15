@@ -2,6 +2,8 @@ import { Component, OnInit, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ApiService } from '../../core/api.service';
+import { SIDE_NAV, TOP_NAV } from '../../layout/nav-catalog';
+import { catalogAsMenu, isStarterMenu, SavedMenuNode } from '../../layout/menu-drive';
 
 export interface MenuNodeDraft {
   id: string;
@@ -35,6 +37,7 @@ export class MenuBuilderComponent implements OnInit {
   busy = false;
   status = '';
   error = '';
+  usingLiveCatalog = false;
 
   ngOnInit(): void {
     this.reload();
@@ -43,7 +46,14 @@ export class MenuBuilderComponent implements OnInit {
   reload(): void {
     this.api.get<MenuNodeDraft[]>('/api/config/menus').subscribe({
       next: (m) => {
-        this.menus = (m ?? []).map((n) => this.normalize(n));
+        const loaded = (m ?? []).map((n) => this.normalize(n));
+        this.usingLiveCatalog = isStarterMenu(loaded as SavedMenuNode[]);
+        this.menus = this.usingLiveCatalog
+          ? catalogAsMenu([...TOP_NAV, ...SIDE_NAV]).map((n) => this.normalize(n))
+          : loaded;
+        if (this.usingLiveCatalog) {
+          this.status = 'Showing the live school menu. Save to apply labels, order, and visibility.';
+        }
         if (this.menus.length && !this.draft) {
           this.select([0]);
         } else if (this.selectedPath.length) {
@@ -127,7 +137,8 @@ export class MenuBuilderComponent implements OnInit {
       next: (saved) => {
         this.busy = false;
         this.menus = (saved ?? []).map((n) => this.normalize(n));
-        this.status = 'Menu tree saved';
+        this.usingLiveCatalog = false;
+        this.status = 'Menu tree saved. The school shell now uses this menu.';
         if (this.selectedPath.length) {
           this.select(this.selectedPath);
         }

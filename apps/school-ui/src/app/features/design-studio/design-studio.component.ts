@@ -281,7 +281,7 @@ export class DesignStudioComponent implements OnInit {
     t.dashboard ??= {};
     for (const key of this.colorKeys) {
       if (!t.colors[key]) {
-        t.colors[key] = this.themeService.theme()?.colors?.[key] ?? '#0B6E4F';
+        t.colors[key] = this.themeService.theme()?.colors?.[key] ?? '#176B45';
       }
     }
   }
