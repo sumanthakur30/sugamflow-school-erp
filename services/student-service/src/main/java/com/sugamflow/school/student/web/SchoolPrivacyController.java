@@ -9,6 +9,7 @@ import com.sugamflow.school.student.privacy.SchoolPrivacyViews.NoticeView;
 import com.sugamflow.school.student.privacy.SchoolPrivacyViews.PurposeView;
 import com.sugamflow.school.student.privacy.SchoolPrivacyViews.RequestCommand;
 import com.sugamflow.school.student.privacy.SchoolPrivacyViews.RequestView;
+import com.sugamflow.school.student.privacy.SchoolPrivacyViews.StatusCommand;
 import java.util.List;
 import java.util.UUID;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -61,5 +62,12 @@ public class SchoolPrivacyController {
   @PostMapping("/requests/{id}/complete")
   public ApiResponse<RequestView> complete(@PathVariable("id") UUID id, @RequestBody(required = false) CompleteCommand command) {
     return ApiResponse.ok(service.complete(id, command));
+  }
+
+  @PostMapping("/requests/{id}/status")
+  public ApiResponse<RequestView> status(@PathVariable("id") UUID id, @RequestBody StatusCommand command) {
+    String status = command == null ? "" : command.status();
+    String note = command == null ? null : command.note();
+    return ApiResponse.ok(service.updateStatus(id, status, note));
   }
 }

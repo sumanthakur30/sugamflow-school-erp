@@ -35,112 +35,8 @@ interface PrivacyRequest {
   selector: 'app-school-privacy',
   standalone: true,
   imports: [CommonModule, FormsModule],
-  template: `
-    <div class="page">
-      <header class="page-head toolbar">
-        <div>
-          <h2>Student privacy</h2>
-          <p>Record access, correction, and erasure requests for student and parent information.</p>
-        </div>
-      </header>
-
-      @if (error) {
-        <p class="error panel" role="alert">{{ error }}</p>
-      }
-      @if (statusMsg) {
-        <p class="status panel" role="status">{{ statusMsg }}</p>
-      }
-
-      @if (notice) {
-        <section class="panel">
-          <h3>{{ notice.title }}</h3>
-          <p>{{ notice.body }}</p>
-          <p>Notice {{ notice.noticeCode }} {{ notice.version }}</p>
-        </section>
-      }
-
-      <section class="panel">
-        <h3>Purposes</h3>
-        @for (purpose of purposes; track purpose.purposeCode) {
-          <div>
-            <strong>{{ purpose.purposeCode }}</strong>
-            <span> {{ purpose.legalGround }} · {{ purpose.allowed ? 'Allowed' : 'Not allowed' }}</span>
-            <p>{{ purpose.description }}</p>
-            @if (purpose.withdrawable) {
-              <button type="button" (click)="setConsent(purpose.purposeCode, 'GRANT')">Allow updates</button>
-              <button type="button" class="icon-btn secondary" (click)="setConsent(purpose.purposeCode, 'WITHDRAW')">
-                Withdraw updates
-              </button>
-            }
-          </div>
-        }
-      </section>
-
-      <section class="panel">
-        <h3>Record a request</h3>
-        <p>Use an admission number or parent reference. Do not paste identity documents.</p>
-        <label>
-          Who
-          <select [(ngModel)]="draft.dataCategory">
-            <option value="STUDENT">Student</option>
-            <option value="PARENT">Parent</option>
-          </select>
-        </label>
-        <label>
-          Request
-          <select [(ngModel)]="draft.requestType">
-            <option value="ACCESS">Access</option>
-            <option value="CORRECTION">Correction</option>
-            <option value="ERASURE">Erasure</option>
-            <option value="GRIEVANCE">Grievance</option>
-          </select>
-        </label>
-        <label>
-          Admission or parent reference
-          <input [(ngModel)]="draft.subjectLabel" maxlength="80" />
-        </label>
-        <label>
-          Note
-          <textarea [(ngModel)]="draft.detail" rows="3"></textarea>
-        </label>
-        <button type="button" (click)="submit()" [disabled]="busy">Save request</button>
-      </section>
-
-      <section class="panel">
-        <h3>Requests</h3>
-        <table>
-          <thead>
-            <tr>
-              <th>Number</th>
-              <th>Who</th>
-              <th>Reference</th>
-              <th>Type</th>
-              <th>Status</th>
-              <th>Action</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
-            @for (row of requests; track row.id) {
-              <tr>
-                <td>{{ row.requestNumber }}</td>
-                <td>{{ row.dataCategory }}</td>
-                <td>{{ row.subjectLabel }}</td>
-                <td>{{ row.requestType }}</td>
-                <td>{{ row.status }}</td>
-                <td>{{ row.actionTaken }}</td>
-                <td>
-                  @if (row.status !== 'COMPLETED') {
-                    <button type="button" (click)="complete(row)" [disabled]="busy">Mark recorded</button>
-                  }
-                </td>
-              </tr>
-            }
-          </tbody>
-        </table>
-      </section>
-    </div>
-  `,
+  templateUrl: './school-privacy.component.html',
+  styleUrl: './school-privacy.component.scss',
 })
 export class SchoolPrivacyComponent implements OnInit {
   private readonly api = inject(ApiService);
@@ -150,7 +46,10 @@ export class SchoolPrivacyComponent implements OnInit {
   requests: PrivacyRequest[] = [];
   error = '';
   statusMsg = '';
+  fieldError = '';
+  loading = true;
   busy = false;
+  statusFilter = 'ALL';
   draft = {
     dataCategory: 'STUDENT',
     requestType: 'ACCESS',
@@ -158,29 +57,75 @@ export class SchoolPrivacyComponent implements OnInit {
     detail: '',
   };
 
+  readonly statuses = [
+    { value: 'ALL', label: 'All' },
+    { value: 'OPEN', label: 'Pending' },
+    { value: 'IN_REVIEW', label: 'Under review' },
+    { value: 'COMPLETED', label: 'Completed' },
+    { value: 'REJECTED', label: 'Rejected' },
+    { value: 'CANCELLED', label: 'Cancelled' },
+  ];
+
   ngOnInit(): void {
     this.reload();
   }
 
+  get visibleRequests(): PrivacyRequest[] {
+    if (this.statusFilter === 'ALL') {
+      return this.requests;
+    }
+    return this.requests.filter((row) => row.status === this.statusFilter);
+  }
+
   reload(): void {
+    this.loading = true;
+    this.error = '';
+    let pending = 3;
+    const done = () => {
+      pending -= 1;
+      if (pending === 0) {
+        this.loading = false;
+      }
+    };
     this.api.get<Notice>('/api/student/privacy/notice').subscribe({
-      next: (notice) => (this.notice = notice),
-      error: (err) => (this.error = this.message(err)),
+      next: (notice) => {
+        this.notice = notice;
+        done();
+      },
+      error: (err) => {
+        this.error = this.message(err, 'The privacy notice could not be loaded.');
+        done();
+      },
     });
     this.api.get<Purpose[]>('/api/student/privacy/purposes').subscribe({
-      next: (purposes) => (this.purposes = purposes ?? []),
-      error: (err) => (this.error = this.message(err)),
+      next: (purposes) => {
+        this.purposes = purposes ?? [];
+        done();
+      },
+      error: (err) => {
+        this.error = this.message(err, 'Privacy purposes could not be loaded.');
+        done();
+      },
     });
     this.api.get<PrivacyRequest[]>('/api/student/privacy/requests/organization').subscribe({
-      next: (rows) => (this.requests = rows ?? []),
-      error: (err) => (this.error = this.message(err)),
+      next: (rows) => {
+        this.requests = rows ?? [];
+        done();
+      },
+      error: (err) => {
+        this.error = this.message(err, 'Privacy requests could not be loaded.');
+        done();
+      },
     });
   }
 
-  setConsent(purposeCode: string, action: string): void {
+  setConsent(purpose: Purpose, action: 'GRANT' | 'WITHDRAW'): void {
+    if (action === 'WITHDRAW' && !confirm('Withdraw optional school updates? School operations stay on.')) {
+      return;
+    }
     this.busy = true;
     this.error = '';
-    this.api.post('/api/student/privacy/consents', { purposeCode, action }).subscribe({
+    this.api.post('/api/student/privacy/consents', { purposeCode: purpose.purposeCode, action }).subscribe({
       next: () => {
         this.busy = false;
         this.statusMsg = action === 'GRANT' ? 'Optional updates allowed.' : 'Optional updates withdrawn.';
@@ -188,45 +133,94 @@ export class SchoolPrivacyComponent implements OnInit {
       },
       error: (err) => {
         this.busy = false;
-        this.error = this.message(err);
+        this.error = this.message(err, 'The preference could not be saved.');
       },
     });
   }
 
   submit(): void {
+    this.fieldError = '';
+    this.error = '';
+    const label = this.draft.subjectLabel.trim();
+    if (!/^[A-Za-z0-9][A-Za-z0-9 ./_-]{0,79}$/.test(label)) {
+      this.fieldError = 'Enter an admission number or a short parent reference. Do not paste a document.';
+      return;
+    }
+    this.busy = true;
+    this.api
+      .post('/api/student/privacy/requests', {
+        ...this.draft,
+        subjectLabel: label,
+        detail: this.draft.detail.trim(),
+      })
+      .subscribe({
+        next: () => {
+          this.busy = false;
+          this.statusMsg = 'Request recorded. Student, fee, and exam records were not deleted.';
+          this.draft = { dataCategory: 'STUDENT', requestType: 'ACCESS', subjectLabel: '', detail: '' };
+          this.reload();
+        },
+        error: (err) => {
+          this.busy = false;
+          this.error = this.message(err, 'The request could not be saved.');
+        },
+      });
+  }
+
+  setStatus(row: PrivacyRequest, status: string): void {
+    const label = this.statusLabel(status);
+    const extra =
+      status === 'COMPLETED' ? ' Completing it records the request and does not delete school records.' : '';
+    if (!confirm(`Mark ${row.requestNumber} as ${label}?${extra}`)) {
+      return;
+    }
     this.busy = true;
     this.error = '';
-    this.api.post('/api/student/privacy/requests', this.draft).subscribe({
+    this.api.post(`/api/student/privacy/requests/${row.id}/status`, { status, note: `Marked ${label} by the school office.` }).subscribe({
       next: () => {
         this.busy = false;
-        this.statusMsg = 'Request recorded. Student, fee, and exam records were not deleted.';
-        this.draft = { dataCategory: 'STUDENT', requestType: 'ACCESS', subjectLabel: '', detail: '' };
+        this.statusMsg =
+          status === 'COMPLETED'
+            ? `${row.requestNumber} completed. No student records were deleted.`
+            : `${row.requestNumber} marked ${label}.`;
         this.reload();
       },
       error: (err) => {
         this.busy = false;
-        this.error = this.message(err);
+        this.error = this.message(err, 'The request status could not be updated.');
       },
     });
   }
 
-  complete(row: PrivacyRequest): void {
-    this.busy = true;
-    this.error = '';
-    this.api.post(`/api/student/privacy/requests/${row.id}/complete`, { note: 'Recorded by the school office.' }).subscribe({
-      next: () => {
-        this.busy = false;
-        this.statusMsg = 'Request marked recorded. No student records were deleted.';
-        this.reload();
-      },
-      error: (err) => {
-        this.busy = false;
-        this.error = this.message(err);
-      },
-    });
+  statusLabel(status: string): string {
+    return this.statuses.find((item) => item.value === status)?.label ?? status;
   }
 
-  private message(err: { error?: { message?: string }; message?: string }): string {
-    return err?.error?.message || err?.message || 'Privacy request failed.';
+  whoLabel(category: string): string {
+    return category === 'PARENT' ? 'Parent or guardian' : 'Student';
+  }
+
+  purposeTitle(code: string): string {
+    if (code === 'SCHOOL_OPERATIONS') {
+      return 'School operations';
+    }
+    if (code === 'OPTIONAL_SCHOOL_UPDATES') {
+      return 'Optional school updates';
+    }
+    return code;
+  }
+
+  private message(err: { error?: { message?: string } | string; message?: string; status?: number }, fallback: string): string {
+    const body = err?.error;
+    if (body && typeof body === 'object' && body.message) {
+      return body.message;
+    }
+    if (typeof body === 'string' && body.trim()) {
+      return body;
+    }
+    if (err?.status === 0) {
+      return 'The privacy service could not be reached.';
+    }
+    return fallback;
   }
 }

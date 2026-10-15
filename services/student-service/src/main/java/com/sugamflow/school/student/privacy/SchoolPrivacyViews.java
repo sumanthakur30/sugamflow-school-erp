@@ -35,4 +35,6 @@ public final class SchoolPrivacyViews {
   public record RequestCommand(String dataCategory, String subjectLabel, String requestType, String detail) {}
 
   public record CompleteCommand(String note) {}
+
+  public record StatusCommand(String status, String note) {}
 }

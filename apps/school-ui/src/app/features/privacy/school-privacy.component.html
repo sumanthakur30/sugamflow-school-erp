@@ -1,0 +1,148 @@
+<div class="privacy">
+  <header class="page-head">
+    <div>
+      <h2>Student privacy</h2>
+      <p>Record access, correction, and erasure requests for student and parent information.</p>
+    </div>
+    <button type="button" class="tiny secondary" (click)="reload()" [disabled]="loading || busy">Retry</button>
+  </header>
+
+  @if (error) {
+    <p class="banner error" role="alert">{{ error }}</p>
+  }
+  @if (statusMsg) {
+    <p class="banner ok" role="status">{{ statusMsg }}</p>
+  }
+  @if (loading) {
+    <p class="hint">Loading privacy notice and requests…</p>
+  }
+
+  @if (notice) {
+    <section class="panel" id="privacy-notice">
+      <h3>{{ notice.title }}</h3>
+      <p>{{ notice.body }}</p>
+      <p class="hint">Notice {{ notice.noticeCode }} · {{ notice.version }}</p>
+    </section>
+  }
+
+  <section class="panel" aria-labelledby="purposes-heading">
+    <h3 id="purposes-heading">Purposes</h3>
+    <div class="purpose-list">
+      @for (purpose of purposes; track purpose.purposeCode) {
+        <article>
+          <header>
+            <h4>{{ purposeTitle(purpose.purposeCode) }}</h4>
+            <span class="pill">{{ purpose.allowed ? 'Allowed' : 'Not allowed' }} · {{ purpose.legalGround }}</span>
+          </header>
+          <p>{{ purpose.description }}</p>
+          @if (!purpose.withdrawable) {
+            <p class="hint">Required for school operations. This cannot be withdrawn here.</p>
+          } @else {
+            <div class="actions">
+              <button type="button" class="primary" (click)="setConsent(purpose, 'GRANT')" [disabled]="busy || purpose.allowed">
+                Allow updates
+              </button>
+              <button type="button" class="tiny secondary" (click)="setConsent(purpose, 'WITHDRAW')" [disabled]="busy || !purpose.allowed">
+                Withdraw updates
+              </button>
+            </div>
+          }
+        </article>
+      }
+    </div>
+  </section>
+
+  <section class="panel">
+    <h3>Record a request</h3>
+    <p class="warn">Do not paste identity documents or other sensitive personal information into the note.</p>
+    <form class="form-grid" (ngSubmit)="submit()">
+      <label>
+        Who
+        <select [(ngModel)]="draft.dataCategory" name="who">
+          <option value="STUDENT">Student</option>
+          <option value="PARENT">Parent or guardian</option>
+        </select>
+      </label>
+      <label>
+        Request type
+        <select [(ngModel)]="draft.requestType" name="type">
+          <option value="ACCESS">Access</option>
+          <option value="CORRECTION">Correction</option>
+          <option value="ERASURE">Erasure</option>
+          <option value="GRIEVANCE">Grievance</option>
+        </select>
+      </label>
+      <label class="grow">
+        Admission number or parent reference
+        <input [(ngModel)]="draft.subjectLabel" name="reference" maxlength="80" autocomplete="off" required />
+      </label>
+      <label class="span">
+        Note
+        <textarea [(ngModel)]="draft.detail" name="note" rows="3" maxlength="2000"></textarea>
+      </label>
+      @if (fieldError) {
+        <p class="field-error span" role="alert">{{ fieldError }}</p>
+      }
+      <div class="span">
+        <button type="submit" class="primary" [disabled]="busy">Save request</button>
+      </div>
+    </form>
+  </section>
+
+  <section class="panel">
+    <div class="section-head">
+      <h3>Requests</h3>
+      <label>
+        Status
+        <select [(ngModel)]="statusFilter" name="statusFilter">
+          @for (item of statuses; track item.value) {
+            <option [value]="item.value">{{ item.label }}</option>
+          }
+        </select>
+      </label>
+    </div>
+    @if (!loading && visibleRequests.length === 0) {
+      <p class="hint">No privacy requests recorded yet.</p>
+    } @else {
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Request number</th>
+              <th>Requester</th>
+              <th>Reference</th>
+              <th>Request type</th>
+              <th>Status</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (row of visibleRequests; track row.id) {
+              <tr>
+                <td>{{ row.requestNumber }}</td>
+                <td>{{ whoLabel(row.dataCategory) }}</td>
+                <td>{{ row.subjectLabel }}</td>
+                <td>{{ row.requestType }}</td>
+                <td><span class="pill">{{ statusLabel(row.status) }}</span></td>
+                <td>
+                  @if (row.status === 'OPEN' || row.status === 'IN_REVIEW') {
+                    <div class="actions">
+                      @if (row.status === 'OPEN') {
+                        <button type="button" class="tiny secondary" (click)="setStatus(row, 'IN_REVIEW')" [disabled]="busy">Review</button>
+                      }
+                      <button type="button" class="tiny secondary" (click)="setStatus(row, 'COMPLETED')" [disabled]="busy">Complete</button>
+                      <button type="button" class="tiny danger" (click)="setStatus(row, 'REJECTED')" [disabled]="busy">Reject</button>
+                      <button type="button" class="tiny secondary" (click)="setStatus(row, 'CANCELLED')" [disabled]="busy">Cancel</button>
+                    </div>
+                  } @else {
+                    <span class="hint">{{ row.actionTaken === 'RECORDED_ONLY' ? 'Recorded only' : statusLabel(row.status) }}</span>
+                  }
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    }
+  </section>
+</div>

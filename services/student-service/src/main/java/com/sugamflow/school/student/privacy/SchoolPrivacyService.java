@@ -12,7 +12,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
-import org.springframework.dao.DataIntegrityViolationException;
+import java.util.regex.Pattern;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -31,27 +31,25 @@ public class SchoolPrivacyService {
   private static final Set<String> CATEGORIES = Set.of("STUDENT", "PARENT");
   private static final Set<String> ADMIN_ROLES =
       Set.of("SHOP_OWNER", "SUPER_ADMIN", "ADMIN", "PRINCIPAL", "OWNER");
-
-  private static final String NOTICE_BODY =
-      "This school uses student and parent details to run admission, attendance, fees, exams, "
-          + "and required school notices. Those activities are part of operating the school and "
-          + "cannot be switched off from this page. Optional school updates are separate and can "
-          + "be allowed or withdrawn here. A request to access, correct, or erase information is "
-          + "recorded for the school office. Recording an erasure request does not delete "
-          + "admission, attendance, fee, exam, or backup records. This page does not collect "
-          + "identity documents and does not block admission.";
+  private static final Set<String> OPEN_STATUSES = Set.of("OPEN", "IN_REVIEW");
+  private static final Set<String> NEXT_STATUSES =
+      Set.of("IN_REVIEW", "COMPLETED", "REJECTED", "CANCELLED");
+  private static final Pattern REFERENCE = Pattern.compile("[A-Za-z0-9][A-Za-z0-9 ./_-]{0,79}");
 
   private final SchoolPrivacyNoticeRepository notices;
   private final SchoolPrivacyConsentRepository consents;
   private final SchoolPrivacyRequestRepository requests;
+  private final SchoolPrivacyAuditRepository audits;
 
   public SchoolPrivacyService(
       SchoolPrivacyNoticeRepository notices,
       SchoolPrivacyConsentRepository consents,
-      SchoolPrivacyRequestRepository requests) {
+      SchoolPrivacyRequestRepository requests,
+      SchoolPrivacyAuditRepository audits) {
     this.notices = notices;
     this.consents = consents;
     this.requests = requests;
+    this.audits = audits;
   }
 
   @Transactional
@@ -117,6 +115,7 @@ public class SchoolPrivacyService {
     row.setNoticeCode(NOTICE_CODE);
     row.setNoticeVersion(NOTICE_VERSION);
     SchoolPrivacyConsentEntity saved = consents.save(row);
+    audit(scope, "GRANT".equals(decision) ? "CONSENT_GRANTED" : "CONSENT_WITHDRAWN", purpose, null);
     return new ConsentView(
         saved.getPurposeCode(), saved.getStatus(), saved.getGrantedAt(), saved.getWithdrawnAt());
   }
@@ -134,8 +133,14 @@ public class SchoolPrivacyService {
       throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unknown category or request type.");
     }
     String label = required(command.subjectLabel(), "subjectLabel");
-    if (label.length() > 80) {
-      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Reference must be 80 characters or fewer.");
+    if (!REFERENCE.matcher(label).matches()) {
+      throw new ResponseStatusException(
+          HttpStatus.BAD_REQUEST, "Use an admission number or a short parent reference. Do not paste a document.");
+    }
+    if (requests.existsByOrganizationIdAndDataCategoryAndSubjectLabelAndRequestTypeAndStatusIn(
+        scope.organizationId(), category, label, type, OPEN_STATUSES)) {
+      throw new ResponseStatusException(
+          HttpStatus.CONFLICT, "An open request already exists for this reference and type.");
     }
     Instant now = Instant.now();
     SchoolPrivacyRequestEntity row = new SchoolPrivacyRequestEntity();
@@ -151,7 +156,9 @@ public class SchoolPrivacyService {
     row.setActionTaken("NONE");
     row.setCreatedAt(now);
     row.setUpdatedAt(now);
-    return toView(requests.save(row));
+    SchoolPrivacyRequestEntity saved = requests.save(row);
+    audit(scope, "REQUEST_CREATED", saved.getRequestNumber(), category + " " + type);
+    return toView(saved);
   }
 
   @Transactional(readOnly = true)
@@ -174,17 +181,31 @@ public class SchoolPrivacyService {
 
   @Transactional
   public RequestView complete(UUID id, CompleteCommand command) {
+    return updateStatus(id, "COMPLETED", command == null ? null : command.note());
+  }
+
+  @Transactional
+  public RequestView updateStatus(UUID id, String status, String note) {
     TenantScope scope = requireAdmin();
+    String next = required(status, "status").toUpperCase();
+    if (!NEXT_STATUSES.contains(next)) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unknown request status.");
+    }
     SchoolPrivacyRequestEntity row =
         requests
             .findById(id)
             .filter(found -> scope.organizationId().equals(found.getOrganizationId()))
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Request not found."));
-    row.setStatus("COMPLETED");
-    row.setActionTaken("RECORDED_ONLY");
-    row.setResponseNote(clip(command == null ? null : command.note(), 2000));
+    if (!OPEN_STATUSES.contains(row.getStatus())) {
+      throw new ResponseStatusException(HttpStatus.CONFLICT, "This request is already closed.");
+    }
+    row.setStatus(next);
+    row.setActionTaken("COMPLETED".equals(next) ? "RECORDED_ONLY" : next);
+    row.setResponseNote(clip(note, 2000));
     row.setUpdatedAt(Instant.now());
-    return toView(requests.save(row));
+    SchoolPrivacyRequestEntity saved = requests.save(row);
+    audit(scope, "REQUEST_" + next, saved.getRequestNumber(), saved.getRequestType());
+    return toView(saved);
   }
 
   private boolean optionalAllowed(TenantScope scope) {
@@ -198,24 +219,22 @@ public class SchoolPrivacyService {
   private SchoolPrivacyNoticeEntity ensureNotice() {
     return notices
         .findByNoticeCodeAndVersion(NOTICE_CODE, NOTICE_VERSION)
-        .orElseGet(this::insertNotice);
+        .orElseThrow(
+            () ->
+                new ResponseStatusException(
+                    HttpStatus.SERVICE_UNAVAILABLE, "The school privacy notice is not installed yet."));
   }
 
-  private SchoolPrivacyNoticeEntity insertNotice() {
-    SchoolPrivacyNoticeEntity row = new SchoolPrivacyNoticeEntity();
-    row.setId(UUID.randomUUID());
-    row.setNoticeCode(NOTICE_CODE);
-    row.setVersion(NOTICE_VERSION);
-    row.setTitle("Student and parent information");
-    row.setBody(NOTICE_BODY);
-    row.setCreatedAt(Instant.now());
-    try {
-      return notices.save(row);
-    } catch (DataIntegrityViolationException ex) {
-      return notices
-          .findByNoticeCodeAndVersion(NOTICE_CODE, NOTICE_VERSION)
-          .orElseThrow(() -> ex);
-    }
+  private void audit(TenantScope scope, String action, String targetRef, String detail) {
+    SchoolPrivacyAuditEntity event = new SchoolPrivacyAuditEntity();
+    event.setId(UUID.randomUUID());
+    event.setOrganizationId(scope.organizationId());
+    event.setActor(subjectRef(scope));
+    event.setAction(action);
+    event.setTargetRef(clip(targetRef, 80));
+    event.setDetail(clip(detail, 500));
+    event.setCreatedAt(Instant.now());
+    audits.save(event);
   }
 
   private SchoolPrivacyConsentEntity newConsent(TenantScope scope, String purpose, Instant now) {

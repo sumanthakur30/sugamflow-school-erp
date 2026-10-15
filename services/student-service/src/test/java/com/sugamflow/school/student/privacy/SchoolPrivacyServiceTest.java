@@ -21,7 +21,6 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.web.server.ResponseStatusException;
 
 @ExtendWith(MockitoExtension.class)
@@ -30,6 +29,7 @@ class SchoolPrivacyServiceTest {
   @Mock private SchoolPrivacyNoticeRepository notices;
   @Mock private SchoolPrivacyConsentRepository consents;
   @Mock private SchoolPrivacyRequestRepository requests;
+  @Mock private SchoolPrivacyAuditRepository audits;
 
   private SchoolPrivacyService service;
   private final List<SchoolPrivacyConsentEntity> storedConsents = new ArrayList<>();
@@ -37,7 +37,7 @@ class SchoolPrivacyServiceTest {
 
   @BeforeEach
   void setUp() {
-    service = new SchoolPrivacyService(notices, consents, requests);
+    service = new SchoolPrivacyService(notices, consents, requests, audits);
     TenantContext.set(new TenantScope("org-1", "branch-1", "session-1", "user-1", "ADMIN"));
     lenient()
         .when(notices.findByNoticeCodeAndVersion(SchoolPrivacyService.NOTICE_CODE, SchoolPrivacyService.NOTICE_VERSION))
@@ -49,6 +49,10 @@ class SchoolPrivacyServiceTest {
             .filter(row -> invocation.getArgument(1).equals(row.getSubjectRef()))
             .filter(row -> invocation.getArgument(2).equals(row.getPurposeCode()))
             .findFirst());
+    lenient().when(requests.existsByOrganizationIdAndDataCategoryAndSubjectLabelAndRequestTypeAndStatusIn(
+            any(), any(), any(), any(), any()))
+        .thenReturn(false);
+    lenient().when(audits.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
     lenient().when(consents.save(any())).thenAnswer(invocation -> {
       SchoolPrivacyConsentEntity row = invocation.getArgument(0);
       storedConsents.removeIf(existing -> existing.getPurposeCode().equals(row.getPurposeCode()));
@@ -102,12 +106,45 @@ class SchoolPrivacyServiceTest {
   }
 
   @Test
-  void duplicateNoticeInsertReadsTheExistingRow() {
+  void missingNoticeDoesNotTryToInsertOne() {
     when(notices.findByNoticeCodeAndVersion(SchoolPrivacyService.NOTICE_CODE, SchoolPrivacyService.NOTICE_VERSION))
-        .thenReturn(Optional.empty(), Optional.of(existingNotice()));
-    when(notices.save(any())).thenThrow(new DataIntegrityViolationException("duplicate"));
+        .thenReturn(Optional.empty());
 
-    assertEquals(SchoolPrivacyService.NOTICE_VERSION, service.currentNotice().version());
+    ResponseStatusException ex = assertThrows(ResponseStatusException.class, () -> service.currentNotice());
+    assertEquals(503, ex.getStatusCode().value());
+  }
+
+  @Test
+  void openDuplicateRequestIsRejected() {
+    when(requests.existsByOrganizationIdAndDataCategoryAndSubjectLabelAndRequestTypeAndStatusIn(
+            any(), any(), any(), any(), any()))
+        .thenReturn(true);
+
+    ResponseStatusException ex =
+        assertThrows(
+            ResponseStatusException.class,
+            () -> service.submit(new RequestCommand("STUDENT", "ADM-1042", "ACCESS", "Again")));
+    assertEquals(409, ex.getStatusCode().value());
+  }
+
+  @Test
+  void rejectingARequestDoesNotDeleteRecords() {
+    when(requests.save(any())).thenAnswer(invocation -> {
+      SchoolPrivacyRequestEntity row = invocation.getArgument(0);
+      storedRequests.clear();
+      storedRequests.add(row);
+      return row;
+    });
+    when(requests.findById(any())).thenAnswer(invocation -> storedRequests.stream()
+        .filter(row -> invocation.getArgument(0).equals(row.getId()))
+        .findFirst());
+
+    SchoolPrivacyViews.RequestView created =
+        service.submit(new RequestCommand("PARENT", "Parent A-2", "ERASURE", "Please review."));
+    SchoolPrivacyViews.RequestView rejected = service.updateStatus(created.id(), "REJECTED", "Kept for school records.");
+
+    assertEquals("REJECTED", rejected.status());
+    assertEquals("REJECTED", rejected.actionTaken());
   }
 
   private static SchoolPrivacyNoticeEntity existingNotice() {
