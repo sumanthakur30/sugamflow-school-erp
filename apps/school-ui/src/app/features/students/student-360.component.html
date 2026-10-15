@@ -261,7 +261,7 @@
         }
         @if (feeAdjustment) {
           <p class="muted">
-            Recurring: {{ feeAdjustment.mode }} {{ feeAdjustment.value }}
+            Recurring: {{ discountValueLabel(feeAdjustment) }}
             · {{ feeAdjustment.status }}
             · {{ feeAdjustment.effectiveFrom || 'start' }} to {{ feeAdjustment.effectiveTo || 'session end' }}
             · {{ feeAdjustment.reason }}
@@ -269,7 +269,7 @@
         }
         @if (feePeriodAdjustment) {
           <p class="muted">
-            {{ feePeriodAdjustment.periodKey }}: {{ feePeriodAdjustment.mode }} {{ feePeriodAdjustment.value }}
+            {{ feePeriodAdjustment.periodKey }}: {{ discountValueLabel(feePeriodAdjustment) }}
             · {{ feePeriodAdjustment.status }}
             · {{ feePeriodAdjustment.reason }}
           </p>
@@ -278,50 +278,98 @@
         <p class="muted">The class fee stays the same. A recurring discount repeats each eligible period. A month discount applies once.</p>
         <div class="grid two">
           <label>
-            Discount
-            <select [(ngModel)]="feeKind" name="feeKind">
+            % Discount
+            <input
+              type="number"
+              [(ngModel)]="feePercent"
+              name="feePercent"
+              min="0"
+              max="100"
+              step="0.01"
+              placeholder="10"
+              (ngModelChange)="markFeeDirty()"
+            />
+            <span class="field-help">Enter a percentage of the eligible fee.</span>
+          </label>
+          <label>
+            ₹ Discount
+            <input
+              type="number"
+              [(ngModel)]="feeFixed"
+              name="feeFixed"
+              min="0"
+              step="0.01"
+              placeholder="2000"
+              (ngModelChange)="markFeeDirty()"
+            />
+            <span class="field-help">Enter a fixed amount to deduct from the eligible fee.</span>
+          </label>
+          <label class="span-2">
+            <span class="field-title">Reason <span class="req">*</span></span>
+            <select [(ngModel)]="feeReasonCode" name="feeReasonCode" (ngModelChange)="markFeeDirty()">
+              <option value="">Select a reason</option>
+              @for (reason of discountReasons; track reason) {
+                <option [value]="reason">{{ reason }}</option>
+              }
+            </select>
+            <span class="field-help">Select the reason for granting this discount.</span>
+          </label>
+          @if (feeReasonCode === 'Other') {
+            <label class="span-2">
+              Custom reason
+              <input
+                [(ngModel)]="feeCustomReason"
+                name="feeCustomReason"
+                placeholder="Describe the discount"
+                (ngModelChange)="markFeeDirty()"
+              />
+            </label>
+          }
+          <label class="span-2">
+            Fee heads
+            <input [(ngModel)]="feeHeads" name="feeHeads" placeholder="TUITION" (ngModelChange)="markFeeDirty()" />
+          </label>
+          <label [class.span-2]="feeKind !== 'PERIOD'">
+            Discount frequency
+            <select [(ngModel)]="feeKind" name="feeKind" (ngModelChange)="onFeeKindChange()">
               <option value="RECURRING">Recurring for the validity period</option>
               <option value="PERIOD">One month or fee period</option>
             </select>
           </label>
-          <label>
-            Type
-            <select [(ngModel)]="feeMode" name="feeMode">
-              <option value="PERCENT">Percentage</option>
-              <option value="FIXED_OFF">Fixed amount</option>
-              <option value="CUSTOM_PAYABLE">Custom payable amount</option>
-            </select>
-          </label>
-          <label>
-            Value
-            <input type="number" [(ngModel)]="feeValue" name="feeValue" min="0" />
-          </label>
-          <label>
-            Fee heads
-            <input [(ngModel)]="feeHeads" name="feeHeads" placeholder="TUITION" />
-          </label>
           @if (feeKind === 'PERIOD') {
             <label>
               Month
-              <input type="month" [(ngModel)]="feePeriod" name="feePeriod" (ngModelChange)="loadFeeQuote()" />
-            </label>
-          } @else {
-            <label>
-              From
-              <input type="date" [(ngModel)]="feeFrom" name="feeFrom" />
-            </label>
-            <label>
-              To
-              <input type="date" [(ngModel)]="feeTo" name="feeTo" />
+              <input type="month" [(ngModel)]="feePeriod" name="feePeriod" (ngModelChange)="onFeePeriodChange()" />
             </label>
           }
           <label>
-            Reason
-            <input [(ngModel)]="feeReason" name="feeReason" placeholder="Merit concession" />
+            Valid From
+            <input type="date" [(ngModel)]="feeFrom" name="feeFrom" (ngModelChange)="markFeeDirty()" />
+          </label>
+          <label>
+            Valid Until
+            <input type="date" [(ngModel)]="feeTo" name="feeTo" (ngModelChange)="markFeeDirty()" />
           </label>
         </div>
+        <div class="discount-preview" aria-live="polite">
+          @if (discountPreview().eligible == null) {
+            <p>Eligible fee is not available for this preview.</p>
+          } @else {
+            <p>Eligible Fee: <strong>{{ formatRupee(discountPreview().eligible) }}</strong></p>
+            @if (discountPreview().showMath) {
+              <p>Discount Applied: <strong>{{ formatRupee(discountPreview().applied) }}</strong></p>
+              <p>Remaining Payable Fee: <strong>{{ formatRupee(discountPreview().remaining) }}</strong></p>
+            }
+          }
+          @if (selectedReasonLabel()) {
+            <p>Selected Discount Reason: <strong>{{ selectedReasonLabel() }}</strong></p>
+          }
+        </div>
+        @if (liveDiscountWarning()) {
+          <p class="fee-warning" role="alert">{{ liveDiscountWarning() }}</p>
+        }
         <div class="head-actions">
-          <button type="button" (click)="saveFeeAdjustment()">Save adjustment</button>
+          <button type="button" (click)="saveFeeAdjustment()">Save discount</button>
           @if (feeKind === 'PERIOD' ? feePeriodAdjustment : feeAdjustment) {
             <button type="button" class="secondary" (click)="removeFeeAdjustment()">Remove this discount</button>
           }

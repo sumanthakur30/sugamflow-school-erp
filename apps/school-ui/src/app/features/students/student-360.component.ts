@@ -41,14 +41,29 @@ export class Student360Component implements OnInit {
   feeAdjustment: any = null;
   feePeriodAdjustment: any = null;
   feeKind = 'RECURRING';
-  feeMode = 'PERCENT';
-  feeValue: number | null = null;
+  feePercent: number | null = null;
+  feeFixed: number | null = null;
   feeHeads = 'TUITION';
   feePeriod = '';
   feeFrom = '';
   feeTo = '';
-  feeReason = '';
+  feeReasonCode = '';
+  feeCustomReason = '';
   feeMessage = '';
+  feeFormDirty = false;
+  private suppressFeeDirty = false;
+  readonly discountReasons = [
+    'Sibling Discount',
+    'Staff Ward Discount',
+    'Alumni Ward Discount',
+    'Merit / Scholarship Discount',
+    'Financial Assistance',
+    'Management Concession',
+    'Economically Weaker Section (EWS) Concession',
+    'Single Parent Concession',
+    'Special Case / Management Approval',
+    'Other',
+  ];
 
   ngOnInit(): void {
     this.route.paramMap.subscribe((pm) => {
@@ -265,18 +280,19 @@ export class Student360Component implements OnInit {
   loadFeeQuote(): void {
     const admissionNo = this.admissionNo();
     if (!admissionNo) return;
-    const preview: Record<string, string> = { studentRef: admissionNo };
-    if (this.feePeriod) {
-      preview['periodKey'] = this.feePeriod;
-    }
-    this.api
-      .post<any>('/api/fee/finance/demands/preview', preview)
-      .subscribe({ next: (quote) => (this.feeQuote = quote), error: () => (this.feeQuote = null) });
+    this.refreshFeeQuote();
     this.api.get<any[]>(`/api/fee/finance/adjustments?admissionNo=${encodeURIComponent(admissionNo)}`).subscribe({
       next: (rows) => {
         const open = (rows ?? []).filter((row) => row.status === 'APPROVED' || row.status === 'PENDING');
         this.feeAdjustment = open.find((row) => (row.kind || 'RECURRING') !== 'PERIOD') ?? null;
         this.feePeriodAdjustment = open.find((row) => row.kind === 'PERIOD') ?? null;
+        const periodBefore = this.feePeriod;
+        if (!this.feeFormDirty) {
+          this.applyOpenAdjustment();
+        }
+        if (this.feePeriod !== periodBefore) {
+          this.refreshFeeQuote();
+        }
       },
       error: () => {
         this.feeAdjustment = null;
@@ -285,31 +301,128 @@ export class Student360Component implements OnInit {
     });
   }
 
+  markFeeDirty(): void {
+    if (!this.suppressFeeDirty) {
+      this.feeFormDirty = true;
+      this.feeMessage = '';
+    }
+  }
+
+  onFeeKindChange(): void {
+    this.feeMessage = '';
+    const row = this.feeKind === 'PERIOD' ? this.feePeriodAdjustment : this.feeAdjustment;
+    if (row) {
+      this.feeFormDirty = false;
+      this.applyOpenAdjustment();
+    }
+    this.refreshFeeQuote();
+  }
+
+  onFeePeriodChange(): void {
+    this.markFeeDirty();
+    this.refreshFeeQuote();
+  }
+
+  liveDiscountWarning(): string {
+    const percent = this.enteredAmount(this.feePercent);
+    const fixed = this.enteredAmount(this.feeFixed);
+    if (percent != null && percent > 0 && fixed != null && fixed > 0) {
+      return 'Fill in only one discount field.';
+    }
+    if (percent != null && (percent <= 0 || percent > 100)) {
+      return 'Percentage must be greater than 0 and no more than 100.';
+    }
+    if (fixed != null && fixed <= 0) {
+      return 'Fixed rupee discount must be greater than 0.';
+    }
+    const eligible = this.eligibleFee();
+    if (fixed != null && fixed > 0 && eligible != null && fixed > eligible) {
+      return 'Fixed discount cannot exceed the eligible fee.';
+    }
+    const pending = this.pendingAmount();
+    if (fixed != null && fixed > 0 && pending > 0 && fixed > pending) {
+      return 'Fixed discount cannot exceed the outstanding balance.';
+    }
+    if (this.feeFrom && this.feeTo && this.feeTo < this.feeFrom) {
+      return 'Valid Until cannot be earlier than Valid From.';
+    }
+    return '';
+  }
+
+  discountPreview(): {
+    eligible: number | null;
+    applied: number | null;
+    remaining: number | null;
+    showMath: boolean;
+  } {
+    const eligible = this.eligibleFee();
+    const warning = this.liveDiscountWarning();
+    const percent = this.enteredAmount(this.feePercent);
+    const fixed = this.enteredAmount(this.feeFixed);
+    const single =
+      !warning &&
+      ((percent != null && percent > 0 && !(fixed != null && fixed > 0)) ||
+        (fixed != null && fixed > 0 && !(percent != null && percent > 0)));
+    if (eligible == null || !single) {
+      return { eligible, applied: null, remaining: null, showMath: false };
+    }
+    const applied =
+      percent != null && percent > 0 ? this.roundMoney((eligible * percent) / 100) : this.roundMoney(fixed ?? 0);
+    return {
+      eligible,
+      applied,
+      remaining: this.roundMoney(eligible - applied),
+      showMath: true,
+    };
+  }
+
+  selectedReasonLabel(): string {
+    if (!this.feeReasonCode) return '';
+    if (this.feeReasonCode === 'Other') {
+      const custom = this.feeCustomReason.trim();
+      return custom ? `Other — ${custom}` : 'Other';
+    }
+    return this.feeReasonCode;
+  }
+
+  formatRupee(value: number | null): string {
+    if (value == null || Number.isNaN(value)) return '';
+    const rounded = this.roundMoney(value);
+    const digits = Number.isInteger(rounded) ? 0 : 2;
+    return `₹${rounded.toLocaleString('en-IN', { minimumFractionDigits: digits, maximumFractionDigits: 2 })}`;
+  }
+
+  discountValueLabel(row: any): string {
+    if (!row) return '';
+    const amount = Number(row.value);
+    if (row.mode === 'PERCENT') return `${row.value}%`;
+    if (row.mode === 'FIXED_OFF') return this.formatRupee(amount);
+    if (row.mode === 'CUSTOM_PAYABLE') return `custom payable ${this.formatRupee(amount)}`;
+    return `${row.mode} ${row.value}`;
+  }
+
   saveFeeAdjustment(): void {
     const admissionNo = this.admissionNo();
-    if (!admissionNo || this.feeValue == null || !this.feeReason.trim()) {
-      this.feeMessage = 'Enter the discount and a reason.';
+    const problem = this.saveDiscountError();
+    if (!admissionNo || problem) {
+      this.feeMessage = this.liveDiscountWarning() ? '' : problem || 'Enter the discount and a reason.';
       return;
     }
-    if (this.feeKind === 'PERIOD' && !this.feePeriod) {
-      this.feeMessage = 'Choose the month this discount applies to.';
-      return;
-    }
+    const percent = this.enteredAmount(this.feePercent);
+    const fixed = this.enteredAmount(this.feeFixed);
+    const usePercent = percent != null && percent > 0;
     this.feeMessage = '';
     this.api
       .post('/api/fee/finance/adjustments', {
         admissionNo,
         kind: this.feeKind,
-        mode: this.feeMode,
-        value: this.feeValue,
+        mode: usePercent ? 'PERCENT' : 'FIXED_OFF',
+        value: usePercent ? percent : fixed,
         periodKey: this.feeKind === 'PERIOD' ? this.feePeriod : undefined,
         effectiveFrom: this.feeFrom || undefined,
         effectiveTo: this.feeTo || undefined,
-        appliesToHeads: this.feeHeads
-          .split(',')
-          .map((head) => head.trim().toUpperCase())
-          .filter(Boolean),
-        reason: this.feeReason.trim(),
+        appliesToHeads: this.feeHeadList(),
+        reason: this.storedReason(),
       })
       .subscribe({
         next: () => {
@@ -317,7 +430,7 @@ export class Student360Component implements OnInit {
             this.feeKind === 'PERIOD'
               ? 'Month discount saved. It applies only to that fee period. Issued receipts stay unchanged.'
               : 'Recurring discount saved. It applies to each eligible future period. Issued receipts stay unchanged.';
-          this.feeReason = '';
+          this.feeFormDirty = false;
           this.loadFeeQuote();
         },
         error: (err) => (this.feeMessage = err?.error?.message ?? 'Could not save the fee adjustment'),
@@ -327,17 +440,15 @@ export class Student360Component implements OnInit {
   removeFeeAdjustment(): void {
     const row = this.feeKind === 'PERIOD' ? this.feePeriodAdjustment : this.feeAdjustment;
     if (!row?.id) return;
-    this.api
-      .post(`/api/fee/finance/adjustments/${row.id}/remove`, {
-        reason: this.feeReason.trim() || 'Removed from student fee profile',
-      })
-      .subscribe({
-        next: () => {
-          this.feeMessage = 'Adjustment removed. The next demand uses the standard fee.';
-          this.loadFeeQuote();
-        },
-        error: (err) => (this.feeMessage = err?.error?.message ?? 'Could not remove the adjustment'),
-      });
+    const reason = this.storedReason() || 'Removed from student fee profile';
+    this.api.post(`/api/fee/finance/adjustments/${row.id}/remove`, { reason }).subscribe({
+      next: () => {
+        this.feeMessage = 'Adjustment removed. The next demand uses the standard fee.';
+        this.feeFormDirty = false;
+        this.loadFeeQuote();
+      },
+      error: (err) => (this.feeMessage = err?.error?.message ?? 'Could not remove the adjustment'),
+    });
   }
 
   admissionQuery(): Record<string, string> {
@@ -353,6 +464,132 @@ export class Student360Component implements OnInit {
         label: this.prettyLabel(key),
         value: typeof value === 'boolean' ? (value ? 'Yes' : 'No') : String(value),
       }));
+  }
+
+  private refreshFeeQuote(): void {
+    const admissionNo = this.admissionNo();
+    if (!admissionNo) return;
+    const preview: Record<string, string> = { studentRef: admissionNo };
+    if (this.feeKind === 'PERIOD' && this.feePeriod) {
+      preview['periodKey'] = this.feePeriod;
+    }
+    this.api
+      .post<any>('/api/fee/finance/demands/preview', preview)
+      .subscribe({ next: (quote) => (this.feeQuote = quote), error: () => (this.feeQuote = null) });
+  }
+
+  private applyOpenAdjustment(): void {
+    const row = this.feeKind === 'PERIOD' ? this.feePeriodAdjustment : this.feeAdjustment;
+    this.suppressFeeDirty = true;
+    if (!row) {
+      this.feePercent = null;
+      this.feeFixed = null;
+      this.feeReasonCode = '';
+      this.feeCustomReason = '';
+      this.suppressFeeDirty = false;
+      return;
+    }
+    const heads = Array.isArray(row.appliesToHeads) ? row.appliesToHeads.filter(Boolean) : [];
+    if (heads.length) {
+      this.feeHeads = heads.join(', ');
+    }
+    this.feeFrom = row.effectiveFrom || '';
+    this.feeTo = row.effectiveTo || '';
+    if (row.periodKey) {
+      this.feePeriod = String(row.periodKey).slice(0, 7);
+    }
+    const parsed = this.parseStoredReason(String(row.reason || ''));
+    this.feeReasonCode = parsed.code;
+    this.feeCustomReason = parsed.custom;
+    if (row.mode === 'PERCENT') {
+      this.feePercent = Number(row.value);
+      this.feeFixed = null;
+    } else if (row.mode === 'FIXED_OFF') {
+      this.feeFixed = Number(row.value);
+      this.feePercent = null;
+    } else {
+      this.feePercent = null;
+      this.feeFixed = null;
+    }
+    this.suppressFeeDirty = false;
+  }
+
+  private saveDiscountError(): string {
+    const live = this.liveDiscountWarning();
+    if (live) return live;
+    const percent = this.enteredAmount(this.feePercent);
+    const fixed = this.enteredAmount(this.feeFixed);
+    const hasPercent = percent != null && percent > 0;
+    const hasFixed = fixed != null && fixed > 0;
+    if (!hasPercent && !hasFixed) {
+      return 'Enter a percentage or a fixed rupee discount.';
+    }
+    if (!this.feeReasonCode) {
+      return 'Select the reason for granting this discount.';
+    }
+    if (this.feeReasonCode === 'Other' && this.feeCustomReason.trim().length < 3) {
+      return 'Enter a custom reason.';
+    }
+    if (this.feeKind === 'PERIOD' && !this.feePeriod) {
+      return 'Choose the month this discount applies to.';
+    }
+    return '';
+  }
+
+  private storedReason(): string {
+    if (this.feeReasonCode === 'Other') {
+      const custom = this.feeCustomReason.trim();
+      return custom ? `Other: ${custom}` : '';
+    }
+    return this.feeReasonCode.trim();
+  }
+
+  private parseStoredReason(stored: string): { code: string; custom: string } {
+    const text = stored.trim();
+    if (!text) return { code: '', custom: '' };
+    if (this.discountReasons.includes(text) && text !== 'Other') {
+      return { code: text, custom: '' };
+    }
+    if (text.toLowerCase().startsWith('other:')) {
+      return { code: 'Other', custom: text.slice(text.indexOf(':') + 1).trim() };
+    }
+    return { code: 'Other', custom: text };
+  }
+
+  private feeHeadList(): string[] {
+    return this.feeHeads
+      .split(',')
+      .map((head) => head.trim().toUpperCase())
+      .filter(Boolean);
+  }
+
+  private eligibleFee(): number | null {
+    const lines = this.feeQuote?.lines;
+    if (!Array.isArray(lines) || !lines.length) return null;
+    const heads = this.feeHeadList();
+    const matched = lines.filter((line: any) => {
+      const key = String(line?.headKey || '').toUpperCase();
+      return !!key && (heads.length === 0 || heads.includes(key));
+    });
+    if (!matched.length) return null;
+    const sum = matched.reduce((total: number, line: any) => total + Number(line?.amount || 0), 0);
+    if (!(sum > 0)) return null;
+    return this.roundMoney(sum);
+  }
+
+  private pendingAmount(): number {
+    const pending = Number(this.data?.fee?.pendingAmount);
+    return Number.isFinite(pending) && pending > 0 ? pending : 0;
+  }
+
+  private enteredAmount(value: number | null): number | null {
+    if (value == null || value === ('' as unknown)) return null;
+    const amount = Number(value);
+    return Number.isFinite(amount) ? amount : null;
+  }
+
+  private roundMoney(value: number): number {
+    return Math.round(value * 100) / 100;
   }
 
   private prettyLabel(key: string): string {
