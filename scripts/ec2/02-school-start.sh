@@ -10,7 +10,7 @@
 # HCP public site full steps: docs/HCP_EC2_WEBSITE_DEPLOY.md
 set -euo pipefail
 
-SCHOOL_DIR="${SCHOOL_DIR:-/home/ec2-user/opt/school}"
+SCHOOL_DIR="${SCHOOL_DIR:-/opt/school}"
 COMPOSE_FILE="${SCHOOL_COMPOSE:-docker-compose.school.ec2-rds.yml}"
 ENV_FILE="${SCHOOL_ENV:-.env.school.production}"
 PHASE="${PHASE:-a}"
