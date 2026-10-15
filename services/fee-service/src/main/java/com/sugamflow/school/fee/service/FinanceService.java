@@ -6,6 +6,7 @@ import com.sugamflow.school.common.tenant.TenantContext;
 import com.sugamflow.school.common.tenant.TenantScope;
 import com.sugamflow.school.fee.config.FeeProperties;
 import com.sugamflow.school.fee.finance.FeeConcessionCalculator;
+import com.sugamflow.school.fee.finance.FeeStructureMatcher;
 import com.sugamflow.school.fee.finance.FinanceCatalog;
 import com.sugamflow.school.fee.persistence.entity.StudentFeeAdjustmentEntity;
 import com.sugamflow.school.fee.integration.ConfigEngineClient;
@@ -23,9 +24,12 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -119,6 +123,9 @@ public class FinanceService {
     payload.put("definitionKey", key);
     payload.remove("id");
     payload.remove("version");
+    if (FinanceCatalog.TYPE_FEE_STRUCTURE.equals(type)) {
+      validateStructureLines(payload);
+    }
 
     FinanceDefinitionEntity existing =
         definitionRepo
@@ -417,13 +424,6 @@ public class FinanceService {
     ensureDefaults(scope);
     Map<String, Object> settings = feeModuleSettings(scope);
 
-    String structureKey = stringOr(body.get("structureKey"), null);
-    if (structureKey == null || structureKey.isBlank()) {
-      structureKey = stringOr(settings.get("defaultStructureKey"), "grade_8_annual");
-    }
-    Map<String, Object> structure =
-        requireDefinition(scope, FinanceCatalog.TYPE_FEE_STRUCTURE, structureKey);
-
     String studentRef = stringOr(body.get("studentRef"), "");
     String studentName = stringOr(body.get("studentName"), "");
     String classSection = stringOr(body.get("classSection"), "");
@@ -447,6 +447,27 @@ public class FinanceService {
     }
     applyBedAndRoute(scope, studentRef, studentAnswers);
 
+    String structureKey = stringOr(body.get("structureKey"), null);
+    String structureMatch = "REQUESTED";
+    if (structureKey == null || structureKey.isBlank()) {
+      String matched = matchStructureKey(classSection, scope.academicSessionId());
+      if (matched != null) {
+        structureKey = matched;
+        structureMatch = "CLASS";
+      } else if (!classSection.isBlank()) {
+        throw new FeeException(
+            "VALIDATION",
+            "No fee structure is configured for "
+                + classSection
+                + ". Add one under Finance → Structures for this class and academic year.");
+      } else {
+        structureKey = stringOr(settings.get("defaultStructureKey"), "grade_8_annual");
+        structureMatch = "DEFAULT";
+      }
+    }
+    Map<String, Object> structure =
+        requireDefinition(scope, FinanceCatalog.TYPE_FEE_STRUCTURE, structureKey);
+
     Map<String, Object> headIndex = headIndex(scope);
     List<Map<String, Object>> lines = new ArrayList<>();
     BigDecimal gross = BigDecimal.ZERO;
@@ -456,7 +477,7 @@ public class FinanceService {
         if (!(item instanceof Map<?, ?> m)) continue;
         Map<String, Object> line = (Map<String, Object>) m;
         String headKey = stringOr(line.get("headKey"), "");
-        if (headKey.isBlank()) continue;
+        if (headKey.isBlank() || !lineActive(line)) continue;
         BigDecimal amount = toDecimal(line.get("amount"));
         Map<String, Object> head = (Map<String, Object>) headIndex.getOrDefault(headKey, Map.of());
         Map<String, Object> outLine = enrichLine(headKey, amount, line, head, settings);
@@ -601,6 +622,7 @@ public class FinanceService {
 
     Map<String, Object> out = new LinkedHashMap<>();
     out.put("structureKey", structureKey);
+    out.put("structureMatch", structureMatch);
     out.put("structureName", stringOr(structure.get("name"), structureKey));
     out.put("studentRef", studentRef.isBlank() ? null : studentRef);
     out.put("studentName", studentName.isBlank() ? null : studentName);
@@ -998,6 +1020,72 @@ public class FinanceService {
         .orElseThrow(() -> new FeeException("NOT_FOUND", type + " not found: " + key));
   }
 
+  private String matchStructureKey(String classSection, String academicSessionId) {
+    List<FeeStructureMatcher.Candidate> candidates = new ArrayList<>();
+    for (Map<String, Object> dto : listDefinitions(FinanceCatalog.TYPE_FEE_STRUCTURE)) {
+      Object payload = dto.get("payload");
+      if (!(payload instanceof Map<?, ?> raw)) {
+        continue;
+      }
+      String className = "";
+      String session = "";
+      if (raw.get("eligibility") instanceof Map<?, ?> eligibility) {
+        className = stringOr(eligibility.get("classSection"), "");
+        session = stringOr(eligibility.get("academicSessionId"), "");
+      }
+      candidates.add(
+          new FeeStructureMatcher.Candidate(
+              stringOr(dto.get("definitionKey"), ""), className, session));
+    }
+    return FeeStructureMatcher.pick(candidates, classSection, academicSessionId);
+  }
+
+  private static boolean lineActive(Map<String, Object> line) {
+    Object active = line.get("active");
+    if (active instanceof Boolean flag) {
+      return flag;
+    }
+    String status = stringOr(line.get("status"), "");
+    return !"INACTIVE".equalsIgnoreCase(status) && !"false".equalsIgnoreCase(String.valueOf(active));
+  }
+
+  private void validateStructureLines(Map<String, Object> payload) {
+    Object raw = payload.get("lines");
+    if (!(raw instanceof List<?> list) || list.isEmpty()) {
+      throw new FeeException("VALIDATION", "A fee structure needs at least one fee head");
+    }
+    Set<String> seen = new HashSet<>();
+    boolean anyActive = false;
+    for (Object item : list) {
+      if (!(item instanceof Map<?, ?> rawLine)) {
+        throw new FeeException("VALIDATION", "Each fee line must include a fee head and amount");
+      }
+      @SuppressWarnings("unchecked")
+      Map<String, Object> line = (Map<String, Object>) rawLine;
+      String headKey = stringOr(line.get("headKey"), "").trim().toUpperCase(Locale.ROOT);
+      if (headKey.isBlank()) {
+        throw new FeeException("VALIDATION", "Each fee line needs a fee head");
+      }
+      if (!seen.add(headKey)) {
+        throw new FeeException("VALIDATION", "Duplicate fee head " + headKey + " in this structure");
+      }
+      line.put("headKey", headKey);
+      BigDecimal amount = toDecimal(line.get("amount"));
+      if (amount.compareTo(BigDecimal.ZERO) < 0) {
+        throw new FeeException("VALIDATION", "Fee amount cannot be negative for " + headKey);
+      }
+      if (lineActive(line)) {
+        anyActive = true;
+        if (amount.compareTo(BigDecimal.ZERO) <= 0) {
+          throw new FeeException("VALIDATION", "Active fee head " + headKey + " needs an amount greater than zero");
+        }
+      }
+    }
+    if (!anyActive) {
+      throw new FeeException("VALIDATION", "At least one fee head must stay active");
+    }
+  }
+
   private Map<String, Object> familyConcessions(
       TenantScope scope,
       String studentRef,
@@ -1054,6 +1142,10 @@ public class FinanceService {
       breakdown.put("studentAdjustmentStatus", row.getStatus());
       breakdown.put("studentReason", row.getReason());
       breakdown.put("studentMode", row.getMode());
+      breakdown.put("studentHeads", row.getAppliesToHeads() == null ? List.of() : row.getAppliesToHeads());
+    }
+    if (policy != null && policy.appliesToHeads() != null) {
+      breakdown.put("siblingHeads", policy.appliesToHeads());
     }
     return breakdown;
   }

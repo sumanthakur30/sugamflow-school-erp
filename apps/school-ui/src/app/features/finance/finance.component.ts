@@ -126,6 +126,8 @@ export class FinanceComponent implements OnInit, OnDestroy {
 
   headsQ = '';
   structuresQ = '';
+  structureClassQ = '';
+  structureSessionQ = '';
   dueQ = '';
   duePageIndex = 0;
   duePageSize = 10;
@@ -184,8 +186,12 @@ export class FinanceComponent implements OnInit, OnDestroy {
     classSection: '',
     academicSessionId: '',
     notes: '',
-    linesText: 'TUITION,12000,M\nLIBRARY,500,Y',
+    linesText: '',
   };
+  structureLines: Array<{ headKey: string; amount: string; frequency: string; active: boolean }> = [
+    { headKey: '', amount: '', frequency: 'M', active: true },
+  ];
+  private writingStructureLines = false;
   editingStructureKey: string | null = null;
 
   adjustDraft = {
@@ -524,16 +530,24 @@ export class FinanceComponent implements OnInit, OnDestroy {
 
   get filteredStructures(): any[] {
     const q = this.structuresQ.trim().toLowerCase();
-    if (!q) return this.structures;
+    const classQ = this.structureClassQ.trim().toLowerCase();
+    const sessionQ = this.structureSessionQ.trim().toLowerCase();
     return this.structures.filter((s) => {
       const p = this.payload(s);
+      const elig = p.eligibility || {};
+      const className = String(elig.classSection || '').toLowerCase();
+      const session = String(elig.academicSessionId || '').toLowerCase();
+      if (classQ && !className.includes(classQ)) return false;
+      if (sessionQ && !session.includes(sessionQ)) return false;
+      if (!q) return true;
       return (
         String(p.name || '')
           .toLowerCase()
           .includes(q) ||
         String(s.definitionKey || '')
           .toLowerCase()
-          .includes(q)
+          .includes(q) ||
+        className.includes(q)
       );
     });
   }
@@ -704,6 +718,18 @@ export class FinanceComponent implements OnInit, OnDestroy {
     this.editingStructureKey = s.definitionKey || p.definitionKey || null;
     const elig = p.eligibility || {};
     const lines = Array.isArray(p.lines) ? p.lines : [];
+    this.structureLines = lines.length
+      ? lines.map((l: any) => ({
+          headKey: String(l.headKey || ''),
+          amount: String(l.amount ?? ''),
+          frequency: String(l.frequency || 'Y'),
+          active: l.active !== false && String(l.status || '').toUpperCase() !== 'INACTIVE',
+        }))
+      : [{ headKey: '', amount: '', frequency: 'M', active: true }];
+    this.structureLines = [
+      ...this.structureLines,
+      { headKey: '', amount: '', frequency: 'M', active: true },
+    ];
     this.structureDraft = {
       definitionKey: String(this.editingStructureKey || ''),
       name: String(p.name || ''),
@@ -711,9 +737,7 @@ export class FinanceComponent implements OnInit, OnDestroy {
       classSection: String(elig.classSection || ''),
       academicSessionId: String(elig.academicSessionId || ''),
       notes: String(p.notes || ''),
-      linesText: lines
-        .map((l: any) => `${l.headKey},${l.amount},${l.frequency || 'Y'}`)
-        .join('\n'),
+      linesText: this.formatStructureLines(),
     };
     this.setTab('structures');
     queueMicrotask(() =>
@@ -721,8 +745,19 @@ export class FinanceComponent implements OnInit, OnDestroy {
     );
   }
 
+  copyStructure(s: any): void {
+    this.editStructure(s);
+    this.editingStructureKey = null;
+    this.structureDraft = {
+      ...this.structureDraft,
+      definitionKey: `${this.structureDraft.definitionKey}_COPY`,
+      name: `${this.structureDraft.name} copy`,
+    };
+  }
+
   resetStructureDraft(): void {
     this.editingStructureKey = null;
+    this.structureLines = [{ headKey: '', amount: '', frequency: 'M', active: true }];
     this.structureDraft = {
       definitionKey: '',
       name: '',
@@ -730,8 +765,30 @@ export class FinanceComponent implements OnInit, OnDestroy {
       classSection: '',
       academicSessionId: '',
       notes: '',
-      linesText: 'TUITION,12000,M\nLIBRARY,500,Y',
+      linesText: '',
     };
+  }
+
+  onStructureLineChange(
+    index: number,
+    field: 'headKey' | 'amount' | 'frequency' | 'active',
+    value: string | boolean,
+  ): void {
+    const row = this.structureLines[index];
+    if (!row) return;
+    if (field === 'active') row.active = !!value;
+    else row[field] = String(value);
+    this.writingStructureLines = true;
+    this.structureDraft.linesText = this.formatStructureLines();
+    this.writingStructureLines = false;
+    if (index === this.structureLines.length - 1 && row.headKey.trim()) {
+      this.structureLines = [...this.structureLines, { headKey: '', amount: '', frequency: 'M', active: true }];
+    }
+  }
+
+  onStructureTextChange(): void {
+    if (this.writingStructureLines) return;
+    this.structureLines = this.parseStructureLines(this.structureDraft.linesText);
   }
 
   saveStructure(): void {
@@ -740,22 +797,33 @@ export class FinanceComponent implements OnInit, OnDestroy {
       this.error = 'Structure key and name are required';
       return;
     }
-    const lines = this.structureDraft.linesText
-      .split(/\r?\n/)
-      .map((row) => row.trim())
-      .filter(Boolean)
-      .map((row) => {
-        const [headKey, amount, frequency] = row.split(',').map((x) => x.trim());
-        return {
-          headKey: (headKey || '').toUpperCase(),
-          amount: Number(amount || 0),
-          frequency: (frequency || 'Y').toUpperCase(),
-          optional: false,
-        };
-      })
-      .filter((l) => l.headKey && l.amount > 0);
-    if (!lines.length) {
-      this.error = 'Add at least one line as HEAD,amount,frequency';
+    const lines = this.structureLines
+      .map((line) => ({
+        headKey: line.headKey.trim().toUpperCase(),
+        amount: Number(line.amount || 0),
+        frequency: (line.frequency || 'M').trim().toUpperCase() || 'M',
+        active: line.active !== false,
+        optional: false,
+      }))
+      .filter((line) => line.headKey);
+    const seen = new Set<string>();
+    for (const line of lines) {
+      if (seen.has(line.headKey)) {
+        this.error = `Duplicate fee head ${line.headKey}`;
+        return;
+      }
+      seen.add(line.headKey);
+      if (line.amount < 0 || Number.isNaN(line.amount)) {
+        this.error = `Amount for ${line.headKey} cannot be negative`;
+        return;
+      }
+      if (line.active && line.amount <= 0) {
+        this.error = `Active fee head ${line.headKey} needs an amount greater than zero`;
+        return;
+      }
+    }
+    if (!lines.some((line) => line.active)) {
+      this.error = 'Add at least one active fee head';
       return;
     }
     this.busy = true;
@@ -784,6 +852,37 @@ export class FinanceComponent implements OnInit, OnDestroy {
           this.error = err?.error?.message ?? 'Save structure failed';
         },
       });
+  }
+
+  private formatStructureLines(): string {
+    return this.structureLines
+      .filter((line) => line.headKey.trim() || String(line.amount).trim())
+      .map((line) => {
+        const status = line.active ? '' : ',INACTIVE';
+        return `${line.headKey.trim().toUpperCase()},${line.amount},${(line.frequency || 'M').toUpperCase()}${status}`;
+      })
+      .join('\n');
+  }
+
+  private parseStructureLines(
+    text: string,
+  ): Array<{ headKey: string; amount: string; frequency: string; active: boolean }> {
+    const rows = text
+      .split(/\r?\n/)
+      .map((row) => row.trim())
+      .filter(Boolean)
+      .map((row) => {
+        const [headKey, amount, frequency, status] = row.split(',').map((part) => part.trim());
+        const flag = String(status || '').toUpperCase();
+        return {
+          headKey: headKey || '',
+          amount: amount || '',
+          frequency: (frequency || 'M').toUpperCase(),
+          active: flag !== 'INACTIVE' && flag !== 'FALSE',
+        };
+      });
+    rows.push({ headKey: '', amount: '', frequency: 'M', active: true });
+    return rows;
   }
 
   postAdjustment(): void {
