@@ -25,8 +25,20 @@ class FeeStructureMatcherTest {
   }
 
   @Test
-  void sectionOverrideBeatsClassStructure() {
-    assertEquals("grade_9a", FeeStructureMatcher.pick(STRUCTURES, "Grade 9-A", "2025-26"));
+  void gradeStructureCoversEverySection() {
+    assertEquals("grade_9", FeeStructureMatcher.pick(STRUCTURES, "Grade 9-A", "2025-26"));
+    assertEquals("grade_9", FeeStructureMatcher.pick(STRUCTURES, "Grade 9-B", "2025-26"));
+    assertEquals("grade_9", FeeStructureMatcher.pick(STRUCTURES, "Grade 9-C", "2025-26"));
+  }
+
+  @Test
+  void sectionStructureIsUsedForTheWholeGradeWhenNoPlainGradeExists() {
+    List<Candidate> structures =
+        List.of(new Candidate("grade_7a", "Grade 7-A", "2025-26"), new Candidate("grade_8", "Grade 8-A", "2025-26"));
+    assertEquals("grade_7a", FeeStructureMatcher.pick(structures, "Grade 7-B", "2025-26"));
+    assertEquals("grade_7a", FeeStructureMatcher.pick(structures, "Grade 7-C", "2025-26"));
+    assertEquals("grade_7a", FeeStructureMatcher.pick(structures, "Grade 7", "2025-26"));
+    assertEquals("grade_8", FeeStructureMatcher.pick(structures, "Grade 8-B", "2025-26"));
   }
 
   @Test
@@ -45,7 +57,9 @@ class FeeStructureMatcherTest {
     List<Candidate> structures =
         List.of(new Candidate("grade_1", "Grade 1", "2025-26"), new Candidate("grade_10", "Grade 10", "2025-26"));
     assertEquals("grade_10", FeeStructureMatcher.pick(structures, "Grade 10", "2025-26"));
+    assertEquals("grade_10", FeeStructureMatcher.pick(structures, "Grade 10-A", "2025-26"));
     assertEquals("grade_1", FeeStructureMatcher.pick(structures, "Grade 1", "2025-26"));
+    assertEquals("grade_1", FeeStructureMatcher.pick(structures, "Grade 1-A", "2025-26"));
   }
 
   @Test
