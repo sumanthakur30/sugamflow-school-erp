@@ -101,6 +101,32 @@ class FeeHeadDiscountTest {
   }
 
   @Test
+  void aHeadThatDoesNotAllowDiscountKeepsItsFullAmount() {
+    List<FeeLine> lines =
+        List.of(
+            new FeeLine("TUITION", new BigDecimal("2000"), true),
+            new FeeLine("ANNUAL", new BigDecimal("5000"), false));
+    StudentAdjustment recurring = adjustment("PERCENT", "10", List.of("TUITION", "ANNUAL"));
+    Result result =
+        FeeConcessionCalculator.calculate(
+            lines, BigDecimal.ZERO, List.of(), recurring, null, List.of(), "ADM-1", false, null);
+    assertEquals(new BigDecimal("200.00"), result.studentConcession());
+    List<BigDecimal> shares =
+        FeeConcessionCalculator.allocate(
+            lines,
+            BigDecimal.ZERO,
+            List.of(),
+            result.studentConcession(),
+            List.of("TUITION", "ANNUAL"),
+            BigDecimal.ZERO,
+            List.of(),
+            BigDecimal.ZERO,
+            List.of());
+    assertEquals(new BigDecimal("200.00"), shares.get(0));
+    assertEquals(new BigDecimal("0.00"), shares.get(1));
+  }
+
+  @Test
   void partialPaymentDoesNotApplyTheHeadDiscountAgain() {
     assertEquals(
         new BigDecimal("8900.00"),
