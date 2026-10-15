@@ -60,6 +60,13 @@ class FeeDiscountPolicyTest {
   }
 
   @Test
+  void fixedDiscountDoesNotExceedTheEligibleFee() {
+    Result result = quote(recurring("FIXED_OFF", "5000"), null);
+    assertEquals(new BigDecimal("2000.00"), result.studentConcession());
+    assertEquals(new BigDecimal("0.00"), result.payable());
+  }
+
+  @Test
   void discountOutsideItsDatesDoesNotApply() {
     assertTrue(FeePeriodFilter.covers(LocalDate.of(2026, 4, 1), LocalDate.of(2026, 8, 31), LocalDate.of(2026, 8, 1)));
     assertFalse(FeePeriodFilter.covers(LocalDate.of(2026, 4, 1), LocalDate.of(2026, 8, 31), LocalDate.of(2026, 9, 1)));

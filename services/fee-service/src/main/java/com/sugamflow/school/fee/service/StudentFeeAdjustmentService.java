@@ -5,6 +5,7 @@ import com.sugamflow.school.common.tenant.TenantContext;
 import com.sugamflow.school.common.tenant.TenantScope;
 import com.sugamflow.school.fee.finance.FeeConcessionCalculator;
 import com.sugamflow.school.fee.finance.FeePeriodFilter;
+import com.sugamflow.school.fee.finance.StudentDiscountRules;
 import com.sugamflow.school.fee.integration.ConfigEngineClient;
 import com.sugamflow.school.fee.persistence.entity.StudentFeeAdjustmentAuditEntity;
 import com.sugamflow.school.fee.persistence.entity.StudentFeeAdjustmentEntity;
@@ -85,19 +86,16 @@ public class StudentFeeAdjustmentService {
     if (admissionNo.isBlank()) {
       throw new FeeException("BAD_REQUEST", "Admission number is required");
     }
-    if (reason.length() < 3) {
-      throw new FeeException("BAD_REQUEST", "A reason is required for a student fee adjustment");
-    }
     String mode = text(body.get("mode")).toUpperCase(Locale.ROOT);
     if (!mode.equals("FIXED_OFF") && !mode.equals("PERCENT") && !mode.equals("CUSTOM_PAYABLE")) {
       throw new FeeException("BAD_REQUEST", "Mode must be FIXED_OFF, PERCENT, or CUSTOM_PAYABLE");
     }
     BigDecimal value = decimal(body.get("value"));
-    if (value.compareTo(BigDecimal.ZERO) < 0) {
-      throw new FeeException("BAD_REQUEST", "Adjustment value cannot be negative");
-    }
-    if ("PERCENT".equals(mode) && value.compareTo(BigDecimal.valueOf(100)) > 0) {
-      throw new FeeException("BAD_REQUEST", "Percentage cannot exceed 100");
+    LocalDate from = date(body.get("effectiveFrom"));
+    LocalDate to = date(body.get("effectiveTo"));
+    String problem = StudentDiscountRules.validate(mode, value, reason, from, to);
+    if (problem != null) {
+      throw new FeeException("BAD_REQUEST", problem);
     }
     String session = scope.academicSessionId() == null ? "" : scope.academicSessionId();
     String kind = kindOf(body.get("kind"));
@@ -119,8 +117,8 @@ public class StudentFeeAdjustmentService {
     row.setAdjustmentValue(value);
     row.setAppliesToHeads(FeeConcessionCalculator.heads(body.get("appliesToHeads")));
     row.setReason(reason);
-    row.setEffectiveFrom(date(body.get("effectiveFrom")));
-    row.setEffectiveTo(date(body.get("effectiveTo")));
+    row.setEffectiveFrom(from);
+    row.setEffectiveTo(to);
     row.setCreatedBy(scope.userId());
     row.setCreatedAt(Instant.now());
     row.setUpdatedAt(Instant.now());

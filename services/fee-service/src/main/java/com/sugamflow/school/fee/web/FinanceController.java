@@ -145,7 +145,11 @@ public class FinanceController {
   @PostMapping("/adjustments")
   public ApiResponse<Map<String, Object>> createAdjustment(@RequestBody Map<String, Object> body) {
     return ApiResponse.ok(
-        wrap(() -> adjustments.create(body, service.concessionApprovalRequired())));
+        wrap(
+            () -> {
+              service.assertFixedDiscountWithinLimits(body);
+              return adjustments.create(body, service.concessionApprovalRequired());
+            }));
   }
 
   @PostMapping("/adjustments/{id}/decision")

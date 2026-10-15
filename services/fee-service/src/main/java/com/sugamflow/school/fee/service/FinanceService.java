@@ -9,6 +9,7 @@ import com.sugamflow.school.fee.finance.FeeConcessionCalculator;
 import com.sugamflow.school.fee.finance.FeePeriodFilter;
 import com.sugamflow.school.fee.finance.FeeStructureMatcher;
 import com.sugamflow.school.fee.finance.FinanceCatalog;
+import com.sugamflow.school.fee.finance.StudentDiscountRules;
 import com.sugamflow.school.fee.persistence.entity.StudentFeeAdjustmentEntity;
 import com.sugamflow.school.fee.integration.ConfigEngineClient;
 import com.sugamflow.school.fee.integration.StudentProfileClient;
@@ -53,6 +54,7 @@ public class FinanceService {
   private final FeeCollectionService feeCollections;
   private final StudentProfileClient studentProfiles;
   private final StudentFeeAdjustmentService feeAdjustments;
+  private final FeeClearanceService clearance;
   private final ObjectMapper objectMapper;
 
   public FinanceService(
@@ -64,6 +66,7 @@ public class FinanceService {
       @Lazy FeeCollectionService feeCollections,
       StudentProfileClient studentProfiles,
       StudentFeeAdjustmentService feeAdjustments,
+      FeeClearanceService clearance,
       ObjectMapper objectMapper) {
     this.definitionRepo = definitionRepo;
     this.transactionRepo = transactionRepo;
@@ -73,6 +76,7 @@ public class FinanceService {
     this.feeCollections = feeCollections;
     this.studentProfiles = studentProfiles;
     this.feeAdjustments = feeAdjustments;
+    this.clearance = clearance;
     this.objectMapper = objectMapper;
   }
 
@@ -157,6 +161,68 @@ public class FinanceService {
   @Transactional
   public Map<String, Object> previewDemand(Map<String, Object> body) {
     return buildDemand(body, false);
+  }
+
+  /** Reject a fixed discount that is larger than a known eligible fee or a positive outstanding balance. */
+  public void assertFixedDiscountWithinLimits(Map<String, Object> body) {
+    String mode = stringOr(body.get("mode"), "").toUpperCase(Locale.ROOT);
+    if (!"FIXED_OFF".equals(mode)) {
+      return;
+    }
+    String problem =
+        StudentDiscountRules.fixedCap(
+            mode, toDecimal(body.get("value")), lookupEligible(body), lookupPending(stringOr(body.get("admissionNo"), "")));
+    if (problem != null) {
+      throw new FeeException("BAD_REQUEST", problem);
+    }
+  }
+
+  private BigDecimal lookupEligible(Map<String, Object> body) {
+    try {
+      Map<String, Object> previewBody = new LinkedHashMap<>();
+      previewBody.put("studentRef", stringOr(body.get("admissionNo"), ""));
+      String periodKey = stringOr(body.get("periodKey"), "");
+      if (!periodKey.isBlank()) {
+        previewBody.put("periodKey", periodKey);
+      }
+      Object lines = previewDemand(previewBody).get("lines");
+      if (!(lines instanceof List<?> list) || list.isEmpty()) {
+        return null;
+      }
+      List<String> heads = FeeConcessionCalculator.heads(body.get("appliesToHeads"));
+      BigDecimal sum = BigDecimal.ZERO;
+      boolean matched = false;
+      for (Object item : list) {
+        if (!(item instanceof Map<?, ?> line)) {
+          continue;
+        }
+        String head = stringOr(line.get("headKey"), "");
+        if (!heads.isEmpty() && heads.stream().noneMatch(candidate -> candidate.equalsIgnoreCase(head))) {
+          continue;
+        }
+        matched = true;
+        sum = sum.add(toDecimal(line.get("amount")));
+      }
+      if (!matched || sum.compareTo(BigDecimal.ZERO) <= 0) {
+        return null;
+      }
+      return sum;
+    } catch (RuntimeException ex) {
+      log.debug("Eligible fee unavailable for discount check: {}", ex.getMessage());
+      return null;
+    }
+  }
+
+  private BigDecimal lookupPending(String admissionNo) {
+    if (admissionNo == null || admissionNo.isBlank()) {
+      return null;
+    }
+    try {
+      return toDecimal(clearance.snapshot(admissionNo).get("pendingAmount"));
+    } catch (RuntimeException ex) {
+      log.debug("Outstanding balance unavailable for discount check: {}", ex.getMessage());
+      return null;
+    }
   }
 
   /** Persist FEE_DEMAND txn and optionally open a pending fee collection. */
