@@ -3,9 +3,12 @@
     <div>
       <p class="eyebrow">Students</p>
       <h2>Import students</h2>
-      <p>Add many students at once from a CSV file. Nothing is saved until you review and confirm.</p>
+      <p>Add many students at once from a CSV or Excel file. Nothing is saved until you review and confirm.</p>
     </div>
-    <button type="button" class="secondary" (click)="downloadTemplate()">Download CSV template</button>
+    <div class="head-actions">
+      <button type="button" class="secondary" (click)="downloadTemplate('csv')">Download CSV template</button>
+      <button type="button" class="secondary" (click)="downloadTemplate('xlsx')">Download Excel template</button>
+    </div>
   </header>
 
   @if (error) {
@@ -23,7 +26,7 @@
     <nav class="import-steps" aria-label="Import progress">
       <div class="import-step active">
         <span>1</span>
-        <div><strong>Choose file</strong><small>Select your student CSV</small></div>
+        <div><strong>Choose file</strong><small>Select a CSV or Excel file</small></div>
       </div>
       <div class="step-line"></div>
       <div class="import-step" [class.active]="selected">
@@ -40,16 +43,16 @@
     <section class="panel upload-card">
       <div class="section-heading">
         <div>
-          <h3>1. Choose a student CSV file</h3>
-          <p class="muted">Use the template so column names and values are recognized correctly.</p>
+          <h3>1. Choose a student CSV or Excel file</h3>
+          <p class="muted">CSV and Excel (.xlsx) both work. Full Name, Class, and Roll Number are recognized.</p>
         </div>
       </div>
 
       <label class="file-picker">
-        <input type="file" accept=".csv,text/csv" (change)="onFileSelected($event)" />
-        <span class="file-icon">CSV</span>
+        <input type="file" accept=".csv,.xlsx,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" (change)="onFileSelected($event)" />
+        <span class="file-icon">{{ selectedFileName.toLowerCase().endsWith('.xlsx') ? 'XLS' : 'CSV' }}</span>
         <span class="file-copy">
-          <strong>{{ selectedFileName || 'Choose CSV file' }}</strong>
+          <strong>{{ selectedFileName || 'Choose CSV or Excel file' }}</strong>
           <small>
             @if (selectedFileName) {
               {{ sourceRowCount }} student row{{ sourceRowCount === 1 ? '' : 's' }} ready to review
@@ -116,6 +119,8 @@
         </div>
 
         <div class="review-actions">
+          <button type="button" class="secondary" (click)="downloadReviewed('csv')" [disabled]="busy">Export CSV</button>
+          <button type="button" class="secondary" (click)="downloadReviewed('xlsx')" [disabled]="busy">Export Excel</button>
           <button type="button" class="secondary" (click)="dryRun()" [disabled]="busy">
             {{ busy ? 'Checking…' : 'Run validation' }}
           </button>

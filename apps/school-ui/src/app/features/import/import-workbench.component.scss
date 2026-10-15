@@ -2,6 +2,12 @@
   max-width: 1180px;
 }
 
+.head-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
 .import-head,
 .section-heading {
   display: flex;

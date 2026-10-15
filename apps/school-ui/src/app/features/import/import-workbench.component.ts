@@ -7,6 +7,16 @@ import { TenantContextService } from '../../core/tenant-context.service';
 import { ModuleBootstrapService } from '../../core/module-bootstrap.service';
 import { ListToolbarComponent } from '../../shared/list-toolbar/list-toolbar.component';
 import { ListSortOption, pageMeta, sortRows } from '../../shared/list-toolbar/list-controls';
+import {
+  readSpreadsheet,
+  rowsFromCsv,
+  STUDENT_IMPORT_FIELDS,
+  tableToCsv,
+  templateRows,
+  toStudentCsv,
+  toStudentTable,
+  workbookBytes,
+} from './spreadsheet-file';
 
 @Component({
   selector: 'sf-import-workbench',
@@ -181,50 +191,55 @@ export class ImportWorkbenchComponent implements OnInit, OnDestroy {
     );
   }
 
-  onFileSelected(event: Event): void {
+  async onFileSelected(event: Event): Promise<void> {
     const input = event.target as HTMLInputElement;
     const file = input.files?.[0];
+    input.value = '';
     if (!file) {
       return;
     }
-    if (!file.name.toLowerCase().endsWith('.csv')) {
-      this.error = 'Choose a CSV file';
-      input.value = '';
-      return;
-    }
-    const reader = new FileReader();
-    reader.onload = () => {
-      this.csvText = String(reader.result || '');
+    try {
+      const rows = await readSpreadsheet(file);
+      this.csvText = toStudentCsv(rows);
       this.selectedFileName = file.name;
       this.selected = null;
       this.error = '';
       this.status = `${file.name} selected · ${this.sourceRowCount} student rows`;
-    };
-    reader.onerror = () => {
-      this.error = 'The selected file could not be read';
-    };
-    reader.readAsText(file);
+    } catch (err) {
+      this.csvText = '';
+      this.selectedFileName = '';
+      this.error = err instanceof Error ? err.message : 'The selected file could not be read';
+    }
   }
 
-  downloadTemplate(): void {
-    const headers = this.targetFields.length
-      ? this.targetFields
-      : ['fullName', 'admissionNo', 'age', 'mobile', 'email', 'classApplied', 'gender', 'rollNo'];
-    const example: Record<string, string> = {
-      fullName: 'Asha Rao',
-      admissionNo: 'ADM-001',
-      age: '12',
-      mobile: '9800000001',
-      email: 'asha@example.com',
-      classApplied: 'Grade 8-A',
-      gender: 'Female',
-      rollNo: '1',
-    };
-    const csv = `${headers.join(',')}\n${headers.map((key) => example[key] || '').join(',')}\n`;
-    const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+  downloadTemplate(format: 'csv' | 'xlsx'): void {
+    const headers = this.targetFields.length ? this.targetFields : [...STUDENT_IMPORT_FIELDS];
+    const example = templateRows()[1];
+    const byField = Object.fromEntries(STUDENT_IMPORT_FIELDS.map((field, index) => [field, example[index]]));
+    this.saveTable([headers, headers.map((field) => byField[field] || '')], 'student-import-template', format);
+  }
+
+  downloadReviewed(format: 'csv' | 'xlsx'): void {
+    const source = (this.selected?.rows || []) as Array<{ mapped?: Record<string, string>; raw?: Record<string, string> }>;
+    const headers = this.targetFields.length ? this.targetFields : [...STUDENT_IMPORT_FIELDS];
+    const table = [
+      headers,
+      ...source.map((row) => headers.map((field) => String(row.mapped?.[field] || row.raw?.[field] || ''))),
+    ];
+    const base = String(this.selected?.fileName || 'student-import').replace(/\.(csv|xlsx)$/i, '');
+    this.saveTable(table, base, format);
+  }
+
+  private saveTable(rows: string[][], baseName: string, format: 'csv' | 'xlsx'): void {
+    const bytes = format === 'xlsx' ? workbookBytes(rows) : new TextEncoder().encode(tableToCsv(rows));
+    const type =
+      format === 'xlsx'
+        ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        : 'text/csv;charset=utf-8';
+    const url = URL.createObjectURL(new Blob([bytes], { type }));
     const anchor = document.createElement('a');
     anchor.href = url;
-    anchor.download = 'student-import-template.csv';
+    anchor.download = `${baseName}.${format}`;
     anchor.click();
     URL.revokeObjectURL(url);
   }
@@ -237,10 +252,12 @@ export class ImportWorkbenchComponent implements OnInit, OnDestroy {
   }
 
   createJob(): void {
-    if (!this.canReview) {
-      this.error = 'Select a CSV file containing at least one student row';
+    const csvText = toStudentCsv(rowsFromCsv(this.csvText));
+    if (!csvText.trim() || toStudentTable(rowsFromCsv(this.csvText)).length < 2) {
+      this.error = 'Select a CSV or Excel file containing at least one student row';
       return;
     }
+    this.csvText = csvText;
     this.busy = true;
     this.status = '';
     this.error = '';
@@ -248,7 +265,7 @@ export class ImportWorkbenchComponent implements OnInit, OnDestroy {
       .post<any>('/api/student/import/jobs', {
         fileName: this.selectedFileName || 'pasted-students.csv',
         entityType: 'student_master',
-        csvText: this.csvText,
+        csvText,
       })
       .subscribe({
         next: (job) => {
