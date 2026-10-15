@@ -1223,10 +1223,26 @@ export class FeeComponent implements OnInit, OnDestroy {
   lineDiscount(line: any): number {
     const gross = Number(line?.amount) || 0;
     if (gross <= 0) return 0;
+    if (line?.discountAmount != null && line?.discountAmount !== '') {
+      const stamped = Number(line.discountAmount);
+      if (!Number.isNaN(stamped)) {
+        return Math.min(gross, Math.max(0, Math.round(stamped * 100) / 100));
+      }
+    }
     const breakdown = this.feeQuote?.concessionBreakdown ?? {};
-    const student = this.concessionShare(gross, line, breakdown.studentConcession, breakdown.studentHeads, !!breakdown.studentApplied);
-    const sibling = this.concessionShare(gross, line, breakdown.siblingConcession, breakdown.siblingHeads, !!breakdown.siblingApplied);
-    return Math.min(gross, Math.round((student + sibling) * 100) / 100);
+    const student = this.concessionShare(
+      gross, line, breakdown.studentConcession, breakdown.studentHeads, !!breakdown.studentApplied, false,
+    );
+    const period = this.concessionShare(
+      gross, line, breakdown.periodConcession, breakdown.periodHeads, !!breakdown.periodApplied, false,
+    );
+    const sibling = this.concessionShare(
+      gross, line, breakdown.siblingConcession, breakdown.siblingHeads, !!breakdown.siblingApplied, true,
+    );
+    const other = this.concessionShare(
+      gross, line, breakdown.otherConcession, breakdown.otherHeads, Number(breakdown.otherConcession) > 0, true,
+    );
+    return Math.min(gross, Math.round((student + period + sibling + other) * 100) / 100);
   }
 
   linePayable(line: any): number {
@@ -1530,11 +1546,15 @@ export class FeeComponent implements OnInit, OnDestroy {
   }
 
   private applyQuoteAmount(): void {
+    const lines = (Array.isArray(this.feeQuote?.lines) ? this.feeQuote.lines : []).filter(
+      (line: any) => String(line?.source || '') !== 'lateFee',
+    );
     const due = this.dueQuoteLines();
-    if (!due.length || this.answers['amount'] === undefined) return;
+    if (!lines.length || this.answers['amount'] === undefined) return;
     const head = String(this.answers['feeHead'] || '').toUpperCase();
     const match =
-      due.find((line) => String(line.headKey || '').toUpperCase() === head) || due[0];
+      lines.find((line: any) => String(line.headKey || '').toUpperCase() === head) || due[0] || lines[0];
+    if (!match) return;
     this.answers['feeHead'] = match.headKey;
     this.answers['amount'] = this.linePayable(match);
   }
@@ -1566,15 +1586,17 @@ export class FeeComponent implements OnInit, OnDestroy {
     concession: unknown,
     heads: unknown,
     applied: boolean,
+    emptyMeansAll: boolean,
   ): number {
     const amount = Number(concession) || 0;
     if (!applied || amount <= 0) return 0;
     const allowed = Array.isArray(heads) ? heads.map((head) => String(head).toUpperCase()) : [];
     const key = String(line?.headKey || '').toUpperCase();
+    if (!allowed.length && !emptyMeansAll) return 0;
     if (allowed.length && !allowed.includes(key)) return 0;
     const pool = (Array.isArray(this.feeQuote?.lines) ? this.feeQuote.lines : []).filter((item: any) => {
       if (String(item?.source || '') === 'lateFee') return false;
-      if (!allowed.length) return true;
+      if (!allowed.length) return emptyMeansAll;
       return allowed.includes(String(item?.headKey || '').toUpperCase());
     });
     const base = pool.reduce((sum: number, item: any) => sum + (Number(item?.amount) || 0), 0);

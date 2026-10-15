@@ -1177,6 +1177,44 @@ public class FinanceService {
             skipSibling,
             periodAdjustment);
     Map<String, Object> breakdown = result.toMap();
+    List<String> studentHeads = adjustment == null ? List.of() : adjustment.appliesToHeads();
+    List<String> periodHeads = periodAdjustment == null ? List.of() : periodAdjustment.appliesToHeads();
+    List<String> siblingHeads =
+        policy == null || policy.appliesToHeads() == null ? List.of() : policy.appliesToHeads();
+    breakdown.put("studentHeads", studentHeads == null ? List.of() : studentHeads);
+    breakdown.put("periodHeads", periodHeads == null ? List.of() : periodHeads);
+    breakdown.put("siblingHeads", siblingHeads);
+    breakdown.put("otherHeads", otherHeads == null ? List.of() : otherHeads);
+    if (row != null && (studentHeads == null || studentHeads.isEmpty())) {
+      breakdown.put("studentHeadsNeedReview", true);
+    }
+    if (periodRow != null && (periodHeads == null || periodHeads.isEmpty())) {
+      breakdown.put("periodHeadsNeedReview", true);
+    }
+    List<BigDecimal> shares =
+        FeeConcessionCalculator.allocate(
+            feeLines,
+            otherDiscount,
+            otherHeads,
+            result.studentConcession(),
+            studentHeads,
+            result.periodConcession(),
+            periodHeads,
+            result.siblingConcession(),
+            siblingHeads);
+    int shareIndex = 0;
+    for (Map<String, Object> line : lines) {
+      if ("lateFee".equals(String.valueOf(line.get("source")))) {
+        continue;
+      }
+      BigDecimal amount = toDecimal(line.get("amount"));
+      BigDecimal off =
+          shareIndex < shares.size() ? shares.get(shareIndex) : BigDecimal.ZERO;
+      shareIndex++;
+      off = off.min(amount.max(BigDecimal.ZERO)).setScale(2, RoundingMode.HALF_UP);
+      line.put("discountAmount", off);
+      line.put("payableAmount", amount.subtract(off).max(BigDecimal.ZERO).setScale(2, RoundingMode.HALF_UP));
+    }
     if (row != null) {
       breakdown.put("studentAdjustmentId", row.getId());
       breakdown.put("studentAdjustmentStatus", row.getStatus());

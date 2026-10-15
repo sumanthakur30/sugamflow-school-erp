@@ -139,7 +139,9 @@ class FeeConcessionCalculatorTest {
     long siblingSources = result.sources().stream().filter(s -> s.startsWith("SIBLING:")).count();
     long studentSources = result.sources().stream().filter(s -> s.startsWith("STUDENT:")).count();
     assertTrue(siblingSources <= 1);
-    assertEquals(1, studentSources);
+    // A student discount with no fee head is not spread across the bill.
+    assertEquals(0, studentSources);
+    assertEquals(new BigDecimal("0.00"), result.studentConcession());
   }
 
   @Test

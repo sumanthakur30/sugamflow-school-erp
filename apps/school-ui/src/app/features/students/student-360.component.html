@@ -325,10 +325,26 @@
               />
             </label>
           }
-          <label class="span-2">
-            Fee heads
-            <input [(ngModel)]="feeHeads" name="feeHeads" placeholder="TUITION" (ngModelChange)="markFeeDirty()" />
-          </label>
+          <fieldset class="span-2 fee-head-picker">
+            <legend>Fee heads <span class="req">*</span></legend>
+            @for (head of feeHeadOptions(); track head.key) {
+              <label class="head-choice">
+                <input
+                  type="checkbox"
+                  [name]="'feeHead_' + head.key"
+                  [ngModel]="isFeeHeadSelected(head.key)"
+                  (ngModelChange)="toggleFeeHead(head.key, $event)"
+                />
+                {{ head.label }}
+              </label>
+            } @empty {
+              <span class="field-help">Fee heads are not available for this class yet.</span>
+            }
+            <span class="field-help">The discount is calculated only on the fee heads you select. Clear every fee head and save to remove this discount.</span>
+          </fieldset>
+          @if (feeHeadsNeedReview) {
+            <p class="fee-warning">This discount has no fee head, so it is not applied. Select the fee head and save it again.</p>
+          }
           <label [class.span-2]="feeKind !== 'PERIOD'">
             Discount frequency
             <select [(ngModel)]="feeKind" name="feeKind" (ngModelChange)="onFeeKindChange()">
@@ -352,13 +368,15 @@
           </label>
         </div>
         <div class="discount-preview" aria-live="polite">
-          @if (discountPreview().eligible == null) {
+          @if (!selectedFeeHeads.length) {
+            <p>Select a fee head to preview this discount.</p>
+          } @else if (discountPreview().eligible == null) {
             <p>Eligible fee is not available for this preview.</p>
           } @else {
-            <p>Eligible Fee: <strong>{{ formatRupee(discountPreview().eligible) }}</strong></p>
+            <p>{{ eligibleFeeLabel() }}: <strong>{{ formatRupee(discountPreview().eligible) }}</strong></p>
             @if (discountPreview().showMath) {
-              <p>Discount Applied: <strong>{{ formatRupee(discountPreview().applied) }}</strong></p>
-              <p>Remaining Payable Fee: <strong>{{ formatRupee(discountPreview().remaining) }}</strong></p>
+              <p>Discount: <strong>{{ formatRupee(discountPreview().applied) }}</strong></p>
+              <p>{{ payableFeeLabel() }}: <strong>{{ formatRupee(discountPreview().remaining) }}</strong></p>
             }
           }
           @if (selectedReasonLabel()) {
