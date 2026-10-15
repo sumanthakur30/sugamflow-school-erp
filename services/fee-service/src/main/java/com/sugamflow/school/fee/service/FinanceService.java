@@ -459,7 +459,7 @@ public class FinanceService {
             "VALIDATION",
             "No fee structure is configured for "
                 + classSection
-                + ". Add one under Finance → Structures for this class and academic year.");
+                + ". Add a structure for this grade under Finance → Structures.");
       } else {
         structureKey = stringOr(settings.get("defaultStructureKey"), "grade_8_annual");
         structureMatch = "DEFAULT";
