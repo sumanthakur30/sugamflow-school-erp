@@ -114,6 +114,9 @@ export class FeeComponent implements OnInit, OnDestroy {
     mandatory: true,
   };
   studentLoading = false;
+  /** Read-only class fee quote. Selecting a student does not create a demand. */
+  feeQuote: any = null;
+  feeQuoteError = '';
   lookupSeed = '';
   /** Remount lookup when opening a fresh New Collection form. */
   lookupNonce = 0;
@@ -1164,6 +1167,7 @@ export class FeeComponent implements OnInit, OnDestroy {
         if (summary) {
           this.applyFeeSummary(summary);
         }
+        this.loadClassFeeQuote(admissionNo, String(row.classSection || detail?.answers?.classSection || ''));
       });
       return;
     }
@@ -1194,7 +1198,43 @@ export class FeeComponent implements OnInit, OnDestroy {
       if (summary) {
         this.applyFeeSummary(summary);
       }
+      const answers = detail?.answers ?? {};
+      this.loadClassFeeQuote(
+        admissionNo,
+        String(row.classSection || answers.classSection || answers.classApplied || ''),
+      );
     });
+  }
+
+  onQuoteSelectionChange(): void {
+    this.applyQuoteAmount();
+  }
+
+  dueQuoteLines(): any[] {
+    const lines = Array.isArray(this.feeQuote?.lines) ? this.feeQuote.lines : [];
+    const month = this.billingMonthNumber();
+    return lines.filter(
+      (line: any) =>
+        String(line?.source || '') !== 'lateFee' &&
+        this.frequencyDue(String(line?.frequency || 'Y'), month),
+    );
+  }
+
+  lineDiscount(line: any): number {
+    const gross = Number(line?.amount) || 0;
+    if (gross <= 0) return 0;
+    const breakdown = this.feeQuote?.concessionBreakdown ?? {};
+    const student = this.concessionShare(gross, line, breakdown.studentConcession, breakdown.studentHeads, !!breakdown.studentApplied);
+    const sibling = this.concessionShare(gross, line, breakdown.siblingConcession, breakdown.siblingHeads, !!breakdown.siblingApplied);
+    return Math.min(gross, Math.round((student + sibling) * 100) / 100);
+  }
+
+  linePayable(line: any): number {
+    return Math.max(0, Math.round(((Number(line?.amount) || 0) - this.lineDiscount(line)) * 100) / 100);
+  }
+
+  isDueThisMonth(line: any): boolean {
+    return this.frequencyDue(String(line?.frequency || 'Y'), this.billingMonthNumber());
   }
 
   onStudentCleared(): void {
@@ -1467,6 +1507,81 @@ export class FeeComponent implements OnInit, OnDestroy {
     this.setAnswer('mobile', answers.mobile || '');
   }
 
+  private loadClassFeeQuote(admissionNo: string, classSection: string): void {
+    this.feeQuote = null;
+    this.feeQuoteError = '';
+    if (!admissionNo && !classSection) return;
+    this.api
+      .post<any>('/api/fee/finance/demands/preview', {
+        studentRef: admissionNo || undefined,
+        classSection: classSection || undefined,
+        periodKey: String(this.answers['feeMonth'] || ''),
+      })
+      .subscribe({
+        next: (quote) => {
+          this.feeQuote = quote;
+          this.applyQuoteAmount();
+        },
+        error: (err) => {
+          this.feeQuoteError =
+            err?.error?.message ?? 'No fee structure is configured for this class and academic year';
+        },
+      });
+  }
+
+  private applyQuoteAmount(): void {
+    const due = this.dueQuoteLines();
+    if (!due.length || this.answers['amount'] === undefined) return;
+    const head = String(this.answers['feeHead'] || '').toUpperCase();
+    const match =
+      due.find((line) => String(line.headKey || '').toUpperCase() === head) || due[0];
+    this.answers['feeHead'] = match.headKey;
+    this.answers['amount'] = this.linePayable(match);
+  }
+
+  private billingMonthNumber(): number {
+    const raw = String(this.answers['feeMonth'] || '').trim().toLowerCase();
+    const index = this.monthOptions.findIndex((name) => raw.startsWith(name.toLowerCase()));
+    if (index >= 0) return index + 1;
+    const iso = raw.match(/-(\d{2})(?:\b|$)/);
+    if (iso) return Number(iso[1]);
+    return new Date().getMonth() + 1;
+  }
+
+  /** School session billing months start in April. */
+  private frequencyDue(frequency: string, month: number): boolean {
+    const code = frequency.trim().toUpperCase();
+    if (code === 'M' || code === 'OT' || code === 'MONTHLY' || code === 'ONE-TIME' || code === 'ONETIME') {
+      return true;
+    }
+    if (code === 'Q' || code === 'QUARTERLY') return [1, 4, 7, 10].includes(month);
+    if (code === 'HY' || code === 'HALF-YEARLY' || code === 'HALFYEARLY') return month === 4 || month === 10;
+    if (code === 'Y' || code === 'YEARLY' || code === 'ANNUAL') return month === 4;
+    return true;
+  }
+
+  private concessionShare(
+    gross: number,
+    line: any,
+    concession: unknown,
+    heads: unknown,
+    applied: boolean,
+  ): number {
+    const amount = Number(concession) || 0;
+    if (!applied || amount <= 0) return 0;
+    const allowed = Array.isArray(heads) ? heads.map((head) => String(head).toUpperCase()) : [];
+    const key = String(line?.headKey || '').toUpperCase();
+    if (allowed.length && !allowed.includes(key)) return 0;
+    const pool = (Array.isArray(this.feeQuote?.lines) ? this.feeQuote.lines : []).filter((item: any) => {
+      if (String(item?.source || '') === 'lateFee') return false;
+      if (!allowed.length) return true;
+      return allowed.includes(String(item?.headKey || '').toUpperCase());
+    });
+    const base = pool.reduce((sum: number, item: any) => sum + (Number(item?.amount) || 0), 0);
+    if (base <= 0) return 0;
+    return (amount * gross) / base;
+  }
+
   private applyFeeSummary(summary: any): void {
     if (summary?.pendingDays != null && this.answers['pendingDays'] !== undefined) {
       this.answers['pendingDays'] = Number(summary.pendingDays) || 0;
@@ -1491,6 +1606,8 @@ export class FeeComponent implements OnInit, OnDestroy {
     this.selectedStudent = null;
     this.studentDetail = null;
     this.feeSummary = null;
+    this.feeQuote = null;
+    this.feeQuoteError = '';
     this.studentLoading = false;
     if (resetIdentity) {
       for (const key of IDENTITY_FIELD_KEYS) {

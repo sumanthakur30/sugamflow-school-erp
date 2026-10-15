@@ -559,6 +559,32 @@ a.crumb-link {
   }
 }
 
+.fee-quote {
+  margin-top: 0.75rem;
+}
+
+.fee-quote-warn {
+  color: #9a3412;
+}
+
+.fee-quote-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.86rem;
+}
+
+.fee-quote-table th,
+.fee-quote-table td {
+  text-align: left;
+  padding: 0.35rem 0.4rem;
+  border-bottom: 1px solid color-mix(in srgb, var(--sf-primary) 12%, transparent);
+}
+
+.fee-quote-table th {
+  font-weight: 600;
+  color: #3f4d46;
+}
+
 @media (max-width: 640px) {
   .student-card,
   .detail-student-card {

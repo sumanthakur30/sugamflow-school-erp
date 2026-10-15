@@ -7,6 +7,7 @@ import com.sugamflow.school.common.tenant.TenantScope;
 import com.sugamflow.school.fee.config.FeeProperties;
 import com.sugamflow.school.fee.finance.FeeConcessionCalculator;
 import com.sugamflow.school.fee.finance.FeePeriodFilter;
+import com.sugamflow.school.fee.finance.FeeStructureMatcher;
 import com.sugamflow.school.fee.finance.FinanceCatalog;
 import com.sugamflow.school.fee.persistence.entity.StudentFeeAdjustmentEntity;
 import com.sugamflow.school.fee.integration.ConfigEngineClient;
@@ -423,13 +424,6 @@ public class FinanceService {
     ensureDefaults(scope);
     Map<String, Object> settings = feeModuleSettings(scope);
 
-    String structureKey = stringOr(body.get("structureKey"), null);
-    if (structureKey == null || structureKey.isBlank()) {
-      structureKey = stringOr(settings.get("defaultStructureKey"), "grade_8_annual");
-    }
-    Map<String, Object> structure =
-        requireDefinition(scope, FinanceCatalog.TYPE_FEE_STRUCTURE, structureKey);
-
     String studentRef = stringOr(body.get("studentRef"), "");
     String studentName = stringOr(body.get("studentName"), "");
     String classSection = stringOr(body.get("classSection"), "");
@@ -452,6 +446,27 @@ public class FinanceService {
       }
     }
     applyBedAndRoute(scope, studentRef, studentAnswers);
+
+    String structureKey = stringOr(body.get("structureKey"), null);
+    String structureMatch = "REQUESTED";
+    if (structureKey == null || structureKey.isBlank()) {
+      String matched = matchStructureKey(classSection, scope.academicSessionId());
+      if (matched != null) {
+        structureKey = matched;
+        structureMatch = "CLASS";
+      } else if (!classSection.isBlank()) {
+        throw new FeeException(
+            "VALIDATION",
+            "No fee structure is configured for "
+                + classSection
+                + ". Add a structure for this grade under Finance → Structures.");
+      } else {
+        structureKey = stringOr(settings.get("defaultStructureKey"), "grade_8_annual");
+        structureMatch = "DEFAULT";
+      }
+    }
+    Map<String, Object> structure =
+        requireDefinition(scope, FinanceCatalog.TYPE_FEE_STRUCTURE, structureKey);
 
     Map<String, Object> headIndex = headIndex(scope);
     List<Map<String, Object>> lines = new ArrayList<>();
@@ -629,6 +644,7 @@ public class FinanceService {
 
     Map<String, Object> out = new LinkedHashMap<>();
     out.put("structureKey", structureKey);
+    out.put("structureMatch", structureMatch);
     out.put("structureName", stringOr(structure.get("name"), structureKey));
     out.put("studentRef", studentRef.isBlank() ? null : studentRef);
     out.put("studentName", studentName.isBlank() ? null : studentName);
@@ -1016,6 +1032,26 @@ public class FinanceService {
     entity.setCreatedAt(Instant.now());
     entity.setUpdatedAt(Instant.now());
     definitionRepo.save(entity);
+  }
+
+  private String matchStructureKey(String classSection, String academicSessionId) {
+    List<FeeStructureMatcher.Candidate> candidates = new ArrayList<>();
+    for (Map<String, Object> dto : listDefinitions(FinanceCatalog.TYPE_FEE_STRUCTURE)) {
+      Object payload = dto.get("payload");
+      if (!(payload instanceof Map<?, ?> raw)) {
+        continue;
+      }
+      String className = "";
+      String session = "";
+      if (raw.get("eligibility") instanceof Map<?, ?> eligibility) {
+        className = stringOr(eligibility.get("classSection"), "");
+        session = stringOr(eligibility.get("academicSessionId"), "");
+      }
+      candidates.add(
+          new FeeStructureMatcher.Candidate(
+              stringOr(dto.get("definitionKey"), ""), className, session));
+    }
+    return FeeStructureMatcher.pick(candidates, classSection, academicSessionId);
   }
 
   private Map<String, Object> requireDefinition(TenantScope scope, String type, String key) {

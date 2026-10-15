@@ -403,6 +403,20 @@
               name="structuresQ"
               placeholder="Search structures…"
             />
+            <input
+              class="fin-inline-search"
+              type="search"
+              [(ngModel)]="structureClassQ"
+              name="structureClassQ"
+              placeholder="Class"
+            />
+            <input
+              class="fin-inline-search"
+              type="search"
+              [(ngModel)]="structureSessionQ"
+              name="structureSessionQ"
+              placeholder="Academic year"
+            />
           </div>
           <div class="fin-structure-grid">
             @for (s of filteredStructures; track s.definitionKey || s.id) {
@@ -411,6 +425,12 @@
                   <div>
                     <h4>{{ payload(s).name || s.definitionKey }}</h4>
                     <p class="muted mono">{{ s.definitionKey }} · v{{ s.version || 1 }}</p>
+                    @if (payload(s).eligibility?.classSection || payload(s).eligibility?.academicSessionId) {
+                      <p class="muted">
+                        {{ payload(s).eligibility?.classSection || 'Any class' }}
+                        · {{ payload(s).eligibility?.academicSessionId || 'Any year' }}
+                      </p>
+                    }
                   </div>
                   <div class="fin-structure-total money">{{ formatMoney(structureTotal(s)) }}</div>
                 </div>
@@ -424,6 +444,7 @@
                 </div>
                 <div class="fin-structure-actions">
                   <button type="button" class="tiny secondary" (click)="editStructure(s)">Edit</button>
+                  <button type="button" class="tiny secondary" (click)="copyStructure(s)">Copy</button>
                   <button type="button" class="tiny" (click)="structureKey = s.definitionKey; setTab('demand')">
                     Use in demand
                   </button>
@@ -439,7 +460,7 @@
           <h3 class="form-section-title">
             {{ editingStructureKey ? 'Update structure' : 'Create structure' }}
           </h3>
-          <p class="muted">Lines format: <code>HEAD,amount,frequency</code> (one per line). Frequencies: M / Q / HY / Y / OT.</p>
+          <p class="muted">Lines format: <code>HEAD,amount,frequency</code> (one per line). Frequencies: M / Q / HY / Y / OT. Add <code>,INACTIVE</code> to turn a head off. Saving a new version does not change demands already issued.</p>
           <div class="grid two">
             <label>
               Key
@@ -456,7 +477,8 @@
             </label>
             <label>
               Class / section eligibility
-              <input [(ngModel)]="structureDraft.classSection" name="structClass" placeholder="Grade 9-A" />
+              <input [(ngModel)]="structureDraft.classSection" name="structClass" placeholder="Grade 7" />
+              <span class="muted">Section is ignored for every grade. Grade 9-C uses the Grade 9 structure.</span>
             </label>
             <label>
               Academic session
@@ -465,11 +487,67 @@
           </div>
           <label>
             Lines
+            <table class="fee-quote-table">
+              <thead>
+                <tr>
+                  <th>Fee head</th>
+                  <th>Frequency</th>
+                  <th>Amount</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (line of structureLines; track $index) {
+                  <tr>
+                    <td>
+                      <input
+                        [ngModel]="line.headKey"
+                        (ngModelChange)="onStructureLineChange($index, 'headKey', $event)"
+                        [name]="'structHead' + $index"
+                        placeholder="TUITION"
+                      />
+                    </td>
+                    <td>
+                      <select
+                        [ngModel]="line.frequency"
+                        (ngModelChange)="onStructureLineChange($index, 'frequency', $event)"
+                        [name]="'structFreq' + $index"
+                      >
+                        <option value="OT">One-time</option>
+                        <option value="M">Monthly</option>
+                        <option value="Q">Quarterly</option>
+                        <option value="HY">Half-yearly</option>
+                        <option value="Y">Yearly</option>
+                      </select>
+                    </td>
+                    <td>
+                      <input
+                        [ngModel]="line.amount"
+                        (ngModelChange)="onStructureLineChange($index, 'amount', $event)"
+                        [name]="'structAmt' + $index"
+                        inputmode="decimal"
+                        placeholder="0"
+                      />
+                    </td>
+                    <td>
+                      <button
+                        type="button"
+                        class="tiny secondary"
+                        (click)="onStructureLineChange($index, 'active', !line.active)"
+                      >
+                        {{ line.active ? 'Active' : 'Inactive' }}
+                      </button>
+                    </td>
+                  </tr>
+                }
+              </tbody>
+            </table>
             <textarea
               [(ngModel)]="structureDraft.linesText"
+              (ngModelChange)="onStructureTextChange()"
               name="structLines"
-              rows="6"
-              placeholder="ANNUAL,5000,Y&#10;TUITION,12000,M"
+              rows="4"
+              placeholder="TUITION,amount,M"
             ></textarea>
           </label>
           <label>
