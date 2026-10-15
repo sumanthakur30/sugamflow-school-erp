@@ -97,6 +97,10 @@ public class StudentFeeAdjustmentService {
     if (problem != null) {
       throw new FeeException("BAD_REQUEST", problem);
     }
+    List<String> heads = FeeConcessionCalculator.heads(body.get("appliesToHeads"));
+    if (heads.isEmpty()) {
+      throw new FeeException("BAD_REQUEST", "Select the fee head this discount applies to.");
+    }
     String session = scope.academicSessionId() == null ? "" : scope.academicSessionId();
     String kind = kindOf(body.get("kind"));
     String periodKey = FeePeriodFilter.normalizePeriod(text(body.get("periodKey")));
@@ -115,7 +119,7 @@ public class StudentFeeAdjustmentService {
     row.setAdjustmentKind(kind);
     row.setPeriodKey("PERIOD".equals(kind) ? periodKey : null);
     row.setAdjustmentValue(value);
-    row.setAppliesToHeads(FeeConcessionCalculator.heads(body.get("appliesToHeads")));
+    row.setAppliesToHeads(heads);
     row.setReason(reason);
     row.setEffectiveFrom(from);
     row.setEffectiveTo(to);

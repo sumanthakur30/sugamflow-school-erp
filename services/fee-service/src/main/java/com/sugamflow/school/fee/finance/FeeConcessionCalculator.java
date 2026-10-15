@@ -112,8 +112,11 @@ public final class FeeConcessionCalculator {
 
     List<String> studentHeads = student == null ? List.of() : student.appliesToHeads();
     List<String> siblingHeads = sibling == null ? List.of() : sibling.appliesToHeads();
+    // A student rule with no fee head is not applied to the whole bill.
     BigDecimal studentBase =
-        eligible(safeLines, studentHeads).subtract(overlap(other, otherHeads, studentHeads, safeLines)).max(BigDecimal.ZERO);
+        namedEligible(safeLines, studentHeads)
+            .subtract(overlap(other, otherHeads, studentHeads, safeLines))
+            .max(BigDecimal.ZERO);
     BigDecimal siblingBase =
         eligible(safeLines, siblingHeads).subtract(overlap(other, otherHeads, siblingHeads, safeLines)).max(BigDecimal.ZERO);
 
@@ -134,7 +137,7 @@ public final class FeeConcessionCalculator {
     BigDecimal periodBase = BigDecimal.ZERO;
     if (period != null && "APPROVED".equalsIgnoreCase(period.status()) && !already(sources, "PERIOD:" + period.id())) {
       BigDecimal periodEligible =
-          eligible(safeLines, periodHeads)
+          namedEligible(safeLines, periodHeads)
               .subtract(overlap(other, otherHeads, periodHeads, safeLines))
               .max(BigDecimal.ZERO);
       BigDecimal alreadyOff =
@@ -394,6 +397,101 @@ public final class FeeConcessionCalculator {
       amount = BigDecimal.valueOf(100);
     }
     return base.multiply(amount).divide(BigDecimal.valueOf(100), 2, RoundingMode.HALF_UP);
+  }
+
+  /**
+   * Splits each concession across only the fee heads it names. Student and period rules with no
+   * fee head contribute nothing. A catalog or sibling concession with no head list still covers
+   * every line. The pieces of one concession sum to that concession, and no line is discounted
+   * below zero.
+   */
+  public static List<BigDecimal> allocate(
+      List<FeeLine> lines,
+      BigDecimal other,
+      List<String> otherHeads,
+      BigDecimal student,
+      List<String> studentHeads,
+      BigDecimal period,
+      List<String> periodHeads,
+      BigDecimal sibling,
+      List<String> siblingHeads) {
+    List<FeeLine> safe = lines == null ? List.of() : lines;
+    BigDecimal[] slots = new BigDecimal[safe.size()];
+    for (int i = 0; i < slots.length; i++) {
+      slots[i] = BigDecimal.ZERO;
+    }
+    addShare(slots, safe, other, otherHeads, true);
+    addShare(slots, safe, student, studentHeads, false);
+    addShare(slots, safe, period, periodHeads, false);
+    addShare(slots, safe, sibling, siblingHeads, true);
+    List<BigDecimal> out = new ArrayList<>();
+    for (BigDecimal slot : slots) {
+      out.add(money(slot));
+    }
+    return out;
+  }
+
+  private static void addShare(
+      BigDecimal[] slots,
+      List<FeeLine> lines,
+      BigDecimal discount,
+      List<String> heads,
+      boolean emptyMeansAll) {
+    BigDecimal remaining = money(discount);
+    if (remaining.compareTo(BigDecimal.ZERO) <= 0) {
+      return;
+    }
+    boolean named = heads != null && !heads.isEmpty();
+    if (!named && !emptyMeansAll) {
+      return;
+    }
+    List<Integer> targets = new ArrayList<>();
+    BigDecimal base = BigDecimal.ZERO;
+    for (int i = 0; i < lines.size(); i++) {
+      FeeLine line = lines.get(i);
+      if (named && !containsHead(heads, line.headKey())) {
+        continue;
+      }
+      BigDecimal room = nz(line.amount()).subtract(slots[i]).max(BigDecimal.ZERO);
+      if (room.compareTo(BigDecimal.ZERO) <= 0) {
+        continue;
+      }
+      targets.add(i);
+      base = base.add(nz(line.amount()));
+    }
+    if (targets.isEmpty() || base.compareTo(BigDecimal.ZERO) <= 0) {
+      return;
+    }
+    BigDecimal assigned = BigDecimal.ZERO;
+    for (int n = 0; n < targets.size(); n++) {
+      int i = targets.get(n);
+      BigDecimal room = nz(lines.get(i).amount()).subtract(slots[i]).max(BigDecimal.ZERO);
+      BigDecimal share =
+          n == targets.size() - 1
+              ? remaining.subtract(assigned).max(BigDecimal.ZERO)
+              : money(remaining.multiply(nz(lines.get(i).amount())).divide(base, 2, RoundingMode.HALF_UP));
+      share = share.min(room);
+      slots[i] = money(slots[i].add(share));
+      assigned = assigned.add(share);
+    }
+    BigDecimal leftover = remaining.subtract(assigned);
+    for (int i : targets) {
+      if (leftover.compareTo(BigDecimal.ZERO) <= 0) {
+        break;
+      }
+      BigDecimal room = nz(lines.get(i).amount()).subtract(slots[i]).max(BigDecimal.ZERO);
+      BigDecimal extra = leftover.min(room);
+      slots[i] = money(slots[i].add(extra));
+      leftover = leftover.subtract(extra);
+    }
+  }
+
+  /** Student and period discounts apply only when a fee head is named. */
+  private static BigDecimal namedEligible(List<FeeLine> lines, List<String> heads) {
+    if (heads == null || heads.isEmpty()) {
+      return BigDecimal.ZERO;
+    }
+    return eligible(lines, heads);
   }
 
   private static BigDecimal eligible(List<FeeLine> lines, List<String> heads) {

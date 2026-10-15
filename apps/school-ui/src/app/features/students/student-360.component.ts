@@ -43,7 +43,8 @@ export class Student360Component implements OnInit {
   feeKind = 'RECURRING';
   feePercent: number | null = null;
   feeFixed: number | null = null;
-  feeHeads = 'TUITION';
+  selectedFeeHeads: string[] = [];
+  feeHeadsNeedReview = false;
   feePeriod = '';
   feeFrom = '';
   feeTo = '';
@@ -78,6 +79,7 @@ export class Student360Component implements OnInit {
   load(): void {
     this.loading = true;
     this.error = '';
+    this.selectedFeeHeads = [];
     this.api.get<any>(`/api/student/students/${this.studentId}/360`).subscribe({
       next: (d) => {
         this.data = d;
@@ -403,9 +405,22 @@ export class Student360Component implements OnInit {
 
   saveFeeAdjustment(): void {
     const admissionNo = this.admissionNo();
+    if (!admissionNo) {
+      this.feeMessage = 'Enter the discount and a reason.';
+      return;
+    }
+    if (!this.feeHeadList().length) {
+      const row = this.feeKind === 'PERIOD' ? this.feePeriodAdjustment : this.feeAdjustment;
+      if (row?.id) {
+        this.removeFeeAdjustment();
+        return;
+      }
+      this.feeMessage = 'Select the fee head this discount applies to.';
+      return;
+    }
     const problem = this.saveDiscountError();
-    if (!admissionNo || problem) {
-      this.feeMessage = this.liveDiscountWarning() ? '' : problem || 'Enter the discount and a reason.';
+    if (problem) {
+      this.feeMessage = this.liveDiscountWarning() ? '' : problem;
       return;
     }
     const percent = this.enteredAmount(this.feePercent);
@@ -443,7 +458,10 @@ export class Student360Component implements OnInit {
     const reason = this.storedReason() || 'Removed from student fee profile';
     this.api.post(`/api/fee/finance/adjustments/${row.id}/remove`, { reason }).subscribe({
       next: () => {
-        this.feeMessage = 'Adjustment removed. The next demand uses the standard fee.';
+        this.feeMessage = 'Discount removed. The next bill uses the standard fee for every fee head.';
+        this.selectedFeeHeads = [];
+        this.feePercent = null;
+        this.feeFixed = null;
         this.feeFormDirty = false;
         this.loadFeeQuote();
       },
@@ -475,7 +493,12 @@ export class Student360Component implements OnInit {
     }
     this.api
       .post<any>('/api/fee/finance/demands/preview', preview)
-      .subscribe({ next: (quote) => (this.feeQuote = quote), error: () => (this.feeQuote = null) });
+      .subscribe({
+        next: (quote) => {
+          this.feeQuote = quote;
+        },
+        error: () => (this.feeQuote = null),
+      });
   }
 
   private applyOpenAdjustment(): void {
@@ -486,13 +509,16 @@ export class Student360Component implements OnInit {
       this.feeFixed = null;
       this.feeReasonCode = '';
       this.feeCustomReason = '';
+      this.selectedFeeHeads = [];
+      this.feeHeadsNeedReview = false;
       this.suppressFeeDirty = false;
       return;
     }
-    const heads = Array.isArray(row.appliesToHeads) ? row.appliesToHeads.filter(Boolean) : [];
-    if (heads.length) {
-      this.feeHeads = heads.join(', ');
-    }
+    const heads = Array.isArray(row.appliesToHeads)
+      ? row.appliesToHeads.map((head: unknown) => String(head).trim().toUpperCase()).filter(Boolean)
+      : [];
+    this.selectedFeeHeads = heads;
+    this.feeHeadsNeedReview = heads.length === 0;
     this.feeFrom = row.effectiveFrom || '';
     this.feeTo = row.effectiveTo || '';
     if (row.periodKey) {
@@ -523,6 +549,9 @@ export class Student360Component implements OnInit {
     const hasFixed = fixed != null && fixed > 0;
     if (!hasPercent && !hasFixed) {
       return 'Enter a percentage or a fixed rupee discount.';
+    }
+    if (!this.feeHeadList().length) {
+      return 'Select the fee head this discount applies to.';
     }
     if (!this.feeReasonCode) {
       return 'Select the reason for granting this discount.';
@@ -556,20 +585,64 @@ export class Student360Component implements OnInit {
     return { code: 'Other', custom: text };
   }
 
+  feeHeadOptions(): Array<{ key: string; label: string }> {
+    const lines = Array.isArray(this.feeQuote?.lines) ? this.feeQuote.lines : [];
+    const seen = new Set<string>();
+    const options: Array<{ key: string; label: string }> = [];
+    for (const line of lines) {
+      if (String(line?.source || '') === 'lateFee') continue;
+      const key = String(line?.headKey || '').trim().toUpperCase();
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
+      options.push({ key, label: String(line?.label || key) });
+    }
+    for (const key of this.selectedFeeHeads) {
+      if (!seen.has(key)) {
+        options.push({ key, label: key });
+      }
+    }
+    return options;
+  }
+
+  isFeeHeadSelected(key: string): boolean {
+    return this.selectedFeeHeads.includes(String(key).toUpperCase());
+  }
+
+  toggleFeeHead(key: string, checked: boolean): void {
+    const normalized = String(key).toUpperCase();
+    this.selectedFeeHeads = checked
+      ? [...this.selectedFeeHeads.filter((head) => head !== normalized), normalized]
+      : this.selectedFeeHeads.filter((head) => head !== normalized);
+    this.feeHeadsNeedReview = false;
+    this.markFeeDirty();
+  }
+
+  eligibleFeeLabel(): string {
+    const labels = this.selectedHeadLabels();
+    return labels.length === 1 ? `Eligible ${labels[0]}` : 'Eligible fee for the selected fee heads';
+  }
+
+  payableFeeLabel(): string {
+    const labels = this.selectedHeadLabels();
+    return labels.length === 1 ? `Payable ${labels[0]}` : 'Payable fee for the selected fee heads';
+  }
+
   private feeHeadList(): string[] {
-    return this.feeHeads
-      .split(',')
-      .map((head) => head.trim().toUpperCase())
-      .filter(Boolean);
+    return this.selectedFeeHeads.map((head) => head.trim().toUpperCase()).filter(Boolean);
+  }
+
+  private selectedHeadLabels(): string[] {
+    const options = this.feeHeadOptions();
+    return this.feeHeadList().map((key) => options.find((head) => head.key === key)?.label || key);
   }
 
   private eligibleFee(): number | null {
     const lines = this.feeQuote?.lines;
-    if (!Array.isArray(lines) || !lines.length) return null;
     const heads = this.feeHeadList();
+    if (!heads.length || !Array.isArray(lines) || !lines.length) return null;
     const matched = lines.filter((line: any) => {
       const key = String(line?.headKey || '').toUpperCase();
-      return !!key && (heads.length === 0 || heads.includes(key));
+      return !!key && heads.includes(key);
     });
     if (!matched.length) return null;
     const sum = matched.reduce((total: number, line: any) => total + Number(line?.amount || 0), 0);
