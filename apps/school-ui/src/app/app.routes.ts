@@ -247,7 +247,7 @@ export const routes: Routes = [
         canActivate: [featureGuard],
         data: { feature: 'FEATURE_STUDENT_MASTER', kind: 'GATE_PASS', title: 'Gate pass' },
         loadComponent: () =>
-          import('./features/desk/campus-desk.component').then((m) => m.CampusDeskComponent),
+          import('./features/gate-pass/gate-pass.component').then((m) => m.GatePassComponent),
       },
       {
         path: 'admin/finance',

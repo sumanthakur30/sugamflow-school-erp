@@ -4,10 +4,13 @@ import com.sugamflow.school.common.tenant.TenantContext;
 import com.sugamflow.school.common.tenant.TenantScope;
 import com.sugamflow.school.student.integration.ConfigEngineClient;
 import com.sugamflow.school.student.persistence.entity.CampusDeskItemEntity;
+import com.sugamflow.school.student.persistence.entity.StudentRecordEntity;
 import com.sugamflow.school.student.persistence.repo.CampusDeskItemRepository;
+import com.sugamflow.school.student.persistence.repo.StudentRecordRepository;
 import com.sugamflow.school.student.web.StudentException;
 import java.time.Instant;
 import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
@@ -40,24 +43,44 @@ public class CampusDeskService {
   private static final Set<String> ELEVATED_ROLES =
       Set.of("SHOP_OWNER", "SUPER_ADMIN", "ADMIN", "PRINCIPAL");
 
+  private static final DateTimeFormatter PASS_DAY = DateTimeFormatter.BASIC_ISO_DATE;
+
+  private static final Set<String> CLOSED_STUDENT_STATUSES =
+      Set.of("DELETED", "TRANSFERRED", "TC_ISSUED", "ALUMNI", "PASSED_OUT");
+
   private final CampusDeskItemRepository repository;
+  private final StudentRecordRepository students;
   private final ConfigEngineClient engines;
 
-  public CampusDeskService(CampusDeskItemRepository repository, ConfigEngineClient engines) {
+  public CampusDeskService(
+      CampusDeskItemRepository repository,
+      StudentRecordRepository students,
+      ConfigEngineClient engines) {
     this.repository = repository;
+    this.students = students;
     this.engines = engines;
   }
 
   @Transactional(readOnly = true)
   public List<Map<String, Object>> list(String kind) {
+    return list(kind, Map.of());
+  }
+
+  @Transactional(readOnly = true)
+  public List<Map<String, Object>> list(String kind, Map<String, String> query) {
     TenantScope scope = TenantContext.require();
     String normalized = normalizeKind(kind);
-    return repository
-        .findByOrganizationIdAndKindOrderByCreatedAtDesc(scope.organizationId(), normalized)
-        .stream()
-        .filter(item -> sameCampus(scope, item))
-        .map(this::toDto)
-        .toList();
+    List<Map<String, Object>> rows =
+        repository
+            .findByOrganizationIdAndKindOrderByCreatedAtDesc(scope.organizationId(), normalized)
+            .stream()
+            .filter(item -> sameCampus(scope, item))
+            .map(this::toDto)
+            .toList();
+    if (!"GATE_PASS".equals(normalized) || query == null || query.isEmpty()) {
+      return rows;
+    }
+    return rows.stream().filter(row -> GatePassRules.matches(row, query)).toList();
   }
 
   @Transactional
@@ -80,6 +103,12 @@ public class CampusDeskService {
     if ("LEAVE".equals(normalized)) {
       stampLeaveStep(scope, payload);
     }
+    if ("GATE_PASS".equals(normalized)) {
+      CampusDeskItemEntity replay = prepareGatePass(scope, entity, body, payload);
+      if (replay != null) {
+        return toDto(replay);
+      }
+    }
     entity.setPayload(payload);
     entity.setCreatedBy(scope.userId());
     Instant now = Instant.now();
@@ -95,6 +124,14 @@ public class CampusDeskService {
         repository
             .findByIdAndOrganizationId(id, scope.organizationId())
             .orElseThrow(() -> new StudentException("NOT_FOUND", "Desk item not found"));
+    if ("GATE_PASS".equals(entity.getKind())) {
+      if (!sameCampus(scope, entity)) {
+        throw new StudentException("NOT_FOUND", "Desk item not found");
+      }
+      applyGateAction(scope, entity, body);
+      entity.setUpdatedAt(Instant.now());
+      return toDto(repository.save(entity));
+    }
     String status = text(body.get("status"), null);
     if (status == null) {
       throw new StudentException("VALIDATION", "status is required");
@@ -109,6 +146,419 @@ public class CampusDeskService {
     }
     entity.setUpdatedAt(Instant.now());
     return toDto(repository.save(entity));
+  }
+
+  /** @return an existing pass when {@code clientRequestId} was already saved */
+  private CampusDeskItemEntity prepareGatePass(
+      TenantScope scope,
+      CampusDeskItemEntity entity,
+      Map<String, Object> body,
+      Map<String, Object> payload) {
+    List<CampusDeskItemEntity> existing = gatePasses(scope);
+    String requestId = text(body.get("clientRequestId"), text(payload.get("clientRequestId"), null));
+    if (requestId != null) {
+      for (CampusDeskItemEntity item : existing) {
+        if (requestId.equals(text(payloadValue(item, "clientRequestId"), null))) {
+          return item;
+        }
+      }
+      payload.put("clientRequestId", requestId);
+    }
+    String passType = gatePassType(body, payload);
+    boolean approval = truthy(body.get("requestApproval")) || truthy(payload.get("requestApproval"));
+    String status =
+        GatePassRules.createStatus(passType, approval, GatePassRules.elevated(scope.roleCode()));
+    entity.setSubjectType(passType);
+    entity.setStatus(status);
+    if ("STUDENT".equals(passType)) {
+      bindStudent(scope, entity, body, payload, existing);
+    } else {
+      bindVisitor(scope, entity, payload, existing);
+    }
+    String passNumber = nextPassNumber(existing, Instant.now());
+    payload.put("passType", passType);
+    payload.put("passNumber", passNumber);
+    payload.put("passDate", GatePassRules.today(Instant.now()).toString());
+    payload.put("issuedAt", Instant.now().toString());
+    rememberAudit(payload, scope.userId(), "CREATE", status);
+    entity.setTitle(passNumber);
+    if (entity.getNote() == null) {
+      entity.setNote(text(payload.get("reason"), text(payload.get("purpose"), null)));
+    }
+    return null;
+  }
+
+  private void applyGateAction(TenantScope scope, CampusDeskItemEntity entity, Map<String, Object> body) {
+    Map<String, Object> payload =
+        entity.getPayload() == null ? new LinkedHashMap<>() : new LinkedHashMap<>(entity.getPayload());
+    String action = text(body.get("action"), null);
+    if (action == null) {
+      throw new StudentException("VALIDATION", "action is required");
+    }
+    if ("EDIT".equalsIgnoreCase(action)) {
+      editGatePass(entity, payload, payloadOf(body.get("payload")));
+      entity.setPayload(payload);
+      return;
+    }
+    String passType = GatePassRules.passType(payload, entity.getSubjectType());
+    String next =
+        GatePassRules.nextStatus(
+            passType, entity.getStatus(), action, GatePassRules.elevated(scope.roleCode()));
+    Instant now = Instant.now();
+    String clock = now.atZone(GatePassRules.ZONE).toLocalTime().format(DateTimeFormatter.ofPattern("HH:mm"));
+    if ("EXIT".equalsIgnoreCase(action)) {
+      payload.put("actualExit", clock);
+      payload.put("actualExitAt", now.toString());
+    } else if ("RETURN".equalsIgnoreCase(action)) {
+      if (text(payload.get("actualExitAt"), null) == null && text(payload.get("actualExit"), null) == null) {
+        throw new StudentException("VALIDATION", "Record return only after the student has exited");
+      }
+      payload.put("actualReturn", clock);
+      payload.put("actualReturnAt", now.toString());
+    } else if ("CHECK_OUT".equalsIgnoreCase(action)) {
+      if (text(payload.get("checkInAt"), null) == null && text(payload.get("checkIn"), null) == null) {
+        throw new StudentException("VALIDATION", "Check-out is only for a visitor who is inside");
+      }
+      payload.put("checkOut", clock);
+      payload.put("checkOutAt", now.toString());
+    }
+    entity.setStatus(next);
+    entity.setSubjectType(passType);
+    rememberAudit(payload, scope.userId(), action.toUpperCase(Locale.ROOT), next);
+    entity.setPayload(payload);
+  }
+
+  private void editGatePass(
+      CampusDeskItemEntity entity, Map<String, Object> payload, Map<String, Object> incoming) {
+    String status = entity.getStatus() == null ? "" : entity.getStatus().toUpperCase(Locale.ROOT);
+    if (Set.of("RETURNED", "COMPLETED", "CANCELLED", "REJECTED").contains(status)) {
+      throw new StudentException("VALIDATION", "A closed gate pass cannot be edited");
+    }
+    for (String key :
+        List.of(
+            "purpose",
+            "reason",
+            "notes",
+            "destination",
+            "expectedReturn",
+            "guardianName",
+            "relationship",
+            "contact",
+            "pickupPerson",
+            "organization",
+            "personToMeet",
+            "department",
+            "vehicleNo",
+            "expectedDeparture",
+            "category")) {
+      if (incoming.containsKey(key)) {
+        payload.put(key, text(incoming.get(key), ""));
+      }
+    }
+    if (incoming.containsKey("accompanying")) {
+      payload.put("accompanying", accompanying(incoming.get("accompanying")));
+    }
+    if (incoming.containsKey("category")) {
+      payload.put("category", visitorCategory(text(payload.get("category"), "GUEST")));
+    }
+    String purpose = text(payload.get("purpose"), null);
+    if (purpose == null) {
+      throw new StudentException("VALIDATION", "Purpose is required");
+    }
+    entity.setNote(text(payload.get("reason"), purpose));
+  }
+
+  private void bindStudent(
+      TenantScope scope,
+      CampusDeskItemEntity entity,
+      Map<String, Object> body,
+      Map<String, Object> payload,
+      List<CampusDeskItemEntity> existing) {
+    String ref = text(body.get("subjectRef"), text(payload.get("studentId"), null));
+    UUID studentId;
+    try {
+      studentId = ref == null ? null : UUID.fromString(ref);
+    } catch (IllegalArgumentException ex) {
+      studentId = null;
+    }
+    if (studentId == null) {
+      throw new StudentException("VALIDATION", "Select a student");
+    }
+    StudentRecordEntity student =
+        students
+            .findByIdAndOrganizationId(studentId, scope.organizationId())
+            .orElseThrow(() -> new StudentException("VALIDATION", "Student not found in this school"));
+    if (student.getDeletedAt() != null || CLOSED_STUDENT_STATUSES.contains(upper(student.getStatus()))) {
+      throw new StudentException("VALIDATION", "This student is not enrolled");
+    }
+    if (scope.branchId() != null
+        && !scope.branchId().isBlank()
+        && student.getBranchId() != null
+        && !student.getBranchId().isBlank()
+        && !scope.branchId().equals(student.getBranchId())) {
+      throw new StudentException("VALIDATION", "Student is not on this campus");
+    }
+    if (scope.academicSessionId() != null
+        && !scope.academicSessionId().isBlank()
+        && student.getAcademicSessionId() != null
+        && !student.getAcademicSessionId().isBlank()
+        && !scope.academicSessionId().equals(student.getAcademicSessionId())) {
+      throw new StudentException("VALIDATION", "Student is not in the current academic session");
+    }
+    for (CampusDeskItemEntity item : existing) {
+      if (ref.equals(item.getSubjectRef()) && GatePassRules.openStudent(item.getStatus())) {
+        throw new StudentException("VALIDATION", "This student already has an open gate pass");
+      }
+    }
+    Map<String, Object> answers = student.getAnswers() == null ? Map.of() : student.getAnswers();
+    String name =
+        firstText(answers, "fullName", "studentName", "name");
+    if (name.isBlank()) {
+      name = "Student";
+    }
+    String classSection = firstText(answers, "classSection", "classApplied");
+    String[] parts = splitClass(classSection);
+    entity.setSubjectRef(student.getId().toString());
+    entity.setSubjectName(name);
+    payload.put("studentId", student.getId().toString());
+    payload.put("admissionNo", text(student.getAdmissionNo(), ""));
+    payload.put("studentName", name);
+    payload.put("className", parts[0]);
+    payload.put("section", parts[1]);
+    payload.put("rollNo", firstText(answers, "rollNo", "rollNumber"));
+    payload.put("photoUrl", photoUrl(answers));
+    putIfBlank(payload, "guardianName", firstText(answers, "guardianName", "fatherName", "parentName"));
+    putIfBlank(payload, "contact", firstText(answers, "mobile", "guardianMobile", "fatherMobile"));
+    requireText(payload.get("purpose"), "Purpose is required");
+    payload.put("reason", text(payload.get("reason"), ""));
+    payload.put("destination", text(payload.get("destination"), ""));
+    payload.put("expectedReturn", text(payload.get("expectedReturn"), ""));
+    payload.put("notes", text(payload.get("notes"), text(payload.get("reason"), "")));
+    payload.put("relationship", text(payload.get("relationship"), ""));
+    payload.put("pickupPerson", text(payload.get("pickupPerson"), ""));
+    copyFromBody(body, payload, "guardianName", "relationship", "contact", "pickupPerson", "reason", "destination", "expectedReturn", "notes");
+  }
+
+  private void bindVisitor(
+      TenantScope scope,
+      CampusDeskItemEntity entity,
+      Map<String, Object> payload,
+      List<CampusDeskItemEntity> existing) {
+    String name = requireText(payload.get("visitorName"), "Visitor name is required");
+    String mobile = digits(text(payload.get("mobile"), ""));
+    if (mobile.length() < 10) {
+      throw new StudentException("VALIDATION", "A valid mobile number is required");
+    }
+    String category = visitorCategory(text(payload.get("category"), "GUEST"));
+    for (CampusDeskItemEntity item : existing) {
+      if (!"INSIDE".equalsIgnoreCase(item.getStatus())) {
+        continue;
+      }
+      if (mobile.equals(digits(text(payloadValue(item, "mobile"), "")))) {
+        throw new StudentException("VALIDATION", "This visitor is already checked in");
+      }
+    }
+    String meetId = text(payload.get("meetStudentId"), null);
+    if (meetId != null) {
+      try {
+        StudentRecordEntity student =
+            students
+                .findByIdAndOrganizationId(UUID.fromString(meetId), scope.organizationId())
+                .orElseThrow(() -> new StudentException("VALIDATION", "Student to meet was not found"));
+        Map<String, Object> answers = student.getAnswers() == null ? Map.of() : student.getAnswers();
+        payload.put("meetStudentName", firstText(answers, "fullName", "studentName"));
+        String[] parts = splitClass(firstText(answers, "classSection", "classApplied"));
+        payload.put("meetClassName", parts[0]);
+        payload.put("meetSection", parts[1]);
+      } catch (IllegalArgumentException ex) {
+        throw new StudentException("VALIDATION", "Student to meet was not found");
+      }
+    }
+    entity.setSubjectRef(null);
+    entity.setSubjectName(name);
+    payload.put("visitorName", name);
+    payload.put("mobile", mobile);
+    payload.put("category", category);
+    payload.put("organization", text(payload.get("organization"), ""));
+    payload.put("idType", text(payload.get("idType"), ""));
+    payload.put("idRefLast4", last4(text(payload.get("idRef"), "")));
+    payload.remove("idRef");
+    requireText(payload.get("purpose"), "Purpose is required");
+    payload.put("personToMeet", text(payload.get("personToMeet"), ""));
+    payload.put("department", text(payload.get("department"), ""));
+    payload.put("vehicleNo", text(payload.get("vehicleNo"), ""));
+    payload.put("accompanying", accompanying(payload.get("accompanying")));
+    payload.put("notes", text(payload.get("notes"), ""));
+    payload.put("expectedDeparture", text(payload.get("expectedDeparture"), ""));
+    Instant now = Instant.now();
+    payload.put("checkIn", now.atZone(GatePassRules.ZONE).toLocalTime().format(DateTimeFormatter.ofPattern("HH:mm")));
+    payload.put("checkInAt", now.toString());
+  }
+
+  private List<CampusDeskItemEntity> gatePasses(TenantScope scope) {
+    return repository.findByOrganizationIdAndKindOrderByCreatedAtDesc(scope.organizationId(), "GATE_PASS")
+        .stream()
+        .filter(item -> sameCampus(scope, item))
+        .toList();
+  }
+
+  private static String nextPassNumber(List<CampusDeskItemEntity> existing, Instant now) {
+    String day = GatePassRules.today(now).format(PASS_DAY);
+    java.util.HashSet<String> used = new java.util.HashSet<>();
+    for (CampusDeskItemEntity item : existing) {
+      used.add(text(item.getTitle(), ""));
+      used.add(text(payloadValue(item, "passNumber"), ""));
+    }
+    for (int n = 1; n <= 9999; n++) {
+      String candidate = "GP-" + day + "-" + String.format(Locale.ROOT, "%04d", n);
+      if (!used.contains(candidate)) {
+        return candidate;
+      }
+    }
+    throw new StudentException("VALIDATION", "Could not allocate a pass number");
+  }
+
+  private static void rememberAudit(
+      Map<String, Object> payload, String userId, String action, String status) {
+    List<Map<String, Object>> audit = new ArrayList<>();
+    Object raw = payload.get("audit");
+    if (raw instanceof List<?> list) {
+      for (Object item : list) {
+        if (item instanceof Map<?, ?> map) {
+          Map<String, Object> copy = new LinkedHashMap<>();
+          map.forEach((key, value) -> copy.put(String.valueOf(key), value));
+          audit.add(copy);
+        }
+      }
+    }
+    Map<String, Object> step = new LinkedHashMap<>();
+    step.put("at", Instant.now().toString());
+    step.put("by", userId);
+    step.put("action", action);
+    step.put("status", status);
+    audit.add(step);
+    payload.put("audit", audit);
+  }
+
+  private static String gatePassType(Map<String, Object> body, Map<String, Object> payload) {
+    String raw = text(payload.get("passType"), text(body.get("subjectType"), "STUDENT"));
+    return "VISITOR".equalsIgnoreCase(raw) ? "VISITOR" : "STUDENT";
+  }
+
+  private static void copyFromBody(
+      Map<String, Object> body, Map<String, Object> payload, String... keys) {
+    for (String key : keys) {
+      if (body.containsKey(key) && text(body.get(key), null) != null) {
+        payload.put(key, text(body.get(key), ""));
+      }
+    }
+  }
+
+  private static void putIfBlank(Map<String, Object> payload, String key, String value) {
+    if (text(payload.get(key), null) == null && value != null && !value.isBlank()) {
+      payload.put(key, value);
+    }
+  }
+
+  private static String requireText(Object value, String message) {
+    String text = text(value, null);
+    if (text == null) {
+      throw new StudentException("VALIDATION", message);
+    }
+    return text;
+  }
+
+  private static String visitorCategory(String raw) {
+    String category = raw == null ? "" : raw.trim().toUpperCase(Locale.ROOT);
+    if (!GatePassRules.VISITOR_CATEGORIES.contains(category)) {
+      throw new StudentException("VALIDATION", "Choose a visitor category");
+    }
+    return category;
+  }
+
+  private static int accompanying(Object raw) {
+    int count = 0;
+    if (raw instanceof Number number) {
+      count = number.intValue();
+    } else if (raw != null && !String.valueOf(raw).isBlank()) {
+      try {
+        count = Integer.parseInt(String.valueOf(raw).trim());
+      } catch (NumberFormatException ex) {
+        throw new StudentException("VALIDATION", "Accompanying visitors must be a number");
+      }
+    }
+    if (count < 0 || count > 20) {
+      throw new StudentException("VALIDATION", "Accompanying visitors must be between 0 and 20");
+    }
+    return count;
+  }
+
+  private static String last4(String value) {
+    String compact = value == null ? "" : value.replaceAll("\\s+", "");
+    if (compact.length() <= 4) {
+      return compact;
+    }
+    return compact.substring(compact.length() - 4);
+  }
+
+  private static String digits(String value) {
+    return value == null ? "" : value.replaceAll("\\D", "");
+  }
+
+  private static String photoUrl(Map<String, Object> answers) {
+    for (String key : List.of("photoUrl", "photo")) {
+      Object value = answers.get(key);
+      if (value instanceof String text) {
+        String url = text.trim();
+        if (url.startsWith("http://")
+            || url.startsWith("https://")
+            || url.startsWith("/")
+            || url.startsWith("data:image/")) {
+          return url;
+        }
+      }
+    }
+    return "";
+  }
+
+  private static String firstText(Map<String, Object> answers, String... keys) {
+    for (String key : keys) {
+      String value = text(answers.get(key), null);
+      if (value != null) {
+        return value;
+      }
+    }
+    return "";
+  }
+
+  private static String[] splitClass(String classSection) {
+    if (classSection == null || classSection.isBlank()) {
+      return new String[] {"", ""};
+    }
+    String value = classSection.trim();
+    int split = value.lastIndexOf('-');
+    if (split <= 0 || split == value.length() - 1) {
+      return new String[] {value, ""};
+    }
+    return new String[] {value.substring(0, split).trim(), value.substring(split + 1).trim()};
+  }
+
+  private static boolean truthy(Object value) {
+    if (value instanceof Boolean flag) {
+      return flag;
+    }
+    return value != null && "true".equalsIgnoreCase(String.valueOf(value).trim());
+  }
+
+  private static String upper(String value) {
+    return value == null ? "" : value.trim().toUpperCase(Locale.ROOT);
+  }
+
+  private static String payloadValue(CampusDeskItemEntity item, String key) {
+    if (item.getPayload() == null) {
+      return null;
+    }
+    return text(item.getPayload().get(key), null);
   }
 
   private static boolean sameCampus(TenantScope scope, CampusDeskItemEntity item) {
