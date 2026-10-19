@@ -55,7 +55,7 @@
     <header class="page-head">
       <div>
         <h2>Class marks entry</h2>
-        <p>Select the exam, class, section and subject. Every student in that section loads together.</p>
+        <p>Choose class, section, subject, and exam, then search. Admission number is optional.</p>
       </div>
       <button type="button" class="secondary" (click)="quickEntry = !quickEntry">
         {{ quickEntry ? 'Full columns' : 'Quick entry' }}
@@ -71,35 +71,56 @@
     @if (loading) {
       <p class="panel">Loading classes…</p>
     } @else {
-      <section class="panel selector-grid">
-        <label>Exam
-          <select [(ngModel)]="examDefinitionId" (ngModelChange)="onExamChange()" name="exam">
-            <option value="">Select exam</option>
-            @for (exam of examOptions; track exam.id) {
-              <option [value]="exam.id">{{ exam.name }} · {{ exam.status }}</option>
-            }
-          </select>
-        </label>
+      <section class="panel selector-grid" aria-label="Marks filters">
         <label>Class
           <select [(ngModel)]="classId" (ngModelChange)="onClassChange()" name="classId">
+            <option value="">Select class</option>
             @for (row of classOptions; track row.id) {
               <option [value]="row.id">{{ row.name }}</option>
             }
           </select>
         </label>
         <label>Section
-          <select [(ngModel)]="sectionId" (ngModelChange)="onSectionChange()" name="sectionId">
+          <select
+            [(ngModel)]="sectionId"
+            (ngModelChange)="onSectionChange()"
+            name="sectionId"
+            [disabled]="!classId"
+          >
+            <option value="">Select section</option>
             @for (row of sectionOptions; track row.id) {
               <option [value]="row.id">{{ row.studentLabel || row.name }}</option>
             }
           </select>
         </label>
         <label>Subject
-          <select [(ngModel)]="subjectId" (ngModelChange)="onSubjectChange()" name="subjectId">
+          <select
+            [(ngModel)]="subjectId"
+            (ngModelChange)="onSubjectChange()"
+            name="subjectId"
+            [disabled]="!sectionId"
+          >
+            <option value="">Select subject</option>
             @for (row of subjectOptions; track row.id) {
               <option [value]="row.id">{{ row.name }}</option>
             }
           </select>
+        </label>
+        <label>Exam
+          <select [(ngModel)]="examDefinitionId" (ngModelChange)="onExamChange()" name="exam" [disabled]="!subjectId">
+            <option value="">Select exam</option>
+            @for (exam of examOptions; track exam.id) {
+              <option [value]="exam.id">{{ exam.name }} · {{ exam.status }}</option>
+            }
+          </select>
+        </label>
+        <label>Admission number
+          <input
+            [(ngModel)]="admissionNo"
+            name="admissionNo"
+            placeholder="Optional"
+            (keyup.enter)="search()"
+          />
         </label>
         <label>Maximum marks
           <input [value]="gradebook?.exam?.maxMarks ?? ''" readonly />
@@ -111,13 +132,27 @@
           <input [value]="gradebook?.exam?.examDate ?? ''" readonly />
         </label>
         <div class="actions">
+          <button type="button" (click)="search()" [disabled]="busy">Search</button>
+          <button type="button" class="secondary" (click)="requestReset()" [disabled]="busy">Reset</button>
           <button type="button" class="secondary" (click)="downloadDateSheet()" [disabled]="busy || !sectionId">
             Date sheet
           </button>
         </div>
       </section>
 
-      @if (!examDefinitionId) {
+      @if (gradebook && loadedDefinitionId !== examDefinitionId) {
+        <p class="panel" role="status">Filters changed. Search to load this exam. Unsaved marks stay until you search or reset.</p>
+      }
+
+      @if (!gradebook && !busy && !(classId && sectionId && subjectId && !examOptions.length)) {
+        @if (!classId || !sectionId || !subjectId || !examDefinitionId) {
+          <p class="panel" role="status">Select class, section, subject, and exam, then search.</p>
+        } @else {
+          <p class="panel" role="status">Search to load students for this exam.</p>
+        }
+      }
+
+      @if (classId && sectionId && subjectId && !examOptions.length) {
         <section class="panel">
           <p>No exam is set up for this class and subject.</p>
           <button type="button" class="secondary" (click)="createOpen = !createOpen">New exam</button>
@@ -332,6 +367,22 @@
             <div class="actions">
               <button type="button" class="secondary" (click)="dialog = ''">Cancel</button>
               <button type="button" (click)="requestCorrection()" [disabled]="!correctionReason.trim()">Send request</button>
+            </div>
+          }
+          @if (dialog === 'discard') {
+            <h3>Load a different exam?</h3>
+            <p>Unsaved marks will be replaced by the exam you searched.</p>
+            <div class="actions">
+              <button type="button" class="secondary" (click)="dialog = ''">Cancel</button>
+              <button type="button" (click)="applySearch()">Load exam</button>
+            </div>
+          }
+          @if (dialog === 'reset') {
+            <h3>Reset filters?</h3>
+            <p>Unsaved marks on this sheet will be discarded.</p>
+            <div class="actions">
+              <button type="button" class="secondary" (click)="dialog = ''">Cancel</button>
+              <button type="button" (click)="applyReset()">Reset</button>
             </div>
           }
           @if (dialog === 'import' && importPreview) {

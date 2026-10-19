@@ -117,6 +117,9 @@ export class ExamBulkComponent implements OnInit {
   sectionId = '';
   subjectId = '';
   examDefinitionId = '';
+  admissionNo = '';
+  loadedDefinitionId = '';
+  private loadedSnapshot = '';
   createOpen = false;
   createDraft = { name: '', termKey: 'TERM1', maxMarks: 100, passingMarks: 33, examDate: '' };
 
@@ -127,7 +130,7 @@ export class ExamBulkComponent implements OnInit {
   sortKey: 'rollNo' | 'studentName' | 'admissionNo' | 'marks' | 'entryStatus' = 'rollNo';
   sortDir: 'ASC' | 'DESC' = 'ASC';
   quickEntry = false;
-  dialog: '' | 'fill' | 'submit' | 'import' | 'correction' | 'status' | 'clear' = '';
+  dialog: '' | 'fill' | 'submit' | 'import' | 'correction' | 'status' | 'clear' | 'discard' | 'reset' = '';
   fillValue = '';
   fillOverwrite = false;
   statusValue = 'PRESENT';
@@ -177,7 +180,8 @@ export class ExamBulkComponent implements OnInit {
   }
 
   get sectionOptions(): AcademicSection[] {
-    let rows = this.sections.filter((s) => !this.classId || s.classId === this.classId);
+    if (!this.classId) return [];
+    let rows = this.sections.filter((s) => s.classId === this.classId);
     if (this.isTeacher && this.teacherScope.sectionIds) {
       const allowed = new Set(this.teacherScope.sectionIds);
       rows = rows.filter((s) => allowed.has(s.id));
@@ -187,7 +191,7 @@ export class ExamBulkComponent implements OnInit {
 
   get subjectOptions(): AcademicSubject[] {
     const active = this.subjects.filter((s) => String(s.status || 'ACTIVE').toUpperCase() !== 'INACTIVE');
-    if (!this.sectionId) return active;
+    if (!this.sectionId) return [];
     const onSection = this.assignments.filter(
       (a) => a.sectionId === this.sectionId && String(a.status || 'ACTIVE').toUpperCase() !== 'INACTIVE',
     );
@@ -207,11 +211,12 @@ export class ExamBulkComponent implements OnInit {
   }
 
   get examOptions(): ExamDef[] {
-    return this.definitions.filter((d) => {
-      if (this.sectionId && d.sectionId !== this.sectionId) return false;
-      if (this.subjectId && d.subjectId !== this.subjectId) return false;
-      return true;
-    });
+    if (!this.sectionId || !this.subjectId) return [];
+    return this.definitions.filter((d) => d.sectionId === this.sectionId && d.subjectId === this.subjectId);
+  }
+
+  get sheetDirty(): boolean {
+    return this.sheetSnapshot() !== this.loadedSnapshot;
   }
 
   get maxMarks(): number {
@@ -303,35 +308,82 @@ export class ExamBulkComponent implements OnInit {
   }
 
   onClassChange(): void {
-    if (!this.sectionOptions.some((s) => s.id === this.sectionId)) {
-      this.sectionId = this.sectionOptions[0]?.id ?? '';
-    }
-    this.onSectionChange();
+    this.sectionId = '';
+    this.subjectId = '';
+    this.examDefinitionId = '';
+    this.error = '';
+    this.clearSheetIfClean();
   }
 
   onSectionChange(): void {
     if (!this.subjectOptions.some((s) => s.id === this.subjectId)) {
-      this.subjectId = this.subjectOptions[0]?.id ?? '';
+      this.subjectId = '';
     }
-    this.refreshExamChoice();
+    this.clearExamIfMissing();
+    this.error = '';
+    this.clearSheetIfClean();
   }
 
   onSubjectChange(): void {
-    this.refreshExamChoice();
+    this.clearExamIfMissing();
+    this.error = '';
+    this.clearSheetIfClean();
   }
 
   onExamChange(): void {
-    const exam = this.selectedExam;
-    if (!exam) {
-      this.gradebook = null;
-      this.rows = [];
+    this.error = '';
+    if (this.loadedDefinitionId !== this.examDefinitionId) {
+      this.clearSheetIfClean();
+    }
+  }
+
+  search(): void {
+    this.error = '';
+    if (!this.classId || !this.sectionId || !this.subjectId || !this.examDefinitionId) {
+      this.error = 'Select class, section, subject, and exam before searching.';
       return;
     }
-    const section = this.sections.find((s) => s.id === exam.sectionId);
-    this.classId = section?.classId ?? this.classId;
-    this.sectionId = exam.sectionId;
-    this.subjectId = exam.subjectId;
+    const sameSheet = !!this.gradebook && this.loadedDefinitionId === this.examDefinitionId;
+    if (sameSheet) {
+      this.query = this.admissionNo.trim();
+      return;
+    }
+    if (this.sheetDirty) {
+      this.dialog = 'discard';
+      return;
+    }
+    this.applySearch();
+  }
+
+  applySearch(): void {
+    this.dialog = '';
+    this.query = this.admissionNo.trim();
     this.loadGradebook();
+  }
+
+  requestReset(): void {
+    if (this.sheetDirty) {
+      this.dialog = 'reset';
+      return;
+    }
+    this.applyReset();
+  }
+
+  applyReset(): void {
+    this.dialog = '';
+    this.classId = '';
+    this.sectionId = '';
+    this.subjectId = '';
+    this.examDefinitionId = '';
+    this.admissionNo = '';
+    this.query = '';
+    this.filter = 'ALL';
+    this.gradebook = null;
+    this.rows = [];
+    this.error = '';
+    this.status = '';
+    this.loadedDefinitionId = '';
+    this.captureSnapshot();
   }
 
   downloadDateSheet(): void {
@@ -662,26 +714,40 @@ export class ExamBulkComponent implements OnInit {
       this.teacherScope = catalog.scope ?? {};
       this.loading = false;
       const preset = this.route.snapshot.queryParamMap.get('definition');
-      if (preset && this.definitions.some((d) => d.id === preset)) {
-        this.examDefinitionId = preset;
-        this.onExamChange();
-      } else if (this.classOptions.length) {
-        this.classId = this.classOptions[0].id;
-        this.onClassChange();
+      const exam = preset ? this.definitions.find((d) => d.id === preset) : undefined;
+      if (exam) {
+        const section = this.sections.find((s) => s.id === exam.sectionId);
+        this.classId = section?.classId ?? '';
+        this.sectionId = exam.sectionId;
+        this.subjectId = exam.subjectId;
+        this.examDefinitionId = exam.id;
+        this.loadGradebook();
       }
     });
   }
 
-  private refreshExamChoice(): void {
-    const still = this.examOptions.some((d) => d.id === this.examDefinitionId);
-    if (!still) {
-      this.examDefinitionId = this.examOptions[0]?.id ?? '';
+  private clearExamIfMissing(): void {
+    if (!this.examOptions.some((d) => d.id === this.examDefinitionId)) {
+      this.examDefinitionId = '';
     }
-    if (this.examDefinitionId) this.loadGradebook();
-    else {
-      this.gradebook = null;
-      this.rows = [];
-    }
+  }
+
+  private clearSheetIfClean(): void {
+    if (this.sheetDirty) return;
+    this.gradebook = null;
+    this.rows = [];
+    this.loadedDefinitionId = '';
+    this.captureSnapshot();
+  }
+
+  private sheetSnapshot(): string {
+    return this.rows
+      .map((row) => `${row.studentId ?? ''}|${row.admissionNo}|${row.marks}|${row.entryStatus}|${row.remarks}`)
+      .join('\n');
+  }
+
+  private captureSnapshot(): void {
+    this.loadedSnapshot = this.sheetSnapshot();
   }
 
   private loadGradebook(): void {
@@ -705,13 +771,18 @@ export class ExamBulkComponent implements OnInit {
           leftSection: !!s.leftSection,
           open: false,
         }));
+        this.loadedDefinitionId = this.examDefinitionId;
+        this.captureSnapshot();
         this.busy = false;
       },
       error: (err) => {
         this.busy = false;
+        this.error = err?.error?.message ?? 'Could not load the class';
+        if (this.sheetDirty) return;
         this.gradebook = null;
         this.rows = [];
-        this.error = err?.error?.message ?? 'Could not load the class';
+        this.loadedDefinitionId = '';
+        this.captureSnapshot();
       },
     });
   }
