@@ -10,6 +10,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
@@ -23,8 +24,9 @@ public class CampusDeskController {
   }
 
   @GetMapping("/{kind}")
-  public ApiResponse<List<Map<String, Object>>> list(@PathVariable("kind") String kind) {
-    return ApiResponse.ok(service.list(kind));
+  public ApiResponse<List<Map<String, Object>>> list(
+      @PathVariable("kind") String kind, @RequestParam Map<String, String> query) {
+    return ApiResponse.ok(service.list(kind, query == null ? Map.of() : query));
   }
 
   @PostMapping("/{kind}")

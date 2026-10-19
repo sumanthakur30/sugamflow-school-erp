@@ -1,0 +1,458 @@
+<section class="page gate">
+  <header class="page-head">
+    <div>
+      <p class="crumb">Administration / Gate Pass</p>
+      <h1>Gate Pass Management</h1>
+      <p>Manage student departures and visitor entry records from one place.</p>
+    </div>
+    <button type="button" class="create" (click)="openCreate()">
+      <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 4v12M4 10h12" /></svg>
+      Create Gate Pass
+    </button>
+  </header>
+
+  <div class="stats">
+    <article>
+      <span class="icon tone-slate" aria-hidden="true">
+        <svg viewBox="0 0 24 24"><rect x="5" y="3" width="14" height="18" rx="2" /><path d="M8 8h8M8 12h8M8 16h5" /></svg>
+      </span>
+      <div><strong>{{ stats.today }}</strong><span>Passes today</span></div>
+    </article>
+    <article>
+      <span class="icon tone-amber" aria-hidden="true">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="3" /><path d="M5 19c1.2-3 3.4-4.5 7-4.5S17.8 16 19 19" /></svg>
+      </span>
+      <div><strong>{{ stats.studentsOutside }}</strong><span>Students outside</span></div>
+    </article>
+    <article>
+      <span class="icon tone-blue" aria-hidden="true">
+        <svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="2.5" /><circle cx="16" cy="9" r="2" /><path d="M4 18c.8-2.4 2.4-3.6 5-3.6s4.2 1.2 5 3.6M14 14.5c1.6.1 2.8.9 3.5 2.5" /></svg>
+      </span>
+      <div><strong>{{ stats.visitorsInside }}</strong><span>Guests inside</span></div>
+    </article>
+    <article>
+      <span class="icon tone-green" aria-hidden="true">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8" /><path d="M8.5 12.5l2.2 2.2 4.8-5" /></svg>
+      </span>
+      <div><strong>{{ stats.completed }}</strong><span>Completed today</span></div>
+    </article>
+  </div>
+
+  <div class="tabs" role="tablist">
+    <button type="button" role="tab" class="tab student linkish" [class.active]="passType === 'STUDENT'" [attr.aria-selected]="passType === 'STUDENT'" (click)="selectType('STUDENT')">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="3" /><path d="M6 19c1-3 2.8-4.5 6-4.5s5 1.5 6 4.5" /></svg>
+      Student Gate Pass
+    </button>
+    <button type="button" role="tab" class="tab guest linkish" [class.active]="passType === 'VISITOR'" [attr.aria-selected]="passType === 'VISITOR'" (click)="selectType('VISITOR')">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="2.4" /><circle cx="16" cy="9" r="2" /><path d="M4.5 18c.7-2.2 2.2-3.4 4.5-3.4s3.8 1.2 4.5 3.4M14 14.6c1.4.1 2.6.8 3.2 2.4" /></svg>
+      Guest Gate Pass
+    </button>
+  </div>
+
+  <div class="panel-head">
+    @if (passType === 'STUDENT') {
+      <div>
+        <h2>Student Gate Passes</h2>
+        <p>Search, create, and manage student departure and return records.</p>
+      </div>
+    } @else {
+      <div>
+        <h2>Guest Gate Passes</h2>
+        <p>Manage visitor registration, check-in, and check-out.</p>
+      </div>
+    }
+  </div>
+
+  @if (notice) {
+    <p class="notice" role="status">{{ notice }}</p>
+  }
+  @if (error) {
+    <p class="error" role="alert">{{ error }}</p>
+  }
+
+  <form class="filter-panel" (ngSubmit)="search()">
+    @if (passType === 'STUDENT') {
+      <div class="filter-row students">
+        <label>Student
+          <input [(ngModel)]="draft.q" name="q" placeholder="Name, admission number, or pass number" />
+        </label>
+        <label>Class
+          <select [(ngModel)]="draft.className" name="className" (ngModelChange)="onClassChange()">
+            <option value="">All classes</option>
+            @for (row of classes; track row.id) {
+              <option [value]="row.name">{{ row.name }}</option>
+            }
+          </select>
+        </label>
+        <label>Section
+          <select [(ngModel)]="draft.section" name="section" [disabled]="!draft.className">
+            <option value="">All sections</option>
+            @for (row of sectionOptions; track row.id) {
+              <option [value]="row.name">{{ row.name }}</option>
+            }
+          </select>
+        </label>
+        <label>Status
+          <select [(ngModel)]="draft.status" name="status">
+            <option value="">All statuses</option>
+            <option value="PENDING">Pending approval</option>
+            <option value="APPROVED">Approved</option>
+            <option value="OUT">Out of school</option>
+            <option value="RETURNED">Returned</option>
+            <option value="REJECTED">Rejected</option>
+            <option value="CANCELLED">Cancelled</option>
+            <option value="OPEN">Open</option>
+          </select>
+        </label>
+        <label>Purpose
+          <select [(ngModel)]="draft.purpose" name="purpose">
+            <option value="">All purposes</option>
+            @for (purpose of purposes.STUDENT; track purpose) {
+              <option [value]="purpose">{{ purpose }}</option>
+            }
+          </select>
+        </label>
+      </div>
+    } @else {
+      <div class="filter-row guests">
+        <label>Guest
+          <input [(ngModel)]="draft.q" name="q" placeholder="Name, phone, or pass number" />
+        </label>
+        <label>Category
+          <select [(ngModel)]="draft.category" name="category">
+            <option value="">All categories</option>
+            @for (category of categories; track category.id) {
+              <option [value]="category.id">{{ category.label }}</option>
+            }
+          </select>
+        </label>
+        <label>Person or department
+          <input [(ngModel)]="draft.person" name="person" placeholder="Who they came to see" />
+        </label>
+        <label>Status
+          <select [(ngModel)]="draft.status" name="status">
+            <option value="">All statuses</option>
+            <option value="INSIDE">Checked in</option>
+            <option value="COMPLETED">Checked out</option>
+            <option value="CANCELLED">Cancelled</option>
+            <option value="OPEN">Open</option>
+          </select>
+        </label>
+      </div>
+    }
+    <div class="filter-row dates">
+      <label>From
+        <input type="date" [(ngModel)]="draft.from" name="from" />
+      </label>
+      <label>To
+        <input type="date" [(ngModel)]="draft.to" name="to" />
+      </label>
+      <div class="filter-actions">
+        <button type="submit">Search</button>
+        <button type="button" class="secondary" (click)="reset()">Reset</button>
+      </div>
+    </div>
+  </form>
+
+  @if (loading) {
+    <p class="loading">Loading gate passes…</p>
+  } @else if (!filtered.length) {
+    <div class="empty">
+      <p>No {{ passType === 'STUDENT' ? 'student' : 'guest' }} gate passes match these filters.</p>
+      <button type="button" class="secondary" (click)="openCreate()">Create Gate Pass</button>
+    </div>
+  } @else {
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th class="list-th" [class.active-sort]="sortKey === 'pass'">
+              <button type="button" class="heading-sort" (click)="sort('pass')">Pass number <span class="sort-indicator">{{ sortKey === 'pass' ? (sortDir === 'asc' ? '↑' : '↓') : '↕' }}</span></button>
+            </th>
+            @if (passType === 'STUDENT') {
+              <th class="list-th" [class.active-sort]="sortKey === 'name'">
+                <button type="button" class="heading-sort" (click)="sort('name')">Student <span class="sort-indicator">{{ sortKey === 'name' ? (sortDir === 'asc' ? '↑' : '↓') : '↕' }}</span></button>
+              </th>
+              <th class="list-th" [class.active-sort]="sortKey === 'class'">
+                <button type="button" class="heading-sort" (click)="sort('class')">Class / section <span class="sort-indicator">{{ sortKey === 'class' ? (sortDir === 'asc' ? '↑' : '↓') : '↕' }}</span></button>
+              </th>
+              <th class="list-th"><span class="heading-label">Purpose</span></th>
+              <th class="list-th"><span class="heading-label">Exit / return</span></th>
+            } @else {
+              <th class="list-th" [class.active-sort]="sortKey === 'name'">
+                <button type="button" class="heading-sort" (click)="sort('name')">Guest <span class="sort-indicator">{{ sortKey === 'name' ? (sortDir === 'asc' ? '↑' : '↓') : '↕' }}</span></button>
+              </th>
+              <th class="list-th"><span class="heading-label">Phone</span></th>
+              <th class="list-th"><span class="heading-label">Person to meet</span></th>
+              <th class="list-th"><span class="heading-label">Purpose</span></th>
+              <th class="list-th"><span class="heading-label">Check-in</span></th>
+              <th class="list-th"><span class="heading-label">Check-out</span></th>
+            }
+            <th class="list-th" [class.active-sort]="sortKey === 'status'">
+              <button type="button" class="heading-sort" (click)="sort('status')">Status <span class="sort-indicator">{{ sortKey === 'status' ? (sortDir === 'asc' ? '↑' : '↓') : '↕' }}</span></button>
+            </th>
+            <th class="list-th"><span class="heading-label">Actions</span></th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (row of pageRows; track row.id) {
+            <tr [class.is-inside]="passType === 'VISITOR' && row.status === 'INSIDE'">
+              <td class="pass-no">{{ row.payload?.passNumber || row.title }}</td>
+              @if (passType === 'STUDENT') {
+                <td>
+                  <div class="who">
+                    <span class="avatar">{{ initials(row.subjectName || row.payload?.studentName) }}</span>
+                    <span>
+                      <strong>{{ row.subjectName || row.payload?.studentName || 'Student' }}</strong>
+                      <small>{{ row.payload?.admissionNo || 'No admission number' }}</small>
+                    </span>
+                  </div>
+                </td>
+                <td>{{ row.payload?.className || '—' }}<small>{{ row.payload?.section }}</small></td>
+                <td><span class="purpose">{{ row.payload?.purpose || row.note || '—' }}</span></td>
+                <td>
+                  <span>Exit {{ row.payload?.actualExit || 'Not recorded' }}</span>
+                  <small>Return {{ row.payload?.actualReturn || 'Not recorded' }}</small>
+                </td>
+              } @else {
+                <td>
+                  <div class="who">
+                    <span class="avatar guest">{{ initials(row.payload?.visitorName || row.subjectName) }}</span>
+                    <span>
+                      <strong>{{ row.payload?.visitorName || row.subjectName || 'Guest' }}</strong>
+                      <small>{{ categoryLabel(row.payload?.category) || 'Guest' }}</small>
+                    </span>
+                  </div>
+                </td>
+                <td>{{ maskPhone(row.payload?.mobile) }}</td>
+                <td>{{ row.payload?.personToMeet || '—' }}<small>{{ row.payload?.department }}</small></td>
+                <td><span class="purpose">{{ row.payload?.purpose || row.note || '—' }}</span></td>
+                <td>{{ row.payload?.checkIn || 'Not recorded' }}</td>
+                <td>{{ row.payload?.checkOut || 'Not recorded' }}</td>
+              }
+              <td><span class="badge" [attr.data-status]="row.status">{{ labelFor(row) }}</span></td>
+              <td class="row-actions">
+                <button type="button" class="icon-btn linkish" title="View" aria-label="View" (click)="detail = row">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12z" /><circle cx="12" cy="12" r="2.5" /></svg>
+                </button>
+                @if (primaryAction(row); as action) {
+                  <button type="button" class="secondary tiny" (click)="ask(row, action.id)">{{ action.label }}</button>
+                }
+                <button type="button" class="icon-btn linkish" title="Print" aria-label="Print" (click)="print(row)">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 8V4h10v4" /><rect x="6" y="13" width="12" height="7" rx="1" /><path d="M6 16H4a1 1 0 0 1-1-1V9a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v6a1 1 0 0 1-1 1h-2" /></svg>
+                </button>
+                <button type="button" class="icon-btn linkish" title="More actions" aria-label="More actions" (click)="toggleMenu(row.id, $event)">⋮</button>
+                @if (menuId === row.id) {
+                  <div class="menu" (click)="$event.stopPropagation()">
+                    @if (editable(row)) {
+                      <button type="button" class="menu-item" (click)="openEdit(row)">Edit</button>
+                    }
+                    @for (item of menuActions(row); track item.id) {
+                      <button type="button" class="menu-item" (click)="ask(row, item.id)">{{ item.label }}</button>
+                    }
+                    @if (!editable(row) && !menuActions(row).length) {
+                      <p class="menu-empty">No further actions</p>
+                    }
+                  </div>
+                }
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+    <div class="pager">
+      <button type="button" class="secondary" (click)="page = page - 1" [disabled]="page <= 1">Previous</button>
+      <span>Page {{ page }} of {{ pageCount }}</span>
+      <button type="button" class="secondary" (click)="page = page + 1" [disabled]="page >= pageCount">Next</button>
+    </div>
+  }
+</section>
+
+@if (formOpen) {
+  <div class="backdrop" (click)="closeForm()">
+    <form class="dialog" (click)="$event.stopPropagation()" (ngSubmit)="save()">
+      <header>
+        <div>
+          <h2>{{ editingId ? 'Edit' : 'New' }} {{ passType === 'STUDENT' ? 'student' : 'guest' }} pass</h2>
+          <p>{{ passType === 'STUDENT' ? 'Student details are filled from the student record.' : 'Register the guest, then check them out when they leave.' }}</p>
+        </div>
+        <button type="button" class="icon-btn linkish" aria-label="Close" (click)="closeForm()">✕</button>
+      </header>
+      @if (formError) {
+        <p class="error" role="alert">{{ formError }}</p>
+      }
+
+      @if (passType === 'STUDENT') {
+        <h3>Student details</h3>
+        @if (!editingId) {
+          <sf-student-lookup label="Student" [showFilters]="false" (studentSelected)="onStudent($event)" />
+        }
+        @if (student || editingId) {
+          <dl class="identity">
+            <div><dt>Admission number</dt><dd>{{ student?.admissionNo || payload.admissionNo || '—' }}</dd></div>
+            <div><dt>Name</dt><dd>{{ student?.fullName || payload.studentName || '—' }}</dd></div>
+            <div><dt>Class / section</dt><dd>{{ student?.classSection || ((payload.className || '') + ' ' + (payload.section || '')) || '—' }}</dd></div>
+            <div><dt>Roll number</dt><dd>{{ student?.rollNo || payload.rollNo || '—' }}</dd></div>
+          </dl>
+        }
+        <h3>Pass details</h3>
+        <div class="grid two">
+          <label>Purpose <span class="req">*</span>
+            <select [(ngModel)]="payload.purpose" name="purpose" required>
+              <option value="">Select a purpose</option>
+              @for (purpose of purposes.STUDENT; track purpose) {
+                <option [value]="purpose">{{ purpose }}</option>
+              }
+            </select>
+          </label>
+          <label>Expected return
+            <input type="time" [(ngModel)]="payload.expectedReturn" name="expectedReturn" />
+          </label>
+          <label>Destination
+            <input [(ngModel)]="payload.destination" name="destination" placeholder="Clinic, home, or other place" />
+          </label>
+          <label class="wide">Reason for leaving
+            <textarea [(ngModel)]="payload.reason" name="reason" rows="2" placeholder="What the gate should know"></textarea>
+          </label>
+        </div>
+        <h3>Authorization</h3>
+        <div class="grid two">
+          <label>Parent or guardian
+            <input [(ngModel)]="payload.guardianName" name="guardianName" />
+          </label>
+          <label>Relationship
+            <input [(ngModel)]="payload.relationship" name="relationship" placeholder="Father, mother, guardian" />
+          </label>
+          <label>Contact
+            <input [(ngModel)]="payload.contact" name="contact" inputmode="tel" />
+          </label>
+          <label>Authorized pickup person
+            <input [(ngModel)]="payload.pickupPerson" name="pickupPerson" />
+          </label>
+        </div>
+        @if (!editingId && !approver) {
+          <label class="check"><input type="checkbox" [(ngModel)]="requestApproval" name="requestApproval" /> Send for approval before the student can exit</label>
+        }
+      } @else {
+        <h3>Guest details</h3>
+        @if (!editingId) {
+          <div class="grid two">
+            <label>Guest name <span class="req">*</span>
+              <input [(ngModel)]="payload.visitorName" name="visitorName" required />
+            </label>
+            <label>Phone <span class="req">*</span>
+              <input [(ngModel)]="payload.mobile" name="mobile" required inputmode="tel" placeholder="10-digit mobile" />
+            </label>
+            <label>Category
+              <select [(ngModel)]="payload.category" name="category">
+                @for (category of categories; track category.id) {
+                  <option [value]="category.id">{{ category.label }}</option>
+                }
+              </select>
+            </label>
+            <label>Organization
+              <input [(ngModel)]="payload.organization" name="organization" />
+            </label>
+            <label>ID type
+              <input [(ngModel)]="payload.idType" name="idType" placeholder="Optional" />
+            </label>
+            <label>ID reference
+              <input [(ngModel)]="payload.idRef" name="idRef" placeholder="Only the last 4 characters are stored" maxlength="32" />
+            </label>
+          </div>
+        } @else {
+          <p class="hint">{{ payload.visitorName }} · {{ payload.passNumber }}</p>
+        }
+        <h3>Visit details</h3>
+        <div class="grid two">
+          <label>Person to meet
+            <input [(ngModel)]="payload.personToMeet" name="personToMeet" />
+          </label>
+          <label>Department
+            <input [(ngModel)]="payload.department" name="department" />
+          </label>
+          <label>Purpose <span class="req">*</span>
+            <select [(ngModel)]="payload.purpose" name="purpose" required>
+              <option value="">Select a purpose</option>
+              @for (purpose of purposes.VISITOR; track purpose) {
+                <option [value]="purpose">{{ purpose }}</option>
+              }
+            </select>
+          </label>
+          <label>Expected departure
+            <input type="time" [(ngModel)]="payload.expectedDeparture" name="expectedDeparture" />
+          </label>
+          <label>Vehicle number
+            <input [(ngModel)]="payload.vehicleNo" name="vehicleNo" />
+          </label>
+          <label>Accompanying guests
+            <input type="number" min="0" max="20" [(ngModel)]="payload.accompanying" name="accompanying" />
+          </label>
+          <label class="wide">Notes
+            <textarea [(ngModel)]="payload.notes" name="notes" rows="2"></textarea>
+          </label>
+        </div>
+        @if (!editingId) {
+          <sf-student-lookup label="Student to meet (optional)" [showFilters]="false" (studentSelected)="onMeetStudent($event)" />
+          @if (meetStudent) {
+            <p class="hint">{{ meetStudent.fullName }} · {{ meetStudent.classSection }}</p>
+          }
+        }
+      }
+
+      <div class="actions">
+        <button type="button" class="secondary" (click)="closeForm()">Cancel</button>
+        <button type="submit" [disabled]="saving">{{ saving ? 'Saving…' : (editingId ? 'Save changes' : 'Create Gate Pass') }}</button>
+      </div>
+    </form>
+  </div>
+}
+
+@if (detail) {
+  <div class="backdrop" (click)="detail = null">
+    <article class="dialog" (click)="$event.stopPropagation()">
+      <header>
+        <div>
+          <h2>{{ detail.payload?.passNumber || detail.title }}</h2>
+          <p>{{ passTypeOf(detail) === 'STUDENT' ? 'Student gate pass' : 'Guest gate pass' }}</p>
+        </div>
+        <button type="button" class="icon-btn linkish" aria-label="Close" (click)="detail = null">✕</button>
+      </header>
+      <p><span class="badge" [attr.data-status]="detail.status">{{ labelFor(detail) }}</span></p>
+      <dl class="identity">
+        <div><dt>Name</dt><dd>{{ detail.subjectName || detail.payload?.visitorName || detail.payload?.studentName || '—' }}</dd></div>
+        <div><dt>Purpose</dt><dd>{{ detail.payload?.purpose || '—' }}</dd></div>
+        <div><dt>Date</dt><dd>{{ detail.payload?.passDate || '—' }}</dd></div>
+        @if (passTypeOf(detail) === 'STUDENT') {
+          <div><dt>Class</dt><dd>{{ detail.payload?.className }} {{ detail.payload?.section }}</dd></div>
+          <div><dt>Exit</dt><dd>{{ detail.payload?.actualExit || 'Not recorded' }}</dd></div>
+          <div><dt>Return</dt><dd>{{ detail.payload?.actualReturn || 'Not recorded' }}</dd></div>
+        } @else {
+          <div><dt>Phone</dt><dd>{{ maskPhone(detail.payload?.mobile) }}</dd></div>
+          <div><dt>Check-in</dt><dd>{{ detail.payload?.checkIn || 'Not recorded' }}</dd></div>
+          <div><dt>Check-out</dt><dd>{{ detail.payload?.checkOut || 'Not recorded' }}</dd></div>
+        }
+      </dl>
+      <div class="actions">
+        <button type="button" class="secondary" (click)="print(detail!)">Print</button>
+        @if (primaryAction(detail); as action) {
+          <button type="button" (click)="ask(detail!, action.id)">{{ action.label }}</button>
+        }
+      </div>
+    </article>
+  </div>
+}
+
+@if (confirm) {
+  <div class="backdrop">
+    <article class="dialog confirm" (click)="$event.stopPropagation()">
+      <h2>{{ confirm.title }}</h2>
+      <p>{{ confirm.body }}</p>
+      <div class="actions">
+        <button type="button" class="secondary" (click)="confirm = null">Back</button>
+        <button type="button" (click)="runConfirm()" [disabled]="saving">Confirm</button>
+      </div>
+    </article>
+  </div>
+}
