@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.sugamflow.school.common.tenant.TenantContext;
@@ -123,5 +124,79 @@ class GradebookServiceTest {
                         "marks",
                         List.of(Map.of("admissionNo", "ADM-1", "marksObtained", 10)))));
     assertEquals("LOCKED", ex.getCode());
+  }
+
+  @Test
+  void clearMarkRejectsCorrectionRequest() {
+    TenantContext.set(new TenantScope("demo-school", "main", "2025-26", "admin", "SHOP_OWNER"));
+    UUID examId = UUID.randomUUID();
+    ExamDefinitionEntity exam = new ExamDefinitionEntity();
+    exam.setId(examId);
+    exam.setOrganizationId("demo-school");
+    exam.setSectionId(UUID.randomUUID());
+    exam.setSubjectId(UUID.randomUUID());
+    exam.setMaxMarks(new BigDecimal("25"));
+    exam.setStatus("CORRECTION_REQUESTED");
+    when(definitions.findByIdAndOrganizationId(examId, "demo-school")).thenReturn(Optional.of(exam));
+
+    ExamException ex =
+        assertThrows(
+            ExamException.class,
+            () ->
+                service.clearMark(
+                    Map.of(
+                        "examDefinitionId",
+                        examId.toString(),
+                        "admissionNo",
+                        "ADM-1",
+                        "reason",
+                        "Entered on the wrong student")));
+    assertEquals("SUBMITTED", ex.getCode());
+  }
+
+  @Test
+  void clearMarkDeletesOnlyTheMarksRow() {
+    TenantContext.set(new TenantScope("demo-school", "main", "2025-26", "admin", "SHOP_OWNER"));
+    UUID examId = UUID.randomUUID();
+    UUID sectionId = UUID.randomUUID();
+    UUID subjectId = UUID.randomUUID();
+    UUID studentId = UUID.randomUUID();
+    ExamDefinitionEntity exam = new ExamDefinitionEntity();
+    exam.setId(examId);
+    exam.setOrganizationId("demo-school");
+    exam.setSectionId(sectionId);
+    exam.setSubjectId(subjectId);
+    exam.setName("UT1");
+    exam.setTermKey("TERM1");
+    exam.setMaxMarks(new BigDecimal("25"));
+    exam.setStatus("OPEN");
+    when(definitions.findByIdAndOrganizationId(examId, "demo-school")).thenReturn(Optional.of(exam));
+    ExamMarkEntity mark = new ExamMarkEntity();
+    mark.setId(UUID.randomUUID());
+    mark.setStudentId(studentId);
+    mark.setAdmissionNo("ADM-1");
+    mark.setStudentName("Asha");
+    mark.setMarksObtained(new BigDecimal("20"));
+    mark.setEntryStatus("PRESENT");
+    when(marks.findByExamDefinitionIdAndStudentId(examId, studentId)).thenReturn(Optional.of(mark));
+    when(academic.getSection(any(), eq(sectionId.toString())))
+        .thenReturn(Map.of("studentLabel", "Grade 8-A"));
+    when(marks.findByExamDefinitionIdOrderByStudentNameAsc(examId)).thenReturn(List.of());
+    when(directory.listByClassSection(any(), eq("Grade 8-A"), anyInt()))
+        .thenReturn(List.of(Map.of("id", studentId.toString(), "admissionNo", "ADM-1", "fullName", "Asha")));
+
+    Map<String, Object> out =
+        service.clearMark(
+            Map.of(
+                "examDefinitionId",
+                examId.toString(),
+                "studentId",
+                studentId.toString(),
+                "reason",
+                "Wrong student"));
+
+    verify(marks).delete(mark);
+    verify(definitions).save(exam);
+    assertEquals("OPEN", ((Map<?, ?>) out.get("exam")).get("status"));
   }
 }

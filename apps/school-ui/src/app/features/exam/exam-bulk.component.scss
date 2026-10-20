@@ -59,9 +59,68 @@
   background: #166534;
 }
 
-.lock-note {
+.lock-note,
+.average-note {
   margin: 0.35rem 0 0;
+}
+
+.average-note {
+  color: #64748b;
+  font-size: 0.82rem;
+}
+
+.lock-note {
   font-weight: 700;
+}
+
+.exam-summary h2 {
+  margin: 0 0 0.6rem;
+  font-size: 1.15rem;
+}
+
+.exam-summary dl {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem 1.25rem;
+  margin: 0;
+}
+
+.exam-summary div {
+  min-width: 7rem;
+}
+
+.exam-summary dt {
+  color: #64748b;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.exam-summary dd {
+  margin: 0.1rem 0 0;
+  font-weight: 700;
+}
+
+.row-actions {
+  white-space: nowrap;
+}
+
+.row-actions button + button {
+  margin-left: 0.35rem;
+}
+
+.marks-table tr.editing {
+  background: #f0fdf4;
+}
+
+.pager {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+  padding: 0.65rem 0.2rem 0.2rem;
+}
+
+.table-wrap {
+  overflow-x: auto;
 }
 
 .marks-table {

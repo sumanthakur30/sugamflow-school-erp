@@ -70,6 +70,7 @@ interface MarkRow {
   result: string | null;
   leftSection: boolean;
   open: boolean;
+  persisted: boolean;
 }
 interface ImportIssue {
   row: number;
@@ -129,12 +130,18 @@ export class ExamBulkComponent implements OnInit {
   filter = 'ALL';
   sortKey: 'rollNo' | 'studentName' | 'admissionNo' | 'marks' | 'entryStatus' = 'rollNo';
   sortDir: 'ASC' | 'DESC' = 'ASC';
+  page = 1;
+  pageSize = 25;
   quickEntry = false;
-  dialog: '' | 'fill' | 'submit' | 'import' | 'correction' | 'status' | 'clear' | 'discard' | 'reset' = '';
+  dialog: '' | 'fill' | 'submit' | 'import' | 'correction' | 'status' | 'clear' | 'discard' | 'reset' | 'locked' | 'delete' = '';
   fillValue = '';
   fillOverwrite = false;
   statusValue = 'PRESENT';
   correctionReason = '';
+  editingKey = '';
+  editBackup: { marks: string; entryStatus: string; remarks: string } | null = null;
+  deleteReason = '';
+  deleteTarget: MarkRow | null = null;
   importPreview: ImportPreview | null = null;
   history: any[] = [];
   historyFor = '';
@@ -239,6 +246,56 @@ export class ExamBulkComponent implements OnInit {
     return this.definitions.find((d) => d.id === this.examDefinitionId);
   }
 
+  get className(): string {
+    return this.classes.find((c) => c.id === this.classId)?.name ?? '';
+  }
+
+  get subjectName(): string {
+    return this.subjects.find((s) => s.id === this.subjectId)?.name ?? '';
+  }
+
+  get sessionLabel(): string {
+    const session = this.gradebook?.exam?.academicSessionId;
+    return session == null || session === '' ? '' : String(session);
+  }
+
+  get passingMarks(): number | null {
+    const value = this.gradebook?.exam?.passingMarks;
+    if (value == null || value === '') return null;
+    const n = Number(value);
+    return Number.isNaN(n) ? null : n;
+  }
+
+  get examStatusLabel(): string {
+    return String(this.gradebook?.exam?.status ?? '').replaceAll('_', ' ');
+  }
+
+  get filteredActive(): boolean {
+    return this.filter !== 'ALL' || !!this.query.trim();
+  }
+
+  get pageCount(): number {
+    return Math.max(1, Math.ceil(this.visibleRows.length / this.pageSize));
+  }
+
+  get currentPage(): number {
+    return Math.min(this.page, this.pageCount);
+  }
+
+  get pagedRows(): MarkRow[] {
+    const page = Math.min(this.page, this.pageCount);
+    const start = (page - 1) * this.pageSize;
+    return this.visibleRows.slice(start, start + this.pageSize);
+  }
+
+  get viewCounts() {
+    return this.countRows(this.visibleRows);
+  }
+
+  get viewSummary() {
+    return this.summarize(this.visibleRows);
+  }
+
   get visibleRows(): MarkRow[] {
     const q = this.query.trim().toLowerCase();
     let rows = this.rows.filter((row) => {
@@ -257,31 +314,11 @@ export class ExamBulkComponent implements OnInit {
   }
 
   get counts() {
-    const total = this.rows.length;
-    const completed = this.rows.filter((r) => this.isComplete(r)).length;
-    return {
-      total,
-      completed,
-      pending: total - completed,
-      entered: this.rows.filter((r) => this.isComplete(r) && !EXCUSED.has(r.entryStatus)).length,
-      absent: this.rows.filter((r) => r.entryStatus === 'ABSENT').length,
-      notAppeared: this.rows.filter((r) => r.entryStatus === 'NOT_APPEARED').length,
-      exempted: this.rows.filter((r) => r.entryStatus === 'EXEMPTED').length,
-      percent: total ? Math.round((completed * 100) / total) : 0,
-    };
+    return this.countRows(this.rows);
   }
 
   get summary() {
-    const nums = this.rows
-      .filter((r) => r.marks.trim() !== '' && !EXCUSED.has(r.entryStatus) && !this.markError(r))
-      .map((r) => Number(r.marks));
-    if (!nums.length) return { average: null as number | null, highest: null as number | null, lowest: null as number | null };
-    const sum = nums.reduce((a, b) => a + b, 0);
-    return {
-      average: Math.round((sum / nums.length) * 100) / 100,
-      highest: Math.max(...nums),
-      lowest: Math.min(...nums),
-    };
+    return this.summarize(this.rows);
   }
 
   get homeCounts() {
@@ -346,6 +383,7 @@ export class ExamBulkComponent implements OnInit {
     const sameSheet = !!this.gradebook && this.loadedDefinitionId === this.examDefinitionId;
     if (sameSheet) {
       this.query = this.admissionNo.trim();
+      this.page = 1;
       return;
     }
     if (this.sheetDirty) {
@@ -669,6 +707,123 @@ export class ExamBulkComponent implements OnInit {
       });
   }
 
+  rowKey(row: MarkRow): string {
+    return row.studentId || row.admissionNo;
+  }
+
+  isEditing(row: MarkRow): boolean {
+    return !!this.editingKey && this.editingKey === this.rowKey(row);
+  }
+
+  startEdit(row: MarkRow): void {
+    if (this.readOnly) {
+      this.dialog = 'locked';
+      return;
+    }
+    if (this.editingKey && this.editingKey !== this.rowKey(row)) {
+      const current = this.rows.find((item) => this.rowKey(item) === this.editingKey);
+      if (current && this.editDirty(current)) {
+        this.error = 'Save or cancel the row you are editing first.';
+        return;
+      }
+      if (current) this.cancelEdit(current);
+    }
+    this.editingKey = this.rowKey(row);
+    this.editBackup = { marks: row.marks, entryStatus: row.entryStatus, remarks: row.remarks };
+    this.error = '';
+  }
+
+  cancelEdit(row: MarkRow): void {
+    if (this.editBackup && this.isEditing(row)) {
+      row.marks = this.editBackup.marks;
+      row.entryStatus = this.editBackup.entryStatus;
+      row.remarks = this.editBackup.remarks;
+    }
+    this.editingKey = '';
+    this.editBackup = null;
+    this.error = '';
+  }
+
+  saveEdit(row: MarkRow): void {
+    const problem = this.markError(row);
+    if (problem) {
+      this.error = problem;
+      return;
+    }
+    this.persist(false, false, 'Marks saved.');
+  }
+
+  askDelete(row: MarkRow): void {
+    if (this.readOnly) {
+      this.dialog = 'locked';
+      return;
+    }
+    const current = this.rows.find((item) => this.rowKey(item) === this.editingKey);
+    if (current && this.editDirty(current)) {
+      this.error = 'Save or cancel the open edit before deleting a mark.';
+      return;
+    }
+    if (!row.persisted && !row.marks.trim() && !row.entryStatus && !row.remarks.trim()) return;
+    this.deleteTarget = row;
+    this.deleteReason = '';
+    this.dialog = 'delete';
+  }
+
+  confirmDelete(): void {
+    const row = this.deleteTarget;
+    if (!row) return;
+    if (!row.persisted) {
+      row.marks = '';
+      row.entryStatus = '';
+      row.remarks = '';
+      row.grade = null;
+      this.dialog = '';
+      this.deleteTarget = null;
+      this.status = 'Unsaved marks cleared for ' + row.studentName + '.';
+      return;
+    }
+    const reason = this.deleteReason.trim();
+    if (!reason || !this.examDefinitionId) return;
+    this.busy = true;
+    this.error = '';
+    this.api
+      .post<any>('/api/exam/gradebook/clear', {
+        examDefinitionId: this.examDefinitionId,
+        expectedUpdatedAt: this.gradebook?.exam?.updatedAt,
+        studentId: row.studentId,
+        admissionNo: row.admissionNo || null,
+        reason,
+      })
+      .subscribe({
+        next: () => {
+          this.busy = false;
+          this.dialog = '';
+          this.deleteTarget = null;
+          this.deleteReason = '';
+          this.editingKey = '';
+          this.editBackup = null;
+          this.status = 'Marks removed for ' + row.studentName + '. The student stays on this exam.';
+          this.loadGradebook();
+        },
+        error: (err) => {
+          this.busy = false;
+          this.error = err?.error?.message ?? 'Could not delete these marks';
+        },
+      });
+  }
+
+  setFilter(value: string): void {
+    this.filter = value;
+    this.page = 1;
+  }
+
+  clearFilters(): void {
+    this.query = '';
+    this.admissionNo = '';
+    this.filter = 'ALL';
+    this.page = 1;
+  }
+
   sort(key: typeof this.sortKey): void {
     if (this.sortKey === key) {
       this.sortDir = this.sortDir === 'ASC' ? 'DESC' : 'ASC';
@@ -770,7 +925,11 @@ export class ExamBulkComponent implements OnInit {
           result: s.result ?? null,
           leftSection: !!s.leftSection,
           open: false,
+          persisted: s.marksObtained != null || !!s.entryStatus || !!s.remarks,
         }));
+        this.editingKey = '';
+        this.editBackup = null;
+        if (this.loadedDefinitionId !== this.examDefinitionId) this.page = 1;
         this.loadedDefinitionId = this.examDefinitionId;
         this.captureSnapshot();
         this.busy = false;
@@ -787,7 +946,44 @@ export class ExamBulkComponent implements OnInit {
     });
   }
 
-  private persist(submit: boolean, anyway = false): void {
+  private editDirty(row: MarkRow): boolean {
+    if (!this.editBackup || !this.isEditing(row)) return false;
+    return (
+      row.marks !== this.editBackup.marks ||
+      row.entryStatus !== this.editBackup.entryStatus ||
+      row.remarks !== this.editBackup.remarks
+    );
+  }
+
+  private countRows(rows: MarkRow[]) {
+    const total = rows.length;
+    const completed = rows.filter((r) => this.isComplete(r)).length;
+    return {
+      total,
+      completed,
+      pending: total - completed,
+      entered: rows.filter((r) => this.isComplete(r) && !EXCUSED.has(r.entryStatus)).length,
+      absent: rows.filter((r) => r.entryStatus === 'ABSENT').length,
+      notAppeared: rows.filter((r) => r.entryStatus === 'NOT_APPEARED').length,
+      exempted: rows.filter((r) => r.entryStatus === 'EXEMPTED').length,
+      percent: total ? Math.round((completed * 100) / total) : 0,
+    };
+  }
+
+  private summarize(rows: MarkRow[]) {
+    const nums = rows
+      .filter((r) => r.marks.trim() !== '' && !EXCUSED.has(r.entryStatus) && !this.markError(r))
+      .map((r) => Number(r.marks));
+    if (!nums.length) return { average: null as number | null, highest: null as number | null, lowest: null as number | null };
+    const sum = nums.reduce((a, b) => a + b, 0);
+    return {
+      average: Math.round((sum / nums.length) * 100) / 100,
+      highest: Math.max(...nums),
+      lowest: Math.min(...nums),
+    };
+  }
+
+  private persist(submit: boolean, anyway = false, savedMessage = 'Draft saved.'): void {
     if (!this.examDefinitionId || this.readOnly) return;
     if (this.rows.some((r) => this.markError(r))) {
       this.error = 'Fix invalid marks before saving.';
@@ -815,7 +1011,9 @@ export class ExamBulkComponent implements OnInit {
           this.gradebook = data;
           if (!submit) {
             this.busy = false;
-            this.status = 'Draft saved.';
+            this.editingKey = '';
+            this.editBackup = null;
+            this.status = savedMessage;
             this.loadGradebook();
             return;
           }

@@ -170,36 +170,53 @@
       }
 
       @if (gradebook) {
+        <section class="panel exam-summary">
+          <h2>{{ gradebook.exam.name }}</h2>
+          <dl>
+            @if (sessionLabel) { <div><dt>Session</dt><dd>{{ sessionLabel }}</dd></div> }
+            @if (className) { <div><dt>Class</dt><dd>{{ className }}</dd></div> }
+            <div><dt>Section</dt><dd>{{ gradebook.sectionLabel || '—' }}</dd></div>
+            @if (subjectName) { <div><dt>Subject</dt><dd>{{ subjectName }}</dd></div> }
+            <div><dt>Exam date</dt><dd>{{ gradebook.exam.examDate || '—' }}</dd></div>
+            <div><dt>Maximum marks</dt><dd>{{ maxMarks }}</dd></div>
+            @if (passingMarks != null) { <div><dt>Pass marks</dt><dd>{{ passingMarks }}</dd></div> }
+            <div><dt>Status</dt><dd>{{ examStatusLabel }}</dd></div>
+          </dl>
+        </section>
+
         <section class="panel progress-panel">
           <div>
-            <strong>{{ counts.completed }} / {{ counts.total }} students completed</strong>
-            <div class="bar" aria-hidden="true"><span [style.width.%]="counts.percent"></span></div>
+            <strong>{{ viewCounts.completed }} / {{ viewCounts.total }} students completed · {{ viewCounts.percent }}%</strong>
+            <div class="bar" aria-hidden="true"><span [style.width.%]="viewCounts.percent"></span></div>
           </div>
           <p>
-            {{ counts.total }} students · {{ counts.entered }} entered · {{ counts.pending }} pending ·
-            {{ counts.absent }} absent · {{ counts.exempted }} exempted
-            @if (summary.average != null) {
-              · Average {{ summary.average }} · High {{ summary.highest }} · Low {{ summary.lowest }}
+            @if (filteredActive) { Filtered · }
+            {{ viewCounts.total }} students · {{ viewCounts.entered }} entered · {{ viewCounts.pending }} pending ·
+            {{ viewCounts.absent }} absent · {{ viewCounts.notAppeared }} not appeared · {{ viewCounts.exempted }} exempted
+            @if (viewSummary.average != null) {
+              · Average {{ viewSummary.average }} · High {{ viewSummary.highest }} · Low {{ viewSummary.lowest }}
             }
           </p>
+          <p class="average-note">Average, highest, and lowest use present marks only. Absent, not appeared, and exempted students are left out.</p>
           @if (readOnly) {
-            <p class="lock-note">Status: {{ gradebook.exam.status }}. Marks are read-only.</p>
+            <p class="lock-note">Status: {{ examStatusLabel }}. Marks are read-only until an authorised user unlocks them.</p>
           }
         </section>
 
         <section class="panel toolbar">
-          <input class="search" [(ngModel)]="query" name="studentQ" placeholder="Search student…" />
+          <input class="search" [(ngModel)]="query" (ngModelChange)="page = 1" name="studentQ" placeholder="Name, admission no, or roll no" />
           <div class="filters">
             @for (f of filters; track f.value) {
-              <button type="button" class="secondary tiny" [class.active]="filter === f.value" (click)="filter = f.value">
+              <button type="button" class="secondary tiny" [class.active]="filter === f.value" (click)="setFilter(f.value)">
                 {{ f.label }}
               </button>
             }
+            <button type="button" class="secondary tiny" (click)="clearFilters()">Clear filters</button>
           </div>
           <div class="actions">
-            <button type="button" class="secondary tiny" (click)="askFill()" [disabled]="readOnly">Fill all</button>
-            <button type="button" class="secondary tiny" (click)="askClear()" [disabled]="readOnly">Clear all</button>
-            <button type="button" class="secondary tiny" (click)="dialog = 'status'" [disabled]="readOnly">Set status</button>
+            <button type="button" class="secondary tiny" (click)="askFill()" [disabled]="readOnly || !!editingKey">Fill all</button>
+            <button type="button" class="secondary tiny" (click)="askClear()" [disabled]="readOnly || !!editingKey">Clear all</button>
+            <button type="button" class="secondary tiny" (click)="dialog = 'status'" [disabled]="readOnly || !!editingKey">Set status</button>
             <button type="button" class="secondary tiny" (click)="exportTemplate()">Export template</button>
             <label class="file-btn secondary tiny">
               Import Excel
@@ -220,12 +237,13 @@
                 <th><button type="button" class="heading-sort" (click)="sort('entryStatus')">Status</button></th>
                 <th class="col-extra col-quiet">Remarks</th>
                 <th class="col-extra col-quiet">Grade</th>
+                <th>Actions</th>
               </tr>
             </thead>
             <tbody>
-              @for (row of visibleRows; track row.studentId || row.admissionNo; let i = $index) {
-                <tr [class.left]="row.leftSection">
-                  <td>{{ i + 1 }}</td>
+              @for (row of pagedRows; track row.studentId || row.admissionNo; let i = $index) {
+                <tr [class.left]="row.leftSection" [class.editing]="isEditing(row)">
+                  <td>{{ (currentPage - 1) * pageSize + i + 1 }}</td>
                   <td class="col-extra">{{ row.rollNo || '—' }}</td>
                   <td>
                     <button type="button" class="linkish" (click)="showHistory(row)">{{ row.studentName }}</button>
@@ -237,37 +255,65 @@
                   </td>
                   <td class="col-extra col-quiet">{{ row.admissionNo || '—' }}</td>
                   <td>
-                    <input
-                      class="mark-input"
-                      [id]="'mark-' + (row.studentId || row.admissionNo)"
-                      [(ngModel)]="row.marks"
-                      [name]="'m' + (row.studentId || row.admissionNo)"
-                      [disabled]="marksDisabled(row)"
-                      (keydown)="onMarksKey($event, row)"
-                      (paste)="onPaste($event, row)"
-                      inputmode="decimal"
-                    />
-                    @if (markError(row)) {
-                      <span class="field-error">{{ markError(row) }}</span>
+                    @if (isEditing(row)) {
+                      <input
+                        class="mark-input"
+                        [id]="'mark-' + (row.studentId || row.admissionNo)"
+                        [(ngModel)]="row.marks"
+                        [name]="'m' + (row.studentId || row.admissionNo)"
+                        [disabled]="marksDisabled(row)"
+                        (keydown)="onMarksKey($event, row)"
+                        (paste)="onPaste($event, row)"
+                        inputmode="decimal"
+                      />
+                      @if (markError(row)) {
+                        <span class="field-error">{{ markError(row) }}</span>
+                      }
+                    } @else {
+                      {{ row.marks || '—' }}
                     }
                   </td>
                   <td>
-                    <select [(ngModel)]="row.entryStatus" (ngModelChange)="onStatus(row)" [name]="'s' + (row.studentId || row.admissionNo)" [disabled]="readOnly">
-                      @for (st of statuses; track st.value) {
-                        <option [value]="st.value">{{ st.label }}</option>
-                      }
-                    </select>
+                    @if (isEditing(row)) {
+                      <select [(ngModel)]="row.entryStatus" (ngModelChange)="onStatus(row)" [name]="'s' + (row.studentId || row.admissionNo)">
+                        @for (st of statuses; track st.value) {
+                          <option [value]="st.value">{{ st.label }}</option>
+                        }
+                      </select>
+                    } @else {
+                      {{ statusLabel(row.entryStatus) }}
+                    }
                   </td>
                   <td class="col-extra col-quiet">
-                    <input [(ngModel)]="row.remarks" [name]="'r' + (row.studentId || row.admissionNo)" [disabled]="readOnly" />
+                    @if (isEditing(row)) {
+                      <input [(ngModel)]="row.remarks" [name]="'r' + (row.studentId || row.admissionNo)" />
+                    } @else {
+                      {{ row.remarks || '—' }}
+                    }
                   </td>
                   <td class="col-extra col-quiet">{{ row.grade || '—' }}</td>
+                  <td class="row-actions">
+                    @if (isEditing(row)) {
+                      <button type="button" (click)="saveEdit(row)" [disabled]="busy">Save</button>
+                      <button type="button" class="secondary tiny" (click)="cancelEdit(row)" [disabled]="busy">Cancel</button>
+                    } @else {
+                      <button type="button" class="secondary tiny" (click)="startEdit(row)">Edit</button>
+                      <button type="button" class="secondary tiny" (click)="askDelete(row)" [disabled]="readOnly || (!row.persisted && !row.marks && !row.entryStatus && !row.remarks)">Delete</button>
+                    }
+                  </td>
                 </tr>
               } @empty {
-                <tr><td colspan="8">No students in this section.</td></tr>
+                <tr><td colspan="9">No students match these filters.</td></tr>
               }
             </tbody>
           </table>
+          @if (pageCount > 1) {
+            <div class="pager">
+              <button type="button" class="secondary tiny" (click)="page = currentPage - 1" [disabled]="currentPage <= 1">Previous</button>
+              <span>Page {{ currentPage }} of {{ pageCount }}</span>
+              <button type="button" class="secondary tiny" (click)="page = currentPage + 1" [disabled]="currentPage >= pageCount">Next</button>
+            </div>
+          }
         </div>
 
         @if (history.length) {
@@ -375,6 +421,41 @@
             <div class="actions">
               <button type="button" class="secondary" (click)="dialog = ''">Cancel</button>
               <button type="button" (click)="applySearch()">Load exam</button>
+            </div>
+          }
+          @if (dialog === 'locked') {
+            <h3>Marks are locked</h3>
+            <p>
+              This exam is {{ examStatusLabel }}. Marks stay read-only until a principal, admin, or class teacher unlocks them.
+              Request a correction when the exam is submitted or published. Unlock applies the correction and records it in the mark history.
+            </p>
+            <div class="actions">
+              <button type="button" class="secondary" (click)="dialog = ''">Close</button>
+              @if (!canUnlock && (gradebook?.exam?.status === 'SUBMITTED' || gradebook?.exam?.status === 'PUBLISHED')) {
+                <button type="button" (click)="dialog = 'correction'">Request correction</button>
+              }
+              @if (canUnlock) {
+                <button type="button" (click)="dialog = ''; unlock()">Unlock</button>
+              }
+            </div>
+          }
+          @if (dialog === 'delete' && deleteTarget) {
+            <h3>Delete marks</h3>
+            <p>
+              {{ deleteTarget.studentName }} · {{ gradebook?.exam?.name }} · {{ subjectName || 'Subject' }} ·
+              {{ gradebook?.sectionLabel }}
+            </p>
+            <p>
+              Admission {{ deleteTarget.admissionNo || '—' }} · Roll {{ deleteTarget.rollNo || '—' }} ·
+              Marks {{ deleteTarget.marks || '—' }} · {{ statusLabel(deleteTarget.entryStatus) }}
+            </p>
+            <p>This removes only this student's saved marks. The student, admission, and exam stay. The row returns as pending and does not keep the old marks.</p>
+            @if (deleteTarget.persisted) {
+              <label>Reason <input [(ngModel)]="deleteReason" name="deleteReason" /></label>
+            }
+            <div class="actions">
+              <button type="button" class="secondary" (click)="dialog = ''">Cancel</button>
+              <button type="button" (click)="confirmDelete()" [disabled]="busy || (deleteTarget.persisted && !deleteReason.trim())">Delete marks</button>
             </div>
           }
           @if (dialog === 'reset') {

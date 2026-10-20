@@ -47,6 +47,11 @@ public class GradebookController {
     return ApiResponse.ok(service.bulkSave(body));
   }
 
+  @PostMapping("/gradebook/clear")
+  public ApiResponse<Map<String, Object>> clearMark(@RequestBody Map<String, Object> body) {
+    return ApiResponse.ok(service.clearMark(body));
+  }
+
   @PostMapping("/definitions/{id}/publish")
   public ApiResponse<Map<String, Object>> publish(@PathVariable("id") UUID id) {
     return ApiResponse.ok(service.publish(id));

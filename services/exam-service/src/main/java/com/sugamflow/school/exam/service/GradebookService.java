@@ -294,6 +294,56 @@ public class GradebookService {
     return gradebook(exam.getId());
   }
 
+  /**
+   * Removes one saved marks row. The student, admission, and exam definition stay. Locked,
+   * submitted, published, and correction-requested exams are rejected.
+   */
+  @Transactional
+  public Map<String, Object> clearMark(Map<String, Object> body) {
+    TenantScope scope = TenantContext.require();
+    PersonaRoles.requireStaffWrite(scope);
+    UUID examId = parseUuid(body.get("examDefinitionId"));
+    if (examId == null) {
+      throw new ExamException("VALIDATION", "examDefinitionId is required");
+    }
+    ExamDefinitionEntity exam = requireDefinition(examId, scope.organizationId());
+    requireSubjectAccess(scope, exam.getSectionId(), exam.getSubjectId());
+    assertWritable(exam);
+    assertFresh(exam, body.get("expectedUpdatedAt"));
+    String reason = asString(body.get("reason"));
+    if (reason == null) {
+      throw new ExamException("VALIDATION", "A reason is required");
+    }
+    UUID studentId = parseUuid(body.get("studentId"));
+    String admission = asString(body.get("admissionNo"));
+    ExamMarkEntity entity = null;
+    if (studentId != null) {
+      entity = marks.findByExamDefinitionIdAndStudentId(exam.getId(), studentId).orElse(null);
+    } else if (admission != null) {
+      entity = marks.findByExamDefinitionIdAndAdmissionNo(exam.getId(), admission).orElse(null);
+    } else {
+      throw new ExamException("VALIDATION", "studentId or admissionNo is required");
+    }
+    if (entity == null) {
+      throw new ExamException("NOT_FOUND", "No saved marks for this student");
+    }
+    writeAudit(
+        exam,
+        scope,
+        entity.getStudentId(),
+        entity.getAdmissionNo(),
+        entity.getStudentName(),
+        entity.getMarksObtained(),
+        null,
+        entity.getEntryStatus(),
+        null,
+        reason);
+    marks.delete(entity);
+    exam.setUpdatedAt(Instant.now());
+    definitions.save(exam);
+    return gradebook(exam.getId());
+  }
+
   @Transactional
   public Map<String, Object> submit(UUID id, Map<String, Object> body) {
     TenantScope scope = TenantContext.require();
