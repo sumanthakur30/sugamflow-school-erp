@@ -20,6 +20,7 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -254,6 +255,123 @@ public class GradebookService {
     return result;
   }
 
+  @Transactional(readOnly = true)
+  public Map<String, Object> sectionGrid(UUID sectionId) {
+    TenantScope scope = TenantContext.require();
+    if (sectionId == null) {
+      throw new ExamException("VALIDATION", "sectionId is required");
+    }
+    Map<String, Object> section = academic.getSection(scope, sectionId.toString());
+    List<ExamDefinitionEntity> exams =
+        filterSession(
+            definitions.findByOrganizationIdAndSectionIdOrderByUpdatedAtDesc(
+                scope.organizationId(), sectionId),
+            scope);
+    if (PersonaRoles.isTeacher(scope.roleCode())) {
+      Map<String, Object> teacherScope = academic.teacherScope(scope);
+      boolean allowed =
+          idListContains(teacherScope.get("classTeacherSectionIds"), sectionId)
+              || idListContains(teacherScope.get("sectionIds"), sectionId)
+              || exams.stream().anyMatch(exam -> teacherOwnsSubject(teacherScope, sectionId, exam.getSubjectId()));
+      if (!allowed) {
+        throw new SecurityException("Teacher is not assigned to this section");
+      }
+      exams =
+          exams.stream()
+              .filter(exam -> teacherOwnsSubject(teacherScope, sectionId, exam.getSubjectId()))
+              .toList();
+    }
+    Map<String, String> subjects = subjectNames(scope);
+    Map<String, String> classes = classNames(scope);
+    exams =
+        exams.stream()
+            .sorted(
+                Comparator
+                    .comparing((ExamDefinitionEntity exam) -> subjects.getOrDefault(exam.getSubjectId().toString(), ""))
+                    .thenComparing(exam -> exam.getName() == null ? "" : exam.getName()))
+            .toList();
+    String label =
+        firstNonBlank(
+            asString(section.get("studentLabel")),
+            asString(section.get("name")),
+            sectionId.toString());
+    List<Map<String, Object>> columns = new ArrayList<>();
+    Map<UUID, Map<UUID, ExamMarkEntity>> marksByStudent = new LinkedHashMap<>();
+    Map<UUID, Map<String, ExamMarkEntity>> marksByAdmission = new LinkedHashMap<>();
+    for (ExamDefinitionEntity exam : exams) {
+      Map<String, Object> column = new LinkedHashMap<>();
+      column.put("examDefinitionId", exam.getId().toString());
+      column.put("subjectId", exam.getSubjectId().toString());
+      column.put("subjectName", subjects.getOrDefault(exam.getSubjectId().toString(), "Subject"));
+      column.put("examName", exam.getName());
+      column.put("status", exam.getStatus());
+      column.put("readOnly", READ_ONLY.contains(exam.getStatus()));
+      column.put("maxMarks", exam.getMaxMarks());
+      columns.add(column);
+      Map<UUID, ExamMarkEntity> byStudent = new LinkedHashMap<>();
+      Map<String, ExamMarkEntity> byAdmission = new LinkedHashMap<>();
+      for (ExamMarkEntity mark : marks.findByExamDefinitionIdOrderByStudentNameAsc(exam.getId())) {
+        if (mark.getStudentId() != null) {
+          byStudent.put(mark.getStudentId(), mark);
+        }
+        if (mark.getAdmissionNo() != null) {
+          byAdmission.put(mark.getAdmissionNo().toLowerCase(Locale.ROOT), mark);
+        }
+      }
+      marksByStudent.put(exam.getId(), byStudent);
+      marksByAdmission.put(exam.getId(), byAdmission);
+    }
+    List<Map<String, Object>> students = new ArrayList<>();
+    for (Map<String, Object> row : directory.listByClassSection(scope, label, 500)) {
+      UUID studentId = parseUuid(row.get("id"));
+      String admission = asString(row.get("admissionNo"));
+      Map<String, Object> student = new LinkedHashMap<>();
+      student.put("studentId", studentId == null ? null : studentId.toString());
+      student.put("admissionNo", admission);
+      student.put(
+          "studentName",
+          firstNonBlank(asString(row.get("fullName")), asString(row.get("studentName")), admission));
+      student.put("rollNo", asString(row.get("rollNo")));
+      Map<String, Object> cells = new LinkedHashMap<>();
+      for (ExamDefinitionEntity exam : exams) {
+        ExamMarkEntity mark =
+            matchMark(
+                marksByStudent.getOrDefault(exam.getId(), Map.of()),
+                marksByAdmission.getOrDefault(exam.getId(), Map.of()),
+                studentId,
+                admission);
+        if (mark == null) {
+          continue;
+        }
+        Map<String, Object> cell = new LinkedHashMap<>();
+        cell.put("marks", mark.getMarksObtained());
+        cell.put("entryStatus", mark.getEntryStatus());
+        cell.put("grade", mark.getGrade());
+        cells.put(exam.getId().toString(), cell);
+      }
+      student.put("cells", cells);
+      students.add(student);
+    }
+    Map<String, Object> out = new LinkedHashMap<>();
+    out.put("sectionId", sectionId.toString());
+    out.put("sectionLabel", label);
+    out.put("className", classes.get(asString(section.get("classId"))));
+    String session = scope.academicSessionId();
+    if (session == null || session.isBlank()) {
+      List<String> onExams =
+          exams.stream()
+              .map(ExamDefinitionEntity::getAcademicSessionId)
+              .filter(value -> value != null && !value.isBlank())
+              .distinct()
+              .toList();
+      session = onExams.size() == 1 ? onExams.get(0) : null;
+    }
+    out.put("academicSessionId", session);
+    out.put("columns", columns);
+    out.put("students", students);
+    return out;
+  }
+
   @Transactional
   public Map<String, Object> bulkSave(Map<String, Object> body) {
     TenantScope scope = TenantContext.require();
@@ -383,10 +501,41 @@ public class GradebookService {
     if (reason == null) {
       throw new ExamException("VALIDATION", "A reason is required");
     }
+    String prior = exam.getStatus();
+    exam.setStatusBeforeCorrection(prior);
     exam.setStatus("CORRECTION_REQUESTED");
     exam.setUpdatedAt(Instant.now());
     definitions.save(exam);
-    writeAudit(exam, scope, null, null, null, null, null, null, null, reason);
+    writeAudit(exam, scope, null, null, null, null, null, prior, "CORRECTION_REQUESTED", reason);
+    return definitionToMap(exam, scope);
+  }
+
+  @Transactional
+  public Map<String, Object> applyCorrection(UUID id, Map<String, Object> body) {
+    ExamDefinitionEntity exam = requireReview(id);
+    TenantScope scope = TenantContext.require();
+    String note = requireReviewNote(body);
+    String prior = exam.getStatus();
+    exam.setStatus("OPEN");
+    exam.setLockedAt(null);
+    exam.setStatusBeforeCorrection(null);
+    exam.setUpdatedAt(Instant.now());
+    definitions.save(exam);
+    writeAudit(exam, scope, null, null, null, null, null, prior, "OPEN", note);
+    return definitionToMap(exam, scope);
+  }
+
+  @Transactional
+  public Map<String, Object> rejectCorrection(UUID id, Map<String, Object> body) {
+    ExamDefinitionEntity exam = requireReview(id);
+    TenantScope scope = TenantContext.require();
+    String note = requireReviewNote(body);
+    String restore = restoreStatus(exam);
+    exam.setStatus(restore);
+    exam.setStatusBeforeCorrection(null);
+    exam.setUpdatedAt(Instant.now());
+    definitions.save(exam);
+    writeAudit(exam, scope, null, null, null, null, null, "CORRECTION_REQUESTED", restore, note);
     return definitionToMap(exam, scope);
   }
 
@@ -398,15 +547,21 @@ public class GradebookService {
     if (!canUnlock(scope, exam.getSectionId())) {
       throw new SecurityException("Only a principal, admin, or class teacher can unlock marks");
     }
+    if ("CORRECTION_REQUESTED".equals(exam.getStatus())) {
+      throw new ExamException(
+          "VALIDATION",
+          "Review the correction request. Apply it to edit marks, or reject it to restore the previous status.");
+    }
     if ("OPEN".equals(exam.getStatus()) || "DRAFT".equals(exam.getStatus())) {
       return definitionToMap(exam, scope);
     }
     String reason = asString(body == null ? null : body.get("reason"));
+    String prior = exam.getStatus();
     exam.setStatus("OPEN");
     exam.setLockedAt(null);
     exam.setUpdatedAt(Instant.now());
     definitions.save(exam);
-    writeAudit(exam, scope, null, null, null, null, null, null, null, firstNonBlank(reason, "Unlocked for correction"));
+    writeAudit(exam, scope, null, null, null, null, null, prior, "OPEN", firstNonBlank(reason, "Unlocked for correction"));
     return definitionToMap(exam, scope);
   }
 
@@ -712,6 +867,35 @@ public class GradebookService {
     }
   }
 
+  private ExamDefinitionEntity requireReview(UUID id) {
+    TenantScope scope = TenantContext.require();
+    PersonaRoles.requireStaffWrite(scope);
+    ExamDefinitionEntity exam = requireDefinition(id, scope.organizationId());
+    if (!canUnlock(scope, exam.getSectionId())) {
+      throw new SecurityException("Only a principal, admin, or class teacher can review a correction");
+    }
+    if (!"CORRECTION_REQUESTED".equals(exam.getStatus())) {
+      throw new ExamException("VALIDATION", "This exam is not waiting for a correction review");
+    }
+    return exam;
+  }
+
+  private static String requireReviewNote(Map<String, Object> body) {
+    String note = asString(body == null ? null : body.get("reason"));
+    if (note == null) {
+      throw new ExamException("VALIDATION", "A review note is required");
+    }
+    return note;
+  }
+
+  private static String restoreStatus(ExamDefinitionEntity exam) {
+    String prior = exam.getStatusBeforeCorrection();
+    if ("SUBMITTED".equals(prior) || "PUBLISHED".equals(prior)) {
+      return prior;
+    }
+    return exam.getPublishedAt() != null ? "PUBLISHED" : "SUBMITTED";
+  }
+
   private boolean canUnlock(TenantScope scope, UUID sectionId) {
     if (PersonaRoles.isElevated(scope.roleCode())) {
       return true;
@@ -961,6 +1145,7 @@ public class GradebookService {
     m.put("examDate", e.getExamDate() == null ? null : e.getExamDate().toString());
     m.put("components", effectiveComponents(e));
     m.put("status", e.getStatus());
+    m.put("statusBeforeCorrection", e.getStatusBeforeCorrection());
     m.put("createdBy", e.getCreatedBy());
     m.put("academicSessionId", e.getAcademicSessionId());
     m.put("branchId", e.getBranchId());

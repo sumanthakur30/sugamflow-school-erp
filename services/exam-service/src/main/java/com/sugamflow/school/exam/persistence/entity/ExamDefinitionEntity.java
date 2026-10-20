@@ -57,6 +57,10 @@ public class ExamDefinitionEntity {
   @Column(nullable = false, length = 32)
   private String status = "DRAFT";
 
+  /** Status to restore when a correction request is rejected. SUBMITTED or PUBLISHED. */
+  @Column(name = "status_before_correction", length = 32)
+  private String statusBeforeCorrection;
+
   @Column(name = "created_by", length = 128)
   private String createdBy;
 
@@ -100,6 +104,10 @@ public class ExamDefinitionEntity {
   }
   public String getStatus() { return status; }
   public void setStatus(String status) { this.status = status; }
+  public String getStatusBeforeCorrection() { return statusBeforeCorrection; }
+  public void setStatusBeforeCorrection(String statusBeforeCorrection) {
+    this.statusBeforeCorrection = statusBeforeCorrection;
+  }
   public String getCreatedBy() { return createdBy; }
   public void setCreatedBy(String createdBy) { this.createdBy = createdBy; }
   public Instant getPublishedAt() { return publishedAt; }

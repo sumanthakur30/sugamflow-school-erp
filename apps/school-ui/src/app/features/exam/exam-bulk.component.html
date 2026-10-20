@@ -46,6 +46,93 @@
       </div>
     }
   </section>
+} @else if (gridMode) {
+  <div class="bulk-page" [class.is-busy]="busy">
+    <p class="crumb">
+      <button type="button" class="crumb-link" (click)="backToList()">Exam Marks</button>
+      / All subjects
+    </p>
+    <header class="page-head">
+      <div>
+        <h2>All subjects</h2>
+        <p>Students in one section, with each exam in its own column. Open a column to edit that subject.</p>
+      </div>
+      <button type="button" class="secondary" (click)="openEntry()">Class marks</button>
+    </header>
+    @if (error) {
+      <p class="error panel" role="alert">{{ error }}</p>
+    }
+    @if (loading) {
+      <p class="panel">Loading classes…</p>
+    } @else {
+      <section class="panel selector-grid" aria-label="Section grid filters">
+        <label>Class
+          <select [(ngModel)]="classId" (ngModelChange)="onClassChange()" name="gridClassId">
+            <option value="">Select class</option>
+            @for (row of classOptions; track row.id) {
+              <option [value]="row.id">{{ row.name }}</option>
+            }
+          </select>
+        </label>
+        <label>Section
+          <select [(ngModel)]="sectionId" name="gridSectionId" [disabled]="!classId">
+            <option value="">Select section</option>
+            @for (row of sectionOptions; track row.id) {
+              <option [value]="row.id">{{ row.studentLabel || row.name }}</option>
+            }
+          </select>
+        </label>
+        <button type="button" (click)="loadSectionGrid()" [disabled]="busy">Show grid</button>
+      </section>
+      @if (grid) {
+        <section class="panel">
+          <p>
+            @if (grid.className) { {{ grid.className }} · }
+            {{ grid.sectionLabel }}
+            @if (grid.academicSessionId) { · {{ grid.academicSessionId }} }
+            · {{ grid.columns.length }} exams
+          </p>
+          <input class="search" [(ngModel)]="gridQuery" name="gridQ" placeholder="Name, admission no, or roll no" />
+          <div class="table-wrap">
+            <table class="marks-table grid-table">
+              <thead>
+                <tr>
+                  <th>Student</th>
+                  <th>Admission</th>
+                  <th>Roll</th>
+                  @for (col of grid.columns; track col.examDefinitionId) {
+                    <th>
+                      <button type="button" class="secondary tiny" (click)="openEntry(col.examDefinitionId)">
+                        {{ col.subjectName }}
+                      </button>
+                      <div>{{ col.examName }} · {{ col.maxMarks }}</div>
+                      @if (col.readOnly) {
+                        <div>Read-only · {{ col.status }}</div>
+                      }
+                    </th>
+                  }
+                </tr>
+              </thead>
+              <tbody>
+                @for (student of filteredGridStudents; track student.studentId || student.admissionNo) {
+                  <tr>
+                    <td>{{ student.studentName }}</td>
+                    <td>{{ student.admissionNo || '—' }}</td>
+                    <td>{{ student.rollNo || '—' }}</td>
+                    @for (col of grid.columns; track col.examDefinitionId) {
+                      <td>{{ cellText(student, col.examDefinitionId) }}</td>
+                    }
+                  </tr>
+                } @empty {
+                  <tr><td [attr.colspan]="3 + grid.columns.length">No students match these filters.</td></tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        </section>
+      }
+    }
+  </div>
 } @else {
   <div class="bulk-page" [class.is-busy]="busy">
     <p class="crumb">
@@ -57,9 +144,12 @@
         <h2>Class marks entry</h2>
         <p>Choose class, section, subject, and exam, then search. Admission number is optional.</p>
       </div>
-      <button type="button" class="secondary" (click)="quickEntry = !quickEntry">
-        {{ quickEntry ? 'Full columns' : 'Quick entry' }}
-      </button>
+      <div class="head-actions">
+        <button type="button" class="secondary" (click)="openGrid()">All subjects</button>
+        <button type="button" class="secondary" (click)="quickEntry = !quickEntry">
+          {{ quickEntry ? 'Full columns' : 'Quick entry' }}
+        </button>
+      </div>
     </header>
 
     @if (error) {
@@ -199,7 +289,17 @@
           </p>
           <p class="average-note">Average, highest, and lowest use present marks only. Absent, not appeared, and exempted students are left out.</p>
           @if (readOnly) {
-            <p class="lock-note">Status: {{ examStatusLabel }}. Marks are read-only until an authorised user unlocks them.</p>
+            <p class="lock-note">
+              Status: {{ examStatusLabel }}.
+              @if (correctionRequested) {
+                Marks stay read-only until a principal, admin, or class teacher applies or rejects the correction.
+              } @else {
+                Marks are read-only until an authorised user unlocks them.
+              }
+            </p>
+            @if (canReview) {
+              <button type="button" (click)="dialog = 'locked'">Review correction</button>
+            }
           }
         </section>
 
@@ -332,8 +432,12 @@
             <button type="button" class="secondary" (click)="saveDraft()" [disabled]="busy">Save draft</button>
             <button type="button" (click)="askSubmit()" [disabled]="busy">Submit marks</button>
           } @else {
-            <button type="button" class="secondary" (click)="dialog = 'correction'" [disabled]="busy">Request correction</button>
-            @if (canUnlock) {
+            @if (canRequestCorrection) {
+              <button type="button" class="secondary" (click)="dialog = 'correction'" [disabled]="busy">Request correction</button>
+            }
+            @if (canReview) {
+              <button type="button" (click)="dialog = 'locked'" [disabled]="busy">Review correction</button>
+            } @else if (canUnlock) {
               <button type="button" (click)="unlock()" [disabled]="busy">Unlock</button>
             }
           }
@@ -424,17 +528,30 @@
             </div>
           }
           @if (dialog === 'locked') {
-            <h3>Marks are locked</h3>
-            <p>
-              This exam is {{ examStatusLabel }}. Marks stay read-only until a principal, admin, or class teacher unlocks them.
-              Request a correction when the exam is submitted or published. Unlock applies the correction and records it in the mark history.
-            </p>
+            <h3>{{ correctionRequested ? 'Review correction' : 'Marks are locked' }}</h3>
+            @if (correctionRequested) {
+              <p>
+                This exam is {{ examStatusLabel }}. Marks stay read-only until the correction is applied or rejected.
+                Applying opens the sheet for editing. Rejecting restores the previous submitted or published status.
+              </p>
+              @if (canReview) {
+                <label>Review note <input [(ngModel)]="reviewNote" name="reviewNote" /></label>
+              }
+            } @else {
+              <p>
+                This exam is {{ examStatusLabel }}. Marks stay read-only until a principal, admin, or class teacher unlocks them.
+                Request a correction when the exam is submitted or published.
+              </p>
+            }
             <div class="actions">
               <button type="button" class="secondary" (click)="dialog = ''">Close</button>
-              @if (!canUnlock && (gradebook?.exam?.status === 'SUBMITTED' || gradebook?.exam?.status === 'PUBLISHED')) {
+              @if (canRequestCorrection && !canUnlock) {
                 <button type="button" (click)="dialog = 'correction'">Request correction</button>
               }
-              @if (canUnlock) {
+              @if (canReview) {
+                <button type="button" class="secondary" (click)="reviewCorrection(false)" [disabled]="busy || !reviewNote.trim()">Reject</button>
+                <button type="button" (click)="reviewCorrection(true)" [disabled]="busy || !reviewNote.trim()">Apply correction</button>
+              } @else if (canUnlock) {
                 <button type="button" (click)="dialog = ''; unlock()">Unlock</button>
               }
             </div>

@@ -36,6 +36,11 @@ public class GradebookController {
     return ApiResponse.ok(service.createDefinition(body));
   }
 
+  @GetMapping("/gradebook/section")
+  public ApiResponse<Map<String, Object>> sectionGrid(@RequestParam("sectionId") UUID sectionId) {
+    return ApiResponse.ok(service.sectionGrid(sectionId));
+  }
+
   @GetMapping("/gradebook")
   public ApiResponse<Map<String, Object>> gradebook(
       @RequestParam("examDefinitionId") UUID examDefinitionId) {
@@ -77,6 +82,18 @@ public class GradebookController {
   public ApiResponse<Map<String, Object>> correction(
       @PathVariable("id") UUID id, @RequestBody Map<String, Object> body) {
     return ApiResponse.ok(service.requestCorrection(id, body));
+  }
+
+  @PostMapping("/definitions/{id}/correction-apply")
+  public ApiResponse<Map<String, Object>> applyCorrection(
+      @PathVariable("id") UUID id, @RequestBody Map<String, Object> body) {
+    return ApiResponse.ok(service.applyCorrection(id, body));
+  }
+
+  @PostMapping("/definitions/{id}/correction-reject")
+  public ApiResponse<Map<String, Object>> rejectCorrection(
+      @PathVariable("id") UUID id, @RequestBody Map<String, Object> body) {
+    return ApiResponse.ok(service.rejectCorrection(id, body));
   }
 
   @PostMapping("/definitions/{id}/unlock")

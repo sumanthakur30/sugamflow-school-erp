@@ -99,6 +99,7 @@ export class ExamBulkComponent implements OnInit {
   private readonly session = inject(AuthSessionService);
 
   @Input() view: 'home' | 'entry' = 'entry';
+  gridMode = false;
 
   loading = true;
   busy = false;
@@ -138,6 +139,7 @@ export class ExamBulkComponent implements OnInit {
   fillOverwrite = false;
   statusValue = 'PRESENT';
   correctionReason = '';
+  reviewNote = '';
   editingKey = '';
   editBackup: { marks: string; entryStatus: string; remarks: string } | null = null;
   deleteReason = '';
@@ -164,8 +166,34 @@ export class ExamBulkComponent implements OnInit {
     { value: 'EXEMPTED', label: 'Exempted' },
   ];
 
+  grid: {
+    sectionLabel?: string;
+    className?: string;
+    academicSessionId?: string;
+    columns: Array<{
+      examDefinitionId: string;
+      subjectName: string;
+      examName: string;
+      status: string;
+      readOnly: boolean;
+      maxMarks: number;
+    }>;
+    students: Array<{
+      studentId: string | null;
+      admissionNo: string;
+      studentName: string;
+      rollNo: string;
+      cells: Record<string, { marks?: number | null; entryStatus?: string | null; grade?: string | null }>;
+    }>;
+  } | null = null;
+  gridQuery = '';
+
   ngOnInit(): void {
     this.role = (this.session.getRole?.() ?? '').toUpperCase();
+    this.gridMode = this.route.snapshot.queryParamMap.get('grid') === '1';
+    this.route.queryParamMap.subscribe((params) => {
+      this.gridMode = params.get('grid') === '1';
+    });
     if (this.view === 'home') {
       this.loadBoard();
       return;
@@ -236,6 +264,19 @@ export class ExamBulkComponent implements OnInit {
 
   get canUnlock(): boolean {
     return !!this.gradebook?.canUnlock && this.readOnly;
+  }
+
+  get correctionRequested(): boolean {
+    return this.gradebook?.exam?.status === 'CORRECTION_REQUESTED';
+  }
+
+  get canReview(): boolean {
+    return this.canUnlock && this.correctionRequested;
+  }
+
+  get canRequestCorrection(): boolean {
+    const status = this.gradebook?.exam?.status;
+    return this.readOnly && (status === 'SUBMITTED' || status === 'PUBLISHED');
   }
 
   get allowIncomplete(): boolean {
@@ -328,6 +369,50 @@ export class ExamBulkComponent implements OnInit {
       submitted: this.board.filter((r) => r.status === 'SUBMITTED' || r.status === 'PUBLISHED' || r.status === 'LOCKED').length,
       corrections: this.board.filter((r) => r.status === 'CORRECTION_REQUESTED').length,
     };
+  }
+
+  get filteredGridStudents() {
+    const rows = this.grid?.students ?? [];
+    const q = this.gridQuery.trim().toLowerCase();
+    if (!q) return rows;
+    return rows.filter((row) =>
+      [row.studentName, row.admissionNo, row.rollNo].some((value) => (value || '').toLowerCase().includes(q)),
+    );
+  }
+
+  openGrid(): void {
+    void this.router.navigate(['/admin/exam'], { queryParams: { bulk: '1', grid: '1' } });
+  }
+
+  loadSectionGrid(): void {
+    this.error = '';
+    if (!this.classId || !this.sectionId) {
+      this.error = 'Select class and section.';
+      return;
+    }
+    this.busy = true;
+    this.api.get<NonNullable<ExamBulkComponent['grid']>>(`/api/exam/gradebook/section?sectionId=${this.sectionId}`).subscribe({
+      next: (grid) => {
+        this.busy = false;
+        this.grid = grid ?? { columns: [], students: [] };
+        this.gridQuery = '';
+      },
+      error: (err) => {
+        this.busy = false;
+        this.error = err?.error?.message ?? 'Could not load the section grid';
+      },
+    });
+  }
+
+  cellText(
+    student: NonNullable<ExamBulkComponent['grid']>['students'][number],
+    examDefinitionId: string,
+  ): string {
+    const cell = student.cells?.[examDefinitionId];
+    if (!cell) return '—';
+    if (cell.entryStatus && EXCUSED.has(cell.entryStatus)) return this.statusLabel(cell.entryStatus);
+    if (cell.marks == null) return '—';
+    return String(cell.marks);
   }
 
   openEntry(id?: string): void {
@@ -677,8 +762,31 @@ export class ExamBulkComponent implements OnInit {
       });
   }
 
+  reviewCorrection(apply: boolean): void {
+    if (!this.examDefinitionId || !this.reviewNote.trim()) return;
+    this.busy = true;
+    const path = apply ? 'correction-apply' : 'correction-reject';
+    this.api
+      .post(`/api/exam/definitions/${this.examDefinitionId}/${path}`, { reason: this.reviewNote.trim() })
+      .subscribe({
+        next: () => {
+          this.busy = false;
+          this.dialog = '';
+          this.reviewNote = '';
+          this.status = apply
+            ? 'Correction applied. Marks can be edited and submitted again.'
+            : 'Correction rejected. Marks stay read-only.';
+          this.loadGradebook();
+        },
+        error: (err) => {
+          this.busy = false;
+          this.error = err?.error?.message ?? (apply ? 'Could not apply this correction' : 'Could not reject this correction');
+        },
+      });
+  }
+
   unlock(): void {
-    if (!this.examDefinitionId) return;
+    if (!this.examDefinitionId || this.correctionRequested) return;
     this.busy = true;
     this.api.post(`/api/exam/definitions/${this.examDefinitionId}/unlock`, { reason: 'Unlocked for correction' }).subscribe({
       next: () => {
