@@ -729,6 +729,7 @@ public class StudentRecordService {
       attachGuardiansOnEnroll(scope, module, answers, sourceAnswers, body);
     }
 
+    fillSplitClassFields(answers);
     validateMandatory(form, answers);
 
     StudentRecordEntity entity = new StudentRecordEntity();
@@ -1519,6 +1520,40 @@ public class StudentRecordService {
     validateDateField(answers, "dateOfBirth", "DOB");
     validateDateField(answers, "dob", "DOB");
     validateDateField(answers, "admissionDate", "Admission date");
+  }
+
+  /**
+   * The import sheet keeps one class value such as {@code Grade 2-A}. The student form also
+   * requires Grade and Section as their own fields.
+   */
+  private void fillSplitClassFields(Map<String, Object> answers) {
+    String applied = stringOr(answers.get("classApplied"), stringOr(answers.get("classSection"), null));
+    String[] parts = classParts(applied);
+    if (stringOr(answers.get("classGrade"), null) == null) {
+      String grade = stringOr(answers.get("grade"), parts[0]);
+      if (grade != null) {
+        answers.put("classGrade", grade);
+      }
+    }
+    if (stringOr(answers.get("sectionLetter"), null) == null) {
+      String section = stringOr(answers.get("section"), parts[1]);
+      if (section != null) {
+        answers.put("sectionLetter", section.toUpperCase(Locale.ROOT));
+      }
+    }
+  }
+
+  private static String[] classParts(String applied) {
+    if (applied == null || applied.isBlank()) {
+      return new String[] {null, null};
+    }
+    var matcher =
+        Pattern.compile("^(?:grade\\s+)?(\\d+|[IVX]+|[A-Za-z]+)(?:\\s*[- ]\\s*([A-Za-z]))?$", Pattern.CASE_INSENSITIVE)
+            .matcher(applied.trim());
+    if (!matcher.matches()) {
+      return new String[] {null, null};
+    }
+    return new String[] {matcher.group(1), matcher.group(2)};
   }
 
   /** Normalize gov IDs and sync classApplied from grade+section when present. */
