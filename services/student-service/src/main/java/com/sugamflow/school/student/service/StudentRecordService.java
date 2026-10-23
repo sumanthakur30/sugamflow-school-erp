@@ -33,6 +33,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
@@ -683,8 +684,10 @@ public class StudentRecordService {
   /**
    * Create (or upsert by admissionNo) a student from Import Workbench. Body: answers map matching
    * student_master form keys. Idempotent when admissionNo already exists for the org.
+   *
+   * <p>Runs in its own transaction so one bad row does not mark the import job rollback-only.
    */
-  @Transactional
+  @Transactional(propagation = Propagation.REQUIRES_NEW)
   public Map<String, Object> createFromImport(Map<String, Object> body) {
     TenantScope scope = TenantContext.require();
     try {
