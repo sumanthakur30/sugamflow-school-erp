@@ -63,8 +63,9 @@ x-common-env: &common-env
   EUREKA_INSTANCE_PREFER_IP_ADDRESS: "true"
   EUREKA_INSTANCE_LEASE_RENEWAL_INTERVAL_IN_SECONDS: "10"
   EUREKA_INSTANCE_LEASE_EXPIRATION_DURATION_IN_SECONDS: "30"
-  # Defaults match .env.school.production (Flyway needs max >= 3)
-  SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE: ${DB_POOL_MAX_SIZE:-5}
+  # Shared RDS max_connections is 79, also used by retail.
+  # Flyway holds one connection and opens a second, so 1 cannot boot. Do not raise above 2.
+  SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE: ${DB_POOL_MAX_SIZE:-2}
   SPRING_DATASOURCE_HIKARI_MINIMUM_IDLE: ${DB_POOL_MIN_IDLE:-0}
   SPRING_DATASOURCE_HIKARI_IDLE_TIMEOUT: ${DB_POOL_IDLE_TIMEOUT_MS:-120000}
   SPRING_DATASOURCE_HIKARI_MAX_LIFETIME: ${DB_POOL_MAX_LIFETIME_MS:-600000}
@@ -125,7 +126,7 @@ services:
 
   form-builder-service:
     <<: *jvm-service
-    image: ${IMAGE_PREFIX:-sumanthakur30}/form-builder-service:${IMAGE_TAG:-1.0.0}
+    image: ${IMAGE_PREFIX:-sumanthakur30}/form-builder-service:${FORM_BUILDER_IMAGE_TAG:-${IMAGE_TAG:-1.0.0}}
     environment:
       <<: *common-env
       EUREKA_INSTANCE_HOSTNAME: form-builder-service
@@ -357,7 +358,7 @@ services:
       ATTENDANCE_PUBLIC_API_URL: http://gateway-service:9090
       ATTENDANCE_NOTIF_DELIVERY_URL: http://notification-service:8087
       ATTENDANCE_NOTIF_CFG_URL: http://school-notification-config-service:8187
-      ATTENDANCE_DB_POOL_MAX_SIZE: ${ATTENDANCE_DB_POOL_MAX_SIZE:-5}
+      ATTENDANCE_DB_POOL_MAX_SIZE: ${ATTENDANCE_DB_POOL_MAX_SIZE:-2}
       ATTENDANCE_DB_POOL_MIN_IDLE: ${ATTENDANCE_DB_POOL_MIN_IDLE:-0}
 
   exam-service:
@@ -382,7 +383,7 @@ services:
       EXAM_ACADEMIC_URL: http://academic-structure-service:8199
       EXAM_PUBLIC_API_URL: http://gateway-service:9090
       EXAM_NOTIF_DELIVERY_URL: http://notification-service:8087
-      EXAM_DB_POOL_MAX_SIZE: ${EXAM_DB_POOL_MAX_SIZE:-5}
+      EXAM_DB_POOL_MAX_SIZE: ${EXAM_DB_POOL_MAX_SIZE:-2}
       EXAM_DB_POOL_MIN_IDLE: ${EXAM_DB_POOL_MIN_IDLE:-0}
 
   library-service:

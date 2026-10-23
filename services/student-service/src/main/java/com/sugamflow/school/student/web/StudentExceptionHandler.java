@@ -12,7 +12,11 @@ public class StudentExceptionHandler {
 
   @ExceptionHandler(StudentException.class)
   public ResponseEntity<ApiResponse<Map<String, String>>> handle(StudentException ex) {
-    return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+    HttpStatus status =
+        "ENGINE_UNAVAILABLE".equals(ex.getCode())
+            ? HttpStatus.SERVICE_UNAVAILABLE
+            : HttpStatus.BAD_REQUEST;
+    return ResponseEntity.status(status)
         .body(new ApiResponse<>(false, Map.of("code", ex.getCode()), ex.getMessage()));
   }
 }

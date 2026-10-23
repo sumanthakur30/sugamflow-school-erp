@@ -129,6 +129,9 @@ export class ModuleBootstrapService {
     const status = err?.status;
     const code = ModuleBootstrapService.errorCode(err);
     const detail = err?.error?.message ?? err?.message ?? fallback;
+    if (code === 'ENGINE_UNAVAILABLE') {
+      return detail;
+    }
     if (status === 503 || status === 0) {
       return `Service unavailable (${status || 'network'}). ${detail}`;
     }

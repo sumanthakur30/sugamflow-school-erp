@@ -14,7 +14,7 @@ import { StudentGlobalSearchComponent } from './student-global-search.component'
 import { ApiService } from '../core/api.service';
 import { applySavedMenu, SavedMenuNode } from './menu-drive';
 import { NavGroup, NavItem, SIDE_NAV, TOP_NAV } from './nav-catalog';
-import { filter, switchMap, timer } from 'rxjs';
+import { filter, switchMap } from 'rxjs';
 
 
 /**
@@ -62,6 +62,7 @@ export class ShellComponent implements OnInit {
   topGroups: NavGroup[] = [...this.topCatalog];
   sideGroups: NavGroup[] = [...this.sideCatalog];
 
+  private campusReady = false;
   openTopId: string | null = null;
   dropdownStyle: Record<string, string> = {};
   expandedSide = new Set<string>(['reports', 'support', 'compliance']);
@@ -87,28 +88,71 @@ export class ShellComponent implements OnInit {
       },
       error: () => this.refreshNav(),
     });
-    this.router.events.pipe(filter((e) => e instanceof NavigationEnd)).subscribe(() => {
+    this.router.events.pipe(filter((e) => e instanceof NavigationEnd)).subscribe((event) => {
+      const nav = event as NavigationEnd;
       this.closeTopMenu();
       this.mobileNavOpen = false;
       this.ensureActiveSideExpanded();
+      if (this.campusReady) {
+        this.warmCurrentRoute(nav.urlAfterRedirects);
+      }
     });
-    // Prefetch module bootstraps after campus sync — defer so dashboard KPIs get connections first.
     this.tenantContext.whenCampusReady().subscribe(() => {
-      timer(2000).subscribe(() => {
-        this.admissionBootstrap.warm();
-        this.modules.warm([
-          '/api/fee/bootstrap',
-          '/api/fee/finance/bootstrap',
-          '/api/student/bootstrap',
-          '/api/student/directory/bootstrap',
-          '/api/staff/directory/bootstrap',
-          '/api/payroll/bootstrap',
-          '/api/attendance/bootstrap',
-          '/api/exam/bootstrap',
-          '/api/library/bootstrap',
-        ]);
-      });
+      this.campusReady = true;
+      this.warmCurrentRoute();
     });
+  }
+
+  /** One bootstrap for the open screen. A login must not wake every school JVM at once. */
+  private warmCurrentRoute(url = this.router.url): void {
+    const path = url.split('?')[0];
+    if (path.includes('/admin/admission') || path.includes('/admin/leads')) {
+      this.admissionBootstrap.warm();
+      return;
+    }
+    const bootstrap = ShellComponent.bootstrapFor(path);
+    if (bootstrap) {
+      this.modules.warm([bootstrap]);
+    }
+  }
+
+  private static bootstrapFor(path: string): string | null {
+    if (path.includes('/admin/student-directory') || path.includes('/admin/udise')) {
+      return '/api/student/directory/bootstrap';
+    }
+    if (
+      path.includes('/admin/students') ||
+      path.includes('/admin/import') ||
+      path.includes('/admin/privacy')
+    ) {
+      return '/api/student/bootstrap';
+    }
+    if (path.includes('/admin/finance') || path.includes('/admin/income-expense')) {
+      return '/api/fee/finance/bootstrap';
+    }
+    if (path.includes('/admin/fee')) {
+      return '/api/fee/bootstrap';
+    }
+    if (path.includes('/admin/staff')) {
+      return '/api/staff/directory/bootstrap';
+    }
+    if (path.includes('/admin/payroll')) {
+      return '/api/payroll/bootstrap';
+    }
+    if (
+      path.includes('/admin/attendance') ||
+      path.includes('/admin/devices') ||
+      path.includes('/admin/biometric')
+    ) {
+      return '/api/attendance/bootstrap';
+    }
+    if (path.includes('/admin/exam')) {
+      return '/api/exam/bootstrap';
+    }
+    if (path.includes('/admin/library')) {
+      return '/api/library/bootstrap';
+    }
+    return null;
   }
 
   @HostListener('document:click', ['$event'])

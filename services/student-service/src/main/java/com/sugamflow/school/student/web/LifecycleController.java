@@ -163,8 +163,10 @@ public class LifecycleController {
               ? HttpStatus.NOT_FOUND
               : "FEATURE_OFF".equals(ex.getCode())
                   ? HttpStatus.FORBIDDEN
-                  : "BLOCK_TC".equals(ex.getCode())
-                      ? HttpStatus.BAD_REQUEST
+              : "BLOCK_TC".equals(ex.getCode())
+                  ? HttpStatus.BAD_REQUEST
+                  : "ENGINE_UNAVAILABLE".equals(ex.getCode())
+                      ? HttpStatus.SERVICE_UNAVAILABLE
                       : HttpStatus.BAD_REQUEST;
       throw new ResponseStatusException(status, ex.getMessage());
     } catch (ResponseStatusException ex) {

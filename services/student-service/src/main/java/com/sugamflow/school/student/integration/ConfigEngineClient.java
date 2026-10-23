@@ -4,6 +4,7 @@ import com.sugamflow.school.common.tenant.TenantHeaders;
 import com.sugamflow.school.common.cache.TtlCache;
 import com.sugamflow.school.common.tenant.TenantScope;
 import com.sugamflow.school.student.config.StudentProperties;
+import com.sugamflow.school.student.web.StudentException;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -76,7 +77,31 @@ public class ConfigEngineClient {
   }
 
   public Map<String, Object> getForm(TenantScope scope, String formKey) {
-    return get(properties.getIntegrations().getFormsBaseUrl() + "/api/forms/" + formKey, scope);
+    String url = properties.getIntegrations().getFormsBaseUrl() + "/api/forms/" + formKey;
+    try {
+      Map<String, Object> envelope =
+          restClientBuilder
+              .build()
+              .get()
+              .uri(url)
+              .headers(h -> applyTenant(h, scope))
+              .retrieve()
+              .body(MAP_TYPE);
+      return formPayload(envelope);
+    } catch (RestClientResponseException ex) {
+      int status = ex.getStatusCode().value();
+      if (status >= 500) {
+        log.warn("GET {} failed: {}", url, ex.getStatusCode());
+        throw new StudentException(
+            "ENGINE_UNAVAILABLE", "form-builder-service is not running (" + status + ")");
+      }
+      log.warn("GET {} failed: {}", url, ex.getStatusCode());
+      return null;
+    } catch (Exception ex) {
+      log.warn("GET {} failed: {}", url, ex.getMessage());
+      throw new StudentException(
+          "ENGINE_UNAVAILABLE", "form-builder-service is not running: " + ex.getMessage());
+    }
   }
 
   public Map<String, Object> renderReport(
@@ -170,6 +195,22 @@ public class ConfigEngineClient {
       log.warn("POST {} failed: {}", url, ex.getMessage());
       throw new IllegalStateException("POST " + url + " failed: " + ex.getMessage(), ex);
     }
+  }
+
+  /** A 200 with a null data field means form-builder answered and the key is absent. */
+  @SuppressWarnings("unchecked")
+  private static Map<String, Object> formPayload(Map<String, Object> envelope) {
+    if (envelope == null) {
+      return null;
+    }
+    if (!envelope.containsKey("data")) {
+      return envelope;
+    }
+    Object data = envelope.get("data");
+    if (data instanceof Map<?, ?> map) {
+      return (Map<String, Object>) map;
+    }
+    return null;
   }
 
   @SuppressWarnings("unchecked")
