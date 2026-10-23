@@ -349,8 +349,15 @@ export class ImportWorkbenchComponent implements OnInit, OnDestroy {
     this.api.post<any>(`/api/student/import/jobs/${this.selected.id}/commit`, {}).subscribe({
       next: (job) => {
         this.busy = false;
+        this.error = '';
         this.selected = job;
-        this.status = `Saved ${job.stats?.committed || 0} students · ${job.stats?.updatedCommitted || job.stats?.updates || 0} updated`;
+        const committed = Number(job.stats?.committed || 0);
+        const updated = Number(job.stats?.updatedCommitted || job.stats?.updates || 0);
+        const failed = Number(job.stats?.error || 0);
+        this.status =
+          failed > 0
+            ? `Imported ${committed} students · ${failed} need attention`
+            : `Saved ${committed} students · ${updated} updated`;
         this.loadJobs();
       },
       error: (err) => {
