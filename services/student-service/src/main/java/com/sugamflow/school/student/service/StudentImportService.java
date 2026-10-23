@@ -18,6 +18,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -27,6 +29,8 @@ import org.springframework.transaction.annotation.Transactional;
  */
 @Service
 public class StudentImportService {
+
+  private static final Logger log = LoggerFactory.getLogger(StudentImportService.class);
 
   public static final String FEATURE_IMPORT = "FEATURE_IMPORT_WORKBENCH";
   public static final String ENTITY_STUDENT = "student_master";
@@ -273,7 +277,6 @@ public class StudentImportService {
     return getJob(jobId);
   }
 
-  @Transactional
   public Map<String, Object> commit(UUID jobId) {
     TenantScope scope = TenantContext.require();
     requireStaff(scope);
@@ -312,8 +315,9 @@ public class StudentImportService {
         mapped.put("_action", outcome);
         row.setMappedJson(mapped);
       } catch (Exception ex) {
+        log.warn("Import row {} on job {} was not saved", row.getRowNumber(), jobId, ex);
         row.setStatus("ERROR");
-        row.setErrorMessage(ex.getMessage() == null ? "commit failed" : ex.getMessage());
+        row.setErrorMessage(rowError(ex));
         error++;
       }
       row.setUpdatedAt(Instant.now());
@@ -535,6 +539,21 @@ public class StudentImportService {
       return new LinkedHashMap<>((Map<String, Object>) m);
     }
     return new LinkedHashMap<>();
+  }
+
+  private static String rowError(Exception ex) {
+    Throwable root = ex;
+    while (root.getCause() != null && root.getCause() != root) {
+      root = root.getCause();
+    }
+    String message = root.getMessage();
+    if (message == null || message.isBlank()) {
+      message = ex.getMessage();
+    }
+    if (message == null || message.isBlank()) {
+      return "commit failed";
+    }
+    return message.length() > 400 ? message.substring(0, 400) : message;
   }
 
   private static boolean isBlank(Object v) {
