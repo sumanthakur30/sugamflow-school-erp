@@ -441,6 +441,11 @@ public class SettingsConfigService {
     changed |= putIfAbsent(settings, "enrollOnApprove", true);
     changed |= putIfAbsent(settings, "studentFormKey", "student_master");
     changed |= putIfAbsent(settings, "generateAdmissionNo", true);
+    changed |= putIfAbsent(settings, "admissionNoPrefix", "ADM");
+    changed |= putIfAbsent(settings, "admissionNoSeparator", "-");
+    changed |= putIfAbsent(settings, "admissionNoYearDigits", 4);
+    changed |= putIfAbsent(settings, "admissionNoIncludeBranch", true);
+    changed |= putIfAbsent(settings, "admissionNoWidth", 4);
     return changed;
   }
 

@@ -1,0 +1,63 @@
+<section class="page">
+  <div class="page-head">
+    <h2>Settings</h2>
+    <p>
+      Configure this school from the screens that already save data. A module that is not on the
+      subscription stays hidden. Turning one off in the plan does not delete its records.
+    </p>
+  </div>
+
+  @if (loadState === 'unavailable') {
+    <p class="error panel" role="alert">The subscription plan could not be loaded. Open cards that do not depend on a module flag, or retry from Subscription.</p>
+  }
+
+  <div class="panel">
+    <h3>Configuration</h3>
+    <table>
+      <thead>
+        <tr>
+          <th>Area</th>
+          <th>Status</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        @for (row of checklist; track row.label) {
+          <tr>
+            <td>{{ row.label }}</td>
+            <td>{{ statusLabel(row.feature) }}</td>
+            <td>
+              @if (statusOf(row.feature) === 'active') {
+                <a [routerLink]="row.path">Open</a>
+              } @else if (statusOf(row.feature) === 'not-on-plan') {
+                <a routerLink="/admin/subscription">See plan</a>
+              }
+            </td>
+          </tr>
+        }
+      </tbody>
+    </table>
+  </div>
+
+  <label>
+    Search settings
+    <input [(ngModel)]="query" type="search" placeholder="Fees, ID card, workflow" />
+  </label>
+
+  @for (group of groups(); track group) {
+    <h3>{{ group }}</h3>
+    <div class="grid three">
+      @for (card of cardsIn(group); track card.path) {
+        <a class="panel" [routerLink]="card.path">
+          <strong>{{ card.title }}</strong>
+          <p>{{ card.detail }}</p>
+          <span class="muted">{{ statusLabel(card.feature) }}</span>
+        </a>
+      }
+    </div>
+  }
+
+  @if (!groups().length) {
+    <p class="panel">No settings match that search, or those modules are not on this plan.</p>
+  }
+</section>
