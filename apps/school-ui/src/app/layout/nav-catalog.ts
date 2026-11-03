@@ -219,6 +219,11 @@ export const SIDE_NAV: NavGroup[] = [
       icon: 'settings',
       items: [
         {
+          path: '/admin/settings',
+          label: 'Settings',
+          roles: ['SHOP_OWNER', 'SUPER_ADMIN', 'ADMIN', 'PRINCIPAL'],
+        },
+        {
           path: '/admin/branches',
           label: 'Campuses',
           feature: 'FEATURE_MULTI_BRANCH',
