@@ -1,0 +1,76 @@
+<section class="page">
+  <div class="page-head">
+    <h2>School setup</h2>
+    <p>
+      These two saves use the admission settings and fee structures that are already stored for this school.
+      <a routerLink="/admin/settings">Back to settings</a>
+    </p>
+  </div>
+
+  @if (error) {
+    <p class="error panel" role="alert">{{ error }}</p>
+  }
+
+  <div class="panel">
+    <h3>Admission number</h3>
+    <p class="muted">Next number preview: {{ preview() }}</p>
+    <div class="grid two">
+      <label>
+        Prefix
+        <input [(ngModel)]="prefix" name="prefix" maxlength="12" />
+      </label>
+      <label>
+        Separator
+        <input [(ngModel)]="separator" name="separator" maxlength="3" />
+      </label>
+      <label>
+        Year
+        <select [(ngModel)]="yearDigits" name="yearDigits">
+          <option [ngValue]="4">Full year</option>
+          <option [ngValue]="2">Last two digits</option>
+          <option [ngValue]="0">No year</option>
+        </select>
+      </label>
+      <label>
+        Sequence width
+        <input [(ngModel)]="width" name="width" type="number" min="1" max="8" />
+      </label>
+    </div>
+    <label>
+      <input [(ngModel)]="includeBranch" name="includeBranch" type="checkbox" />
+      Include the campus code
+    </label>
+    <button type="button" (click)="saveAdmissionFormat()" [disabled]="busy">Save admission format</button>
+    @if (admissionStatus) {
+      <p class="status">{{ admissionStatus }}</p>
+    }
+  </div>
+
+  <div class="panel">
+    <h3>Class fee</h3>
+    <p class="muted">Saves one tuition line on the existing fee structure for this class. Add more heads from Fee collection.</p>
+    <div class="grid two">
+      <label>
+        Class
+        <input [(ngModel)]="className" name="className" placeholder="8-A" />
+      </label>
+      <label>
+        Tuition amount
+        <input [(ngModel)]="tuition" name="tuition" type="number" min="1" />
+      </label>
+      <label>
+        Frequency
+        <select [(ngModel)]="frequency" name="frequency">
+          <option value="M">Monthly</option>
+          <option value="Q">Quarterly</option>
+          <option value="Y">Yearly</option>
+          <option value="OT">One time</option>
+        </select>
+      </label>
+    </div>
+    <button type="button" (click)="saveFeeStructure()" [disabled]="busy">Save fee structure</button>
+    @if (feeStatus) {
+      <p class="status">{{ feeStatus }}</p>
+    }
+  </div>
+</section>

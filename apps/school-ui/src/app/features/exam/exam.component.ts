@@ -151,6 +151,13 @@ export class ExamComponent implements OnInit, OnDestroy {
     });
   }
 
+  openGrid(): void {
+    void this.router.navigate([], {
+      relativeTo: this.route,
+      queryParams: { bulk: '1', grid: '1' },
+    });
+  }
+
   closeForm(): void {
     if (this.submitting) return;
     void this.router.navigate([], { relativeTo: this.route, queryParams: {} });

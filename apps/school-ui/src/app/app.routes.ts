@@ -527,6 +527,24 @@ export const routes: Routes = [
           ),
       },
       {
+        path: 'admin/settings/setup',
+        canActivate: [featureGuard],
+        data: { roles: [...PLATFORM_ADMIN_ROLES, 'PRINCIPAL'] },
+        loadComponent: () =>
+          import('./features/settings-hub/school-setup.component').then(
+            (m) => m.SchoolSetupComponent,
+          ),
+      },
+      {
+        path: 'admin/settings',
+        canActivate: [featureGuard],
+        data: { roles: [...PLATFORM_ADMIN_ROLES, 'PRINCIPAL'] },
+        loadComponent: () =>
+          import('./features/settings-hub/settings-hub.component').then(
+            (m) => m.SettingsHubComponent,
+          ),
+      },
+      {
         path: 'admin/modules',
         canActivate: [featureGuard],
         data: { feature: 'FEATURE_ADMIN_CONFIG', roles: PLATFORM_ADMIN_ROLES },

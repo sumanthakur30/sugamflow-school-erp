@@ -240,6 +240,7 @@
         @if (featureEnabled && !loading && listTab !== 'sheets') {
           <div class="head-actions">
             <button type="button" (click)="openBulk()">+ Enter marks</button>
+            <button type="button" class="secondary" (click)="openGrid()">All subjects</button>
             <button type="button" class="secondary" (click)="openForm()">Individual student</button>
           </div>
         }
