@@ -177,4 +177,19 @@ public interface StudentRecordRepository extends JpaRepository<StudentRecordEnti
       @Param("scholarshipBlank") boolean scholarshipBlank,
       @Param("includeDeleted") Boolean includeDeleted,
       Pageable pageable);
+
+  /**
+   * Distinct student ids (the primary key). A student is one row, so a section assignment does not
+   * add a second count. Soft-deleted rows and any status other than the supplied billable status are
+   * excluded.
+   */
+  @Query(
+      """
+      SELECT COUNT(s.id) FROM StudentRecordEntity s
+      WHERE s.organizationId = :organizationId
+        AND s.deletedAt IS NULL
+        AND UPPER(s.status) = UPPER(:status)
+      """)
+  long countBillableActiveStudents(
+      @Param("organizationId") String organizationId, @Param("status") String status);
 }
