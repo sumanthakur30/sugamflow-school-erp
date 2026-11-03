@@ -1,5 +1,8 @@
 package com.sugamflow.school.subscription.service;
 
+import com.sugamflow.school.subscription.billing.PerStudentInvoiceCommand;
+import com.sugamflow.school.subscription.billing.PerStudentInvoiceIssuer;
+import com.sugamflow.school.subscription.billing.TaxRuleView;
 import com.sugamflow.school.subscription.model.SubscriptionPlan;
 import com.sugamflow.school.subscription.payment.SubscriptionRazorpayClient;
 import com.sugamflow.school.subscription.persistence.entity.BillingCouponEntity;
@@ -43,7 +46,7 @@ import org.springframework.transaction.annotation.Transactional;
  * Does not change entitlements/feature-flag JSON contracts.
  */
 @Service
-public class CommercialBillingService {
+public class CommercialBillingService implements PerStudentInvoiceIssuer {
 
   private final BillingCycleRepository billingCycleRepository;
   private final PriceBookRepository priceBookRepository;
@@ -436,6 +439,104 @@ public class CommercialBillingService {
       saveLine(invoice.getId(), "TAX_IGST", "IGST " + (taxRule.getIgstBps() / 100.0) + "%", 1, igst, igst, null, sort);
     }
 
+    return invoiceDetail(invoice);
+  }
+
+  @Override
+  public TaxRuleView defaultTaxRule() {
+    TaxRuleEntity rule = resolveTaxRule(null);
+    return new TaxRuleView(rule.getId(), rule.getCgstBps(), rule.getSgstBps(), rule.getIgstBps());
+  }
+
+  /**
+   * Issues a per-student platform invoice from amounts already calculated. Leaves the invoice unpaid.
+   */
+  @Override
+  @Transactional
+  public Map<String, Object> issuePerStudent(PerStudentInvoiceCommand command) {
+    Instant now = Instant.now();
+    String planId =
+        tenantSubscriptionRepository
+            .findById(command.organizationId())
+            .map(TenantSubscriptionEntity::getPlanId)
+            .orElse(null);
+    SubscriptionInvoiceEntity invoice = new SubscriptionInvoiceEntity();
+    invoice.setOrganizationId(command.organizationId());
+    invoice.setStatus("ISSUED");
+    invoice.setCurrency("INR");
+    invoice.setPlanId(planId);
+    invoice.setBillingCycleCode("MONTHLY");
+    long studentAmount = Math.multiplyExact((long) command.quantity(), command.unitAmountMinor());
+    invoice.setSubtotalMinor(Math.addExact(studentAmount, command.baseFeeMinor()));
+    invoice.setDiscountMinor(command.discountMinor());
+    invoice.setTaxRuleId(command.taxRuleId());
+    invoice.setCgstMinor(command.cgstMinor());
+    invoice.setSgstMinor(command.sgstMinor());
+    invoice.setIgstMinor(command.igstMinor());
+    invoice.setTaxMinor(command.taxMinor());
+    invoice.setTotalMinor(command.totalMinor());
+    invoice.setPlaceOfSupply(command.placeOfSupply());
+    invoice.setSellerStateCode(command.sellerStateCode());
+    invoice.setPeriodStart(command.periodStart());
+    invoice.setPeriodEnd(command.periodEnd());
+    invoice.setIssuedAt(now);
+    invoice.setDueAt(now.plus(7, ChronoUnit.DAYS));
+    invoice.setInvoiceNumber(nextInvoiceNumber(now));
+    invoice.setNotes(
+        "School per-student subscription "
+            + command.periodKey()
+            + ". Count policy ACTIVE_ON_RUN. Snapshot count is not live enrollment.");
+    invoice.setCreatedAt(now);
+    invoice.setUpdatedAt(now);
+    invoice = invoiceRepository.save(invoice);
+
+    int sort = 10;
+    if (command.quantity() > 0) {
+      saveLine(
+          invoice.getId(),
+          "PER_STUDENT",
+          "Platform subscription · " + command.quantity() + " billable students",
+          command.quantity(),
+          command.unitAmountMinor(),
+          studentAmount,
+          planId,
+          sort);
+      sort += 10;
+    } else {
+      saveLine(
+          invoice.getId(),
+          "PER_STUDENT",
+          "Platform subscription · no billable students",
+          1,
+          0,
+          0,
+          planId,
+          sort);
+      sort += 10;
+    }
+    if (command.baseFeeMinor() > 0) {
+      saveLine(
+          invoice.getId(),
+          "BASE_FEE",
+          "Platform base fee",
+          1,
+          command.baseFeeMinor(),
+          command.baseFeeMinor(),
+          planId,
+          sort);
+      sort += 10;
+    }
+    if (command.cgstMinor() > 0) {
+      saveLine(invoice.getId(), "TAX_CGST", "CGST", 1, command.cgstMinor(), command.cgstMinor(), null, sort);
+      sort += 10;
+    }
+    if (command.sgstMinor() > 0) {
+      saveLine(invoice.getId(), "TAX_SGST", "SGST", 1, command.sgstMinor(), command.sgstMinor(), null, sort);
+      sort += 10;
+    }
+    if (command.igstMinor() > 0) {
+      saveLine(invoice.getId(), "TAX_IGST", "IGST", 1, command.igstMinor(), command.igstMinor(), null, sort);
+    }
     return invoiceDetail(invoice);
   }
 
