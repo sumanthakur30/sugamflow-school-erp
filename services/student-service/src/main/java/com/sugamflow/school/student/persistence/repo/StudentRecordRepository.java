@@ -39,6 +39,16 @@ public interface StudentRecordRepository extends JpaRepository<StudentRecordEnti
 
   long countByOrganizationIdAndDeletedAtIsNull(String organizationId);
 
+  @Query(
+      """
+      select count(s) from StudentRecordEntity s
+      where s.organizationId = :org
+        and s.deletedAt is null
+        and lower(s.admissionNo) like lower(concat(:prefix, '%'))
+      """)
+  long countByOrganizationAndAdmissionPrefix(
+      @Param("org") String organizationId, @Param("prefix") String prefix);
+
   long countByOrganizationIdAndStatusAndDeletedAtIsNull(String organizationId, String status);
 
   long countByOrganizationIdAndBranchIdAndAcademicSessionIdAndDeletedAtIsNull(
