@@ -2103,6 +2103,37 @@ public class StudentRecordService {
   }
 
   private String generateAdmissionNo(TenantScope scope) {
+    Map<String, Object> settings;
+    try {
+      settings = moduleSettingsMap(engines.getModuleSettings(scope, "admission"));
+    } catch (RuntimeException ex) {
+      log.warn("Admission number format unavailable; using the built-in number. {}", ex.toString());
+      return legacyAdmissionNo(scope);
+    }
+    if (settings.get("admissionNoPrefix") == null) {
+      return legacyAdmissionNo(scope);
+    }
+    LocalDate today = LocalDate.now();
+    String stem = AdmissionNumberFormat.stem(settings, scope.branchId(), today);
+    long existing = repository.countByOrganizationAndAdmissionPrefix(scope.organizationId(), stem);
+    for (int step = 1; step <= 25; step++) {
+      String candidate =
+          AdmissionNumberFormat.format(settings, scope.branchId(), existing + step, today);
+      if (candidate.length() > 64) {
+        throw new StudentException(
+            "VALIDATION", "Admission number format is longer than 64 characters");
+      }
+      if (repository
+          .findByOrganizationIdAndAdmissionNoIgnoreCaseAndDeletedAtIsNull(
+              scope.organizationId(), candidate)
+          .isEmpty()) {
+        return candidate;
+      }
+    }
+    throw new StudentException("VALIDATION", "Could not allocate a unique admission number");
+  }
+
+  private static String legacyAdmissionNo(TenantScope scope) {
     String year = String.valueOf(LocalDate.now().getYear());
     String suffix = UUID.randomUUID().toString().substring(0, 6).toUpperCase();
     String branch =
