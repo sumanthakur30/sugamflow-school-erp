@@ -10,6 +10,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.sugamflow.school.subscription.billing.PerStudentInvoiceCommand;
 import com.sugamflow.school.subscription.model.SubscriptionPlan;
 import com.sugamflow.school.subscription.payment.SubscriptionRazorpayClient;
 import com.sugamflow.school.subscription.persistence.entity.BillingCouponEntity;
@@ -29,6 +30,7 @@ import com.sugamflow.school.subscription.persistence.repo.SubscriptionInvoiceRep
 import com.sugamflow.school.subscription.persistence.repo.SubscriptionPaymentRepository;
 import com.sugamflow.school.subscription.persistence.repo.TaxRuleRepository;
 import com.sugamflow.school.subscription.persistence.repo.TenantSubscriptionRepository;
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -247,6 +249,51 @@ class CommercialBillingServiceTest {
         .thenReturn(Optional.of(starterMonthlyPrice()));
     when(taxRuleRepository.findFirstByDefaultRuleTrueAndActiveTrue())
         .thenReturn(Optional.of(gst18()));
+  }
+
+  @Test
+  void issuePerStudentLeavesInvoiceIssuedAndUnpaid() {
+    when(tenantSubscriptionRepository.findById(ORG)).thenReturn(Optional.empty());
+    when(invoiceRepository.save(any()))
+        .thenAnswer(
+            inv -> {
+              SubscriptionInvoiceEntity e = inv.getArgument(0);
+              e.setId(88L);
+              return e;
+            });
+    when(invoiceLineRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+    when(invoiceLineRepository.findByInvoiceIdOrderBySortOrderAscIdAsc(88L)).thenReturn(List.of());
+
+    Instant start = Instant.parse("2026-10-01T00:00:00Z");
+    Map<String, Object> out =
+        service.issuePerStudent(
+            new PerStudentInvoiceCommand(
+                ORG,
+                "2026-10",
+                800,
+                3_000L,
+                0,
+                0,
+                2_400_000L,
+                216_000L,
+                216_000L,
+                0,
+                432_000L,
+                2_832_000L,
+                "tax-in-gst18",
+                "09",
+                "09",
+                start,
+                Instant.parse("2026-11-01T00:00:00Z")));
+
+    assertEquals("ISSUED", out.get("status"));
+    assertEquals(2_832_000L, out.get("totalMinor"));
+    ArgumentCaptor<SubscriptionInvoiceLineEntity> lines =
+        ArgumentCaptor.forClass(SubscriptionInvoiceLineEntity.class);
+    verify(invoiceLineRepository, atLeastOnce()).save(lines.capture());
+    assertTrue(
+        lines.getAllValues().stream()
+            .anyMatch(line -> "PER_STUDENT".equals(line.getLineType()) && line.getQuantity() == 800));
   }
 
   private static BillingCycleEntity monthly() {

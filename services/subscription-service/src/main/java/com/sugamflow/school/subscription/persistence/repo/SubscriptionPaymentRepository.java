@@ -31,4 +31,11 @@ public interface SubscriptionPaymentRepository
   List<SubscriptionPaymentEntity> findSuccessfulSince(@Param("from") Instant from);
 
   long countByStatusIgnoreCase(String status);
+
+  @Query(
+      """
+      select coalesce(sum(p.amountMinor), 0) from SubscriptionPaymentEntity p
+      where p.invoiceId = :invoiceId and upper(p.status) = 'SUCCESS'
+      """)
+  long sumSuccessfulForInvoice(@Param("invoiceId") long invoiceId);
 }

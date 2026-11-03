@@ -1,10 +1,13 @@
 package com.sugamflow.school.subscription;
 
+import com.sugamflow.school.subscription.config.SchoolBillingProperties;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.autoconfigure.data.redis.RedisAutoConfiguration;
 import org.springframework.boot.autoconfigure.data.redis.RedisRepositoriesAutoConfiguration;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.cloud.client.discovery.EnableDiscoveryClient;
+import org.springframework.scheduling.annotation.EnableScheduling;
 
 /**
  * Redis autoconfig is excluded by default so local/dev without Redis still boots. Phase 7 enables
@@ -14,6 +17,8 @@ import org.springframework.cloud.client.discovery.EnableDiscoveryClient;
     scanBasePackages = "com.sugamflow.school",
     exclude = {RedisAutoConfiguration.class, RedisRepositoriesAutoConfiguration.class})
 @EnableDiscoveryClient
+@EnableScheduling
+@EnableConfigurationProperties(SchoolBillingProperties.class)
 public class SubscriptionServiceApplication {
   public static void main(String[] args) {
     SpringApplication.run(SubscriptionServiceApplication.class, args);
