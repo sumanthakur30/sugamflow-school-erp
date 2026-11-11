@@ -255,25 +255,23 @@ if (-not (Wait-Http $eurekaHealthUrl 8)) {
   Write-Warning "Eureka not healthy at $eurekaHealthUrl - run platform/Docker discovery first."
 }
 
-if ($SkipBuild) {
-  Write-Host 'SkipBuild: reusing existing school jars'
-} elseif ($Only) {
-  $pl = ($modules | ForEach-Object { $_.Name }) -join ','
-  Write-Host "Building $pl ..."
-  mvn -q -DskipTests -pl $pl -am package
-} else {
-  Write-Host 'Building school jars...'
-  mvn -q -DskipTests package
+function Stop-ListenersForBuild([array]$targets) {
+  foreach ($m in $targets) {
+    Get-NetTCPConnection -LocalPort $m.Port -State Listen -ErrorAction SilentlyContinue | ForEach-Object {
+      Write-Host "Stopping PID $($_.OwningProcess) on :$($m.Port) so Maven can replace $($m.Name)"
+      Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue
+    }
+  }
 }
 
-foreach ($m in $modules) {
+function Start-SchoolModule($m) {
   if (Test-ServiceAlreadyRunning $m.Name $m.Port) {
     if (Test-PortOpen $m.Port) {
       Write-Host "Skip $($m.Name) - port $($m.Port) already in use"
     } else {
       Write-Host "Skip $($m.Name) - JVM already starting (port $($m.Port) not listening yet)"
     }
-    continue
+    return
   }
   $jar = Get-ChildItem "$root\services\$($m.Name)\target\$($m.Name)-*.jar" |
     Where-Object { $_.Name -notlike '*original*' -and $_.Name -notlike '*copy*' } |
@@ -310,18 +308,51 @@ foreach ($m in $modules) {
   Start-Sleep -Milliseconds 400
 }
 
-$healthTargets = if ($Only) {
-  $modules
-} else {
-  @($modules | Where-Object { $_.Name -eq 'school-settings-service' })
-}
-foreach ($m in $healthTargets) {
+function Wait-SchoolHealth($m) {
+  # 127.0.0.1 avoids a hang when localhost resolves to IPv6 and the jar listens on IPv4.
+  $url = "http://127.0.0.1:$($m.Port)/actuator/health"
   Write-Host "Waiting for $($m.Name) (health on :$($m.Port))..."
-  if (Wait-Http "http://localhost:$($m.Port)/actuator/health" 180 $m.Name) {
+  if (Wait-Http $url 180 $m.Name) {
     Write-Host "$($m.Name) UP" -ForegroundColor Green
+    return $true
+  }
+  Write-Warning "$($m.Name) health not confirmed yet"
+  Write-Warning "Check log: $logDir\$($m.Name).err.log"
+  return $false
+}
+
+if ($SkipBuild) {
+  Write-Host 'SkipBuild: reusing existing school jars'
+} else {
+  # A running JVM keeps the jar open. Spring Boot then cannot rename it to *.jar.original.
+  Stop-ListenersForBuild $modules
+  Start-Sleep -Seconds 2
+  if ($Only) {
+    $pl = ($modules | ForEach-Object { $_.Name }) -join ','
+    Write-Host "Building $pl ..."
+    mvn -q -DskipTests -pl $pl -am package
   } else {
-    Write-Warning "$($m.Name) health not confirmed yet"
-    Write-Warning "Check log: $logDir\$($m.Name).err.log"
+    Write-Host 'Building school jars...'
+    mvn -q -DskipTests package
+  }
+  if ($LASTEXITCODE -ne 0) {
+    throw "Maven package failed (exit $LASTEXITCODE). School jars were not replaced."
+  }
+}
+
+# Settings first. Launching the other JVMs at the same time starved this box for ~30 minutes.
+$settingsFirst = @($modules | Where-Object { $_.Name -eq 'school-settings-service' })
+$afterSettings = @($modules | Where-Object { $_.Name -ne 'school-settings-service' })
+foreach ($m in $settingsFirst) {
+  Start-SchoolModule $m
+  Wait-SchoolHealth $m | Out-Null
+}
+foreach ($m in $afterSettings) {
+  Start-SchoolModule $m
+}
+if ($Only -and $settingsFirst.Count -eq 0) {
+  foreach ($m in $modules) {
+    Wait-SchoolHealth $m | Out-Null
   }
 }
 

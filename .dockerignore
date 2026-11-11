@@ -1,0 +1,9 @@
+.git
+.tmp*
+**/.tmp*
+**/node_modules
+**/dist
+**/target
+**/*.tgz
+**/*.log
+tmp-*.sh
