@@ -28,11 +28,12 @@ import { SeoService } from '../core/seo.service';
     <div class="masonry" *ngIf="editorial && visiblePhotos.length; else classic">
       <figure *ngFor="let g of visiblePhotos; let i = index" [class.feature]="i % 7 === 0">
         <img [src]="mediaUrl(g['imageUrl'] ?? g['url'])" [alt]="asText(g['title'], 'Gallery')" loading="lazy" />
-        <figcaption>
-          <small>{{ categoryOf(g) }}</small>
-          <strong>{{ g['title'] }}</strong>
-          <span *ngIf="visibleCaption(g)">{{ visibleCaption(g) }}</span>
-        </figcaption>
+          <figcaption>
+            <small>{{ categoryOf(g) }}</small>
+            <strong>{{ g['title'] }}</strong>
+            <span *ngIf="visibleCaption(g)">{{ visibleCaption(g) }}</span>
+            <a *ngIf="g['videoUrl']" [href]="asText(g['videoUrl'])" target="_blank" rel="noopener">Watch video</a>
+          </figcaption>
       </figure>
     </div>
 

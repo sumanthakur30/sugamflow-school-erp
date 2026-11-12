@@ -23,5 +23,17 @@ public interface MediaObjectStore {
 
   void delete(String organizationId, UUID id);
 
+  /**
+   * Overwrite the object already stored for this id so the public URL stays the same.
+   * When nothing is stored yet, this behaves like {@link #store}.
+   */
+  StoredObject replace(
+      String organizationId,
+      UUID id,
+      String fileName,
+      String contentType,
+      InputStream data,
+      long byteSize);
+
   boolean remoteEnabled();
 }

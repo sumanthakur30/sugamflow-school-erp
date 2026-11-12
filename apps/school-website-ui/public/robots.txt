@@ -1,0 +1,9 @@
+User-agent: *
+Allow: /
+Disallow: /api/cms/admin
+Disallow: /api/website/admin
+Disallow: /api/admission/admin
+
+# Host-specific sitemap is also served by the website API:
+# /api/website/public/sitemap.xml?host=<public-host>
+# /api/website/public/robots.txt?host=<public-host>

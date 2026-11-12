@@ -65,6 +65,18 @@ public class WebsitePublicController {
     return ApiResponse.ok(marketplaceService.listTemplates());
   }
 
+  @GetMapping("/media-referenced")
+  public ApiResponse<Map<String, Object>> mediaReferenced(
+      @RequestParam("organizationId") String organizationId,
+      @RequestParam("needle") String needle) {
+    String safe = needle == null ? "" : needle.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_");
+    boolean referenced = false;
+    if (!safe.isBlank() && organizationId != null && !organizationId.isBlank()) {
+      referenced = resolveService.mediaReferenced(organizationId.trim(), "%" + safe + "%");
+    }
+    return ApiResponse.ok(Map.of("referenced", referenced));
+  }
+
   /** Machine-readable sitemap entries for the public Angular app / CDN. */
   @GetMapping("/sitemap")
   public ApiResponse<Map<String, Object>> sitemap(@RequestParam("host") String host) {
@@ -76,6 +88,8 @@ public class WebsitePublicController {
     urls.add(entry("/news", "0.7"));
     urls.add(entry("/events", "0.7"));
     urls.add(entry("/gallery", "0.6"));
+    urls.add(entry("/resources", "0.6"));
+    urls.add(entry("/contact", "0.6"));
 
     for (Map<String, Object> nav : site.navigation()) {
       Object path = nav.get("path");
@@ -119,6 +133,12 @@ public class WebsitePublicController {
       // CMS optional for sitemap shell
     }
 
+    appendCmsPaths(
+        urls,
+        site,
+        "/api/cms/public/news?organizationId={org}&siteId={siteId}&includeLegacy={legacy}&limit=100",
+        "/news/");
+
     Map<String, Object> payload = new LinkedHashMap<>();
     payload.put("host", site.host());
     payload.put("organizationId", site.organizationId());
@@ -153,7 +173,7 @@ public class WebsitePublicController {
   @GetMapping(value = "/robots.txt", produces = MediaType.TEXT_PLAIN_VALUE)
   public String robots(@RequestParam("host") String host) {
     WebsiteResolveResponse site = resolveService.resolveByHost(host);
-    return "User-agent: *\nAllow: /\nSitemap: https://"
+    return "User-agent: *\nAllow: /\nAllow: /api/website/public/sitemap.xml\nAllow: /api/website/public/robots.txt\nDisallow: /api/\nSitemap: https://"
         + site.host()
         + "/api/website/public/sitemap.xml?host="
         + site.host()
@@ -217,6 +237,40 @@ public class WebsitePublicController {
         .append(" -->");
     html.append("</body></html>");
     return html.toString();
+  }
+
+  private void appendCmsPaths(
+      List<Map<String, Object>> urls, WebsiteResolveResponse site, String path, String prefix) {
+    try {
+      @SuppressWarnings("unchecked")
+      Map<String, Object> response =
+          restClientBuilder
+              .build()
+              .get()
+              .uri(
+                  cmsBaseUrl + path,
+                  site.organizationId(),
+                  site.siteId(),
+                  site.defaultSite())
+              .header("X-Gateway-Verified", "true")
+              .header("X-Tenant-Id", site.organizationId())
+              .retrieve()
+              .body(Map.class);
+      Object data = response != null ? response.get("data") : null;
+      if (!(data instanceof List<?> list)) {
+        return;
+      }
+      for (Object row : list) {
+        if (row instanceof Map<?, ?> item) {
+          Object slug = item.get("slug");
+          if (slug != null && !String.valueOf(slug).isBlank()) {
+            urls.add(entry(prefix + slug, "0.5"));
+          }
+        }
+      }
+    } catch (Exception ignored) {
+      // News list is optional for the sitemap.
+    }
   }
 
   private static Map<String, Object> entry(String path, String priority) {

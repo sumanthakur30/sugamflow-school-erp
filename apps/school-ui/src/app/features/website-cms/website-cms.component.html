@@ -127,6 +127,29 @@
         </article>
       </div>
 
+      <div class="dash-grid">
+        <article class="dash-card">
+          <h3>Recent uploads</h3>
+          <p *ngFor="let item of (mediaUsage?.recent || [])" class="meta">{{ item.fileName || item.title }}</p>
+          <p class="hint" *ngIf="!(mediaUsage?.recent || []).length">No uploads yet.</p>
+        </article>
+        <article class="dash-card">
+          <h3>Latest notices</h3>
+          <p *ngFor="let item of newsItems.slice(0, 4)" class="meta">{{ item.title }} · {{ item.status }}</p>
+          <p class="hint" *ngIf="!newsItems.length">No notices yet.</p>
+        </article>
+        <article class="dash-card">
+          <h3>Upcoming events</h3>
+          <p *ngFor="let item of events.slice(0, 4)" class="meta">{{ item['title'] }}</p>
+          <p class="hint" *ngIf="!events.length">No events yet.</p>
+        </article>
+        <article class="dash-card">
+          <h3>Documents</h3>
+          <p class="dash-value">{{ documents.length }}</p>
+          <button type="button" class="linkish" (click)="setTab('downloads')">Open documents</button>
+        </article>
+      </div>
+
       <div class="dash-actions">
         <h3>Quick actions</h3>
         <div class="dash-action-row">
@@ -275,6 +298,15 @@
                   placeholder="From Media → Use as hero"
                 />
               </label>
+              <label
+                >More slide image URLs (one per line)
+                <textarea
+                  rows="3"
+                  [name]="'himages' + selectedSectionIndex"
+                  [ngModel]="heroImageLines(s)"
+                  (ngModelChange)="setHeroImages(s, $event)"
+                ></textarea>
+              </label>
             </div>
 
             <div class="hero-fields" *ngIf="s.type === 'ADMISSION_CTA'">
@@ -334,7 +366,7 @@
               </label>
             </div>
 
-            <div class="hero-fields" *ngIf="s.type === 'PRINCIPAL_MESSAGE'">
+            <div class="hero-fields" *ngIf="s.type === 'PRINCIPAL_MESSAGE' || s.type === 'DIRECTOR_MESSAGE'">
               <label
                 >Heading
                 <input
@@ -450,6 +482,7 @@
                 s.type !== 'ADMISSION_CTA' &&
                 s.type !== 'ABOUT_SCHOOL' &&
                 s.type !== 'PRINCIPAL_MESSAGE' &&
+                s.type !== 'DIRECTOR_MESSAGE' &&
                 s.type !== 'STATISTICS'
               "
             >
@@ -526,6 +559,28 @@
             <button type="button" class="linkish" (click)="setTab('media')">Media</button>
             tab to upload school photos, then Insert into body.
           </p>
+          <h3>Page sections</h3>
+          <p class="hint">Optional blocks. If you add any, the public page shows these instead of Body HTML.</p>
+          <button type="button" (click)="addPageSection()">Add section</button>
+          <div *ngFor="let section of pageSections; let i = index" class="editor">
+            <label>Type
+              <select [name]="'psType' + i" [(ngModel)]="section.type">
+                <option>TEXT</option>
+                <option>IMAGE</option>
+                <option>HERO</option>
+                <option>CUSTOM_HTML</option>
+              </select>
+            </label>
+            <label class="check"><input type="checkbox" [name]="'psOn' + i" [(ngModel)]="section.enabled" /> Enabled</label>
+            <label>Title <input [name]="'psTitle' + i" [(ngModel)]="section.title" /></label>
+            <label>Body <textarea [name]="'psBody' + i" rows="3" [(ngModel)]="section.body"></textarea></label>
+            <label>Image URL <input [name]="'psImg' + i" [(ngModel)]="section.imageUrl" /></label>
+            <div class="actions row">
+              <button type="button" (click)="movePageSection(i, -1)">Up</button>
+              <button type="button" (click)="movePageSection(i, 1)">Down</button>
+              <button type="button" class="danger" (click)="removePageSection(i)">Remove</button>
+            </div>
+          </div>
           <button type="submit" class="primary" [disabled]="saving">
             {{ saving ? 'Saving…' : 'Save' }}
           </button>
@@ -573,23 +628,41 @@
         </p>
       </div>
       <label class="upload">
-        <span>{{ mediaUploading ? 'Uploading…' : 'Choose image or file' }}</span>
+        <span>{{ mediaUploading ? 'Uploading…' : 'Choose images' }}</span>
         <input
           type="file"
-          accept="image/*,.pdf,.webp"
+          accept="image/jpeg,image/png,image/webp,image/svg+xml,.jpg,.jpeg,.png,.webp,.svg"
+          multiple
           (change)="onMediaSelected($event)"
           [disabled]="mediaUploading"
         />
       </label>
-      <div class="media-grid" *ngIf="mediaAssets.length; else noMedia">
-        <article class="media-card" *ngFor="let m of mediaAssets">
+      <div class="actions row">
+        <input name="mediaQuery" [(ngModel)]="mediaQuery" placeholder="Search images" />
+        <input name="mediaCategory" [(ngModel)]="mediaCategory" placeholder="Category" />
+      </div>
+      <form class="editor" *ngIf="editingMediaId" (ngSubmit)="saveMediaText()">
+        <label>Title <input name="mediaTitle" [(ngModel)]="mediaDraft.title" /></label>
+        <label>Description <input name="mediaDescription" [(ngModel)]="mediaDraft.description" /></label>
+        <label>Alt text <input name="mediaAlt" [(ngModel)]="mediaDraft.altText" /></label>
+        <label>Category <input name="mediaCat" [(ngModel)]="mediaDraft.category" /></label>
+        <button type="submit" class="primary">Save image details</button>
+      </form>
+      <div class="media-grid" *ngIf="filteredMedia().length; else noMedia">
+        <article class="media-card" *ngFor="let m of filteredMedia()">
           <div class="thumb" *ngIf="isImage(m)">
             <img [src]="m.url" [alt]="m.fileName" />
           </div>
           <div class="thumb file" *ngIf="!isImage(m)">{{ m.fileName }}</div>
-          <strong>{{ m.fileName }}</strong>
-          <div class="meta">{{ formatBytes(m.byteSize) }}</div>
+          <strong>{{ m.title || m.fileName }}</strong>
+          <div class="meta">{{ m.category }} {{ formatBytes(m.byteSize) }}</div>
           <div class="actions row">
+            <button type="button" (click)="editMedia(m)">Edit</button>
+            <label class="linkish">
+              Replace
+              <input type="file" accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp,.svg" (change)="replaceMedia(m, $event)" hidden />
+            </label>
+            <button type="button" (click)="showMediaUse(m)">Where used</button>
             <button type="button" (click)="insertMediaIntoBody(m)">Insert into page</button>
             <button type="button" (click)="useMediaAsHero(m)">Use as hero</button>
             <button type="button" (click)="useMediaAsOg(m)">Use as OG</button>
@@ -625,6 +698,23 @@
             <input name="secondaryColorText" [(ngModel)]="theme.secondaryColor" />
           </div>
         </label>
+        <label
+          >Accent color
+          <div class="color-row">
+            <input name="accentColor" type="color" [(ngModel)]="theme.accentColor" />
+            <input name="accentColorText" [(ngModel)]="theme.accentColor" />
+          </div>
+        </label>
+        <label
+          >Font
+          <select name="fontSans" [(ngModel)]="theme.fontSans">
+            <option>Manrope</option>
+            <option>Source Sans 3</option>
+            <option>Nunito Sans</option>
+            <option>Lora</option>
+          </select>
+        </label>
+        <label>Copyright line <input name="copyrightText" [(ngModel)]="theme.copyrightText" /></label>
         <label>Logo URL <input name="logoUrl" [(ngModel)]="theme.logoUrl" /></label>
         <label>Favicon URL <input name="faviconUrl" [(ngModel)]="theme.faviconUrl" /></label>
         <label
@@ -796,6 +886,7 @@
           >Image URL <input name="gUrl" [(ngModel)]="galleryDraft.imageUrl" required
         /></label>
         <label>Album <input name="gAlbum" [(ngModel)]="galleryDraft.album" /></label>
+        <label>Video URL <input name="gVideo" [(ngModel)]="galleryDraft.videoUrl" placeholder="https://…" /></label>
         <label
           >Sort order
           <input name="gSort" type="number" [(ngModel)]="galleryDraft.sortOrder" />
@@ -1057,15 +1148,55 @@
       <h2>Downloads</h2>
       <form (ngSubmit)="saveDocument()">
         <label>Title <input [(ngModel)]="documentDraft.title" name="docTitle" required /></label>
-        <label>Category <input [(ngModel)]="documentDraft.category" name="docCategory" /></label>
+        <label>Category
+          <select name="docCategory" [(ngModel)]="documentDraft.category">
+            <option>GENERAL</option>
+            <option>MANDATORY_DISCLOSURE</option>
+            <option>CBSE</option>
+            <option>AFFILIATION</option>
+            <option>RECOGNITION</option>
+            <option>FEE_STRUCTURE</option>
+            <option>ACADEMIC_CALENDAR</option>
+            <option>SMC</option>
+            <option>PTA</option>
+            <option>ADMISSION_FORM</option>
+            <option>PROSPECTUS</option>
+            <option>NOTICE</option>
+            <option>CIRCULAR</option>
+            <option>EXAM_SCHEDULE</option>
+          </select>
+        </label>
+        <label>Academic year <input [(ngModel)]="documentDraft.academicYear" name="docYear" /></label>
+        <label>Sort order <input type="number" [(ngModel)]="documentDraft.sortOrder" name="docSort" /></label>
         <label>File URL <input [(ngModel)]="documentDraft.fileUrl" name="docUrl" required /></label>
         <label>Summary <input [(ngModel)]="documentDraft.summary" name="docSummary" /></label>
         <button type="submit" [disabled]="saving">Save draft</button>
       </form>
       <article *ngFor="let row of documents">
         <strong>{{ row['title'] }}</strong>
-        <span>{{ row['status'] }}</span>
+        <span>{{ row['category'] }} · {{ row['academicYear'] }} · {{ row['status'] }}</span>
         <button type="button" *ngIf="row['status'] !== 'PUBLISHED'" (click)="publishDocument(row)">Publish</button>
+        <label>
+          Replace file
+          <input type="file" accept=".pdf,.doc,.docx,.xls,.xlsx,image/jpeg,image/png,image/webp" (change)="replaceDocument(row, $event)" />
+        </label>
+      </article>
+    </div>
+
+    <div class="wb-panel panel" *ngIf="tab === 'staff'">
+      <h2>Staff profiles</h2>
+      <p class="hint">Published profiles appear on the homepage Staff section. Leave the photo blank until the school provides one.</p>
+      <form (ngSubmit)="saveProfile()">
+        <label>Name <input [(ngModel)]="profileDraft.fullName" name="staffName" required /></label>
+        <label>Role <input [(ngModel)]="profileDraft.role" name="staffRole" /></label>
+        <label>Photo URL <input [(ngModel)]="profileDraft.photoUrl" name="staffPhoto" /></label>
+        <label>Sort <input type="number" [(ngModel)]="profileDraft.sortOrder" name="staffSort" /></label>
+        <button type="submit" [disabled]="saving">Save draft</button>
+      </form>
+      <article *ngFor="let row of profiles">
+        <strong>{{ row['fullName'] }}</strong>
+        <span>{{ row['role'] }} · {{ row['status'] }}</span>
+        <button type="button" *ngIf="row['status'] !== 'PUBLISHED'" (click)="publishProfile(row)">Publish</button>
       </article>
     </div>
 

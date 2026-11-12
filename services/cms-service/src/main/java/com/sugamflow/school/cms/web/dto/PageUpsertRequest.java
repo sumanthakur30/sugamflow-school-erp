@@ -8,4 +8,5 @@ public record PageUpsertRequest(
     String summary,
     String bodyHtml,
     String seoTitle,
-    String seoDescription) {}
+    String seoDescription,
+    String sectionsJson) {}

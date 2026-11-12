@@ -7,4 +7,5 @@ public record GalleryUpsertRequest(
     String caption,
     @NotBlank String imageUrl,
     String album,
-    Integer sortOrder) {}
+    Integer sortOrder,
+    String videoUrl) {}

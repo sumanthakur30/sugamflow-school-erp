@@ -13,4 +13,5 @@ public record PageResponse(
     String seoTitle,
     String seoDescription,
     Instant publishedAt,
-    Instant updatedAt) {}
+    Instant updatedAt,
+    String sectionsJson) {}

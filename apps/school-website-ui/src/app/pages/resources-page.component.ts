@@ -1,25 +1,35 @@
 import { Component, OnInit, inject } from '@angular/core';
 import { NgFor, NgIf } from '@angular/common';
+import { FormsModule } from '@angular/forms';
 import { WebsiteApiService } from '../core/website-api.service';
 import { SeoService } from '../core/seo.service';
 
 @Component({
   selector: 'app-resources-page',
   standalone: true,
-  imports: [NgFor, NgIf],
+  imports: [NgFor, NgIf, FormsModule],
   template: `
     <section class="page">
       <p class="eyebrow">Resources</p>
       <h1>Downloads and school resources</h1>
       <p class="lead">Calendars, forms, and notices the school has published for families.</p>
+      <div class="tools" *ngIf="documents.length">
+        <input [(ngModel)]="query" name="docQuery" placeholder="Search documents" />
+        <select [(ngModel)]="category" name="docCategory">
+          <option value="">All categories</option>
+          <option *ngFor="let name of categories" [value]="name">{{ name }}</option>
+        </select>
+      </div>
       <p *ngIf="loading">Loading resources…</p>
       <p *ngIf="!loading && !documents.length">
         No public documents are published yet. The school can add them in Website CMS → Downloads.
       </p>
-      <ul *ngIf="documents.length">
-        <li *ngFor="let doc of documents">
+      <p *ngIf="!loading && documents.length && !visible.length">No documents match this search.</p>
+      <ul *ngIf="visible.length">
+        <li *ngFor="let doc of visible">
           <a [href]="fileUrl(doc)" target="_blank" rel="noopener">{{ doc['title'] }}</a>
           <span *ngIf="doc['category']">{{ doc['category'] }}</span>
+          <span *ngIf="doc['academicYear']">{{ doc['academicYear'] }}</span>
           <p *ngIf="doc['summary']">{{ doc['summary'] }}</p>
         </li>
       </ul>
@@ -78,6 +88,21 @@ export class ResourcesPageComponent implements OnInit {
   private readonly seo = inject(SeoService);
   documents: Array<Record<string, unknown>> = [];
   loading = true;
+  query = '';
+  category = '';
+
+  get categories(): string[] {
+    return [...new Set(this.documents.map((doc) => String(doc['category'] || '')).filter(Boolean))].sort();
+  }
+
+  get visible(): Array<Record<string, unknown>> {
+    const q = this.query.trim().toLowerCase();
+    return this.documents.filter((doc) => {
+      if (this.category && String(doc['category'] || '') !== this.category) return false;
+      if (!q) return true;
+      return `${doc['title'] || ''} ${doc['summary'] || ''}`.toLowerCase().includes(q);
+    });
+  }
 
   ngOnInit(): void {
     this.api.resolve().subscribe((site) => {

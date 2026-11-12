@@ -46,6 +46,9 @@ public class CmsGalleryItem {
   @Column(name = "updated_at", nullable = false)
   private Instant updatedAt;
 
+  @Column(name = "video_url", length = 1024)
+  private String videoUrl;
+
   public UUID getId() { return id; }
   public void setId(UUID id) { this.id = id; }
   public String getOrganizationId() { return organizationId; }
@@ -70,4 +73,6 @@ public class CmsGalleryItem {
   public void setCreatedAt(Instant createdAt) { this.createdAt = createdAt; }
   public Instant getUpdatedAt() { return updatedAt; }
   public void setUpdatedAt(Instant updatedAt) { this.updatedAt = updatedAt; }
+  public String getVideoUrl() { return videoUrl; }
+  public void setVideoUrl(String videoUrl) { this.videoUrl = videoUrl; }
 }

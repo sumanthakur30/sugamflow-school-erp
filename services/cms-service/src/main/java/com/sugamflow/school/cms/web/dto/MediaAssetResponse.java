@@ -9,4 +9,8 @@ public record MediaAssetResponse(
     String contentType,
     String url,
     Long byteSize,
-    Instant createdAt) {}
+    Instant createdAt,
+    String title,
+    String description,
+    String altText,
+    String category) {}

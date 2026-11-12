@@ -34,6 +34,18 @@ public class CmsMediaAsset {
   @Column(name = "created_at", nullable = false)
   private Instant createdAt;
 
+  @Column(length = 256)
+  private String title;
+
+  @Column(length = 1024)
+  private String description;
+
+  @Column(name = "alt_text", length = 512)
+  private String altText;
+
+  @Column(length = 64)
+  private String category;
+
   public UUID getId() { return id; }
   public void setId(UUID id) { this.id = id; }
   public String getOrganizationId() { return organizationId; }
@@ -50,4 +62,12 @@ public class CmsMediaAsset {
   public void setByteSize(Long byteSize) { this.byteSize = byteSize; }
   public Instant getCreatedAt() { return createdAt; }
   public void setCreatedAt(Instant createdAt) { this.createdAt = createdAt; }
+  public String getTitle() { return title; }
+  public void setTitle(String title) { this.title = title; }
+  public String getDescription() { return description; }
+  public void setDescription(String description) { this.description = description; }
+  public String getAltText() { return altText; }
+  public void setAltText(String altText) { this.altText = altText; }
+  public String getCategory() { return category; }
+  public void setCategory(String category) { this.category = category; }
 }

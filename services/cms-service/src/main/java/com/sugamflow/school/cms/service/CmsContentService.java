@@ -190,6 +190,7 @@ public class CmsContentService {
     page.setTitle(request.title().trim());
     page.setSummary(blankToNull(request.summary()));
     page.setBodyHtml(request.bodyHtml() == null ? "" : request.bodyHtml());
+    page.setSectionsJson(normalizeSections(request.sectionsJson()));
     page.setStatus(DRAFT);
     page.setSeoTitle(blankToNull(request.seoTitle()));
     page.setSeoDescription(blankToNull(request.seoDescription()));
@@ -211,6 +212,7 @@ public class CmsContentService {
     page.setTitle(request.title().trim());
     page.setSummary(blankToNull(request.summary()));
     page.setBodyHtml(request.bodyHtml() == null ? "" : request.bodyHtml());
+    page.setSectionsJson(normalizeSections(request.sectionsJson()));
     page.setSeoTitle(blankToNull(request.seoTitle()));
     page.setSeoDescription(blankToNull(request.seoDescription()));
     page.setUpdatedAt(Instant.now());
@@ -508,6 +510,7 @@ public class CmsContentService {
     item.setAlbum(
         request.album() == null || request.album().isBlank() ? "general" : request.album().trim());
     item.setSortOrder(request.sortOrder() == null ? 0 : Math.max(0, request.sortOrder()));
+    item.setVideoUrl(blankToNull(request.videoUrl()));
   }
 
   private PageResponse toPage(CmsPage p) {
@@ -521,7 +524,8 @@ public class CmsContentService {
         p.getSeoTitle(),
         p.getSeoDescription(),
         p.getPublishedAt(),
-        p.getUpdatedAt());
+        p.getUpdatedAt(),
+        p.getSectionsJson());
   }
 
   private NewsResponse toNews(CmsNews n) {
@@ -564,7 +568,19 @@ public class CmsContentService {
         g.getImageUrl(),
         g.getAlbum(),
         g.getSortOrder(),
-        g.getStatus());
+        g.getStatus(),
+        g.getVideoUrl());
+  }
+
+  private static String normalizeSections(String raw) {
+    if (raw == null || raw.isBlank()) {
+      return null;
+    }
+    String trimmed = raw.trim();
+    if (trimmed.length() > 200_000 || !trimmed.startsWith("[") || !trimmed.endsWith("]")) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "sectionsJson must be a JSON array");
+    }
+    return trimmed;
   }
 
   private static void assertSlugFree(boolean taken) {

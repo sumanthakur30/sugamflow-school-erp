@@ -19,9 +19,11 @@ public class CmsDocumentService {
   private static final String DRAFT = "DRAFT";
 
   private final CmsDocumentRepository repository;
+  private final CmsMediaService mediaService;
 
-  public CmsDocumentService(CmsDocumentRepository repository) {
+  public CmsDocumentService(CmsDocumentRepository repository, CmsMediaService mediaService) {
     this.repository = repository;
+    this.mediaService = mediaService;
   }
 
   public List<DocumentResponse> listPublished(String organizationId, CmsSiteScope scope, int limit) {
@@ -32,6 +34,9 @@ public class CmsDocumentService {
         .stream()
         .filter(d -> scope.matches(d.getSiteId()))
         .filter(d -> d.getExpiresAt() == null || !d.getExpiresAt().isBefore(now))
+        .sorted(
+            java.util.Comparator.comparingInt(CmsDocument::getSortOrder)
+                .thenComparing(CmsDocument::getTitle, java.util.Comparator.nullsLast(String::compareToIgnoreCase)))
         .limit(cap)
         .map(this::toResponse)
         .toList();
@@ -83,6 +88,20 @@ public class CmsDocumentService {
     return toResponse(repository.save(doc));
   }
 
+  @Transactional
+  public DocumentResponse replaceFile(String organizationId, UUID id, org.springframework.web.multipart.MultipartFile file) {
+    CmsDocument doc = requireDoc(organizationId, id);
+    UploadRules.Prepared prepared = UploadRules.prepareDocument(file);
+    var saved = mediaService.savePrepared(organizationId, doc.getMediaAssetId(), prepared);
+    doc.setMediaAssetId(saved.id());
+    doc.setFileUrl(saved.url());
+    doc.setFileName(saved.fileName());
+    doc.setContentType(saved.contentType());
+    doc.setByteSize(saved.byteSize());
+    doc.setUpdatedAt(Instant.now());
+    return toResponse(repository.save(doc));
+  }
+
   private CmsDocument requireDoc(String organizationId, UUID id) {
     return repository
         .findByIdAndOrganizationId(id, require(organizationId))
@@ -97,6 +116,11 @@ public class CmsDocumentService {
     doc.setFileName(blankToNull(request.fileName()));
     doc.setAudience(blank(request.audience(), "PUBLIC"));
     doc.setExpiresAt(request.expiresAt());
+    doc.setAcademicYear(blankToNull(request.academicYear()));
+    doc.setSortOrder(request.sortOrder() == null ? 0 : Math.max(0, request.sortOrder()));
+    doc.setContentType(blankToNull(request.contentType()));
+    doc.setByteSize(request.byteSize());
+    doc.setMediaAssetId(request.mediaAssetId());
   }
 
   private DocumentResponse toResponse(CmsDocument d) {
@@ -110,7 +134,12 @@ public class CmsDocumentService {
         d.getStatus(),
         d.getAudience(),
         d.getPublishedAt(),
-        d.getExpiresAt());
+        d.getExpiresAt(),
+        d.getAcademicYear(),
+        d.getSortOrder(),
+        d.getContentType(),
+        d.getByteSize(),
+        d.getMediaAssetId());
   }
 
   private static String require(String organizationId) {
