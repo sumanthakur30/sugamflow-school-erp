@@ -9,4 +9,5 @@ public record GalleryItemResponse(
     String imageUrl,
     String album,
     int sortOrder,
-    String status) {}
+    String status,
+    String videoUrl) {}

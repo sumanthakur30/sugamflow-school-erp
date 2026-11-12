@@ -14,6 +14,7 @@ interface PageRow {
   seoTitle?: string;
   seoDescription?: string;
   updatedAt?: string;
+  sectionsJson?: string;
 }
 
 interface HomepageSection {
@@ -81,6 +82,7 @@ interface GalleryRow {
   album: string;
   sortOrder: number;
   status: string;
+  videoUrl?: string;
 }
 
 interface TemplateRow {
@@ -96,6 +98,10 @@ interface MediaRow {
   url: string;
   byteSize?: number;
   createdAt?: string;
+  title?: string;
+  description?: string;
+  altText?: string;
+  category?: string;
 }
 
 interface ApiResponse<T> {
@@ -150,6 +156,9 @@ export class WebsiteCmsComponent implements OnInit {
   theme = {
     primaryColor: '#0B3D91',
     secondaryColor: '#F5B700',
+    accentColor: '#F4EFE6',
+    fontSans: 'Manrope',
+    copyrightText: '',
     logoUrl: '',
     faviconUrl: '',
     tagline: '',
@@ -186,6 +195,7 @@ export class WebsiteCmsComponent implements OnInit {
     { type: 'HERO', label: 'Hero', supported: true },
     { type: 'ABOUT_SCHOOL', label: 'About school', supported: true },
     { type: 'STATISTICS', label: 'Statistics', supported: true },
+    { type: 'DIRECTOR_MESSAGE', label: 'Director message', supported: true },
     { type: 'PRINCIPAL_MESSAGE', label: 'Principal message', supported: true },
     { type: 'QUICK_LINKS', label: 'Quick links', supported: true },
     { type: 'LATEST_NEWS', label: 'Latest news', supported: true },
@@ -196,9 +206,12 @@ export class WebsiteCmsComponent implements OnInit {
     { type: 'WHY_CHOOSE', label: 'Why choose us', supported: true },
     { type: 'ACADEMIC_PROGRAMS', label: 'Academic programs', supported: true },
     { type: 'ACHIEVEMENTS', label: 'Achievements', supported: true },
-    { type: 'TESTIMONIALS', label: 'Testimonials', supported: false },
-    { type: 'FAQ', label: 'FAQ', supported: false },
-    { type: 'CUSTOM_HTML', label: 'Custom HTML', supported: false },
+    { type: 'TESTIMONIALS', label: 'Testimonials', supported: true },
+    { type: 'DOCUMENTS', label: 'Documents', supported: true },
+    { type: 'STAFF', label: 'Staff', supported: true },
+    { type: 'CONTACT', label: 'Contact', supported: true },
+    { type: 'FAQ', label: 'FAQ', supported: true },
+    { type: 'CUSTOM_HTML', label: 'Custom HTML', supported: true },
   ];
   readonly navModules: Array<{ id: ModuleId; label: string; group: string; ready: boolean }> = [
     { id: 'dashboard', label: 'Dashboard', group: 'Overview', ready: true },
@@ -215,7 +228,7 @@ export class WebsiteCmsComponent implements OnInit {
     { id: 'alumni', label: 'Alumni', group: 'Content', ready: true },
     { id: 'campuses', label: 'Campuses', group: 'ERP', ready: true },
     { id: 'admissions', label: 'Admissions', group: 'ERP', ready: false },
-    { id: 'staff', label: 'Staff', group: 'ERP', ready: false },
+    { id: 'staff', label: 'Staff', group: 'Content', ready: true },
     { id: 'achievements', label: 'Achievements', group: 'Content', ready: false },
     { id: 'downloads', label: 'Downloads', group: 'Content', ready: true },
     { id: 'seo', label: 'SEO', group: 'Growth', ready: true },
@@ -233,6 +246,10 @@ export class WebsiteCmsComponent implements OnInit {
   mediaAssets: MediaRow[] = [];
   mediaUploading = false;
   mediaNotice = '';
+  mediaQuery = '';
+  mediaCategory = '';
+  editingMediaId: string | null = null;
+  mediaDraft = { title: '', description: '', altText: '', category: '' };
   analyticsSummary: {
     totalEvents: number;
     days: number;
@@ -245,6 +262,7 @@ export class WebsiteCmsComponent implements OnInit {
     storageLimitGb: number | null;
     pageCount: number;
     pageLimit: number | null;
+    recent?: Array<{ fileName?: string; title?: string }>;
   } | null = null;
   loading = false;
   saving = false;
@@ -282,6 +300,7 @@ export class WebsiteCmsComponent implements OnInit {
     imageUrl: '',
     album: 'campus',
     sortOrder: 0,
+    videoUrl: '',
   };
   editingGalleryId: string | null = null;
   aiDraft = { kind: 'page', topic: '', tone: 'warm and professional' };
@@ -333,6 +352,11 @@ export class WebsiteCmsComponent implements OnInit {
       this.loadMedia();
       this.loadMediaUsage();
     }
+    if (tab === 'dashboard') {
+      this.loadNews();
+      this.loadEvents();
+      this.loadDocuments();
+    }
     if (tab === 'builder' || tab === 'theme' || tab === 'settings') {
       this.loadWebsiteBootstrap();
     }
@@ -343,6 +367,7 @@ export class WebsiteCmsComponent implements OnInit {
     if (tab === 'navigation') this.loadWebsiteBootstrap();
     if (tab === 'events') this.loadEvents();
     if (tab === 'downloads') this.loadDocuments();
+    if (tab === 'staff') this.loadProfiles();
     if (tab === 'marketplace') this.loadTemplates();
     if (tab === 'pages') this.reload();
   }
@@ -360,6 +385,10 @@ export class WebsiteCmsComponent implements OnInit {
             url: String(m.url || ''),
             byteSize: m.byteSize == null ? undefined : Number(m.byteSize),
             createdAt: m.createdAt,
+            title: m.title || '',
+            description: m.description || '',
+            altText: m.altText || '',
+            category: m.category || '',
           }));
         },
         error: (err) => (this.error = err?.error?.message || 'Failed to load media'),
@@ -368,9 +397,8 @@ export class WebsiteCmsComponent implements OnInit {
 
   onMediaSelected(event: Event): void {
     const input = event.target as HTMLInputElement;
-    const file = input.files?.[0];
-    if (!file) return;
-    this.uploadMedia(file);
+    const files = Array.from(input.files || []);
+    files.forEach((file) => this.uploadMedia(file));
     input.value = '';
   }
 
@@ -458,6 +486,73 @@ export class WebsiteCmsComponent implements OnInit {
       });
   }
 
+  filteredMedia(): MediaRow[] {
+    const q = this.mediaQuery.trim().toLowerCase();
+    return this.mediaAssets.filter((asset) => {
+      if (this.mediaCategory && (asset.category || '') !== this.mediaCategory) return false;
+      if (!q) return true;
+      return `${asset.fileName} ${asset.title || ''} ${asset.altText || ''} ${asset.category || ''}`
+        .toLowerCase()
+        .includes(q);
+    });
+  }
+
+  editMedia(asset: MediaRow): void {
+    this.editingMediaId = asset.id;
+    this.mediaDraft = {
+      title: asset.title || asset.fileName,
+      description: asset.description || '',
+      altText: asset.altText || '',
+      category: asset.category || '',
+    };
+  }
+
+  saveMediaText(): void {
+    if (!this.editingMediaId) return;
+    this.http
+      .put(`${environment.apiBaseUrl}/api/cms/admin/media/${this.editingMediaId}`, this.mediaDraft)
+      .subscribe({
+        next: () => {
+          this.editingMediaId = null;
+          this.mediaNotice = 'Image details saved.';
+          this.loadMedia();
+        },
+        error: (err) => (this.error = err?.error?.message || 'Could not save image details'),
+      });
+  }
+
+  replaceMedia(asset: MediaRow, event: Event): void {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0];
+    input.value = '';
+    if (!file) return;
+    const form = new FormData();
+    form.append('file', file, file.name);
+    this.http
+      .post(`${environment.apiBaseUrl}/api/cms/admin/media/${asset.id}/replace`, form)
+      .subscribe({
+        next: () => {
+          this.mediaNotice = 'Image replaced. Pages that use this file will show the new picture.';
+          this.loadMedia();
+        },
+        error: (err) => (this.error = err?.error?.message || 'Replace failed'),
+      });
+  }
+
+  showMediaUse(asset: MediaRow): void {
+    this.http
+      .get<ApiResponse<string[]>>(`${environment.apiBaseUrl}/api/cms/admin/media/${asset.id}/references`)
+      .subscribe({
+        next: (res) => {
+          const used = res.data || [];
+          this.mediaNotice = used.length
+            ? `${asset.fileName} is used in: ${used.join(', ')}`
+            : `${asset.fileName} is not used by a page, gallery, document, or homepage.`;
+        },
+        error: (err) => (this.error = err?.error?.message || 'Could not check image use'),
+      });
+  }
+
   formatBytes(bytes?: number): string {
     if (bytes == null || Number.isNaN(bytes)) return '—';
     if (bytes < 1024) return `${bytes} B`;
@@ -508,6 +603,10 @@ export class WebsiteCmsComponent implements OnInit {
               data['storageLimitGb'] == null ? null : Number(data['storageLimitGb']),
             pageCount: Number(data['pageCount'] || 0),
             pageLimit: data['pageLimit'] == null ? null : Number(data['pageLimit']),
+            recent: ((data['recent'] as Array<Record<string, string>>) || []).map((row) => ({
+              fileName: row['fileName'],
+              title: row['title'],
+            })),
           };
         },
         error: () => {
@@ -563,6 +662,9 @@ export class WebsiteCmsComponent implements OnInit {
           this.theme = {
             primaryColor: theme['primaryColor'] || '#0B3D91',
             secondaryColor: theme['secondaryColor'] || '#F5B700',
+            accentColor: theme['accentColor'] || '#F4EFE6',
+            fontSans: theme['fontSans'] || 'Manrope',
+            copyrightText: theme['copyrightText'] || '',
             logoUrl: theme['logoUrl'] || '',
             faviconUrl: theme['faviconUrl'] || '',
             tagline: theme['tagline'] || '',
@@ -824,6 +926,7 @@ export class WebsiteCmsComponent implements OnInit {
           imageUrl: '',
           album: 'campus',
           sortOrder: 0,
+          videoUrl: '',
         };
         this.mediaNotice = 'Gallery item saved. Publish if draft, then refresh /gallery.';
         this.loadGallery();
@@ -843,6 +946,7 @@ export class WebsiteCmsComponent implements OnInit {
       imageUrl: row.imageUrl,
       album: row.album || 'campus',
       sortOrder: row.sortOrder ?? 0,
+      videoUrl: row.videoUrl || '',
     };
     this.tab = 'gallery';
   }
@@ -855,6 +959,7 @@ export class WebsiteCmsComponent implements OnInit {
       imageUrl: '',
       album: 'campus',
       sortOrder: 0,
+      videoUrl: '',
     };
   }
 
@@ -954,6 +1059,7 @@ export class WebsiteCmsComponent implements OnInit {
   startCreate(): void {
     this.editing = null;
     this.draft = this.emptyDraft();
+    this.pageSections = [];
     this.tab = 'pages';
   }
 
@@ -967,6 +1073,7 @@ export class WebsiteCmsComponent implements OnInit {
       seoTitle: page.seoTitle || '',
       seoDescription: page.seoDescription || '',
     };
+    this.pageSections = this.parseSections(page.sectionsJson);
     this.tab = 'pages';
   }
 
@@ -978,7 +1085,10 @@ export class WebsiteCmsComponent implements OnInit {
       return;
     }
     this.saving = true;
-    const body = { ...this.draft };
+    const body = {
+      ...this.draft,
+      sectionsJson: this.pageSections.length ? JSON.stringify(this.pageSections) : '',
+    };
     const req$ = this.editing
       ? this.http.put<ApiResponse<PageRow>>(
           `${environment.apiBaseUrl}/api/cms/admin/pages/${this.editing.id}`,
@@ -1141,6 +1251,20 @@ export class WebsiteCmsComponent implements OnInit {
     this.previewSrc = `${base}?t=${Date.now()}`;
   }
 
+  heroImageLines(section: HomepageSection): string {
+    const images = (section.content?.['images'] as Array<{ imageUrl?: string }> | undefined) || [];
+    return images.map((row) => row?.imageUrl || '').filter(Boolean).join('\n');
+  }
+
+  setHeroImages(section: HomepageSection, value: string): void {
+    this.ensureContent(section);
+    section.content!['images'] = value
+      .split('\n')
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .map((imageUrl) => ({ imageUrl, alt: '' }));
+  }
+
   addSection(type: string): void {
     const meta = this.sectionCatalog.find((s) => s.type === type);
     this.sections = [
@@ -1231,7 +1355,22 @@ export class WebsiteCmsComponent implements OnInit {
   events: Array<Record<string, string>> = [];
   documents: Array<Record<string, string>> = [];
   eventDraft = { slug: '', title: '', summary: '', locationText: '', startsAt: '', endsAt: '' };
-  documentDraft = { title: '', category: 'GENERAL', summary: '', fileUrl: '', fileName: '' };
+  documentDraft = {
+    title: '',
+    category: 'GENERAL',
+    summary: '',
+    fileUrl: '',
+    fileName: '',
+    academicYear: '',
+    sortOrder: 0,
+    contentType: '',
+    byteSize: 0,
+    mediaAssetId: '',
+  };
+  profiles: Array<Record<string, string>> = [];
+  profileDraft = { fullName: '', role: '', photoUrl: '', sortOrder: 0 };
+  editingProfileId: string | null = null;
+  pageSections: Array<{ type: string; title: string; body: string; imageUrl: string; enabled: boolean }> = [];
 
   loadEvents(): void {
     this.http
@@ -1285,11 +1424,28 @@ export class WebsiteCmsComponent implements OnInit {
   saveDocument(): void {
     this.saving = true;
     this.http
-      .post(this.withSite(`${environment.apiBaseUrl}/api/cms/admin/documents`), this.documentDraft)
+      .post(this.withSite(`${environment.apiBaseUrl}/api/cms/admin/documents`), {
+        ...this.documentDraft,
+        mediaAssetId: this.documentDraft.mediaAssetId || null,
+        byteSize: this.documentDraft.byteSize || null,
+        contentType: this.documentDraft.contentType || null,
+        academicYear: this.documentDraft.academicYear || null,
+      })
       .subscribe({
         next: () => {
           this.saving = false;
-          this.documentDraft = { title: '', category: 'GENERAL', summary: '', fileUrl: '', fileName: '' };
+          this.documentDraft = {
+            title: '',
+            category: 'GENERAL',
+            summary: '',
+            fileUrl: '',
+            fileName: '',
+            academicYear: '',
+            sortOrder: 0,
+            contentType: '',
+            byteSize: 0,
+            mediaAssetId: '',
+          };
           this.loadDocuments();
         },
         error: (err) => {
@@ -1303,6 +1459,98 @@ export class WebsiteCmsComponent implements OnInit {
     this.http
       .post(`${environment.apiBaseUrl}/api/cms/admin/documents/${row['id']}/publish`, {})
       .subscribe({ next: () => this.loadDocuments() });
+  }
+
+  replaceDocument(row: Record<string, string>, event: Event): void {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0];
+    input.value = '';
+    if (!file) return;
+    const form = new FormData();
+    form.append('file', file, file.name);
+    this.http
+      .post(`${environment.apiBaseUrl}/api/cms/admin/documents/${row['id']}/file`, form)
+      .subscribe({
+        next: () => {
+          this.mediaNotice = 'Document file replaced.';
+          this.loadDocuments();
+        },
+        error: (err) => (this.error = this.apiError(err, 'Could not replace document')),
+      });
+  }
+
+  loadProfiles(): void {
+    this.http
+      .get<ApiResponse<Array<Record<string, string>>>>(
+        this.withSite(`${environment.apiBaseUrl}/api/cms/admin/profiles`)
+      )
+      .subscribe({
+        next: (res) => (this.profiles = res.data || []),
+        error: (err) => (this.error = err?.error?.message || 'Failed to load staff'),
+      });
+  }
+
+  saveProfile(): void {
+    this.saving = true;
+    const body = { ...this.profileDraft };
+    const req$ = this.editingProfileId
+      ? this.http.put(this.withSite(`${environment.apiBaseUrl}/api/cms/admin/profiles/${this.editingProfileId}`), body)
+      : this.http.post(this.withSite(`${environment.apiBaseUrl}/api/cms/admin/profiles`), body);
+    req$.subscribe({
+      next: () => {
+        this.saving = false;
+        this.editingProfileId = null;
+        this.profileDraft = { fullName: '', role: '', photoUrl: '', sortOrder: 0 };
+        this.loadProfiles();
+      },
+      error: (err) => {
+        this.saving = false;
+        this.error = this.apiError(err, 'Could not save staff profile');
+      },
+    });
+  }
+
+  publishProfile(row: Record<string, string>): void {
+    this.http
+      .post(`${environment.apiBaseUrl}/api/cms/admin/profiles/${row['id']}/publish`, {})
+      .subscribe({ next: () => this.loadProfiles() });
+  }
+
+  addPageSection(): void {
+    this.pageSections = [
+      ...this.pageSections,
+      { type: 'TEXT', title: '', body: '', imageUrl: '', enabled: true },
+    ];
+  }
+
+  movePageSection(index: number, delta: number): void {
+    const next = index + delta;
+    if (next < 0 || next >= this.pageSections.length) return;
+    const copy = [...this.pageSections];
+    const [row] = copy.splice(index, 1);
+    copy.splice(next, 0, row);
+    this.pageSections = copy;
+  }
+
+  removePageSection(index: number): void {
+    this.pageSections = this.pageSections.filter((_, i) => i !== index);
+  }
+
+  private parseSections(raw?: string): Array<{ type: string; title: string; body: string; imageUrl: string; enabled: boolean }> {
+    if (!raw) return [];
+    try {
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed)) return [];
+      return parsed.map((row) => ({
+        type: String(row?.type || 'TEXT'),
+        title: String(row?.title || ''),
+        body: String(row?.body || ''),
+        imageUrl: String(row?.imageUrl || ''),
+        enabled: row?.enabled !== false,
+      }));
+    } catch {
+      return [];
+    }
   }
 
   saveNavigation(): void {

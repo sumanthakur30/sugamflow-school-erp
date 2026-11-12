@@ -6,7 +6,11 @@ import com.sugamflow.school.cms.service.CmsBlogService;
 import com.sugamflow.school.cms.service.CmsContentService;
 import com.sugamflow.school.cms.service.CmsDocumentService;
 import com.sugamflow.school.cms.service.CmsMediaService;
+import com.sugamflow.school.cms.service.CmsProfileService;
 import com.sugamflow.school.cms.service.CmsSiteScope;
+import com.sugamflow.school.cms.web.dto.MediaUpdateRequest;
+import com.sugamflow.school.cms.web.dto.ProfileResponse;
+import com.sugamflow.school.cms.web.dto.ProfileUpsertRequest;
 import com.sugamflow.school.cms.web.dto.AlumniResponse;
 import com.sugamflow.school.cms.web.dto.AlumniUpsertRequest;
 import com.sugamflow.school.cms.web.dto.BlogPostResponse;
@@ -52,6 +56,7 @@ public class CmsAdminController {
   private final CmsAlumniService alumniService;
   private final CmsAiAssistService aiAssistService;
   private final CmsDocumentService documentService;
+  private final CmsProfileService profileService;
 
   public CmsAdminController(
       CmsContentService contentService,
@@ -59,13 +64,15 @@ public class CmsAdminController {
       CmsBlogService blogService,
       CmsAlumniService alumniService,
       CmsAiAssistService aiAssistService,
-      CmsDocumentService documentService) {
+      CmsDocumentService documentService,
+      CmsProfileService profileService) {
     this.contentService = contentService;
     this.mediaService = mediaService;
     this.blogService = blogService;
     this.alumniService = alumniService;
     this.aiAssistService = aiAssistService;
     this.documentService = documentService;
+    this.profileService = profileService;
   }
 
   @GetMapping("/pages")
@@ -123,6 +130,23 @@ public class CmsAdminController {
   public ApiResponse<Map<String, Object>> deleteMedia(@PathVariable("id") UUID id) {
     mediaService.delete(orgId(), id);
     return ApiResponse.ok(Map.of("deleted", true, "id", id.toString()));
+  }
+
+  @PutMapping("/media/{id}")
+  public ApiResponse<MediaAssetResponse> updateMedia(
+      @PathVariable("id") UUID id, @RequestBody MediaUpdateRequest request) {
+    return ApiResponse.ok(mediaService.update(orgId(), id, request));
+  }
+
+  @PostMapping(value = "/media/{id}/replace", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+  public ApiResponse<MediaAssetResponse> replaceMedia(
+      @PathVariable("id") UUID id, @RequestPart("file") MultipartFile file) {
+    return ApiResponse.ok(mediaService.replace(orgId(), id, file));
+  }
+
+  @GetMapping("/media/{id}/references")
+  public ApiResponse<List<String>> mediaReferences(@PathVariable("id") UUID id) {
+    return ApiResponse.ok(mediaService.references(orgId(), id));
   }
 
   @GetMapping("/blog")
@@ -276,6 +300,49 @@ public class CmsAdminController {
   @PostMapping("/documents/{id}/unpublish")
   public ApiResponse<DocumentResponse> unpublishDocument(@PathVariable("id") UUID id) {
     return ApiResponse.ok(documentService.unpublish(orgId(), id));
+  }
+
+  @PostMapping(value = "/documents/{id}/file", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+  public ApiResponse<DocumentResponse> replaceDocumentFile(
+      @PathVariable("id") UUID id, @RequestPart("file") MultipartFile file) {
+    return ApiResponse.ok(documentService.replaceFile(orgId(), id, file));
+  }
+
+  @GetMapping("/profiles")
+  public ApiResponse<List<ProfileResponse>> listProfiles(
+      @RequestParam(value = "siteId", required = false) String siteId,
+      @RequestParam(value = "includeLegacy", required = false) Boolean includeLegacy) {
+    return ApiResponse.ok(profileService.listAdmin(orgId(), adminScope(siteId, includeLegacy)));
+  }
+
+  @PostMapping("/profiles")
+  public ApiResponse<ProfileResponse> createProfile(
+      @Valid @RequestBody ProfileUpsertRequest request,
+      @RequestParam(value = "siteId", required = false) String siteId,
+      @RequestParam(value = "includeLegacy", required = false) Boolean includeLegacy) {
+    return ApiResponse.ok(profileService.create(orgId(), request, adminScope(siteId, includeLegacy)));
+  }
+
+  @PutMapping("/profiles/{id}")
+  public ApiResponse<ProfileResponse> updateProfile(
+      @PathVariable("id") UUID id, @Valid @RequestBody ProfileUpsertRequest request) {
+    return ApiResponse.ok(profileService.update(orgId(), id, request));
+  }
+
+  @PostMapping("/profiles/{id}/publish")
+  public ApiResponse<ProfileResponse> publishProfile(@PathVariable("id") UUID id) {
+    return ApiResponse.ok(profileService.publish(orgId(), id));
+  }
+
+  @PostMapping("/profiles/{id}/unpublish")
+  public ApiResponse<ProfileResponse> unpublishProfile(@PathVariable("id") UUID id) {
+    return ApiResponse.ok(profileService.unpublish(orgId(), id));
+  }
+
+  @DeleteMapping("/profiles/{id}")
+  public ApiResponse<Map<String, Object>> deleteProfile(@PathVariable("id") UUID id) {
+    profileService.delete(orgId(), id);
+    return ApiResponse.ok(Map.of("deleted", true));
   }
 
   @GetMapping("/alumni")

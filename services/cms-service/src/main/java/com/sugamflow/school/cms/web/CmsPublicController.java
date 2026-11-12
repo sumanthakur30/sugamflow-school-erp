@@ -5,7 +5,9 @@ import com.sugamflow.school.cms.service.CmsBlogService;
 import com.sugamflow.school.cms.service.CmsContentService;
 import com.sugamflow.school.cms.service.CmsDocumentService;
 import com.sugamflow.school.cms.service.CmsMediaService;
+import com.sugamflow.school.cms.service.CmsProfileService;
 import com.sugamflow.school.cms.service.CmsSiteScope;
+import com.sugamflow.school.cms.web.dto.ProfileResponse;
 import com.sugamflow.school.cms.web.dto.AlumniResponse;
 import com.sugamflow.school.cms.web.dto.BlogPostResponse;
 import com.sugamflow.school.cms.web.dto.DocumentResponse;
@@ -35,18 +37,21 @@ public class CmsPublicController {
   private final CmsAlumniService alumniService;
   private final CmsMediaService mediaService;
   private final CmsDocumentService documentService;
+  private final CmsProfileService profileService;
 
   public CmsPublicController(
       CmsContentService contentService,
       CmsBlogService blogService,
       CmsAlumniService alumniService,
       CmsMediaService mediaService,
-      CmsDocumentService documentService) {
+      CmsDocumentService documentService,
+      CmsProfileService profileService) {
     this.contentService = contentService;
     this.blogService = blogService;
     this.alumniService = alumniService;
     this.mediaService = mediaService;
     this.documentService = documentService;
+    this.profileService = profileService;
   }
 
   @GetMapping("/pages")
@@ -149,6 +154,14 @@ public class CmsPublicController {
     return ApiResponse.ok(alumniService.getPublished(organizationId, slug));
   }
 
+  @GetMapping("/profiles")
+  public ApiResponse<List<ProfileResponse>> profiles(
+      @RequestParam("organizationId") String organizationId,
+      @RequestParam(value = "siteId", required = false) String siteId,
+      @RequestParam(value = "includeLegacy", required = false) Boolean includeLegacy) {
+    return ApiResponse.ok(profileService.listPublished(organizationId, scope(siteId, includeLegacy)));
+  }
+
   @GetMapping("/media/{id}")
   public ResponseEntity<?> mediaFile(
       @RequestParam("organizationId") String organizationId, @PathVariable("id") UUID id) {
@@ -159,7 +172,7 @@ public class CmsPublicController {
     Resource resource = mediaService.loadFile(organizationId, id);
     MediaType type = mediaService.mediaTypeFor(organizationId, id);
     return ResponseEntity.ok()
-        .header(HttpHeaders.CACHE_CONTROL, "public, max-age=86400")
+        .header(HttpHeaders.CACHE_CONTROL, "public, max-age=300")
         .contentType(type)
         .body(resource);
   }

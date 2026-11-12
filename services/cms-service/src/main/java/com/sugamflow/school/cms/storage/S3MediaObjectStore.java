@@ -90,6 +90,41 @@ public class S3MediaObjectStore implements MediaObjectStore {
   }
 
   @Override
+  public StoredObject replace(
+      String organizationId,
+      UUID id,
+      String fileName,
+      String contentType,
+      InputStream data,
+      long byteSize) {
+    String prefix = keyPrefix + organizationId + "/" + id + "-";
+    String existingKey = null;
+    try {
+      var listed = s3.listObjectsV2(b -> b.bucket(bucket).prefix(prefix).maxKeys(1));
+      if (listed.hasContents() && !listed.contents().isEmpty()) {
+        existingKey = listed.contents().get(0).key();
+      }
+    } catch (Exception ignored) {
+      existingKey = null;
+    }
+    if (existingKey == null || existingKey.isBlank()) {
+      return store(organizationId, id, fileName, contentType, data, byteSize);
+    }
+    try {
+      PutObjectRequest.Builder put =
+          PutObjectRequest.builder().bucket(bucket).key(existingKey).contentLength(byteSize);
+      if (contentType != null && !contentType.isBlank()) {
+        put.contentType(contentType);
+      }
+      s3.putObject(put.build(), RequestBody.fromInputStream(data, byteSize));
+    } catch (Exception ex) {
+      throw new ResponseStatusException(
+          HttpStatus.INTERNAL_SERVER_ERROR, "Failed to replace object");
+    }
+    return new StoredObject(existingKey, publicUrl(existingKey), byteSize);
+  }
+
+  @Override
   public void delete(String organizationId, UUID id) {
     // Best-effort: list isn't needed; callers pass known URL key via filename convention.
     String prefix = keyPrefix + organizationId + "/" + id + "-";

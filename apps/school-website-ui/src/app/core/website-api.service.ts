@@ -123,6 +123,15 @@ export class WebsiteApiService {
       .pipe(map((r) => r.data));
   }
 
+  listProfiles() {
+    return this.http
+      .get<ApiResponse<Array<Record<string, unknown>>>>(
+        `${environment.apiBaseUrl}/api/cms/public/profiles`,
+        { params: this.cmsParams() }
+      )
+      .pipe(map((r) => r.data));
+  }
+
   listDocuments(limit = 50) {
     return this.http
       .get<ApiResponse<Array<Record<string, unknown>>>>(
@@ -339,8 +348,14 @@ export class WebsiteApiService {
     root.style.setProperty('--sf-primary', theme['primaryColor'] || '#0B3D91');
     root.style.setProperty('--sf-secondary', theme['secondaryColor'] || '#F5B700');
     if (premium) {
+      const allowed = ['Manrope', 'Source Sans 3', 'Nunito Sans', 'Lora'];
+      const chosen = allowed.includes(String(theme['fontSans'] || '')) ? String(theme['fontSans']) : 'Manrope';
       root.style.setProperty('--sf-serif', '"Playfair Display", Georgia, serif');
-      root.style.setProperty('--sf-sans', 'Manrope, "Segoe UI", sans-serif');
+      root.style.setProperty('--sf-sans', `"${chosen}", "Segoe UI", sans-serif`);
+    }
+    const accent = theme['accentColor'];
+    if (accent && String(accent).trim()) {
+      root.style.setProperty('--sf-accent', String(accent).trim());
     }
     const favicon = this.mediaUrl(theme['faviconUrl'] || theme['logoUrl'] || undefined);
     if (favicon) {

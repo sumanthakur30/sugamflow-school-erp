@@ -77,6 +77,18 @@ public class LocalMediaObjectStore implements MediaObjectStore {
   }
 
   @Override
+  public StoredObject replace(
+      String organizationId,
+      UUID id,
+      String fileName,
+      String contentType,
+      InputStream data,
+      long byteSize) {
+    delete(organizationId, id);
+    return store(organizationId, id, fileName, contentType, data, byteSize);
+  }
+
+  @Override
   public void delete(String organizationId, UUID id) {
     Path orgDir = storageRoot.resolve(organizationId);
     try {

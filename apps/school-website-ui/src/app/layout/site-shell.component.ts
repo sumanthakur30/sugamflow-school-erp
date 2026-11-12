@@ -16,6 +16,24 @@ import { AnalyticsService } from '../core/analytics.service';
       [class.menu-open]="menuOpen"
     >
       <header class="pps-head" *ngIf="isPremium(site)">
+        <div class="pps-top" *ngIf="hasPremiumTop(site)">
+          <div class="pps-top-inner">
+            <a *ngIf="brand(site).contactPhone" [href]="api.telHref(brand(site).contactPhone)">{{
+              brand(site).contactPhone
+            }}</a>
+            <a *ngIf="brand(site).contactEmail" [href]="api.mailtoHref(brand(site).contactEmail)">{{
+              brand(site).contactEmail
+            }}</a>
+            <span *ngIf="brand(site).workingHours">{{ brand(site).workingHours }}</span>
+            <a
+              *ngIf="brand(site).socialWhatsapp"
+              [href]="brand(site).socialWhatsapp"
+              target="_blank"
+              rel="noopener"
+              >WhatsApp</a
+            >
+          </div>
+        </div>
         <div class="pps-identity">
           <a routerLink="/" class="brand">
             <img
@@ -242,7 +260,7 @@ import { AnalyticsService } from '../core/analytics.service';
           </div>
         </div>
         <div class="footer-bottom">
-          <span>&copy; {{ year }} {{ site.displayName }}. All rights reserved.</span>
+          <span>{{ copyrightLine(site) }}</span>
           <span class="legal" *ngIf="isPremium(site)">Privacy policy and terms can be added in the website CMS.</span>
           <a class="powered" [href]="poweredUrl(site)" target="_blank" rel="noopener">{{
             poweredLabel(site)
@@ -569,6 +587,23 @@ import { AnalyticsService } from '../core/analytics.service';
         color: #1c2430;
         font-family: var(--sf-sans, Manrope, sans-serif);
       }
+      .pps-top {
+        background: #1b4d3e;
+        color: #f4efe6;
+        font-size: 0.82rem;
+      }
+      .pps-top-inner {
+        width: min(1240px, calc(100% - 2rem));
+        margin: 0 auto;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.75rem 1.25rem;
+        padding: 0.4rem 0;
+      }
+      .pps-top a {
+        color: #fff;
+        text-decoration: none;
+      }
       .pps-head {
         position: sticky;
         top: 0;
@@ -799,6 +834,18 @@ export class SiteShellComponent implements OnInit {
     return !!(b.contactEmail || b.contactPhone || b.workingHours);
   }
 
+  hasPremiumTop(site: WebsiteResolve): boolean {
+    const b = this.brand(site);
+    return !!(b.contactEmail || b.contactPhone || b.workingHours || b.socialWhatsapp);
+  }
+
+  copyrightLine(site: WebsiteResolve): string {
+    const raw = site.theme?.['copyrightText'];
+    const text = raw == null ? '' : String(raw).trim();
+    if (text && text !== 'null') return text;
+    return `© ${this.year} ${site.displayName}. All rights reserved.`;
+  }
+
   hasSocials(site: WebsiteResolve): boolean {
     const b = this.brand(site);
     return !!(b.socialFacebook || b.socialInstagram || b.socialYoutube || b.socialWhatsapp);
@@ -849,23 +896,12 @@ export class SiteShellComponent implements OnInit {
     return this.isPremium(site) ? this.premiumNav : this.classicNav;
   }
 
-  /** Six-item bar. Gallery and news stay in the footer. */
+  /** Premium header uses the saved navigation, including items an admin adds. */
   buildPremiumNav(site: WebsiteResolve): WebsiteResolve['navigation'] {
-    const keep = ['/about', '/academics', '/admission', '/campus', '/student-life', '/contact'];
-    return this.primaryNav(site.navigation)
-      .filter((item) => keep.includes(item.path))
-      .map((item) =>
-        item.path === '/campus'
-          ? {
-              ...item,
-              label: 'Campus',
-              children: (item.children || []).map((child) => ({ ...child })),
-            }
-          : {
-              ...item,
-              children: (item.children || []).map((child) => ({ ...child })),
-            }
-      );
+    return this.primaryNav(site.navigation).map((item) => ({
+      ...item,
+      children: (item.children || []).map((child) => ({ ...child })),
+    }));
   }
 
   childLinks(item: { children?: Array<{ label: string; path: string; fragment?: string }> }) {

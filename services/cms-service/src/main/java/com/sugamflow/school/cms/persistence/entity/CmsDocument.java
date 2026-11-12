@@ -52,6 +52,21 @@ public class CmsDocument {
   @Column(name = "updated_at", nullable = false)
   private Instant updatedAt;
 
+  @Column(name = "academic_year", length = 32)
+  private String academicYear;
+
+  @Column(name = "sort_order", nullable = false)
+  private int sortOrder;
+
+  @Column(name = "content_type", length = 128)
+  private String contentType;
+
+  @Column(name = "byte_size")
+  private Long byteSize;
+
+  @Column(name = "media_asset_id")
+  private UUID mediaAssetId;
+
   public UUID getId() { return id; }
   public void setId(UUID id) { this.id = id; }
   public String getOrganizationId() { return organizationId; }
@@ -80,4 +95,14 @@ public class CmsDocument {
   public void setCreatedAt(Instant createdAt) { this.createdAt = createdAt; }
   public Instant getUpdatedAt() { return updatedAt; }
   public void setUpdatedAt(Instant updatedAt) { this.updatedAt = updatedAt; }
+  public String getAcademicYear() { return academicYear; }
+  public void setAcademicYear(String academicYear) { this.academicYear = academicYear; }
+  public int getSortOrder() { return sortOrder; }
+  public void setSortOrder(int sortOrder) { this.sortOrder = sortOrder; }
+  public String getContentType() { return contentType; }
+  public void setContentType(String contentType) { this.contentType = contentType; }
+  public Long getByteSize() { return byteSize; }
+  public void setByteSize(Long byteSize) { this.byteSize = byteSize; }
+  public UUID getMediaAssetId() { return mediaAssetId; }
+  public void setMediaAssetId(UUID mediaAssetId) { this.mediaAssetId = mediaAssetId; }
 }

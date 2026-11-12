@@ -13,4 +13,9 @@ public record DocumentResponse(
     String status,
     String audience,
     Instant publishedAt,
-    Instant expiresAt) {}
+    Instant expiresAt,
+    String academicYear,
+    int sortOrder,
+    String contentType,
+    Long byteSize,
+    UUID mediaAssetId) {}

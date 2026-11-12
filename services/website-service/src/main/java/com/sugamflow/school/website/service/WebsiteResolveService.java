@@ -494,6 +494,13 @@ public class WebsiteResolveService {
     return host;
   }
 
+  public boolean mediaReferenced(String organizationId, String likeNeedle) {
+    if (organizationId == null || organizationId.isBlank() || likeNeedle == null || likeNeedle.isBlank()) {
+      return false;
+    }
+    return siteRepository.countMediaNeedle(organizationId, likeNeedle) > 0;
+  }
+
   private Map<String, Object> readMap(String json) {
     if (json == null || json.isBlank()) {
       return Collections.emptyMap();

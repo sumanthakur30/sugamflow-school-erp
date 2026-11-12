@@ -1,6 +1,6 @@
 import { Component, OnInit, inject } from '@angular/core';
 import { ActivatedRoute } from '@angular/router';
-import { NgIf } from '@angular/common';
+import { NgFor, NgIf } from '@angular/common';
 import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
 import { WebsiteApiService } from '../core/website-api.service';
 import { SeoService } from '../core/seo.service';
@@ -8,7 +8,7 @@ import { SeoService } from '../core/seo.service';
 @Component({
   selector: 'app-cms-page',
   standalone: true,
-  imports: [NgIf],
+  imports: [NgIf, NgFor],
   template: `
     <section class="page-hero" *ngIf="page as p">
       <p class="eyebrow">School information</p>
@@ -16,7 +16,21 @@ import { SeoService } from '../core/seo.service';
       <p class="summary" *ngIf="p['summary']">{{ p['summary'] }}</p>
     </section>
     <article *ngIf="page as p; else loading">
-      <div class="body" [innerHTML]="trusted(p['bodyHtml'])"></div>
+      <div *ngIf="sections(p).length; else htmlBody">
+        <section *ngFor="let section of sections(p)" class="block">
+          <h2 *ngIf="section['title']">{{ section['title'] }}</h2>
+          <img
+            *ngIf="section['imageUrl']"
+            [src]="media(section['imageUrl'])"
+            [alt]="asText(section['title'])"
+            loading="lazy"
+          />
+          <div *ngIf="section['body']" [innerHTML]="trusted(section['body'])"></div>
+        </section>
+      </div>
+      <ng-template #htmlBody>
+        <div class="body" [innerHTML]="trusted(p['bodyHtml'])"></div>
+      </ng-template>
     </article>
     <ng-template #loading><p class="loading">Loading…</p></ng-template>
   `,
@@ -60,8 +74,9 @@ import { SeoService } from '../core/seo.service';
         font-family: 'Fraunces', Georgia, serif;
         color: #0b1f3a;
       }
-      .body img {
+      .body img, .block img {
         border-radius: 14px;
+        max-width: 100%;
       }
       .loading {
         padding: 2rem 0;
@@ -101,8 +116,31 @@ export class CmsPageComponent implements OnInit {
   }
 
   trusted(html: unknown): SafeHtml {
-    const raw = String(html || '').replace(/<script[\s\S]*?>[\s\S]*?<\/script>/gi, '');
+    const raw = String(html || '')
+      .replace(/<script[\s\S]*?>[\s\S]*?<\/script>/gi, '')
+      .replace(/\son\w+\s*=\s*(['"]).*?\1/gi, '')
+      .replace(/javascript:/gi, '');
     return this.sanitizer.bypassSecurityTrustHtml(raw);
+  }
+
+  sections(page: Record<string, unknown>): Array<Record<string, unknown>> {
+    const raw = page['sectionsJson'];
+    if (typeof raw !== 'string' || !raw.trim()) return [];
+    try {
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed)) return [];
+      return parsed.filter((row) => row && row.enabled !== false);
+    } catch {
+      return [];
+    }
+  }
+
+  media(value: unknown): string {
+    return this.api.mediaUrl(value == null ? '' : String(value));
+  }
+
+  asText(value: unknown): string {
+    return value == null ? '' : String(value);
   }
 
   private scrollTo(id: string | null): void {
