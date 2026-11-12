@@ -26,6 +26,27 @@ public final class UploadRules {
     return prepare(file, DOCUMENTS, false);
   }
 
+  public static Prepared preparePdf(MultipartFile file) {
+    Prepared prepared = prepare(file, Set.of("pdf"), false);
+    byte[] bytes = prepared.bytes();
+    if (bytes.length < 5
+        || bytes[0] != '%'
+        || bytes[1] != 'P'
+        || bytes[2] != 'D'
+        || bytes[3] != 'F'
+        || bytes[4] != '-') {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Only PDF files can be uploaded");
+    }
+    String provided = file.getContentType() == null ? "" : file.getContentType().toLowerCase(Locale.ROOT);
+    if (!provided.isBlank()
+        && !provided.equals("application/pdf")
+        && !provided.equals("application/octet-stream")
+        && !provided.equals("application/x-pdf")) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Only PDF files can be uploaded");
+    }
+    return prepared;
+  }
+
   private static Prepared prepare(MultipartFile file, Set<String> allowed, boolean image) {
     if (file == null || file.isEmpty()) {
       throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "file is required");

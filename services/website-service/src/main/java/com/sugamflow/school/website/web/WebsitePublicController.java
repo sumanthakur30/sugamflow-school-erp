@@ -89,6 +89,7 @@ public class WebsitePublicController {
     urls.add(entry("/events", "0.7"));
     urls.add(entry("/gallery", "0.6"));
     urls.add(entry("/resources", "0.6"));
+    urls.add(entry("/mandatory-public-disclosure", "0.7"));
     urls.add(entry("/contact", "0.6"));
 
     for (Map<String, Object> nav : site.navigation()) {

@@ -308,6 +308,24 @@ public class CmsAdminController {
     return ApiResponse.ok(documentService.replaceFile(orgId(), id, file));
   }
 
+  @PostMapping(value = "/documents/disclosure", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+  public ApiResponse<DocumentResponse> uploadDisclosure(
+      @RequestPart("file") MultipartFile file,
+      @RequestParam("title") String title,
+      @RequestParam("category") String category,
+      @RequestParam(value = "sortOrder", required = false) Integer sortOrder,
+      @RequestParam(value = "siteId", required = false) String siteId) {
+    return ApiResponse.ok(
+        documentService.uploadDisclosure(
+            orgId(), CmsSiteScope.parse(siteId, false), title, category, sortOrder, file));
+  }
+
+  @DeleteMapping("/documents/{id}")
+  public ApiResponse<Map<String, Object>> deleteDocument(@PathVariable("id") UUID id) {
+    documentService.delete(orgId(), id);
+    return ApiResponse.ok(Map.of("deleted", true, "id", id.toString()));
+  }
+
   @GetMapping("/profiles")
   public ApiResponse<List<ProfileResponse>> listProfiles(
       @RequestParam(value = "siteId", required = false) String siteId,

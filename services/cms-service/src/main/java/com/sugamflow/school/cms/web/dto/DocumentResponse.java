@@ -18,4 +18,5 @@ public record DocumentResponse(
     int sortOrder,
     String contentType,
     Long byteSize,
-    UUID mediaAssetId) {}
+    UUID mediaAssetId,
+    Instant createdAt) {}
