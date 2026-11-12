@@ -46,6 +46,13 @@ class UploadRulesTest {
   }
 
   @Test
+  void rejectsPdfThatIsNotAPdf() {
+    MockMultipartFile file =
+        new MockMultipartFile("file", "notes.pdf", "application/pdf", "not-a-pdf".getBytes());
+    assertThrows(ResponseStatusException.class, () -> UploadRules.preparePdf(file));
+  }
+
+  @Test
   void acceptsPdf() {
     MockMultipartFile file =
         new MockMultipartFile("file", "calendar.pdf", "application/pdf", "%PDF-1.4".getBytes());

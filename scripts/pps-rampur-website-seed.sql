@@ -63,7 +63,7 @@ INSERT INTO website_site (
     ]'::jsonb,
     '[
       {"label":"Home","path":"/","order":10},
-      {"label":"About","path":"/about","order":20,"children":[{"label":"About the school","path":"/about","fragment":"school"},{"label":"Founder Director","path":"/about","fragment":"founder"},{"label":"Vision and mission","path":"/about","fragment":"vision"},{"label":"Infrastructure","path":"/campus","fragment":"labs"}]},
+      {"label":"About","path":"/about","order":20,"children":[{"label":"About the school","path":"/about","fragment":"school"},{"label":"Founder Director","path":"/about","fragment":"founder"},{"label":"Vision and mission","path":"/about","fragment":"vision"},{"label":"Infrastructure","path":"/campus","fragment":"labs"},{"label":"Mandatory Public Disclosure","path":"/mandatory-public-disclosure"}]},
       {"label":"Academics","path":"/academics","order":30,"children":[{"label":"Curriculum","path":"/academics","fragment":"curriculum"},{"label":"Classes","path":"/academics","fragment":"classes"},{"label":"Academic calendar","path":"/notices","fragment":"calendar"},{"label":"Results","path":"/notices","fragment":"results"}]},
       {"label":"Admissions","path":"/admission","order":40,"children":[{"label":"Admission process","path":"/admission","fragment":"process"},{"label":"Apply online","path":"/admission/apply"},{"label":"Enquiry","path":"/contact"}]},
       {"label":"Campus Life","path":"/campus","order":50,"children":[{"label":"Campus","path":"/campus","fragment":"campus"},{"label":"Library and labs","path":"/campus","fragment":"labs"},{"label":"Sports","path":"/student-life","fragment":"sports"}]},

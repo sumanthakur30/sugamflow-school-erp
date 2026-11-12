@@ -12,6 +12,7 @@ import { BlogListPageComponent } from './pages/blog-list-page.component';
 import { BlogDetailPageComponent } from './pages/blog-detail-page.component';
 import { ContactPageComponent } from './pages/contact-page.component';
 import { ResourcesPageComponent } from './pages/resources-page.component';
+import { DisclosurePageComponent } from './pages/disclosure-page.component';
 import { AlumniListPageComponent } from './pages/alumni-list-page.component';
 import { AlumniDetailPageComponent } from './pages/alumni-detail-page.component';
 
@@ -31,6 +32,7 @@ export const routes: Routes = [
       { path: 'notices', component: NewsListPageComponent },
       { path: 'admissions', redirectTo: 'admission', pathMatch: 'full' },
       { path: 'resources', component: ResourcesPageComponent },
+      { path: 'mandatory-public-disclosure', component: DisclosurePageComponent },
       { path: 'news', component: NewsListPageComponent },
       { path: 'news/:slug', component: NewsDetailPageComponent },
       { path: 'gallery', component: GalleryPageComponent },

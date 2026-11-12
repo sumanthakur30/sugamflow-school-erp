@@ -127,6 +127,7 @@ type ModuleId =
   | 'campuses'
   | 'achievements'
   | 'downloads'
+  | 'disclosure'
   | 'seo'
   | 'analytics'
   | 'marketplace'
@@ -216,10 +217,10 @@ export class WebsiteCmsComponent implements OnInit {
   readonly navModules: Array<{ id: ModuleId; label: string; group: string; ready: boolean }> = [
     { id: 'dashboard', label: 'Dashboard', group: 'Overview', ready: true },
     { id: 'builder', label: 'Website Builder', group: 'Overview', ready: true },
+    { id: 'media', label: 'Upload images', group: 'Overview', ready: true },
     { id: 'pages', label: 'Pages', group: 'Content', ready: true },
     { id: 'navigation', label: 'Navigation', group: 'Content', ready: true },
     { id: 'theme', label: 'Theme', group: 'Design', ready: true },
-    { id: 'media', label: 'Media', group: 'Design', ready: true },
     { id: 'forms', label: 'Forms', group: 'Content', ready: false },
     { id: 'blogs', label: 'Blogs', group: 'Content', ready: false },
     { id: 'events', label: 'Events', group: 'Content', ready: true },
@@ -231,6 +232,7 @@ export class WebsiteCmsComponent implements OnInit {
     { id: 'staff', label: 'Staff', group: 'Content', ready: true },
     { id: 'achievements', label: 'Achievements', group: 'Content', ready: false },
     { id: 'downloads', label: 'Downloads', group: 'Content', ready: true },
+    { id: 'disclosure', label: 'Disclosure', group: 'Content', ready: true },
     { id: 'seo', label: 'SEO', group: 'Growth', ready: true },
     { id: 'analytics', label: 'Analytics', group: 'Growth', ready: true },
     { id: 'marketplace', label: 'Marketplace', group: 'Growth', ready: true },
@@ -366,7 +368,7 @@ export class WebsiteCmsComponent implements OnInit {
     if (tab === 'gallery') this.loadGallery();
     if (tab === 'navigation') this.loadWebsiteBootstrap();
     if (tab === 'events') this.loadEvents();
-    if (tab === 'downloads') this.loadDocuments();
+    if (tab === 'downloads' || tab === 'disclosure') this.loadDocuments();
     if (tab === 'staff') this.loadProfiles();
     if (tab === 'marketplace') this.loadTemplates();
     if (tab === 'pages') this.reload();
@@ -400,6 +402,42 @@ export class WebsiteCmsComponent implements OnInit {
     const files = Array.from(input.files || []);
     files.forEach((file) => this.uploadMedia(file));
     input.value = '';
+  }
+
+  uploadSectionImage(section: HomepageSection, event: Event): void {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0];
+    input.value = '';
+    if (!file) return;
+    const field =
+      section.type === 'PRINCIPAL_MESSAGE' || section.type === 'DIRECTOR_MESSAGE'
+        ? 'photoUrl'
+        : 'imageUrl';
+    this.mediaUploading = true;
+    this.error = '';
+    this.mediaNotice = '';
+    const form = new FormData();
+    form.append('file', file, file.name);
+    this.http
+      .post<ApiResponse<MediaRow>>(`${environment.apiBaseUrl}/api/cms/admin/media/upload`, form)
+      .subscribe({
+        next: (res) => {
+          this.mediaUploading = false;
+          const url = res.data?.url;
+          if (!url) {
+            this.error = 'Upload finished without a file address';
+            return;
+          }
+          section.content = { ...(section.content || {}), [field]: url };
+          this.mediaNotice = 'Image uploaded. Click Save homepage so the public site shows it.';
+          this.loadMedia();
+          this.loadMediaUsage();
+        },
+        error: (err) => {
+          this.mediaUploading = false;
+          this.error = this.apiError(err, 'Upload failed — check media storage permissions');
+        },
+      });
   }
 
   uploadMedia(file: File): void {
@@ -688,6 +726,13 @@ export class WebsiteCmsComponent implements OnInit {
             (item) => ({
               label: String(item['label'] || ''),
               path: String(item['path'] || ''),
+              children: Array.isArray(item['children'])
+                ? (item['children'] as Array<Record<string, unknown>>).map((child) => ({
+                    label: String(child['label'] || ''),
+                    path: String(child['path'] || ''),
+                    fragment: child['fragment'] ? String(child['fragment']) : undefined,
+                  }))
+                : undefined,
             })
           );
           this.siteMeta = {
@@ -1351,7 +1396,30 @@ export class WebsiteCmsComponent implements OnInit {
 
   activeSiteId = '';
   activeSiteIsDefault = true;
-  navItems: Array<{ label: string; path: string }> = [];
+  navItems: Array<{
+    label: string;
+    path: string;
+    children?: Array<{ label: string; path: string; fragment?: string }>;
+  }> = [];
+  readonly disclosureCategories = [
+    { code: 'AFFILIATION', label: 'AFFILIATION / UPGRADATION LETTER' },
+    { code: 'TRUST_REGISTRATION', label: 'SOCIETIES / TRUST / COMPANY REGISTRATION' },
+    { code: 'NOC', label: 'NO OBJECTION CERTIFICATE (NOC)' },
+    { code: 'RECOGNITION', label: 'RECOGNITION CERTIFICATE' },
+    { code: 'BUILDING_SAFETY', label: 'BUILDING SAFETY CERTIFICATE' },
+    { code: 'FIRE_SAFETY', label: 'FIRE SAFETY CERTIFICATE' },
+    { code: 'DEO', label: 'DEO CERTIFICATE' },
+    { code: 'WATER_HEALTH', label: 'VALIDITY OF WATER, HEALTH AND SANITATION CERTIFICATES' },
+    { code: 'FEE_STRUCTURE', label: 'FEE STRUCTURE' },
+    { code: 'ACADEMIC_CALENDAR', label: 'ANNUAL ACADEMIC CALENDAR' },
+    { code: 'SMC', label: 'LIST OF SCHOOL MANAGEMENT COMMITTEE (SMC)' },
+    { code: 'PTA', label: 'LIST OF PARENTS TEACHERS ASSOCIATION (PTA)' },
+    { code: 'BOARD_RESULT', label: 'LAST THREE-YEAR RESULT OF BOARD EXAMINATION' },
+  ];
+  disclosureDraft = { title: '', category: 'DEO', sortOrder: 0 };
+  disclosureFile: File | null = null;
+  editingDisclosureId: string | null = null;
+  disclosureUploading = false;
   events: Array<Record<string, string>> = [];
   documents: Array<Record<string, string>> = [];
   eventDraft = { slug: '', title: '', summary: '', locationText: '', startsAt: '', endsAt: '' };
@@ -1453,6 +1521,149 @@ export class WebsiteCmsComponent implements OnInit {
           this.error = this.apiError(err, 'Failed to save document');
         },
       });
+  }
+
+  get disclosureDocuments(): Array<Record<string, string>> {
+    const codes = new Set(this.disclosureCategories.map((item) => item.code));
+    return this.documents
+      .filter((row) => codes.has(String(row['category'] || '')))
+      .slice()
+      .sort((a, b) => Number(a['sortOrder'] || 0) - Number(b['sortOrder'] || 0));
+  }
+
+  disclosureCategoryLabel(code: string): string {
+    return this.disclosureCategories.find((item) => item.code === code)?.label || code;
+  }
+
+  onDisclosureFile(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    this.disclosureFile = input.files?.[0] || null;
+  }
+
+  cancelDisclosure(): void {
+    this.editingDisclosureId = null;
+    this.disclosureFile = null;
+    this.disclosureDraft = { title: '', category: 'DEO', sortOrder: 0 };
+    this.error = '';
+  }
+
+  uploadDisclosure(): void {
+    if (!this.disclosureDraft.title.trim()) {
+      this.error = 'Document name is required';
+      return;
+    }
+    if (this.editingDisclosureId) {
+      this.saveDisclosureEdit();
+      return;
+    }
+    if (!this.disclosureFile) {
+      this.error = 'Choose a PDF file';
+      return;
+    }
+    const form = new FormData();
+    form.append('file', this.disclosureFile, this.disclosureFile.name);
+    form.append('title', this.disclosureDraft.title.trim());
+    form.append('category', this.disclosureDraft.category);
+    form.append('sortOrder', String(this.disclosureDraft.sortOrder || 0));
+    this.disclosureUploading = true;
+    this.error = '';
+    this.mediaNotice = '';
+    this.http
+      .post(this.withSite(`${environment.apiBaseUrl}/api/cms/admin/documents/disclosure`), form)
+      .subscribe({
+        next: () => {
+          this.disclosureUploading = false;
+          this.mediaNotice = 'Document uploaded. It is now on the public disclosure page.';
+          this.cancelDisclosure();
+          this.loadDocuments();
+        },
+        error: (err) => {
+          this.disclosureUploading = false;
+          this.error = this.apiError(err, 'Upload failed. Use a PDF of 20 MB or less.');
+        },
+      });
+  }
+
+  editDisclosure(row: Record<string, string>): void {
+    this.editingDisclosureId = String(row['id']);
+    this.disclosureDraft = {
+      title: String(row['title'] || ''),
+      category: String(row['category'] || 'DEO'),
+      sortOrder: Number(row['sortOrder'] || 0),
+    };
+    this.disclosureFile = null;
+    this.error = '';
+  }
+
+  saveDisclosureEdit(): void {
+    const row = this.documents.find((item) => item['id'] === this.editingDisclosureId);
+    if (!row || !this.editingDisclosureId) return;
+    this.disclosureUploading = true;
+    this.error = '';
+    this.http
+      .put(`${environment.apiBaseUrl}/api/cms/admin/documents/${this.editingDisclosureId}`, {
+        title: this.disclosureDraft.title.trim(),
+        category: this.disclosureDraft.category,
+        summary: row['summary'] || null,
+        fileUrl: row['fileUrl'],
+        fileName: row['fileName'] || null,
+        audience: row['audience'] || 'PUBLIC',
+        academicYear: row['academicYear'] || null,
+        sortOrder: Number(this.disclosureDraft.sortOrder || 0),
+        contentType: row['contentType'] || null,
+        byteSize: row['byteSize'] ? Number(row['byteSize']) : null,
+        mediaAssetId: row['mediaAssetId'] || null,
+      })
+      .subscribe({
+        next: () => {
+          if (!this.disclosureFile || !this.editingDisclosureId) {
+            this.disclosureUploading = false;
+            this.mediaNotice = 'Document updated.';
+            this.cancelDisclosure();
+            this.loadDocuments();
+            return;
+          }
+          const form = new FormData();
+          form.append('file', this.disclosureFile, this.disclosureFile.name);
+          this.http
+            .post(`${environment.apiBaseUrl}/api/cms/admin/documents/${this.editingDisclosureId}/file`, form)
+            .subscribe({
+              next: () => {
+                this.disclosureUploading = false;
+                this.mediaNotice = 'Document updated and the PDF was replaced.';
+                this.cancelDisclosure();
+                this.loadDocuments();
+              },
+              error: (err) => {
+                this.disclosureUploading = false;
+                this.error = this.apiError(err, 'The name was saved, but the PDF replacement failed.');
+                this.loadDocuments();
+              },
+            });
+        },
+        error: (err) => {
+          this.disclosureUploading = false;
+          this.error = this.apiError(err, 'Could not update the document');
+        },
+      });
+  }
+
+  deleteDisclosure(row: Record<string, string>): void {
+    const name = row['title'] || 'this document';
+    if (!confirm(`Delete ${name}? It will disappear from the public disclosure page.`)) return;
+    this.http.delete(`${environment.apiBaseUrl}/api/cms/admin/documents/${row['id']}`).subscribe({
+      next: () => {
+        this.mediaNotice = 'Document deleted.';
+        this.loadDocuments();
+      },
+      error: (err) => (this.error = this.apiError(err, 'Could not delete the document')),
+    });
+  }
+
+  previewDisclosure(row: Record<string, string>): void {
+    const url = row['fileUrl'];
+    if (!url) return;
+    window.open(url, '_blank', 'noopener');
   }
 
   publishDocument(row: Record<string, string>): void {
@@ -1562,6 +1773,7 @@ export class WebsiteCmsComponent implements OnInit {
           label: item.label,
           path: item.path,
           order: (index + 1) * 10,
+          children: item.children || [],
         }))
       )
       .subscribe({

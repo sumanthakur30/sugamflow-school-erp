@@ -269,6 +269,16 @@
               />
               Enabled
             </label>
+            <label class="upload">
+              <span>{{ mediaUploading ? 'Uploading…' : 'Upload image' }}</span>
+              <input
+                type="file"
+                accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp"
+                (change)="uploadSectionImage(s, $event)"
+                [disabled]="mediaUploading"
+              />
+            </label>
+            <p class="hint">Choose a photo here, then click Save homepage.</p>
 
             <div class="hero-fields" *ngIf="s.type === 'HERO'">
               <label
@@ -1142,6 +1152,67 @@
         <span>{{ row['status'] }}</span>
         <button type="button" *ngIf="row['status'] !== 'PUBLISHED'" (click)="publishEvent(row)">Publish</button>
       </article>
+    </div>
+
+    <div class="wb-panel panel" *ngIf="tab === 'disclosure'">
+      <h2>CBSE Mandatory Public Disclosure Update</h2>
+      <p class="hint">
+        Upload a PDF. It is published immediately on
+        /mandatory-public-disclosure for this school.
+      </p>
+      <form (ngSubmit)="uploadDisclosure()">
+        <label>
+          Attachment file
+          <input type="file" accept="application/pdf,.pdf" (change)="onDisclosureFile($event)" />
+        </label>
+        <label>
+          Document name
+          <input name="disclosureTitle" [(ngModel)]="disclosureDraft.title" required />
+        </label>
+        <label>
+          Category
+          <select name="disclosureCategory" [(ngModel)]="disclosureDraft.category">
+            <option *ngFor="let item of disclosureCategories" [value]="item.code">{{ item.label }}</option>
+          </select>
+        </label>
+        <label>
+          Display order
+          <input type="number" name="disclosureSort" [(ngModel)]="disclosureDraft.sortOrder" />
+        </label>
+        <div class="actions row">
+          <button type="submit" class="primary" [disabled]="disclosureUploading">
+            {{ disclosureUploading ? 'Uploading…' : 'Upload' }}
+          </button>
+          <button type="button" (click)="cancelDisclosure()" [disabled]="disclosureUploading">Cancel</button>
+        </div>
+      </form>
+      <table class="disclosure-table" *ngIf="disclosureDocuments.length">
+        <thead>
+          <tr>
+            <th>S. No.</th>
+            <th>Document name</th>
+            <th>Category</th>
+            <th>File</th>
+            <th>Uploaded</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let row of disclosureDocuments; let i = index">
+            <td>{{ i + 1 }}</td>
+            <td><strong>{{ row['title'] }}</strong></td>
+            <td>{{ disclosureCategoryLabel(row['category']) }}</td>
+            <td>{{ row['fileName'] || row['fileUrl'] }}</td>
+            <td>{{ row['createdAt'] || row['publishedAt'] }}</td>
+            <td class="actions row">
+              <button type="button" (click)="editDisclosure(row)">Edit</button>
+              <button type="button" (click)="previewDisclosure(row)">Preview</button>
+              <button type="button" class="danger" (click)="deleteDisclosure(row)">Delete</button>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+      <p class="hint" *ngIf="!disclosureDocuments.length">No disclosure documents yet.</p>
     </div>
 
     <div class="wb-panel panel" *ngIf="tab === 'downloads'">

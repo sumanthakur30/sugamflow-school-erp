@@ -7,6 +7,7 @@ import com.sugamflow.school.cms.web.dto.DocumentUpsertRequest;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
+import org.springframework.web.multipart.MultipartFile;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -89,9 +90,62 @@ public class CmsDocumentService {
   }
 
   @Transactional
-  public DocumentResponse replaceFile(String organizationId, UUID id, org.springframework.web.multipart.MultipartFile file) {
+  public DocumentResponse uploadDisclosure(
+      String organizationId,
+      CmsSiteScope scope,
+      String title,
+      String category,
+      Integer sortOrder,
+      MultipartFile file) {
+    if (title == null || title.isBlank()) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Document name is required");
+    }
+    String code = DisclosureCategories.require(category);
+    UploadRules.Prepared prepared = UploadRules.preparePdf(file);
+    var saved = mediaService.savePrepared(require(organizationId), null, prepared);
+    Instant now = Instant.now();
+    CmsDocument doc = new CmsDocument();
+    doc.setId(UUID.randomUUID());
+    doc.setOrganizationId(require(organizationId));
+    doc.setSiteId(scope.siteId());
+    doc.setTitle(title.trim());
+    doc.setCategory(code);
+    doc.setFileUrl(saved.url());
+    doc.setFileName(saved.fileName());
+    doc.setContentType(saved.contentType());
+    doc.setByteSize(saved.byteSize());
+    doc.setMediaAssetId(saved.id());
+    doc.setAudience("PUBLIC");
+    doc.setStatus(PUBLISHED);
+    doc.setPublishedAt(now);
+    doc.setSortOrder(sortOrder == null ? 0 : Math.max(0, sortOrder));
+    doc.setCreatedAt(now);
+    doc.setUpdatedAt(now);
+    return toResponse(repository.save(doc));
+  }
+
+  @Transactional
+  public void delete(String organizationId, UUID id) {
     CmsDocument doc = requireDoc(organizationId, id);
-    UploadRules.Prepared prepared = UploadRules.prepareDocument(file);
+    UUID mediaId = doc.getMediaAssetId();
+    repository.delete(doc);
+    repository.flush();
+    if (mediaId != null) {
+      try {
+        mediaService.delete(require(organizationId), mediaId);
+      } catch (ResponseStatusException ignored) {
+        // The file can stay when another page still points at the same address.
+      }
+    }
+  }
+
+  @Transactional
+  public DocumentResponse replaceFile(String organizationId, UUID id, MultipartFile file) {
+    CmsDocument doc = requireDoc(organizationId, id);
+    UploadRules.Prepared prepared =
+        DisclosureCategories.isDisclosure(doc.getCategory())
+            ? UploadRules.preparePdf(file)
+            : UploadRules.prepareDocument(file);
     var saved = mediaService.savePrepared(organizationId, doc.getMediaAssetId(), prepared);
     doc.setMediaAssetId(saved.id());
     doc.setFileUrl(saved.url());
@@ -110,7 +164,11 @@ public class CmsDocumentService {
 
   private void apply(CmsDocument doc, DocumentUpsertRequest request) {
     doc.setTitle(request.title().trim());
-    doc.setCategory(blank(request.category(), "GENERAL"));
+    if (DisclosureCategories.isDisclosure(doc.getCategory()) || DisclosureCategories.isDisclosure(request.category())) {
+      doc.setCategory(DisclosureCategories.require(request.category()));
+    } else {
+      doc.setCategory(blank(request.category(), "GENERAL"));
+    }
     doc.setSummary(blankToNull(request.summary()));
     doc.setFileUrl(request.fileUrl().trim());
     doc.setFileName(blankToNull(request.fileName()));
@@ -139,7 +197,8 @@ public class CmsDocumentService {
         d.getSortOrder(),
         d.getContentType(),
         d.getByteSize(),
-        d.getMediaAssetId());
+        d.getMediaAssetId(),
+        d.getCreatedAt());
   }
 
   private static String require(String organizationId) {
