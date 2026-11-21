@@ -1,0 +1,162 @@
+.admit {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.admit-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: flex-start;
+}
+
+.admit-head h2 {
+  margin: 0.35rem 0 0.25rem;
+}
+
+.admit-head p,
+.section-note {
+  margin: 0;
+  color: color-mix(in srgb, var(--sf-text, #26352e) 68%, #405549);
+}
+
+.back {
+  border: 0;
+  background: none;
+  padding: 0;
+  color: var(--sf-primary, #176b45);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.section-card h3 {
+  margin: 0 0 0.85rem;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.85rem 1rem;
+}
+
+.span-2 {
+  grid-column: span 2;
+}
+
+.span-3 {
+  grid-column: 1 / -1;
+}
+
+label {
+  min-width: 0;
+}
+
+.req::after {
+  content: ' *';
+  color: #b42318;
+}
+
+.hint,
+.field-error {
+  display: block;
+  margin-top: 0.2rem;
+  font-size: 0.78rem;
+  font-weight: 650;
+}
+
+.hint {
+  color: #66756d;
+}
+
+.field-error {
+  color: #b42318;
+}
+
+.optional-tag {
+  margin-left: 0.35rem;
+  color: #66756d;
+  font-size: 0.75rem;
+  font-weight: 650;
+}
+
+.photo-row {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+}
+
+.photo-preview {
+  width: 5.5rem;
+  height: 5.5rem;
+  border-radius: 0.9rem;
+  border: 1px dashed color-mix(in srgb, var(--sf-primary, #176b45) 45%, #c5d1cb);
+  background: color-mix(in srgb, var(--sf-primary, #176b45) 6%, #fff);
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  color: #66756d;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.photo-preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.subhead {
+  margin: 0.4rem 0 0;
+  font-size: 0.95rem;
+}
+
+.check {
+  flex-direction: row;
+  align-items: center;
+  gap: 0.5rem;
+  font-weight: 650;
+}
+
+.address-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.address-card {
+  border: 1px solid var(--sf-border, #dce4df);
+  border-radius: var(--sf-radius, 8px);
+  padding: 0.9rem;
+  background: #fff;
+}
+
+.address-card .grid {
+  grid-template-columns: 1fr 1fr;
+}
+
+.docs {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.6rem;
+}
+
+@media (max-width: 900px) {
+  .grid,
+  .address-grid,
+  .docs {
+    grid-template-columns: 1fr;
+  }
+
+  .span-2,
+  .span-3 {
+    grid-column: auto;
+  }
+}
