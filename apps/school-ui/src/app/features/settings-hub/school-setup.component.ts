@@ -20,7 +20,6 @@ export class SchoolSetupComponent implements OnInit {
   busy = false;
   error = '';
   admissionStatus = '';
-  feeStatus = '';
   nameStatus = '';
   schoolName = '';
   sessionId = '';
@@ -32,10 +31,6 @@ export class SchoolSetupComponent implements OnInit {
   yearDigits = 4;
   includeBranch = true;
   width = 4;
-
-  className = '';
-  tuition = '';
-  frequency = 'Y';
 
   ngOnInit(): void {
     this.sessionId = this.auth.getSessionId();
@@ -141,46 +136,4 @@ export class SchoolSetupComponent implements OnInit {
       });
   }
 
-  saveFeeStructure(): void {
-    const className = this.className.trim();
-    const amount = Number(this.tuition);
-    if (!className) {
-      this.error = 'Enter the class this fee applies to.';
-      return;
-    }
-    if (!Number.isFinite(amount) || amount <= 0) {
-      this.error = 'Tuition needs an amount greater than zero.';
-      return;
-    }
-    const key = `FEE_${className.toUpperCase().replace(/[^A-Z0-9]+/g, '_').replace(/^_|_$/g, '')}`;
-    this.busy = true;
-    this.error = '';
-    this.api
-      .put(`/api/fee/finance/structures/${encodeURIComponent(key)}`, {
-        definitionKey: key,
-        name: `${className} fees`,
-        currency: 'INR',
-        eligibility: { classSection: className },
-        lines: [
-          {
-            headKey: 'TUITION',
-            amount,
-            frequency: this.frequency,
-            active: true,
-            discountAllowed: true,
-            optional: false,
-          },
-        ],
-      })
-      .subscribe({
-        next: () => {
-          this.busy = false;
-          this.feeStatus = `Saved ${className} tuition of ${amount} on the fee structure ${key}.`;
-        },
-        error: (err) => {
-          this.busy = false;
-          this.error = err?.error?.message ?? 'Fee structure was not saved.';
-        },
-      });
-  }
 }

@@ -1,10 +1,12 @@
 import { Component, EventEmitter, OnInit, Output, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { forkJoin, of } from 'rxjs';
-import { catchError } from 'rxjs/operators';
+import { forkJoin, Observable, of } from 'rxjs';
+import { catchError, map, switchMap, tap } from 'rxjs/operators';
 import { ApiService } from '../../core/api.service';
 import { AuthSessionService } from '../../core/auth-session.service';
+import { EntitlementsService } from '../../core/entitlements.service';
+import { matchFeeStructure } from '../settings-hub/fee-structure-match';
 
 export interface StudentCreated {
   id: string;
@@ -16,6 +18,8 @@ interface NamedRow {
   id: string;
   name: string;
   classId?: string;
+  suggested?: boolean;
+  sequenceNo?: number;
 }
 
 interface Choice {
@@ -40,14 +44,19 @@ interface PendingFile {
 export class AddStudentPanelComponent implements OnInit {
   private readonly api = inject(ApiService);
   private readonly auth = inject(AuthSessionService);
+  private readonly entitlements = inject(EntitlementsService);
 
   @Output() readonly closed = new EventEmitter<void>();
   @Output() readonly created = new EventEmitter<StudentCreated>();
 
   readonly genders = ['Male', 'Female', 'Other'];
   readonly bloodGroups = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'];
-  readonly categories = ['General', 'OBC', 'SC', 'ST', 'Other'];
+  readonly categories = ['General', 'OBC', 'SC', 'ST', 'EWS', 'Other'];
+  readonly nationalities = ['Indian', 'Other'];
+  readonly religions = ['Hindu', 'Muslim', 'Christian', 'Sikh', 'Other'];
+  readonly motherTongues = ['Hindi', 'English', 'Urdu', 'Sanskrit', 'Other'];
   readonly admissionTypes = ['New', 'Transfer'];
+  private readonly defaultSections = ['A', 'B', 'C', 'D', 'E', 'F'];
   readonly contacts = [
     { value: 'FATHER', label: 'Father' },
     { value: 'MOTHER', label: 'Mother' },
@@ -67,9 +76,15 @@ export class AddStudentPanelComponent implements OnInit {
   gender = '';
   bloodGroup = '';
   nationality = 'Indian';
+  otherNationality = '';
   religion = '';
+  otherReligion = '';
   category = '';
+  otherCategory = '';
   motherTongue = '';
+  otherMotherTongue = '';
+  otherClass = '';
+  otherSection = '';
   aadhaar = '';
   photoName = '';
   photoPreview = '';
@@ -145,6 +160,7 @@ export class AddStudentPanelComponent implements OnInit {
   branches: Choice[] = [];
   sessions: Choice[] = [];
   feeStructures: Choice[] = [];
+  private structureRows: any[] = [];
   concessions: Choice[] = [];
   routes: Choice[] = [];
 
@@ -160,22 +176,44 @@ export class AddStudentPanelComponent implements OnInit {
     this.loadChoices();
   }
 
+  get transportEnabled(): boolean {
+    return this.entitlements.isEnabled('FEATURE_TRANSPORT');
+  }
+
   get filteredClasses(): NamedRow[] {
     return this.filterRows(this.classes, this.classQuery);
   }
 
-  get filteredSections(): NamedRow[] {
-    const selected = this.classes.find((row) => row.name === this.className);
+  get sectionChoices(): NamedRow[] {
+    const selected = this.classes.find((row) => row.name === this.resolvedClass());
     const rows = selected?.id
       ? this.sections.filter((row) => !row.classId || row.classId === selected.id)
-      : this.sections;
-    return this.filterRows(rows, this.sectionQuery);
+      : [];
+    const unique = this.uniqueNames(this.filterRows(rows, this.sectionQuery));
+    if (unique.length || !this.resolvedClass()) {
+      return unique;
+    }
+    const query = this.sectionQuery.trim().toLowerCase();
+    return this.defaultSections
+      .filter((name) => !query || name.toLowerCase().includes(query))
+      .map((name) => ({ id: '', name, suggested: true }));
   }
 
   onClassChange(): void {
-    if (!this.filteredSections.some((row) => row.name === this.section)) {
+    const names = new Set(this.sectionChoices.map((row) => row.name));
+    if (this.section !== '__other__' && !names.has(this.section)) {
       this.section = '';
+      this.otherSection = '';
     }
+    this.applyStandardFee();
+  }
+
+  private applyStandardFee(): void {
+    const className = this.resolvedClass();
+    if (!className) {
+      return;
+    }
+    this.feeStructureKey = matchFeeStructure(this.structureRows, className, this.sessionId);
   }
 
   onSameAddress(): void {
@@ -245,6 +283,16 @@ export class AddStudentPanelComponent implements OnInit {
     }
     if (this.sameAddress) this.onSameAddress();
     this.saving = true;
+    this.prepareAcademic().subscribe({
+      next: () => this.postStudent(),
+      error: () => {
+        this.saving = false;
+        this.error = 'The class or section could not be saved.';
+      },
+    });
+  }
+
+  private postStudent(): void {
     const mobile = this.contactMobile();
     this.api.post<any>('/api/student/students', this.payload(mobile)).subscribe({
       next: (row) => {
@@ -274,7 +322,9 @@ export class AddStudentPanelComponent implements OnInit {
 
   private loadChoices(): void {
     forkJoin({
-      classes: this.api.get<any[]>('/api/academic/classes').pipe(catchError(() => of([]))),
+      classes: this.api.get<any[]>('/api/academic/class-catalog').pipe(
+        catchError(() => this.api.get<any[]>('/api/academic/classes').pipe(catchError(() => of([])))),
+      ),
       sections: this.api.get<any[]>('/api/academic/sections').pipe(catchError(() => of([]))),
       branches: this.api.get<any[]>('/api/config/branches').pipe(catchError(() => of([]))),
       sessions: this.api.get<any[]>('/api/student/lifecycle/sessions').pipe(catchError(() => of([]))),
@@ -298,11 +348,13 @@ export class AddStudentPanelComponent implements OnInit {
       if (!this.sessions.some((row) => row.key === this.sessionId) && this.sessionId) {
         this.sessions = [{ key: this.sessionId, label: this.sessionId }, ...this.sessions];
       }
+      this.structureRows = rows.structures || [];
       this.feeStructures = this.choices(
         rows.structures,
         ['definitionKey'],
         ['label', 'name', 'definitionKey'],
       );
+      this.applyStandardFee();
       this.concessions = this.choices(
         rows.concessions,
         ['definitionKey'],
@@ -319,7 +371,7 @@ export class AddStudentPanelComponent implements OnInit {
     if (!this.dateOfBirth) errors['dateOfBirth'] = 'Date of birth is required.';
     else if (this.dateOfBirth > this.today) errors['dateOfBirth'] = 'Date of birth cannot be a future date.';
     if (!this.gender) errors['gender'] = 'Gender is required.';
-    if (!this.className.trim()) errors['className'] = 'Class is required.';
+    if (!this.resolvedClass()) errors['className'] = 'Class is required.';
     if (!this.admissionDate) errors['admissionDate'] = 'Admission date is required.';
     if (!this.sessionId) errors['sessionId'] = 'Academic session is required.';
     if (!this.branchId) errors['branchId'] = 'Campus is required.';
@@ -350,16 +402,16 @@ export class AddStudentPanelComponent implements OnInit {
       dateOfBirth: this.dateOfBirth,
       gender: this.gender,
       bloodGroup: this.bloodGroup,
-      nationality: this.nationality.trim(),
-      religion: this.religion.trim(),
-      category: this.category,
-      motherTongue: this.motherTongue.trim(),
+      nationality: this.chosen(this.nationality, this.otherNationality),
+      religion: this.chosen(this.religion, this.otherReligion),
+      category: this.chosen(this.category, this.otherCategory),
+      motherTongue: this.chosen(this.motherTongue, this.otherMotherTongue),
       aadhaar: this.aadhaar.replace(/\D/g, ''),
       admissionDate: this.admissionDate,
       academicSessionId: this.sessionId,
       branchId: this.branchId,
-      className: this.className.trim(),
-      section: this.section.trim(),
+      className: this.resolvedClass(),
+      section: this.resolvedSection(),
       rollNo: this.rollNo.trim(),
       previousSchool: this.previousSchool.trim(),
       previousClass: this.previousClass.trim(),
@@ -451,11 +503,109 @@ export class AddStudentPanelComponent implements OnInit {
     });
   }
 
+  private chosen(value: string, other: string): string {
+    if (value !== 'Other') {
+      return value.trim();
+    }
+    return other.trim();
+  }
+
+  resolvedClass(): string {
+    return this.className === '__other__' ? this.otherClass.trim() : this.className.trim();
+  }
+
+  private resolvedSection(): string {
+    return this.section === '__other__' ? this.otherSection.trim() : this.section.trim();
+  }
+
+  private uniqueNames(rows: NamedRow[]): NamedRow[] {
+    const seen = new Set<string>();
+    const out: NamedRow[] = [];
+    for (const row of rows) {
+      const key = row.name.trim().toLowerCase();
+      if (!key || seen.has(key)) {
+        continue;
+      }
+      seen.add(key);
+      out.push(row);
+    }
+    return out;
+  }
+
+  private prepareAcademic(): Observable<void> {
+    return this.prepareClass().pipe(switchMap(() => this.prepareSection()));
+  }
+
+  private prepareClass(): Observable<void> {
+    const name = this.resolvedClass();
+    if (!name) {
+      return of(undefined);
+    }
+    const row = this.classes.find((item) => item.name === name);
+    if (row?.id && !row.suggested) {
+      this.className = row.name;
+      return of(undefined);
+    }
+    return this.api.post<any>('/api/academic/classes', { name, sequenceNo: row?.sequenceNo || 0 }).pipe(
+      tap((created) => {
+        const id = created?.id ? String(created.id) : '';
+        const saved = String(created?.name || name);
+        this.className = saved;
+        const next = { id, name: saved, suggested: false, sequenceNo: row?.sequenceNo || 0 };
+        this.classes = this.classes.some((item) => item.name === name || item.name === saved)
+          ? this.classes.map((item) => (item.name === name || item.name === saved ? next : item))
+          : [...this.classes, next];
+      }),
+      map(() => undefined),
+      catchError(() => {
+        this.className = name;
+        return of(undefined);
+      }),
+    );
+  }
+
+  private prepareSection(): Observable<void> {
+    const name = this.resolvedSection();
+    if (!name) {
+      return of(undefined);
+    }
+    const classRow = this.classes.find((item) => item.name === this.resolvedClass());
+    const existing = this.sections.find(
+      (item) =>
+        item.name.trim().toLowerCase() === name.toLowerCase() &&
+        (!classRow?.id || !item.classId || item.classId === classRow.id),
+    );
+    if (existing?.id) {
+      this.section = existing.name;
+      return of(undefined);
+    }
+    if (!classRow?.id) {
+      this.section = name;
+      return of(undefined);
+    }
+    return this.api.post<any>('/api/academic/sections', { name, classId: classRow.id }).pipe(
+      tap((created) => {
+        this.section = String(created?.name || name);
+        this.sections = [
+          ...this.sections,
+          { id: created?.id ? String(created.id) : '', name: this.section, classId: classRow.id },
+        ];
+      }),
+      map(() => undefined),
+      catchError(() => {
+        this.section = name;
+        return of(undefined);
+      }),
+    );
+  }
+
   private named(rows: any[]): NamedRow[] {
     return (rows || [])
       .map((row) => ({
-        id: String(row.id || ''),
+        id: row?.id ? String(row.id) : '',
         name: String(row.name || row.className || '').trim(),
+        suggested: row?.suggested === true || row?.status === 'SUGGESTED',
+        sequenceNo: Number(row?.sequenceNo) || 0,
       }))
       .filter((row) => row.name);
   }

@@ -24,6 +24,12 @@
     <!-- Classes -->
     <article class="panel">
       <h2>Classes</h2>
+      <p class="muted">Admission uses this list. Deactivate a class to hide it. Grade 7 and Class 7 are the same class.</p>
+      <div class="form-actions" *ngIf="canManage">
+        <button type="button" class="btn ghost" (click)="addStandardClasses()" [disabled]="busy">
+          Add missing standard classes
+        </button>
+      </div>
       <p class="panel-err" *ngIf="classesError">{{ classesError }}</p>
       <ul class="list" *ngIf="classes.length; else noClasses">
         <li
@@ -33,10 +39,13 @@
         >
           <div class="row-main">
             <strong>{{ c.name }}</strong>
-            <span class="muted">{{ c.code || '—' }} · seq {{ c.sequenceNo }}</span>
+            <span class="muted">{{ c.code || '—' }} · seq {{ c.sequenceNo }}<span *ngIf="c.status === 'INACTIVE'"> · inactive</span></span>
           </div>
           <div class="row-actions" *ngIf="canManage" (click)="$event.stopPropagation()">
             <button type="button" class="linkish" (click)="startEditClass(c)">Edit</button>
+            <button type="button" class="linkish" (click)="setClassStatus(c)">
+              {{ c.status === 'INACTIVE' ? 'Activate' : 'Deactivate' }}
+            </button>
             <button type="button" class="linkish danger" (click)="deleteClass(c.id)">Delete</button>
           </div>
         </li>
