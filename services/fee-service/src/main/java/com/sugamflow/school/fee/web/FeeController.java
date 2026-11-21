@@ -5,6 +5,7 @@ import com.sugamflow.school.common.api.PageResult;
 import com.sugamflow.school.fee.service.FeeClearanceService;
 import com.sugamflow.school.fee.service.FeeCollectionService;
 import com.sugamflow.school.fee.service.FeeDueReminderService;
+import com.sugamflow.school.fee.service.OutstandingFeeFigures;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -44,6 +45,12 @@ public class FeeController {
   @GetMapping("/defaulters")
   public ApiResponse<List<Map<String, Object>>> defaulters() {
     return ApiResponse.ok(service.defaulters());
+  }
+
+  /** Named Ask query. Same rows as the fee desk, without any other figure. */
+  @GetMapping("/ask/outstanding-fees")
+  public ApiResponse<List<Map<String, Object>>> outstandingFees() {
+    return ApiResponse.ok(OutstandingFeeFigures.fromDesk(service.defaulters()));
   }
 
   @GetMapping("/exceptions")
