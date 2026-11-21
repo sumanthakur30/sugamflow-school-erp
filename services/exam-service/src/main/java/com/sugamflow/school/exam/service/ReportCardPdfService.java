@@ -30,20 +30,63 @@ public class ReportCardPdfService {
    * @param schoolName tenant/org display name for the masthead.
    */
   public byte[] render(Map<String, Object> card, String schoolName) {
-    if (card == null) {
+    requireStudent(card);
+    return renderCards(List.of(card), schoolName);
+  }
+
+  /** One page per student whose marks are complete. A missing mark is not printed as zero. */
+  public byte[] renderClass(Map<String, Object> sectionReport, String schoolName) {
+    if (sectionReport == null) {
       throw new ExamException("NOT_FOUND", "No report card to render");
     }
     @SuppressWarnings("unchecked")
-    Map<String, Object> student = (Map<String, Object>) card.get("student");
-    if (student == null) {
-      throw new ExamException("VALIDATION", "Report card has no student payload");
+    List<Map<String, Object>> students = (List<Map<String, Object>>) sectionReport.get("students");
+    List<Map<String, Object>> cards = new java.util.ArrayList<>();
+    if (students != null) {
+      for (Map<String, Object> student : students) {
+        if (!Boolean.TRUE.equals(student.get("complete"))) {
+          continue;
+        }
+        Map<String, Object> card = new java.util.LinkedHashMap<>();
+        card.put("termKey", sectionReport.get("termKey"));
+        card.put("sectionLabel", sectionReport.get("sectionLabel"));
+        card.put("student", student);
+        cards.add(card);
+      }
     }
+    if (cards.isEmpty()) {
+      throw new ExamException(
+          "VALIDATION", "No complete report card. Missing marks stay off the print.");
+    }
+    return renderCards(cards, schoolName);
+  }
 
+  private byte[] renderCards(List<Map<String, Object>> cards, String schoolName) {
     Document doc = new Document(PageSize.A4, 42, 42, 48, 42);
     ByteArrayOutputStream out = new ByteArrayOutputStream();
     try {
       PdfWriter.getInstance(doc, out);
       doc.open();
+      boolean first = true;
+      for (Map<String, Object> card : cards) {
+        if (!first) {
+          doc.newPage();
+        }
+        first = false;
+        writeCard(doc, card, schoolName);
+      }
+      doc.close();
+      return out.toByteArray();
+    } catch (ExamException ex) {
+      throw ex;
+    } catch (Exception ex) {
+      throw new ExamException("PDF_ERROR", "Failed to render report card PDF: " + ex.getMessage());
+    }
+  }
+
+  private void writeCard(Document doc, Map<String, Object> card, String schoolName) throws Exception {
+    @SuppressWarnings("unchecked")
+    Map<String, Object> student = (Map<String, Object>) card.get("student");
 
       Font titleFont = FontFactory.getFont(FontFactory.HELVETICA_BOLD, 18, HEADER_BG);
       Font subFont = FontFactory.getFont(FontFactory.HELVETICA, 11, Color.DARK_GRAY);
@@ -139,13 +182,14 @@ public class ReportCardPdfService {
               FontFactory.getFont(FontFactory.HELVETICA_OBLIQUE, 8, Color.GRAY));
       note.setSpacingBefore(28f);
       doc.add(note);
+  }
 
-      doc.close();
-      return out.toByteArray();
-    } catch (ExamException ex) {
-      throw ex;
-    } catch (Exception ex) {
-      throw new ExamException("PDF_ERROR", "Failed to render report card PDF: " + ex.getMessage());
+  private static void requireStudent(Map<String, Object> card) {
+    if (card == null) {
+      throw new ExamException("NOT_FOUND", "No report card to render");
+    }
+    if (!(card.get("student") instanceof Map<?, ?>)) {
+      throw new ExamException("VALIDATION", "Report card has no student payload");
     }
   }
 

@@ -36,6 +36,8 @@ import {
   paymentModeCards,
   paymentModeSlices,
   pendingByClass,
+  receiptAmount as collectionReceiptAmount,
+  todayReceipts,
 } from '../../shared/finance-ui/finance-metrics';
 
 export type FinanceTab =
@@ -1355,6 +1357,14 @@ export class FinanceComponent implements OnInit, OnDestroy {
     if (days >= 30) return 'overdue';
     if (days >= 7) return 'late';
     return 'ok';
+  }
+
+  todayReceiptRows(): any[] {
+    return todayReceipts(this.collections);
+  }
+
+  receiptAmount(row: any): number {
+    return collectionReceiptAmount(row);
   }
 
   recentApproved(): any[] {
