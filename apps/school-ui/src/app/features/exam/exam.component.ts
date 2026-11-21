@@ -1,7 +1,7 @@
 import { Component, HostListener, OnDestroy, OnInit, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { ActivatedRoute, Router } from '@angular/router';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { forkJoin, of, Subscription } from 'rxjs';
 import { catchError } from 'rxjs/operators';
 import { ApiService, PageResult } from '../../core/api.service';
@@ -34,6 +34,7 @@ import { ExamDateSheetComponent } from './date-sheet.component';
   imports: [
     CommonModule,
     FormsModule,
+    RouterLink,
     ListToolbarComponent,
     ListPagerComponent,
     StudentLookupComponent,

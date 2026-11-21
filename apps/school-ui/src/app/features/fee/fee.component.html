@@ -385,16 +385,12 @@
   } @else {
     <header class="page-head list-head">
       <div>
-        <h2>Fee Collection</h2>
-        <p>Search collections, review dues, and collect — same layout as Orders.</p>
+        <h2>Fees</h2>
+        <p>Take a payment, then review earlier receipts below.</p>
       </div>
-      @if (featureEnabled && !loading) {
-        <div class="head-actions">
-          <button type="button" class="secondary" (click)="openHistory()">Student history</button>
-          <button type="button" (click)="openForm()">+ New Collection</button>
-        </div>
-      }
     </header>
+
+    <sf-fee-counter (collected)="loadCollections()" />
 
     @if (error) {
       <p class="error panel" role="alert">{{ error }}</p>
@@ -578,8 +574,8 @@
                     >
                       {{ studentName(row) }}
                     </button>
-                    @if (answer(row, 'mobile') !== '—') {
-                      <div class="cell-sub">{{ answer(row, 'mobile') }}</div>
+                    @if (answer(row, 'admissionNo') !== '—') {
+                      <div class="cell-sub">{{ answer(row, 'admissionNo') }}</div>
                     }
                     <div class="cell-sub mono order-order-number">
                       {{ collectionIdShort(row) }}
@@ -592,13 +588,11 @@
                       (click)="select(row); $event.stopPropagation()"
                     >
                       <span class="items-preview__primary">{{ answer(row, 'feeHead') }}</span>
-                      @if (answer(row, 'paymentMode') !== '—') {
-                        <span class="cell-sub">{{ answer(row, 'paymentMode') }}</span>
-                      }
+                      <span class="cell-sub">{{ paymentModeText(row) }}</span>
                     </button>
                   </td>
                   <td class="muted-cell text-nowrap">
-                    {{ formatWhen(row.updatedAt || row.createdAt) }}
+                    {{ paymentWhen(row) }}
                   </td>
                   <td class="text-nowrap">
                     <span class="badge badge-progress order-type-badge">Collection</span>
@@ -611,7 +605,12 @@
                       }
                     </div>
                   </td>
-                  <td class="money text-end">{{ formatMoney(row.answers?.amount) }}</td>
+                  <td class="money text-end">
+                    {{ formatMoney(row.answers?.amount) }}
+                    @if (netAmount(row) != null) {
+                      <div class="cell-sub">Net {{ formatMoney(netAmount(row)) }}</div>
+                    }
+                  </td>
                   <td class="col-actions order-col-actions" (click)="$event.stopPropagation()">
                     <div class="order-actions-inline">
                       <button type="button" class="tiny order-action-btn" (click)="select(row)">
@@ -647,6 +646,13 @@
                               (click)="editCollection(moreMenuRow)"
                             >
                               Edit
+                            </button>
+                            <button
+                              type="button"
+                              role="menuitem"
+                              (click)="downloadReceiptFile(moreMenuRow, $event)"
+                            >
+                              Download receipt
                             </button>
                             <button
                               type="button"

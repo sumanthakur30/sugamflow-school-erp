@@ -1,12 +1,11 @@
 import { Component, HostListener, OnInit, inject } from '@angular/core';
-import { AsyncPipe, NgStyle } from '@angular/common';
+import { AsyncPipe } from '@angular/common';
 import { NavigationEnd, Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { AuthSessionService } from '../core/auth-session.service';
 import { EntitlementsService } from '../core/entitlements.service';
 import { OfflineQueueService } from '../core/offline-queue.service';
 import { ProvisionService } from '../core/provision.service';
 import { ThemeService } from '../core/theme.service';
-import { TenantContextService } from '../core/tenant-context.service';
 import { AdmissionBootstrapService } from '../core/admission-bootstrap.service';
 import { ModuleBootstrapService } from '../core/module-bootstrap.service';
 import { BranchSwitcherComponent } from '../features/branches/branch-switcher.component';
@@ -14,7 +13,10 @@ import { StudentGlobalSearchComponent } from './student-global-search.component'
 import { ApiService } from '../core/api.service';
 import { applySavedMenu, SavedMenuNode } from './menu-drive';
 import { NavGroup, NavItem, SIDE_NAV, TOP_NAV } from './nav-catalog';
-import { filter, switchMap, timer } from 'rxjs';
+import { buildSimpleNav } from './simple-nav';
+import { InstitutionPresetService } from '../core/institution-preset.service';
+import { roleKey, roleLabel as displayRole } from '../core/role-label';
+import { filter, switchMap } from 'rxjs';
 
 
 /**
@@ -31,7 +33,6 @@ import { filter, switchMap, timer } from 'rxjs';
     RouterLink,
     RouterLinkActive,
     AsyncPipe,
-    NgStyle,
     BranchSwitcherComponent,
     StudentGlobalSearchComponent,
   ],
@@ -43,10 +44,10 @@ export class ShellComponent implements OnInit {
   private readonly router = inject(Router);
   private readonly entitlements = inject(EntitlementsService);
   private readonly provision = inject(ProvisionService);
-  private readonly tenantContext = inject(TenantContextService);
   private readonly admissionBootstrap = inject(AdmissionBootstrapService);
   private readonly modules = inject(ModuleBootstrapService);
   private readonly api = inject(ApiService);
+  private readonly presets = inject(InstitutionPresetService);
   readonly themeService = inject(ThemeService);
   readonly offlineQueue = inject(OfflineQueueService);
 
@@ -61,6 +62,8 @@ export class ShellComponent implements OnInit {
 
   topGroups: NavGroup[] = [...this.topCatalog];
   sideGroups: NavGroup[] = [...this.sideCatalog];
+  primaryLinks: NavItem[] = [];
+  moreLinks: NavItem[] = [];
 
   openTopId: string | null = null;
   dropdownStyle: Record<string, string> = {};
@@ -79,6 +82,8 @@ export class ShellComponent implements OnInit {
           this.themeService.loadAuthenticated().subscribe();
         }
       });
+    this.presets.load();
+    this.presets.preset$.subscribe(() => this.refreshNav());
     this.entitlements.load().subscribe(() => this.refreshNav());
     this.api.get<SavedMenuNode[]>('/api/config/menus').subscribe({
       next: (menus) => {
@@ -91,23 +96,6 @@ export class ShellComponent implements OnInit {
       this.closeTopMenu();
       this.mobileNavOpen = false;
       this.ensureActiveSideExpanded();
-    });
-    // Prefetch module bootstraps after campus sync — defer so dashboard KPIs get connections first.
-    this.tenantContext.whenCampusReady().subscribe(() => {
-      timer(2000).subscribe(() => {
-        this.admissionBootstrap.warm();
-        this.modules.warm([
-          '/api/fee/bootstrap',
-          '/api/fee/finance/bootstrap',
-          '/api/student/bootstrap',
-          '/api/student/directory/bootstrap',
-          '/api/staff/directory/bootstrap',
-          '/api/payroll/bootstrap',
-          '/api/attendance/bootstrap',
-          '/api/exam/bootstrap',
-          '/api/library/bootstrap',
-        ]);
-      });
     });
   }
 
@@ -136,7 +124,7 @@ export class ShellComponent implements OnInit {
   }
 
   refreshNav(): void {
-    const role = (this.auth.getRole() || '').toUpperCase();
+    const role = roleKey(this.auth.getRole());
     const portalOnly = role === 'PARENT' || role === 'STUDENT';
     const teacherPortal = role === 'TEACHER';
 
@@ -147,7 +135,7 @@ export class ShellComponent implements OnInit {
       }
       if (!this.entitlements.isEnabled(item.feature)) return false;
       if (item.roles?.length) {
-        if (!item.roles.map((r) => r.toUpperCase()).includes(role)) {
+        if (!item.roles.map((r) => roleKey(r)).includes(role)) {
           return false;
         }
       }
@@ -159,6 +147,9 @@ export class ShellComponent implements OnInit {
 
     this.topGroups = applySavedMenu(this.topCatalog, this.savedMenus, keep);
     this.sideGroups = applySavedMenu(this.sideCatalog, this.savedMenus, keep);
+    const simple = buildSimpleNav(this.presets.current(), [...this.topGroups, ...this.sideGroups], keep);
+    this.primaryLinks = simple.primary;
+    this.moreLinks = simple.more;
 
     this.ensureActiveSideExpanded();
   }
@@ -330,24 +321,7 @@ export class ShellComponent implements OnInit {
   }
 
   roleLabel(): string {
-    const raw = (this.auth.getRole() || '').toUpperCase();
-    const labels: Record<string, string> = {
-      SHOP_OWNER: 'School Owner',
-      SUPER_ADMIN: 'Super Admin',
-      ADMIN: 'Admin',
-      PRINCIPAL: 'Principal',
-      TEACHER: 'Teacher',
-      CLASS_TEACHER: 'Class Teacher',
-      ACCOUNTANT: 'Accountant',
-      RECEPTION: 'Reception',
-      PARENT: 'Parent',
-      STUDENT: 'Student',
-      STAFF: 'Staff',
-    };
-    if (labels[raw]) {
-      return labels[raw];
-    }
-    return raw ? raw.replace(/_/g, ' ') : 'Staff';
+    return displayRole(this.auth.getRole());
   }
 
   onBranchChanged(): void {

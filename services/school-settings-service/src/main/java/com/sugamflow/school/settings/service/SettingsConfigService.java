@@ -507,6 +507,7 @@ public class SettingsConfigService {
     boolean changed = false;
     changed |= putIfAbsent(settings, "formKey", "fee_collection");
     changed |= putIfAbsent(settings, "workflowKey", "fee");
+    changed |= putIfAbsent(settings, "requireCollectionApproval", false);
     changed |= putIfAbsent(settings, "requiredFeatureFlag", "FEATURE_FEE");
     changed |= putIfAbsent(settings, "feeReceiptTemplateKey", "fee_receipt");
     changed |= putIfAbsent(settings, "notifyOnApprove", true);

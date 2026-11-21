@@ -1,0 +1,245 @@
+<section class="panel fee-desk" aria-label="Collect fee">
+  <h3>Collect fee</h3>
+  <p class="muted">Choose the fee heads, take a full or part payment, and print the receipt.</p>
+  @if (error) {
+    <p class="error" role="alert">{{ error }}</p>
+  }
+  @if (status) {
+    <p class="status" role="status">{{ status }}</p>
+  }
+
+  <sf-student-lookup label="Student" (studentSelected)="onStudent($event)" />
+
+  @if (student) {
+    <section class="desk-section" aria-label="Student information">
+      <h4>Student information</h4>
+      <dl class="facts">
+        <div>
+          <dt>Student name</dt>
+          <dd>{{ student.fullName || '—' }}</dd>
+        </div>
+        <div>
+          <dt>Admission number</dt>
+          <dd>{{ student.admissionNo || '—' }}</dd>
+        </div>
+        <div>
+          <dt>Class / section</dt>
+          <dd>{{ student.classSection || '—' }}</dd>
+        </div>
+        <div>
+          <dt>Roll number</dt>
+          <dd>{{ student.rollNo || '—' }}</dd>
+        </div>
+        <div>
+          <dt>Current outstanding balance</dt>
+          <dd>{{ demandOutstanding == null ? '—' : formatInr(demandOutstanding) }}</dd>
+        </div>
+      </dl>
+      @if (demandNote) {
+        <p class="muted">{{ demandNote }}</p>
+      }
+    </section>
+
+    <section class="desk-section" aria-label="Fee details">
+      <h4>Fee details</h4>
+      <div class="grid two">
+        <label>
+          Fee category
+          <input
+            [(ngModel)]="headQuery"
+            name="feeSearch"
+            type="search"
+            placeholder="Search fee heads"
+            autocomplete="off"
+          />
+        </label>
+        <label>
+          Academic session
+          <input [value]="sessionId" name="academicSession" readonly />
+        </label>
+      </div>
+      <div class="head-list" role="listbox" aria-label="Fee heads" aria-multiselectable="true">
+        @if (!heads.length) {
+          <p class="muted">No fee heads are configured yet.</p>
+        } @else if (!filteredHeads.length) {
+          <p class="muted">No fee head matches that search.</p>
+        } @else {
+          @for (head of filteredHeads; track head.key) {
+            <label class="head-option" [class.is-on]="isSelected(head.key)">
+              <input
+                type="checkbox"
+                [checked]="isSelected(head.key)"
+                (change)="toggleHead(head)"
+              />
+              <span class="head-option__name">{{ head.label }}</span>
+              <span class="head-option__amount">{{ amountHint(head) }}</span>
+            </label>
+          }
+        }
+      </div>
+      @if (canConfigureHeads) {
+        <p class="head-actions">
+          <button type="button" class="secondary" (click)="addingHead = !addingHead">
+            {{ addingHead ? 'Close' : 'Add fee head' }}
+          </button>
+        </p>
+        @if (addingHead) {
+          <div class="grid two">
+            <label>
+              Fee head name
+              <input
+                [(ngModel)]="newHeadLabel"
+                name="newHeadLabel"
+                placeholder="Tuition, Admission, Transport…"
+              />
+            </label>
+            <label>
+              Default amount
+              <input [(ngModel)]="newHeadAmount" name="newHeadAmount" type="number" min="0" step="0.01" />
+            </label>
+          </div>
+          <p>
+            <button type="button" (click)="saveHead()" [disabled]="savingHead">
+              {{ savingHead ? 'Saving…' : 'Save fee head' }}
+            </button>
+          </p>
+        }
+      }
+      @if (selected.length) {
+        <div class="line-table">
+          @for (line of selected; track line.key) {
+            <label>
+              {{ line.label }}
+              <input
+                [(ngModel)]="line.amount"
+                [name]="'feeLine' + line.key"
+                type="number"
+                min="0.01"
+                step="0.01"
+                (ngModelChange)="markCustom(line, $event)"
+              />
+            </label>
+          }
+        </div>
+      }
+      <div class="grid two">
+        <label class="span-2">
+          Fee description
+          <input [(ngModel)]="description" name="feeDescription" placeholder="Optional note for this bill" />
+        </label>
+        <label>
+          Discount
+          <input [(ngModel)]="discount" name="discount" type="number" min="0" step="0.01" (ngModelChange)="touch()" />
+        </label>
+        <label>
+          Late fee
+          <input [(ngModel)]="lateFee" name="lateFee" type="number" min="0" step="0.01" (ngModelChange)="touch()" />
+        </label>
+      </div>
+    </section>
+
+    <section class="desk-section" aria-label="Payment details">
+      <h4>Payment details</h4>
+      <p class="muted">Add a row for each mode when one receipt is paid partly in cash and partly by another mode.</p>
+      @for (row of payRows; track $index) {
+        <div class="pay-row">
+          <label>
+            Payment mode
+            <select [(ngModel)]="row.mode" [name]="'payMode' + $index" (ngModelChange)="touch()">
+              @for (mode of modes; track mode.value) {
+                <option [value]="mode.value">{{ mode.label }}</option>
+              }
+            </select>
+          </label>
+          <label>
+            Amount
+            <input
+              [(ngModel)]="row.amount"
+              [name]="'payAmount' + $index"
+              type="number"
+              min="0"
+              step="0.01"
+              (ngModelChange)="touch()"
+            />
+          </label>
+          <label>
+            Transaction / reference
+            <input
+              [(ngModel)]="row.reference"
+              [name]="'payRef' + $index"
+              [placeholder]="needsReference(row.mode) ? 'Required' : 'Optional'"
+            />
+          </label>
+          <button type="button" class="secondary" (click)="removePayRow($index)">Remove</button>
+        </div>
+      }
+      <p class="head-actions">
+        <button type="button" class="secondary" (click)="addPayRow()">Add payment</button>
+        <button type="button" class="secondary" (click)="payFullBalance()" [disabled]="balanceDue <= 0">
+          Pay full balance
+        </button>
+      </p>
+      <div class="grid two">
+        <label>
+          Payment date
+          <input [(ngModel)]="paymentDate" name="paymentDate" type="date" />
+        </label>
+        <label>
+          Remarks
+          <input [(ngModel)]="remarks" name="remarks" />
+        </label>
+      </div>
+    </section>
+
+    <section class="desk-section summary" aria-label="Payment summary">
+      <h4>Payment summary</h4>
+      <dl class="facts">
+        <div>
+          <dt>Total fee amount</dt>
+          <dd>{{ formatInr(feeAmount) }}</dd>
+        </div>
+        <div>
+          <dt>Discount</dt>
+          <dd>{{ formatInr(discountAmount) }}</dd>
+        </div>
+        <div>
+          <dt>Late fee</dt>
+          <dd>{{ formatInr(lateFeeAmount) }}</dd>
+        </div>
+        <div>
+          <dt>Net payable</dt>
+          <dd>{{ formatInr(netPayable) }}</dd>
+        </div>
+        <div>
+          <dt>Previously paid</dt>
+          <dd>{{ balanceReady ? formatInr(previouslyPaid) : '…' }}</dd>
+        </div>
+        <div>
+          <dt>Current payment</dt>
+          <dd>{{ formatInr(currentPayment) }}</dd>
+        </div>
+        <div>
+          <dt>Remaining balance</dt>
+          <dd>{{ formatInr(remaining) }}</dd>
+        </div>
+        <div>
+          <dt>Status</dt>
+          <dd><span [class]="paymentStatus === 'PAID' ? 'badge badge-ok' : paymentStatus === 'PENDING' ? 'badge' : 'badge badge-progress'">{{ paymentStatus }}</span></dd>
+        </div>
+      </dl>
+    </section>
+
+    <p class="actions">
+      <button type="button" (click)="collect()" [disabled]="saving || !balanceReady">
+        {{ saving ? 'Saving…' : 'Save payment' }}
+      </button>
+      @if (receiptId) {
+        <button type="button" class="secondary" (click)="printReceipt()">Print receipt</button>
+        <button type="button" class="secondary" (click)="downloadReceipt()">Download receipt</button>
+      }
+    </p>
+    @if (receiptNo) {
+      <p class="muted">Receipt {{ receiptNo }}. The row below keeps this installment. Collect the rest later on a new receipt.</p>
+    }
+  }
+</section>

@@ -2,6 +2,7 @@ import { Component, OnInit, inject } from '@angular/core';
 import { AsyncPipe } from '@angular/common';
 import { ActivatedRoute, Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { AuthSessionService } from '../../core/auth-session.service';
+import { roleKey } from '../../core/role-label';
 import { ThemeService } from '../../core/theme.service';
 import { ApiService } from '../../core/api.service';
 import { PortalContextService } from './portal-context.service';
@@ -59,7 +60,7 @@ export class PortalShellComponent implements OnInit {
         }
         this.title = boot.title || this.portalKey;
         this.subtitle = boot.subtitle || '';
-        this.nav = boot.nav || [];
+        this.nav = this.dailyNav(boot.nav || []);
         // Do not override JWT role — gateway ignores client X-Auth-Role for school APIs.
         // Keep UI destination only; relationship scoping uses the signed-in account role.
         this.portalCtx.set(this.portalKey, boot);
@@ -94,6 +95,29 @@ export class PortalShellComponent implements OnInit {
     this.router.navigateByUrl('/', { skipLocationChange: true }).then(() => {
       this.router.navigateByUrl(url);
     });
+  }
+
+  showAdminLink(): boolean {
+    const role = roleKey(this.auth.getRole());
+    return !['PARENT', 'GUARDIAN', 'STUDENT'].includes(role);
+  }
+
+  private dailyNav(
+    nav: Array<{ id: string; label: string; route: string }>,
+  ): Array<{ id: string; label: string; route: string }> {
+    const parent = new Set(['home', 'attendance', 'fees', 'exams', 'report-cards', 'notices', 'homework']);
+    const teacher = new Set([
+      'home',
+      'students',
+      'attendance',
+      'gradebook',
+      'report-cards',
+      'notices',
+      'timetable',
+      'homework',
+    ]);
+    const keep = this.portalKey === 'teacher' ? teacher : parent;
+    return nav.filter((item) => keep.has(item.id));
   }
 
   logout(event?: Event): void {

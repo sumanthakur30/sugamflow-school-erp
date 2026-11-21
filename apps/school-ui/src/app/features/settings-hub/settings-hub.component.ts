@@ -3,6 +3,7 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { EntitlementsService } from '../../core/entitlements.service';
+import { InstitutionPreset, InstitutionPresetService, isInstitutionPreset } from '../../core/institution-preset.service';
 import { PlanStatus, planStatus } from './settings-hub.util';
 
 interface SettingsCard {
@@ -35,22 +36,20 @@ interface SetupRow {
 })
 export class SettingsHubComponent implements OnInit {
   private readonly entitlements = inject(EntitlementsService);
+  private readonly presets = inject(InstitutionPresetService);
 
   query = '';
   loadState: 'ready' | 'unavailable' | 'loading' = 'loading';
   flags: Record<string, boolean> | null = null;
+  preset: InstitutionPreset = 'small';
+  presetStatus = '';
 
   readonly checklist: SetupRow[] = [
+    { label: 'School name, session, classes, and one fee', path: '/admin/settings/setup' },
     { label: 'Students', feature: 'FEATURE_STUDENT_MASTER', path: '/admin/students' },
-    { label: 'Admission number and class fee', path: '/admin/settings/setup' },
-    { label: 'Admissions', feature: 'FEATURE_ADMISSION', path: '/admin/admission' },
-    { label: 'Academic structure', path: '/admin/academic' },
     { label: 'Fees', feature: 'FEATURE_FEE', path: '/admin/fee' },
     { label: 'Attendance', feature: 'FEATURE_ATTENDANCE', path: '/admin/attendance' },
-    { label: 'Payroll', feature: 'FEATURE_PAYROLL', path: '/admin/payroll' },
-    { label: 'ID cards and certificates', feature: 'FEATURE_REPORT_BUILDER', path: '/admin/reports' },
-    { label: 'Forms', feature: 'FEATURE_FORM_BUILDER', path: '/admin/forms' },
-    { label: 'Workflows', feature: 'FEATURE_WORKFLOW_BUILDER', path: '/admin/workflows' },
+    { label: 'Exams', feature: 'FEATURE_EXAM', path: '/admin/exam' },
   ];
 
   readonly cards: SettingsCard[] = [
@@ -74,6 +73,11 @@ export class SettingsHubComponent implements OnInit {
   ];
 
   ngOnInit(): void {
+    this.preset = this.presets.current();
+    this.presets.load();
+    this.presets.preset$.subscribe((preset) => {
+      this.preset = preset;
+    });
     const current = this.entitlements.current();
     if (current?.loadState === 'ready' && current.featureFlags) {
       this.flags = current.featureFlags;
@@ -92,6 +96,29 @@ export class SettingsHubComponent implements OnInit {
 
   cardsIn(group: string): SettingsCard[] {
     return this.visibleCards().filter((card) => card.group === group);
+  }
+
+  savePreset(value: string): void {
+    if (!isInstitutionPreset(value)) {
+      return;
+    }
+    const preset = value;
+    this.presetStatus = '';
+    this.presets.save(preset).subscribe({
+      next: () => {
+        this.presetStatus =
+          preset === 'small'
+            ? 'Small school. Transport, library, payroll, and campuses stay out of the menu.'
+            : preset === 'large'
+              ? 'Large school. Those modules show when this subscription includes them.'
+              : preset === 'college'
+                ? 'College. Programs and semesters use classes and sections. A school menu does not show them.'
+                : 'Coaching. Exams are labeled Tests. Board tools stay out of the daily menu.';
+      },
+      error: () => {
+        this.presetStatus = 'The choice was kept on this browser. It could not be saved for the whole school.';
+      },
+    });
   }
 
   statusOf(feature?: string): PlanStatus {
