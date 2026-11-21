@@ -76,15 +76,17 @@
     </div>
 
     <nav class="transport-tabs" aria-label="Transport sections" role="tablist">
-      <button
-        type="button"
-        role="tab"
-        [attr.aria-selected]="view === 'desk'"
-        [class.active]="view === 'desk'"
-        (click)="selectView('desk')"
-      >
-        Fleet desk
-      </button>
+      @if (gpsEnabled) {
+        <button
+          type="button"
+          role="tab"
+          [attr.aria-selected]="view === 'desk'"
+          [class.active]="view === 'desk'"
+          (click)="selectView('desk')"
+        >
+          Live location
+        </button>
+      }
       <button
         type="button"
         role="tab"
@@ -152,6 +154,10 @@
               <input [(ngModel)]="routeDraft.vehicleNo" name="vehicleNo" placeholder="e.g. BR 01 AB 1234" />
             </label>
             <label>
+              Stops
+              <input [(ngModel)]="routeDraft.stops" name="stops" placeholder="Campus, Market, Station" />
+            </label>
+            <label>
               Capacity
               <input type="number" min="1" [(ngModel)]="routeDraft.capacity" name="capacity" />
             </label>
@@ -214,7 +220,7 @@
                 <tr>
                   <td>
                     <span class="cell-strong">{{ route.routeName }}</span>
-                    <span class="cell-sub">{{ route.routeKey }}</span>
+                    <span class="cell-sub">{{ route.stops || route.routeKey }}</span>
                   </td>
                   <td>{{ route.vehicleNo || 'Not assigned' }}</td>
                   <td>{{ route.capacity }} seats</td>

@@ -3,6 +3,7 @@ import { Component, OnDestroy, OnInit, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Subscription } from 'rxjs';
 import { ApiService, PageResult } from '../../core/api.service';
+import { EntitlementsService } from '../../core/entitlements.service';
 import { TenantContextService } from '../../core/tenant-context.service';
 import { ModuleBootstrapService } from '../../core/module-bootstrap.service';
 import {
@@ -30,6 +31,7 @@ type TransportView = 'desk' | 'routes' | 'assign' | 'assignments' | 'workflow';
 })
 export class TransportComponent implements OnInit, OnDestroy {
   private readonly api = inject(ApiService);
+  private readonly entitlements = inject(EntitlementsService);
   private readonly tenantContext = inject(TenantContextService);
   private readonly modules = inject(ModuleBootstrapService);
   private campusReadySub?: Subscription;
@@ -38,7 +40,8 @@ export class TransportComponent implements OnInit, OnDestroy {
   error = '';
   statusMsg = '';
   featureEnabled = false;
-  view: TransportView = 'desk';
+  gpsEnabled = false;
+  view: TransportView = 'routes';
   formKey = 'transport_route';
   workflowKey = 'transport';
   fields: Array<{ key: string; label: string; type: string; mandatory: boolean }> = [];
@@ -52,7 +55,7 @@ export class TransportComponent implements OnInit, OnDestroy {
   routes: any[] = [];
   assignments: any[] = [];
   showRouteForm = false;
-  routeDraft = { routeKey: 'route_a', routeName: '', vehicleNo: '', capacity: 40 };
+  routeDraft = { routeKey: 'route_a', routeName: '', vehicleNo: '', stops: '', capacity: 40 };
   assignDraft = {
     routeId: '',
     studentId: '',
@@ -97,6 +100,17 @@ export class TransportComponent implements OnInit, OnDestroy {
   };
 
   ngOnInit(): void {
+    const applyGps = (flags?: Record<string, boolean>) => {
+      this.gpsEnabled = flags?.['FEATURE_GPS'] === true;
+      if (!this.gpsEnabled && this.view === 'desk') {
+        this.view = 'routes';
+      }
+    };
+    const current = this.entitlements.current();
+    if (current?.featureFlags) {
+      applyGps(current.featureFlags);
+    }
+    this.entitlements.load().subscribe((loaded) => applyGps(loaded.featureFlags));
     this.campusReadySub = this.tenantContext.whenCampusReady().subscribe(() => this.reload());
   }
 
@@ -139,6 +153,9 @@ export class TransportComponent implements OnInit, OnDestroy {
   }
 
   selectView(view: TransportView): void {
+    if (view === 'desk' && !this.gpsEnabled) {
+      return;
+    }
     this.view = view;
     this.error = '';
     this.statusMsg = '';
@@ -210,7 +227,7 @@ export class TransportComponent implements OnInit, OnDestroy {
       next: () => {
         this.submitting = false;
         this.statusMsg = `Route “${this.routeDraft.routeName}” saved.`;
-        this.routeDraft = { routeKey: 'route_a', routeName: '', vehicleNo: '', capacity: 40 };
+        this.routeDraft = { routeKey: 'route_a', routeName: '', vehicleNo: '', stops: '', capacity: 40 };
         this.showRouteForm = false;
         this.loadRoutes();
       },
