@@ -5,6 +5,7 @@ import { Router, RouterLink } from '@angular/router';
 import { Subscription, forkJoin, of } from 'rxjs';
 import { catchError } from 'rxjs/operators';
 import { ApiService } from '../../core/api.service';
+import { DailyLanguageService } from '../../core/daily-language.service';
 import { TenantContextService } from '../../core/tenant-context.service';
 import { isDemoOrganization } from '../../core/tenant-context.util';
 import { ModuleBootstrapService } from '../../core/module-bootstrap.service';
@@ -75,6 +76,7 @@ export class FinanceComponent implements OnInit, OnDestroy {
   private readonly router = inject(Router);
   private readonly tenantContext = inject(TenantContextService);
   private readonly modules = inject(ModuleBootstrapService);
+  readonly language = inject(DailyLanguageService);
   private campusReadySub?: Subscription;
 
   loading = true;

@@ -4,6 +4,9 @@
       <h2>{{ title }}</h2>
       <p>{{ description }}</p>
     </div>
+    <div class="head-actions">
+      <button type="button" class="secondary" (click)="language.set('en')">{{ language.t('english') }}</button>
+      <button type="button" class="secondary" (click)="language.set('hi')">{{ language.t('hindi') }}</button>
     <button
       type="button"
       class="secondary refresh-button"
@@ -12,17 +15,18 @@
       aria-label="Refresh records"
     >
       <span aria-hidden="true">↻</span>
-      {{ loading ? 'Refreshing…' : 'Refresh' }}
+      {{ loading ? language.t('refreshing') : language.t('refresh') }}
     </button>
+    </div>
   </div>
 
   @if (sectionKey === 'attendance') {
-    <p class="panel">These are the marks the teacher submitted. A roll that is still a draft is not shown.</p>
+    <p class="panel">{{ language.t('attendanceNote') }}</p>
   }
 
   @if (sectionKey === 'fees') {
-    <p class="panel">Pay an open due here. After the school records the payment, the receipt stays on this page.</p>
-    <p class="due-total">Due now {{ dueTotalLabel }}</p>
+    <p class="panel">{{ language.t('feeNote') }}</p>
+    <p class="due-total">{{ language.t('dueNow') }} {{ dueTotalLabel }}</p>
   }
 
   @if (error) {
@@ -99,10 +103,10 @@
           <thead>
             <tr>
               @for (column of columns; track column.label) {
-                <th scope="col">{{ column.label }}</th>
+                <th scope="col">{{ labelFor(column.label) }}</th>
               }
               @if (sectionKey === 'fees') {
-                <th scope="col" class="action-column">Action</th>
+                <th scope="col" class="action-column">{{ language.t('action') }}</th>
               }
             </tr>
           </thead>
@@ -110,7 +114,7 @@
             @for (row of filteredRows; track trackRow($index, row)) {
               <tr>
                 @for (column of columns; track column.label) {
-                  <td [attr.data-label]="column.label">
+                  <td [attr.data-label]="labelFor(column.label)">
                     @if (column.kind === 'status') {
                       <span class="status-chip" [attr.data-tone]="statusTone(displayValue(row, column))">
                         {{ displayValue(row, column) }}
@@ -121,14 +125,14 @@
                   </td>
                 }
                 @if (sectionKey === 'fees') {
-                  <td data-label="Action" class="action-cell">
+                  <td [attr.data-label]="language.t('action')" class="action-cell">
                     @if (canPay(row)) {
                       <button type="button" class="pay-button" (click)="payOnline(row)" [disabled]="busy">
-                        {{ busy ? 'Please wait…' : 'Pay ' + payableLabel(row) }}
+                        {{ busy ? language.t('pleaseWait') : language.t('pay') + ' ' + payableLabel(row) }}
                       </button>
                     } @else if (canReceipt(row)) {
                       <button type="button" class="pay-button" (click)="downloadReceipt(row)" [disabled]="busy">
-                        Receipt
+                        {{ language.t('receipt') }}
                       </button>
                     } @else {
                       <span class="muted">No action needed</span>
