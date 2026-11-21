@@ -50,7 +50,26 @@
         <button type="button" class="secondary" (click)="downloadDateSheet()" [disabled]="busy || !sectionId">
           Date sheet
         </button>
+        <button
+          type="button"
+          (click)="downloadClass()"
+          [disabled]="busy || !sectionId || !completeCount"
+        >
+          Download class cards
+        </button>
       </div>
+
+      @if ((report.missingMarks || []).length) {
+        <div class="panel" role="status">
+          <h3>Missing marks</h3>
+          <p>These are not printed as zero. A saved zero is included on the card.</p>
+          <ul>
+            @for (gap of report.missingMarks; track gap.admissionNo + gap.subject + gap.exam) {
+              <li>{{ gap.studentName || gap.admissionNo }} — {{ gap.subject }}{{ gap.exam ? ' (' + gap.exam + ')' : '' }}</li>
+            }
+          </ul>
+        </div>
+      }
 
       @if (!(report.subjects || []).length) {
         <p class="panel muted">

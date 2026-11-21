@@ -196,6 +196,7 @@ public class ReportCardService {
     }
 
     List<Map<String, Object>> students = new ArrayList<>();
+    List<Map<String, Object>> missingMarks = new ArrayList<>();
     for (Map<String, Object> row : directory.listByClassSection(scope, label, 500)) {
       UUID studentId = parseUuid(row.get("id"));
       String admission = asString(row.get("admissionNo"));
@@ -206,21 +207,39 @@ public class ReportCardService {
       BigDecimal totalObtained = BigDecimal.ZERO;
       BigDecimal totalMax = BigDecimal.ZERO;
       int attempted = 0;
+      boolean studentComplete = true;
       for (String subjectId : bySubject.keySet()) {
         BigDecimal obtained = null;
         BigDecimal max = BigDecimal.ZERO;
         boolean hasMark = false;
+        boolean missingExam = false;
+        String subjectName = subjectNames.getOrDefault(subjectId, "Subject");
         for (ExamDefinitionEntity d : bySubject.get(subjectId)) {
           ExamMarkEntity mark = findMark(marksByDef.get(d.getId().toString()), studentId, admission);
-          if (mark != null && mark.getMarksObtained() != null) {
+          if (mark == null || mark.getMarksObtained() == null) {
+            missingExam = true;
+            Map<String, Object> gap = new LinkedHashMap<>();
+            gap.put("studentId", studentId == null ? null : studentId.toString());
+            gap.put("admissionNo", admission);
+            gap.put("studentName", studentName);
+            gap.put("subject", subjectName);
+            gap.put("exam", d.getName());
+            missingMarks.add(gap);
+          } else {
             obtained = (obtained == null ? BigDecimal.ZERO : obtained).add(mark.getMarksObtained());
             max = max.add(d.getMaxMarks() == null ? BigDecimal.ZERO : d.getMaxMarks());
             hasMark = true;
           }
         }
+        if (missingExam) {
+          studentComplete = false;
+          hasMark = false;
+          obtained = null;
+          max = null;
+        }
         Map<String, Object> sr = new LinkedHashMap<>();
         sr.put("subjectId", subjectId);
-        sr.put("name", subjectNames.getOrDefault(subjectId, "Subject"));
+        sr.put("name", subjectName);
         sr.put("marksObtained", obtained);
         sr.put("maxMarks", hasMark ? max : null);
         sr.put("grade", hasMark ? gradeBand(scope, percentage(obtained, max)) : null);
@@ -240,6 +259,7 @@ public class ReportCardService {
       student.put("classSection", firstNonBlank(asString(row.get("classSection")), label));
       student.put("subjects", subjectRows);
       student.put("subjectsAttempted", attempted);
+      student.put("complete", studentComplete && !bySubject.isEmpty());
       student.put("totalObtained", attempted > 0 ? totalObtained : null);
       student.put("totalMax", attempted > 0 ? totalMax : null);
       student.put("percentage", attempted > 0 ? pct : null);
@@ -264,6 +284,7 @@ public class ReportCardService {
     result.put("publishedOnly", publishedOnly);
     result.put("subjects", subjectColumns);
     result.put("students", students);
+    result.put("missingMarks", missingMarks);
     return result;
   }
 
@@ -335,6 +356,18 @@ public class ReportCardService {
         Map<String, Object> card = new LinkedHashMap<>(section);
         card.remove("students");
         card.put("student", s);
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> missing = (List<Map<String, Object>>) section.get("missingMarks");
+        if (missing != null) {
+          List<Map<String, Object>> own = new ArrayList<>();
+          for (Map<String, Object> gap : missing) {
+            if (matchesStudent(
+                studentKey, parseUuid(gap.get("studentId")), asString(gap.get("admissionNo")))) {
+              own.add(gap);
+            }
+          }
+          card.put("missingMarks", own);
+        }
         return card;
       }
     }

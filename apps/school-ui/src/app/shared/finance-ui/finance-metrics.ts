@@ -395,6 +395,18 @@ export function buildAlerts(input: {
   return alerts;
 }
 
+export function receiptAmount(row: any): number {
+  return num(row?.answers?.amount ?? row?.netAmount);
+}
+
+export function todayReceipts(collections: any[], now = new Date()): any[] {
+  return (collections || []).filter(
+    (row) =>
+      String(row?.status || '').toUpperCase() === 'APPROVED' &&
+      isSameDay(row?.updatedAt || row?.createdAt || row?.answers?.paymentDate, now),
+  );
+}
+
 export function executiveNumbers(input: {
   collections: any[];
   transactions: any[];
@@ -411,7 +423,8 @@ export function executiveNumbers(input: {
   const prev = new Date(now.getFullYear(), now.getMonth() - 1, 1);
   const approved = input.collections.filter((c) => String(c.status).toUpperCase() === 'APPROVED');
   const pending = input.collections.filter((c) => String(c.status).toUpperCase() !== 'APPROVED');
-  const sum = (rows: any[]) => rows.reduce((s, r) => s + num(r?.answers?.amount ?? r?.netAmount), 0);
+  const sum = (rows: any[]) => rows.reduce((s, r) => s + receiptAmount(r), 0);
+  const todaysReceipts = todayReceipts(input.collections, now);
   const totalCollected = sum(approved);
   const pendingFees = sum(pending);
   const monthCollection = sum(approved.filter((c) => isSameMonth(c.updatedAt || c.createdAt, now)));
@@ -436,7 +449,7 @@ export function executiveNumbers(input: {
   return {
     totalCollected,
     pendingFees,
-    todayCollection: sum(approved.filter((c) => isSameDay(c.updatedAt || c.createdAt, now))),
+    todayCollection: sum(todaysReceipts),
     onlineAmount,
     offlineAmount,
     monthDelta,
