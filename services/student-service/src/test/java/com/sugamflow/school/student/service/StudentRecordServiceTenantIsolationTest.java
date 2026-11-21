@@ -6,6 +6,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -22,6 +23,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -154,6 +156,48 @@ class StudentRecordServiceTenantIsolationTest {
                 "answers", Map.of("fullName", "Mallory")));
 
     assertEquals(ORG_A, dto.get("organizationId"));
+  }
+
+  @Test
+  void approvingAnApplicationKeepsDocumentsAndDoesNotCreateASecondStudent() {
+    bindTenant(ORG_A);
+    UUID applicationId = UUID.randomUUID();
+    AtomicReference<StudentRecordEntity> stored = new AtomicReference<>();
+    when(repository.findByOrganizationIdAndSourceApplicationIdAndDeletedAtIsNull(ORG_A, applicationId))
+        .thenAnswer(invocation -> Optional.ofNullable(stored.get()));
+    when(engines.getModuleSettings(any(), anyString())).thenReturn(Map.of());
+    when(engines.getForm(any(), anyString()))
+        .thenReturn(
+            Map.of(
+                "sections",
+                List.of(Map.of("fields", List.of(Map.of("key", "fullName", "type", "TEXTBOX"))))));
+    when(repository.save(any(StudentRecordEntity.class)))
+        .thenAnswer(
+            invocation -> {
+              StudentRecordEntity row = invocation.getArgument(0);
+              stored.set(row);
+              return row;
+            });
+
+    Map<String, Object> body =
+        Map.of(
+            "applicationId",
+            applicationId.toString(),
+            "answers",
+            Map.of("fullName", "Asha"),
+            "documents",
+            List.of(Map.of("type", "BIRTH_CERTIFICATE", "name", "birth.pdf")));
+
+    Map<String, Object> first = service.enrollFromAdmission(body);
+    Map<String, Object> second = service.enrollFromAdmission(body);
+
+    assertEquals(first.get("id"), second.get("id"));
+    @SuppressWarnings("unchecked")
+    Map<String, Object> answers = (Map<String, Object>) first.get("answers");
+    @SuppressWarnings("unchecked")
+    List<Map<String, Object>> documents = (List<Map<String, Object>>) answers.get("documents");
+    assertEquals("birth.pdf", documents.get(0).get("name"));
+    verify(repository, times(1)).save(any(StudentRecordEntity.class));
   }
 
   @Test

@@ -231,6 +231,38 @@ public class FeeCollectionService {
     }
   }
 
+  /** A refund is a new amount. The receipt's original amount and fee lines stay as they were saved. */
+  @Transactional
+  public Map<String, Object> recordRefund(UUID id, BigDecimal amount, String reason) {
+    TenantScope scope = TenantContext.require();
+    requireFeature(scope);
+    if (amount == null || amount.compareTo(BigDecimal.ZERO) <= 0) {
+      throw new FeeException("VALIDATION", "amount must be > 0");
+    }
+    FeeCollectionEntity entity = requireCollection(id, scope.organizationId());
+    Map<String, Object> answers = new LinkedHashMap<>();
+    if (entity.getAnswers() != null) {
+      answers.putAll(entity.getAnswers());
+    }
+    Object feeLines = answers.get("feeLines");
+    BigDecimal original = decimalOr(answers.get("amount"));
+    BigDecimal remaining =
+        answers.containsKey("remaining") ? decimalOr(answers.get("remaining")) : original;
+    if (amount.compareTo(remaining) > 0) {
+      throw new FeeException("VALIDATION", "Refund is more than the balance");
+    }
+    answers.put("amount", money(original));
+    answers.put("refundAmount", money(decimalOr(answers.get("refundAmount")).add(amount)));
+    answers.put("refundReason", reason == null ? "" : reason);
+    answers.put("remaining", money(remaining.subtract(amount)));
+    if (feeLines != null) {
+      answers.put("feeLines", feeLines);
+    }
+    entity.setAnswers(answers);
+    entity.setUpdatedAt(Instant.now());
+    return toDto(repository.save(entity));
+  }
+
   @Transactional(readOnly = true)
   public Map<String, Object> get(UUID id) {
     TenantScope scope = TenantContext.require();

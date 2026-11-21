@@ -631,6 +631,17 @@ public class StudentRecordService {
 
     Map<String, Object> answers = mapAnswers(form, sourceAnswers, fieldMap);
     stripEmbeddedImages(answers);
+    if (body.get("documents") instanceof List<?> docs) {
+      List<Map<String, Object>> kept = new ArrayList<>();
+      for (Object doc : docs) {
+        if (doc instanceof Map<?, ?> raw) {
+          Map<String, Object> copy = new LinkedHashMap<>();
+          raw.forEach((key, value) -> copy.put(String.valueOf(key), value));
+          kept.add(copy);
+        }
+      }
+      answers.put("documents", kept);
+    }
     boolean generateNo =
         admissionSettings.get("generateAdmissionNo") == null
             || Boolean.TRUE.equals(admissionSettings.get("generateAdmissionNo"));

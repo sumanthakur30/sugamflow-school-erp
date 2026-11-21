@@ -4,6 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { ActivatedRoute } from '@angular/router';
 import { Subscription, combineLatest } from 'rxjs';
 import { ApiService } from '../../core/api.service';
+import { DailyLanguageService } from '../../core/daily-language.service';
 import { isDemoOrganization } from '../../core/tenant-context.util';
 import { PortalContextService } from './portal-context.service';
 
@@ -72,7 +73,20 @@ export class PortalSectionComponent implements OnInit, OnDestroy {
   private readonly route = inject(ActivatedRoute);
   private readonly api = inject(ApiService);
   private readonly portalCtx = inject(PortalContextService);
+  readonly language = inject(DailyLanguageService);
   private sub?: Subscription;
+
+  labelFor(label: string): string {
+    const keys: Record<string, 'student' | 'date' | 'attendance' | 'class' | 'action'> = {
+      Student: 'student',
+      Date: 'date',
+      Attendance: 'attendance',
+      Class: 'class',
+      Action: 'action',
+    };
+    const key = keys[label];
+    return key ? this.language.t(key) : label;
+  }
 
   sectionKey = '';
   title = '';

@@ -473,6 +473,10 @@ public class FinanceService {
     txn.setCreatedAt(Instant.now());
     txn.setUpdatedAt(Instant.now());
 
+    if ("FEE_REFUND".equals(type) && collectionId != null) {
+      feeCollections.recordRefund(collectionId, amount, reason);
+    }
+
     if (collectionId != null) {
       try {
         Map<String, Object> detail = feeCollections.get(collectionId);
@@ -539,6 +543,8 @@ public class FinanceService {
     Map<String, Object> headIndex = headIndex(scope);
     List<Map<String, Object>> lines = new ArrayList<>();
     BigDecimal gross = BigDecimal.ZERO;
+    String portionKey = stringOr(body.get("portionKey"), "");
+    List<?> portionSchedule = null;
     Object rawLines = structure.get("lines");
     if (rawLines instanceof List<?> list) {
       for (Object item : list) {
@@ -547,6 +553,14 @@ public class FinanceService {
         String headKey = stringOr(line.get("headKey"), "");
         if (headKey.isBlank()) continue;
         BigDecimal amount = toDecimal(line.get("amount"));
+        if (!portionKey.isBlank() && line.get("portions") instanceof List<?> portions) {
+          BigDecimal portionAmount = com.sugamflow.school.fee.finance.InstallmentSchedule.amountFor(portions, portionKey);
+          if (portionAmount == null) {
+            continue;
+          }
+          amount = portionAmount;
+          portionSchedule = portions;
+        }
         Map<String, Object> head = (Map<String, Object>) headIndex.getOrDefault(headKey, Map.of());
         Map<String, Object> outLine = enrichLine(headKey, amount, line, head, settings);
         lines.add(outLine);
@@ -705,29 +719,29 @@ public class FinanceService {
     out.put("netAmount", net);
     out.put("concession", concessionApplied);
     out.put("lateFee", lateFeeApplied);
-    out.put(
-        "suggestedAnswers",
-        Map.of(
-            "feeHead",
-            lines.isEmpty() ? "TUITION" : String.valueOf(lines.get(0).get("headKey")),
-            "amount",
-            net,
-            "paymentMode",
-            "CASH",
-            "admissionNo",
-            studentRef,
-            "studentName",
-            studentName,
-            "discountAmount",
-            discount,
-            "gstAmount",
-            gstAmount,
-            "lateFeeAmount",
-            lateFee,
-            "periodKey",
-            periodKey,
-            "structureKey",
-            structureKey));
+    Map<String, Object> suggested = new LinkedHashMap<>();
+    suggested.put("feeHead", lines.isEmpty() ? "TUITION" : String.valueOf(lines.get(0).get("headKey")));
+    suggested.put("amount", net);
+    suggested.put("paymentMode", "CASH");
+    suggested.put("admissionNo", studentRef);
+    suggested.put("studentName", studentName);
+    suggested.put("discountAmount", discount);
+    suggested.put("gstAmount", gstAmount);
+    suggested.put("lateFeeAmount", lateFee);
+    suggested.put("periodKey", periodKey);
+    suggested.put("structureKey", structureKey);
+    if (!portionKey.isBlank()) {
+      suggested.put("portionKey", portionKey);
+    }
+    out.put("suggestedAnswers", suggested);
+    if (portionSchedule != null) {
+      out.put("portionKey", portionKey);
+      out.put(
+          "yearSettled",
+          com.sugamflow.school.fee.finance.InstallmentSchedule.yearSettled(
+              portionSchedule,
+              body.get("paidPortionKeys") instanceof java.util.Collection<?> paid ? paid : List.of()));
+    }
     return out;
   }
 
