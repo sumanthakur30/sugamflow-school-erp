@@ -65,6 +65,22 @@ public class ReportCardController {
             sectionId, termKey, studentKey(studentId, admissionNo), publishedOnly));
   }
 
+  @GetMapping(value = "/section.pdf", produces = MediaType.APPLICATION_PDF_VALUE)
+  public ResponseEntity<byte[]> sectionPdf(
+      @RequestParam("sectionId") UUID sectionId,
+      @RequestParam("termKey") String termKey,
+      @RequestParam(name = "publishedOnly", defaultValue = "false") boolean publishedOnly) {
+    TenantScope scope = TenantContext.require();
+    Map<String, Object> report = service.sectionTermReport(sectionId, termKey, publishedOnly);
+    byte[] bytes = pdfService.renderClass(report, scope.organizationId());
+    String section = String.valueOf(report.get("sectionLabel"));
+    String fileName = "report-cards-" + safe(section) + "-" + safe(termKey) + ".pdf";
+    return ResponseEntity.ok()
+        .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + fileName + "\"")
+        .contentType(MediaType.APPLICATION_PDF)
+        .body(bytes);
+  }
+
   @GetMapping(value = "/student.pdf", produces = MediaType.APPLICATION_PDF_VALUE)
   public ResponseEntity<byte[]> studentPdf(
       @RequestParam("sectionId") UUID sectionId,

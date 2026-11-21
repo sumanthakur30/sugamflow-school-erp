@@ -100,6 +100,44 @@
         </article>
       </section>
 
+      <section class="panel inbox-panel">
+        <h3 class="form-section-title">Today's receipts</h3>
+        <p class="exec-hint">Approved receipts posted today on this campus. The total matches Today's collection.</p>
+        <div class="table-wrap">
+          <table class="inbox-table">
+            <thead>
+              <tr>
+                <th>Student</th>
+                <th>Receipt</th>
+                <th>Amount</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (c of todayReceiptRows(); track c.id) {
+                <tr class="inbox-row">
+                  <td>
+                    <div class="cell-primary">{{ c.answers?.studentName || '—' }}</div>
+                    <div class="cell-sub mono">{{ c.answers?.admissionNo || '—' }}</div>
+                  </td>
+                  <td class="mono">{{ c.answers?.receiptNo || c.receiptNo || c.id }}</td>
+                  <td class="money">{{ formatMoney(receiptAmount(c)) }}</td>
+                </tr>
+              } @empty {
+                <tr>
+                  <td colspan="3" class="muted-cell">No approved receipt posted today on this campus.</td>
+                </tr>
+              }
+            </tbody>
+            <tfoot>
+              <tr>
+                <td colspan="2">Total</td>
+                <td class="money">{{ formatMoney(snapshot.todayCollection) }}</td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      </section>
+
       <div class="exec-main">
         <section class="panel exec-chart">
           <h3 class="form-section-title">Collection and revenue</h3>

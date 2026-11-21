@@ -182,6 +182,46 @@ export class TeacherReportCardsComponent implements OnInit {
     });
   }
 
+  get completeCount(): number {
+    return (this.report?.students || []).filter((student: any) => this.studentComplete(student)).length;
+  }
+
+  private studentComplete(student: any): boolean {
+    if (student?.complete === false) {
+      return false;
+    }
+    const subjects = student?.subjects || [];
+    if (!subjects.length) {
+      return student?.complete === true;
+    }
+    return subjects.every(
+      (subject: any) => subject?.marksObtained !== null && subject?.marksObtained !== undefined,
+    );
+  }
+
+  downloadClass(): void {
+    if (!this.sectionId || !this.completeCount) {
+      return;
+    }
+    const path =
+      `/api/exam/report-cards/section.pdf?sectionId=${encodeURIComponent(this.sectionId)}` +
+      `&termKey=${encodeURIComponent(this.termKey.trim())}` +
+      `&publishedOnly=${this.publishedOnly}`;
+    this.busy = true;
+    this.error = '';
+    this.api.getBlob(path).subscribe({
+      next: (blob) => {
+        this.busy = false;
+        const label = String(this.report?.sectionLabel || 'class').replace(/\s+/g, '-');
+        this.saveBlob(blob, `report-cards-${label}-${this.termKey.trim()}.pdf`);
+      },
+      error: () => {
+        this.busy = false;
+        this.error = 'Could not download the class report cards. Complete the missing marks first.';
+      },
+    });
+  }
+
   downloadPdf(student: any): void {
     const key = student.studentId
       ? `studentId=${encodeURIComponent(student.studentId)}`
