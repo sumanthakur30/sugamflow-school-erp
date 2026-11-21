@@ -134,6 +134,10 @@ public class FeeCollectionService {
     requireFeature(scope);
     String admission = admissionNo == null ? "" : admissionNo.trim();
     String bill = billKey == null ? "" : billKey.trim();
+    AccessScope access = studentAccess.resolve(scope);
+    if (access.restricted() && !access.allowsAdmissionNo(admission)) {
+      throw new FeeException("NOT_FOUND", "Fee collection not found");
+    }
     BigDecimal paid = BigDecimal.ZERO;
     if (!admission.isBlank() && !bill.isBlank()) {
       Double sum = repository.sumApprovedForBill(scope.organizationId(), admission, bill);
@@ -154,6 +158,7 @@ public class FeeCollectionService {
     TenantScope scope = TenantContext.require();
     requireFeature(scope);
     List<Map<String, Object>> rows = new ArrayList<>();
+    AccessScope access = studentAccess.resolve(scope);
     for (FeeCollectionEntity entity : loadCandidates(scope)) {
       String status = String.valueOf(entity.getStatus()).toUpperCase(Locale.ROOT);
       if (!status.equals("IN_PROGRESS") && !status.equals("INFO_REQUESTED")) {
@@ -165,6 +170,9 @@ public class FeeCollectionService {
         continue;
       }
       Map<String, Object> dto = toDto(entity);
+      if (access.restricted() && !access.allowsStudentDto(dto)) {
+        continue;
+      }
       dto.put("admissionNo", answers.get("admissionNo"));
       dto.put(
           "studentName",
@@ -227,12 +235,13 @@ public class FeeCollectionService {
   public Map<String, Object> get(UUID id) {
     TenantScope scope = TenantContext.require();
     requireFeature(scope);
-    Map<String, Object> dto = toDetailDto(requireCollection(id, scope.organizationId()));
+    FeeCollectionEntity entity = requireCollection(id, scope.organizationId());
     AccessScope access = studentAccess.resolve(scope);
-    if (!access.allowsStudentDto(dto)) {
+    Map<String, Object> answers = entity.getAnswers() == null ? Map.of() : entity.getAnswers();
+    if (!access.allowsAnswers(answers)) {
       throw new FeeException("NOT_FOUND", "Fee collection not found");
     }
-    return dto;
+    return toDetailDto(entity);
   }
 
   @Transactional
