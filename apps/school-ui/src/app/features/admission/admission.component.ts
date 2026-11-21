@@ -647,6 +647,9 @@ export class AdmissionComponent implements OnInit, OnDestroy {
       formKey: this.formKey,
       workflowKey: this.workflowKey,
       answers,
+      documents: this.paperName
+        ? [{ fileName: this.paperName, mediaType: this.paperType || 'text/plain' }]
+        : [],
       clientRequestId: crypto.randomUUID?.() ?? `${Date.now()}-${Math.random()}`,
     };
 
@@ -1250,7 +1253,66 @@ export class AdmissionComponent implements OnInit, OnDestroy {
     return keys.map((k) => String(answers[k] ?? '').trim().toLowerCase()).join('|');
   }
 
+  paperName = '';
+  paperType = '';
+  suggestions: Record<string, string> = {};
+  suggestionNote = '';
+
+  onAdmissionPaper(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0];
+    if (!file) {
+      return;
+    }
+    this.paperName = file.name;
+    this.paperType = file.type || 'application/octet-stream';
+    this.suggestions = {};
+    this.suggestionNote = 'Reading the paper. Nothing is saved until you submit.';
+    const finish = (text: string) => {
+      this.api
+        .post<any>('/api/admission/applications/suggest-fields', { fileName: file.name, text })
+        .subscribe({
+          next: (result) => {
+            this.suggestions = result?.fields || {};
+            this.suggestionNote = Object.keys(this.suggestions).length
+              ? 'Suggestions are ready. They are not stored until you submit the application.'
+              : 'No fields were recognised. The file stays attached when you submit.';
+          },
+          error: () => {
+            this.suggestions = {};
+            this.suggestionNote = 'The paper is attached. Suggestions could not be read. Nothing is saved until you submit.';
+          },
+        });
+    };
+    if (file.type.startsWith('text/') || /\.txt$/i.test(file.name)) {
+      const reader = new FileReader();
+      reader.onload = () => finish(String(reader.result || '').slice(0, 4000));
+      reader.onerror = () => finish('');
+      reader.readAsText(file);
+      return;
+    }
+    finish('');
+  }
+
+  suggestionKeys(): string[] {
+    return Object.keys(this.suggestions);
+  }
+
+  useSuggestions(): void {
+    for (const [key, value] of Object.entries(this.suggestions)) {
+      const current = this.answers[key];
+      if (current == null || String(current).trim() === '') {
+        this.answers[key] = value;
+      }
+    }
+    this.suggestionNote = 'Suggestions copied into empty fields. Submit the application to store them with the paper.';
+  }
+
   private resetAnswers(): void {
+    this.paperName = '';
+    this.paperType = '';
+    this.suggestions = {};
+    this.suggestionNote = '';
     const next: Record<string, unknown> = {};
     for (const f of this.fields) {
       next[f.key] = f.type === 'CHECKBOX' ? false : '';

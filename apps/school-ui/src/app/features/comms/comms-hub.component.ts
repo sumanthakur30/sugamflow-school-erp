@@ -55,6 +55,9 @@ export class CommsHubComponent implements OnInit, OnDestroy {
     channel: 'IN_APP',
     audience: 'PRIMARY_PARENTS',
   };
+  noticeLanguage = 'en';
+  noticeOccasion = '';
+  drafting = false;
 
   ngOnInit(): void {
     this.campusReadySub = this.tenantContext.whenCampusReady().subscribe(() => this.reload());
@@ -95,6 +98,42 @@ export class CommsHubComponent implements OnInit, OnDestroy {
         }
       },
     });
+  }
+
+  writeNoticeDraft(): void {
+    this.drafting = true;
+    this.error = '';
+    this.api
+      .post<any>('/api/school/notification-config/comms/notice-drafts', {
+        language: this.noticeLanguage,
+        occasion: this.noticeOccasion.trim(),
+      })
+      .subscribe({
+        next: (draft) => {
+          this.drafting = false;
+          this.draft.title = String(draft?.title || this.localNotice().title);
+          this.draft.body = String(draft?.body || this.localNotice().body);
+          this.status = 'Draft ready. Edit it, then publish. Nothing has been sent.';
+        },
+        error: () => {
+          this.drafting = false;
+          const local = this.localNotice();
+          this.draft.title = local.title;
+          this.draft.body = local.body;
+          this.status = 'Draft ready on this screen. Edit it, then publish. Nothing has been sent.';
+        },
+      });
+  }
+
+  private localNotice(): { title: string; body: string } {
+    const hindi = this.noticeLanguage === 'hi';
+    const day = this.noticeOccasion.trim() || (hindi ? 'घोषित दिन' : 'the announced day');
+    return hindi
+      ? { title: 'विद्यालय सूचना', body: `विद्यालय ${day} को बंद रहेगा। अभिभावक कृपया ध्यान दें।` }
+      : {
+          title: 'School notice',
+          body: `The school will remain closed on ${day}. Guardians are requested to note this.`,
+        };
   }
 
   publish(): void {

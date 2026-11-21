@@ -47,6 +47,13 @@ public class CommsHubService {
     return list(scope.organizationId());
   }
 
+  /** A draft only. The student list is ignored, and nothing is sent until the office saves the edited text. */
+  public Map<String, Object> noticeDraft(Map<String, Object> body) {
+    String language = body == null ? null : str(body.get("language"));
+    String occasion = body == null ? null : str(body.get("occasion"));
+    return NoticeDraft.write(language, occasion);
+  }
+
   @Transactional
   public Map<String, Object> create(Map<String, Object> body) {
     TenantScope scope = TenantContext.require();

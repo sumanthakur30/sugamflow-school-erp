@@ -241,6 +241,11 @@ public class AdmissionApplicationService {
 
     entity.setFormKey(formKey);
     entity.setAnswers(answers);
+    if (body.get("documents") instanceof List<?> docs) {
+      @SuppressWarnings("unchecked")
+      List<Map<String, Object>> incoming = (List<Map<String, Object>>) docs;
+      entity.setDocuments(AdmissionPaper.attach(entity.getDocuments(), incoming));
+    }
     entity.setUpdatedAt(Instant.now());
 
     List<Map<String, Object>> history =
@@ -335,8 +340,23 @@ public class AdmissionApplicationService {
       intents.add(recordNotification(scope, entity, "ADMISSION_RULE_NOTIFY"));
     }
     entity.setNotificationIntents(intents);
+    if (body.get("documents") instanceof List<?> docs) {
+      @SuppressWarnings("unchecked")
+      List<Map<String, Object>> incoming = (List<Map<String, Object>>) docs;
+      entity.setDocuments(AdmissionPaper.attach(entity.getDocuments(), incoming));
+    }
 
     return toDto(repository.save(entity));
+  }
+
+  /** Suggested fields from an uploaded paper. This does not create an application or a student. */
+  public Map<String, Object> suggestFields(Map<String, Object> body) {
+    String fileName = body == null ? null : stringOr(body.get("fileName"), "");
+    String text = body == null ? null : stringOr(body.get("text"), "");
+    Map<String, Object> out = new LinkedHashMap<>();
+    out.put("fields", AdmissionFieldSuggest.suggest(fileName, text));
+    out.put("saved", false);
+    return out;
   }
 
   /** Public field list for the school's configured admission form. No workflow or internal ids. */
