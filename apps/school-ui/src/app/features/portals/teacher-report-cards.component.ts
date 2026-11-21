@@ -2,6 +2,7 @@ import { Component, OnInit, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ApiService } from '../../core/api.service';
+import { DailyLanguageService } from '../../core/daily-language.service';
 import { RouterLink } from '@angular/router';
 import { ReportCardInsightsComponent } from '../../shared/report-card-insights/report-card-insights.component';
 
@@ -14,6 +15,7 @@ import { ReportCardInsightsComponent } from '../../shared/report-card-insights/r
 })
 export class TeacherReportCardsComponent implements OnInit {
   private readonly api = inject(ApiService);
+  readonly language = inject(DailyLanguageService);
 
   loading = true;
   busy = false;

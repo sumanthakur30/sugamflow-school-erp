@@ -12,8 +12,10 @@
           <button type="button" [class.is-on]="range === 'year'" (click)="setRange('year')">Academic year</button>
           <button type="button" [class.is-on]="range === 'month'" (click)="setRange('month')">Month</button>
         </div>
+        <button type="button" class="secondary" (click)="language.set('en')">{{ language.t('english') }}</button>
+        <button type="button" class="secondary" (click)="language.set('hi')">{{ language.t('hindi') }}</button>
         <button type="button" (click)="runQuick({ label: 'Collect', link: ['/admin/fee'], query: { new: '1' } })">
-          Collect fee +
+          {{ language.t('collectFee') }}
         </button>
         <button type="button" class="secondary" (click)="reload()" [disabled]="loading || busy">
           Refresh
@@ -84,9 +86,9 @@
           <button type="button" class="text-link" (click)="setTab('collections')">View defaulters</button>
         </article>
         <article class="exec-card">
-          <div class="exec-card-top"><span>Today's collection</span></div>
+          <div class="exec-card-top"><span>{{ language.t('todayCollection') }}</span></div>
           <div class="exec-value">{{ formatMoney(snapshot.todayCollection) }}</div>
-          <p class="exec-hint">Approved receipts posted today</p>
+          <p class="exec-hint">{{ language.t('todayHint') }}</p>
         </article>
         <article class="exec-card">
           <div class="exec-card-top"><span>Online vs cash</span></div>
@@ -101,8 +103,8 @@
       </section>
 
       <section class="panel inbox-panel">
-        <h3 class="form-section-title">Today's receipts</h3>
-        <p class="exec-hint">Approved receipts posted today on this campus. The total matches Today's collection.</p>
+        <h3 class="form-section-title">{{ language.t('todayReceipts') }}</h3>
+        <p class="exec-hint">{{ language.t('todayListHint') }}</p>
         <div class="table-wrap">
           <table class="inbox-table">
             <thead>
@@ -124,13 +126,13 @@
                 </tr>
               } @empty {
                 <tr>
-                  <td colspan="3" class="muted-cell">No approved receipt posted today on this campus.</td>
+                  <td colspan="3" class="muted-cell">{{ language.t('noReceiptsToday') }}</td>
                 </tr>
               }
             </tbody>
             <tfoot>
               <tr>
-                <td colspan="2">Total</td>
+                <td colspan="2">{{ language.t('total') }}</td>
                 <td class="money">{{ formatMoney(snapshot.todayCollection) }}</td>
               </tr>
             </tfoot>
