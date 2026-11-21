@@ -505,12 +505,23 @@ public class FeeCollectionService {
     return toDetailDto(repository.save(entity));
   }
 
-  @Transactional(readOnly = true)
+  @Transactional
   public byte[] getFeeReceiptPdf(UUID id) {
     TenantScope scope = TenantContext.require();
     requireFeature(scope);
     FeeCollectionEntity entity = requireCollection(id, scope.organizationId());
     Map<String, Object> doc = findFeeReceipt(entity);
+    if ((doc == null || doc.get("contentBase64") == null)
+        && "APPROVED".equals(entity.getStatus())) {
+      Map<String, Object> generated = generateReadyReceipt(entity, scope);
+      if (generated != null) {
+        entity.getDocuments().removeIf(d -> DOC_FEE_RECEIPT.equals(String.valueOf(d.get("type"))));
+        entity.getDocuments().add(generated);
+        entity.setUpdatedAt(Instant.now());
+        repository.save(entity);
+        doc = generated;
+      }
+    }
     if (doc == null || doc.get("contentBase64") == null) {
       throw new FeeException("FEE_RECEIPT_MISSING", "Fee receipt not generated for this collection");
     }
@@ -519,6 +530,18 @@ public class FeeCollectionService {
     } catch (IllegalArgumentException ex) {
       throw new FeeException("FEE_RECEIPT_CORRUPT", "Stored fee receipt is not valid base64");
     }
+  }
+
+  /** Render a receipt for an approved collection that was saved before report-builder was reachable. */
+  private Map<String, Object> generateReadyReceipt(FeeCollectionEntity entity, TenantScope scope) {
+    Map<String, Object> module = engines.getModuleSettings(scope, MODULE_FEE);
+    Map<String, Object> settings = moduleSettingsMap(module);
+    Map<String, Object> receiptDoc =
+        renderFeeReceipt(scope, entity, settings, feeReceiptUrl(entity.getId()));
+    if (receiptDoc == null || !"READY".equals(String.valueOf(receiptDoc.get("status")))) {
+      return null;
+    }
+    return receiptDoc;
   }
 
   /**
