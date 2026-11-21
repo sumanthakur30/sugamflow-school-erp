@@ -1,53 +1,185 @@
-<section class="panel" aria-label="Add student">
-  <h3>Add student</h3>
-  <p class="muted">Name, parent, and class are enough. The admission number is generated. Government IDs can wait.</p>
+<section class="admit" aria-label="Add new student">
+  <header class="admit-head">
+    <div>
+      <button type="button" class="back" (click)="closed.emit()" [disabled]="saving">Back to Students</button>
+      <h2>Add New Student</h2>
+      <p>Enter student information to complete the admission process.</p>
+    </div>
+  </header>
+
   @if (error) {
-    <p class="error" role="alert">{{ error }}</p>
+    <p class="error panel" role="alert">{{ error }}</p>
   }
-  @if (savedId) {
-    <p class="status" role="status">Saved{{ savedNo ? ' as ' + savedNo : '' }}.</p>
-    <p>
-      <a [routerLink]="['/admin/students', savedId, '360']">More details</a>
-      <button type="button" class="secondary" (click)="closed.emit()">Close</button>
-    </p>
-  } @else {
-    <div class="grid three">
+
+  <section class="panel section-card">
+    <h3>Personal Information</h3>
+    <div class="photo-row">
+      <div class="photo-preview">
+        @if (photoPreview) {
+          <img [src]="photoPreview" alt="Student photo preview" />
+        } @else {
+          Photo
+        }
+      </div>
       <label>
-        Student name
-        <input [(ngModel)]="fullName" name="fullName" required />
+        Student photo
+        <span class="optional-tag">Optional</span>
+        <input type="file" accept="image/jpeg,image/png,image/webp" (change)="onPhoto($event)" />
+        @if (photoName) {
+          <span class="hint">{{ photoName }}</span>
+        }
+        @if (fieldErrors['photo']) {
+          <span class="field-error">{{ fieldErrors['photo'] }}</span>
+        }
+      </label>
+    </div>
+    <div class="grid">
+      <label class="req">
+        Student first name
+        <input [(ngModel)]="firstName" name="firstName" placeholder="First name" />
+        @if (fieldErrors['firstName']) {
+          <span class="field-error">{{ fieldErrors['firstName'] }}</span>
+        }
       </label>
       <label>
+        Middle name
+        <span class="optional-tag">Optional</span>
+        <input [(ngModel)]="middleName" name="middleName" />
+      </label>
+      <label class="req">
+        Last name
+        <input [(ngModel)]="lastName" name="lastName" placeholder="Last name" />
+        @if (fieldErrors['lastName']) {
+          <span class="field-error">{{ fieldErrors['lastName'] }}</span>
+        }
+      </label>
+      <label class="req">
         Date of birth
-        <input [(ngModel)]="dateOfBirth" name="dateOfBirth" type="date" />
+        <input [(ngModel)]="dateOfBirth" name="dateOfBirth" type="date" [max]="today" />
+        @if (fieldErrors['dateOfBirth']) {
+          <span class="field-error">{{ fieldErrors['dateOfBirth'] }}</span>
+        }
       </label>
-      <label>
+      <label class="req">
         Gender
         <select [(ngModel)]="gender" name="gender">
           <option value="">Select</option>
-          <option>Male</option>
-          <option>Female</option>
-          <option>Other</option>
+          @for (row of genders; track row) {
+            <option [value]="row">{{ row }}</option>
+          }
+        </select>
+        @if (fieldErrors['gender']) {
+          <span class="field-error">{{ fieldErrors['gender'] }}</span>
+        }
+      </label>
+      <label>
+        Blood group
+        <span class="optional-tag">Optional</span>
+        <select [(ngModel)]="bloodGroup" name="bloodGroup">
+          <option value="">Select</option>
+          @for (row of bloodGroups; track row) {
+            <option [value]="row">{{ row }}</option>
+          }
         </select>
       </label>
       <label>
+        Nationality
+        <span class="optional-tag">Optional</span>
+        <input [(ngModel)]="nationality" name="nationality" />
+      </label>
+      <label>
+        Religion
+        <span class="optional-tag">Optional</span>
+        <input [(ngModel)]="religion" name="religion" />
+      </label>
+      <label>
+        Category
+        <span class="optional-tag">Optional</span>
+        <select [(ngModel)]="category" name="category">
+          <option value="">Select</option>
+          @for (row of categories; track row) {
+            <option [value]="row">{{ row }}</option>
+          }
+        </select>
+      </label>
+      <label>
+        Mother tongue
+        <span class="optional-tag">Optional</span>
+        <input [(ngModel)]="motherTongue" name="motherTongue" />
+      </label>
+      <label>
+        Aadhaar number
+        <span class="optional-tag">Optional</span>
+        <input [(ngModel)]="aadhaar" name="aadhaar" inputmode="numeric" maxlength="14" placeholder="12 digits" />
+        @if (fieldErrors['aadhaar']) {
+          <span class="field-error">{{ fieldErrors['aadhaar'] }}</span>
+        }
+      </label>
+    </div>
+  </section>
+
+  <section class="panel section-card">
+    <h3>Academic Information</h3>
+    <p class="section-note">Admission number is generated from the school format when you save.</p>
+    <div class="grid">
+      <label>
+        Admission number
+        <input value="Generated on save" readonly />
+      </label>
+      <label class="req">
+        Admission date
+        <input [(ngModel)]="admissionDate" name="admissionDate" type="date" />
+        @if (fieldErrors['admissionDate']) {
+          <span class="field-error">{{ fieldErrors['admissionDate'] }}</span>
+        }
+      </label>
+      <label class="req">
+        Academic session
+        <select [(ngModel)]="sessionId" name="sessionId">
+          @for (row of sessions; track row.key) {
+            <option [value]="row.key">{{ row.label }}</option>
+          }
+        </select>
+        @if (fieldErrors['sessionId']) {
+          <span class="field-error">{{ fieldErrors['sessionId'] }}</span>
+        }
+      </label>
+      <label class="req">
+        Campus / branch
+        <select [(ngModel)]="branchId" name="branchId">
+          @for (row of branches; track row.key) {
+            <option [value]="row.key">{{ row.label }}</option>
+          }
+        </select>
+        @if (fieldErrors['branchId']) {
+          <span class="field-error">{{ fieldErrors['branchId'] }}</span>
+        }
+      </label>
+      <label class="req">
         Class
         @if (classes.length) {
-          <select [(ngModel)]="className" name="className">
+          <input [(ngModel)]="classQuery" name="classQuery" type="search" placeholder="Search class" />
+          <select [(ngModel)]="className" name="className" (ngModelChange)="onClassChange()">
             <option value="">Select</option>
-            @for (row of classes; track row.id) {
+            @for (row of filteredClasses; track row.id) {
               <option [value]="row.name">{{ row.name }}</option>
             }
           </select>
         } @else {
-          <input [(ngModel)]="className" name="className" placeholder="Grade 1" />
+          <input [(ngModel)]="className" name="className" placeholder="Class" />
+        }
+        @if (fieldErrors['className']) {
+          <span class="field-error">{{ fieldErrors['className'] }}</span>
         }
       </label>
       <label>
         Section
+        <span class="optional-tag">Optional</span>
         @if (sections.length) {
+          <input [(ngModel)]="sectionQuery" name="sectionQuery" type="search" placeholder="Search section" />
           <select [(ngModel)]="section" name="section">
             <option value="">Select</option>
-            @for (row of sections; track row.id) {
+            @for (row of filteredSections; track row.id) {
               <option [value]="row.name">{{ row.name }}</option>
             }
           </select>
@@ -56,17 +188,374 @@
         }
       </label>
       <label>
-        Parent name
-        <input [(ngModel)]="parentName" name="parentName" />
+        Roll number
+        <span class="optional-tag">Optional</span>
+        <input [(ngModel)]="rollNo" name="rollNo" placeholder="Leave blank if not assigned" />
       </label>
       <label>
-        Mobile
-        <input [(ngModel)]="mobile" name="mobile" inputmode="tel" />
+        Admission type
+        <select [(ngModel)]="admissionType" name="admissionType">
+          @for (row of admissionTypes; track row) {
+            <option [value]="row">{{ row }}</option>
+          }
+        </select>
+      </label>
+      <label>
+        Student status
+        <select [(ngModel)]="status" name="status">
+          <option value="ACTIVE">Active</option>
+          <option value="INACTIVE">Inactive</option>
+        </select>
+      </label>
+      <label>
+        Previous school name
+        <span class="optional-tag">Optional</span>
+        <input [(ngModel)]="previousSchool" name="previousSchool" />
+      </label>
+      <label>
+        Previous class
+        <span class="optional-tag">Optional</span>
+        <input [(ngModel)]="previousClass" name="previousClass" />
+      </label>
+      <label>
+        Previous school TC number
+        <span class="optional-tag">Optional</span>
+        <input [(ngModel)]="previousTcNumber" name="previousTcNumber" />
       </label>
     </div>
-    <p>
-      <button type="button" (click)="save()" [disabled]="saving">{{ saving ? 'Saving…' : 'Save' }}</button>
-      <button type="button" class="secondary" (click)="closed.emit()" [disabled]="saving">Cancel</button>
-    </p>
+  </section>
+
+  <section class="panel section-card">
+    <h3>Parent &amp; Guardian Information</h3>
+    <p class="section-note">One parent or guardian is enough. The other fields can stay empty.</p>
+    <div class="grid">
+      <label>
+        Primary contact
+        <select [(ngModel)]="primaryContact" name="primaryContact">
+          @for (row of contacts; track row.value) {
+            <option [value]="row.value">{{ row.label }}</option>
+          }
+        </select>
+      </label>
+    </div>
+    <h4 class="subhead">Father</h4>
+    <div class="grid">
+      <label>
+        Full name
+        <input [(ngModel)]="fatherName" name="fatherName" />
+        @if (fieldErrors['fatherName']) {
+          <span class="field-error">{{ fieldErrors['fatherName'] }}</span>
+        }
+      </label>
+      <label>
+        Mobile number
+        <input [(ngModel)]="fatherMobile" name="fatherMobile" inputmode="tel" />
+        @if (fieldErrors['fatherMobile']) {
+          <span class="field-error">{{ fieldErrors['fatherMobile'] }}</span>
+        }
+      </label>
+      <label>
+        WhatsApp number
+        <span class="optional-tag">Optional</span>
+        <input [(ngModel)]="fatherWhatsapp" name="fatherWhatsapp" inputmode="tel" />
+      </label>
+      <label>
+        Email
+        <span class="optional-tag">Optional</span>
+        <input [(ngModel)]="fatherEmail" name="fatherEmail" type="email" />
+        @if (fieldErrors['fatherEmail']) {
+          <span class="field-error">{{ fieldErrors['fatherEmail'] }}</span>
+        }
+      </label>
+      <label>
+        Occupation
+        <span class="optional-tag">Optional</span>
+        <input [(ngModel)]="fatherOccupation" name="fatherOccupation" />
+      </label>
+      <label>
+        Education
+        <span class="optional-tag">Optional</span>
+        <input [(ngModel)]="fatherEducation" name="fatherEducation" />
+      </label>
+      <label>
+        Aadhaar number
+        <span class="optional-tag">Optional</span>
+        <input [(ngModel)]="fatherAadhaar" name="fatherAadhaar" inputmode="numeric" maxlength="14" />
+        @if (fieldErrors['fatherAadhaar']) {
+          <span class="field-error">{{ fieldErrors['fatherAadhaar'] }}</span>
+        }
+      </label>
+    </div>
+    <h4 class="subhead">Mother</h4>
+    <div class="grid">
+      <label>
+        Full name
+        <input [(ngModel)]="motherName" name="motherName" />
+      </label>
+      <label>
+        Mobile number
+        <input [(ngModel)]="motherMobile" name="motherMobile" inputmode="tel" />
+        @if (fieldErrors['motherMobile']) {
+          <span class="field-error">{{ fieldErrors['motherMobile'] }}</span>
+        }
+      </label>
+      <label>
+        WhatsApp number
+        <span class="optional-tag">Optional</span>
+        <input [(ngModel)]="motherWhatsapp" name="motherWhatsapp" inputmode="tel" />
+      </label>
+      <label>
+        Email
+        <span class="optional-tag">Optional</span>
+        <input [(ngModel)]="motherEmail" name="motherEmail" type="email" />
+        @if (fieldErrors['motherEmail']) {
+          <span class="field-error">{{ fieldErrors['motherEmail'] }}</span>
+        }
+      </label>
+      <label>
+        Occupation
+        <span class="optional-tag">Optional</span>
+        <input [(ngModel)]="motherOccupation" name="motherOccupation" />
+      </label>
+      <label>
+        Education
+        <span class="optional-tag">Optional</span>
+        <input [(ngModel)]="motherEducation" name="motherEducation" />
+      </label>
+      <label>
+        Aadhaar number
+        <span class="optional-tag">Optional</span>
+        <input [(ngModel)]="motherAadhaar" name="motherAadhaar" inputmode="numeric" maxlength="14" />
+        @if (fieldErrors['motherAadhaar']) {
+          <span class="field-error">{{ fieldErrors['motherAadhaar'] }}</span>
+        }
+      </label>
+    </div>
+    <label class="check">
+      <input type="checkbox" [(ngModel)]="guardianDifferent" name="guardianDifferent" />
+      Guardian is different from parents
+    </label>
+    @if (guardianDifferent) {
+      <h4 class="subhead">Guardian</h4>
+      <div class="grid">
+        <label>
+          Guardian name
+          <input [(ngModel)]="guardianName" name="guardianName" />
+        </label>
+        <label>
+          Relationship with student
+          <input [(ngModel)]="guardianRelation" name="guardianRelation" placeholder="Uncle, aunt, grandparent" />
+        </label>
+        <label>
+          Mobile number
+          <input [(ngModel)]="guardianMobile" name="guardianMobile" inputmode="tel" />
+          @if (fieldErrors['guardianMobile']) {
+            <span class="field-error">{{ fieldErrors['guardianMobile'] }}</span>
+          }
+        </label>
+        <label>
+          Email
+          <span class="optional-tag">Optional</span>
+          <input [(ngModel)]="guardianEmail" name="guardianEmail" type="email" />
+          @if (fieldErrors['guardianEmail']) {
+            <span class="field-error">{{ fieldErrors['guardianEmail'] }}</span>
+          }
+        </label>
+        <label class="span-2">
+          Address
+          <span class="optional-tag">Optional</span>
+          <input [(ngModel)]="guardianAddress" name="guardianAddress" />
+        </label>
+      </div>
+    }
+  </section>
+
+  <section class="panel section-card">
+    <h3>Address Information</h3>
+    <div class="address-grid">
+      <div class="address-card">
+        <h4>Permanent address</h4>
+        <div class="grid">
+          <label class="span-3">
+            Address line 1
+            <input [(ngModel)]="permanentAddress" name="permanentAddress" (ngModelChange)="onSameAddress()" />
+          </label>
+          <label class="span-3">
+            Address line 2
+            <span class="optional-tag">Optional</span>
+            <input [(ngModel)]="permanentAddressLine2" name="permanentAddressLine2" (ngModelChange)="onSameAddress()" />
+          </label>
+          <label>
+            State
+            <input [(ngModel)]="permanentState" name="permanentState" (ngModelChange)="onSameAddress()" />
+          </label>
+          <label>
+            District
+            <input [(ngModel)]="permanentDistrict" name="permanentDistrict" (ngModelChange)="onSameAddress()" />
+          </label>
+          <label>
+            City
+            <input [(ngModel)]="permanentCity" name="permanentCity" (ngModelChange)="onSameAddress()" />
+          </label>
+          <label>
+            PIN code
+            <input [(ngModel)]="permanentPin" name="permanentPin" inputmode="numeric" (ngModelChange)="onSameAddress()" />
+            @if (fieldErrors['permanentPin']) {
+              <span class="field-error">{{ fieldErrors['permanentPin'] }}</span>
+            }
+          </label>
+        </div>
+      </div>
+      <div class="address-card">
+        <h4>Current address</h4>
+        <label class="check">
+          <input type="checkbox" [(ngModel)]="sameAddress" name="sameAddress" (ngModelChange)="onSameAddress()" />
+          Same as permanent address
+        </label>
+        <div class="grid">
+          <label class="span-3">
+            Address line 1
+            <input [(ngModel)]="address" name="address" [readonly]="sameAddress" />
+          </label>
+          <label class="span-3">
+            Address line 2
+            <input [(ngModel)]="addressLine2" name="addressLine2" [readonly]="sameAddress" />
+          </label>
+          <label>
+            State
+            <input [(ngModel)]="state" name="state" [readonly]="sameAddress" />
+          </label>
+          <label>
+            District
+            <input [(ngModel)]="district" name="district" [readonly]="sameAddress" />
+          </label>
+          <label>
+            City
+            <input [(ngModel)]="city" name="city" [readonly]="sameAddress" />
+          </label>
+          <label>
+            PIN code
+            <input [(ngModel)]="pinCode" name="pinCode" inputmode="numeric" [readonly]="sameAddress" />
+            @if (fieldErrors['pinCode']) {
+              <span class="field-error">{{ fieldErrors['pinCode'] }}</span>
+            }
+          </label>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel section-card">
+    <h3>Additional Information</h3>
+    <div class="grid">
+      <label class="span-3">
+        Medical information
+        <span class="optional-tag">Optional</span>
+        <textarea [(ngModel)]="medicalInfo" name="medicalInfo" rows="2"></textarea>
+      </label>
+      <label>
+        Allergies
+        <span class="optional-tag">Optional</span>
+        <input [(ngModel)]="allergies" name="allergies" />
+      </label>
+      <label>
+        Emergency contact name
+        <span class="optional-tag">Optional</span>
+        <input [(ngModel)]="emergencyContactName" name="emergencyContactName" />
+      </label>
+      <label>
+        Emergency contact number
+        <span class="optional-tag">Optional</span>
+        <input [(ngModel)]="emergencyContactNumber" name="emergencyContactNumber" inputmode="tel" />
+        @if (fieldErrors['emergencyContactNumber']) {
+          <span class="field-error">{{ fieldErrors['emergencyContactNumber'] }}</span>
+        }
+      </label>
+      <label class="span-3">
+        Previous academic remarks
+        <span class="optional-tag">Optional</span>
+        <textarea [(ngModel)]="previousRemarks" name="previousRemarks" rows="2"></textarea>
+      </label>
+      <label class="span-3">
+        Special instructions
+        <span class="optional-tag">Optional</span>
+        <textarea [(ngModel)]="specialInstructions" name="specialInstructions" rows="2"></textarea>
+      </label>
+    </div>
+    <h4 class="subhead">Documents</h4>
+    <div class="docs">
+      @for (doc of documentTypes; track doc.type) {
+        <label>
+          {{ doc.label }}
+          <span class="optional-tag">Optional</span>
+          <input type="file" accept="application/pdf,image/jpeg,image/png,image/webp" (change)="onDocument(doc.type, $event)" />
+          @if (documentName(doc.type)) {
+            <span class="hint">{{ documentName(doc.type) }}</span>
+          }
+        </label>
+      }
+    </div>
+  </section>
+
+  <section class="panel section-card">
+    <h3>Fee &amp; Transport Information</h3>
+    <p class="section-note">Optional. Payment is not collected on this form.</p>
+    <div class="grid">
+      <label>
+        Applicable fee structure
+        <select [(ngModel)]="feeStructureKey" name="feeStructureKey">
+          <option value="">Not selected</option>
+          @for (row of feeStructures; track row.key) {
+            <option [value]="row.key">{{ row.label }}</option>
+          }
+        </select>
+        @if (!feeStructures.length) {
+          <span class="hint">No fee structure is configured yet.</span>
+        }
+      </label>
+      <label>
+        Scholarship / concession
+        <select [(ngModel)]="concessionKey" name="concessionKey">
+          <option value="">None</option>
+          @for (row of concessions; track row.key) {
+            <option [value]="row.key">{{ row.label }}</option>
+          }
+        </select>
+      </label>
+      <label class="check">
+        <input type="checkbox" [(ngModel)]="transportRequired" name="transportRequired" />
+        Transport required
+      </label>
+      @if (transportRequired) {
+        <label>
+          Transport route
+          <select [(ngModel)]="transportRoute" name="transportRoute">
+            <option value="">Select</option>
+            @for (row of routes; track row.key) {
+              <option [value]="row.key">{{ row.label }}</option>
+            }
+          </select>
+          @if (!routes.length) {
+            <span class="hint">No transport route is configured yet.</span>
+          }
+        </label>
+        <label>
+          Pickup point
+          <input [(ngModel)]="pickupPoint" name="pickupPoint" />
+        </label>
+        <label>
+          Drop point
+          <input [(ngModel)]="dropPoint" name="dropPoint" />
+        </label>
+      }
+    </div>
+  </section>
+
+  <div class="actions">
+    <button type="button" class="secondary" (click)="closed.emit()" [disabled]="saving">Cancel</button>
+    <button type="button" (click)="save()" [disabled]="saving">{{ saving ? 'Saving…' : 'Save Student' }}</button>
+  </div>
+  @if (fieldErrors['mobile']) {
+    <p class="field-error">{{ fieldErrors['mobile'] }}</p>
   }
 </section>

@@ -685,12 +685,173 @@ public class StudentRecordService {
   }
 
   /**
-   * Short desk enrollment: name, class, parent, and mobile. Admission number uses the school format.
-   * Government IDs stay on the student profile.
+   * Desk enrollment. The short list form still sends name, class, parent, and mobile. The admission
+   * form sends the same student profile keys, and the admission number still uses the school format.
    */
   @Transactional
   public Map<String, Object> quickAdd(Map<String, Object> body) {
     Map<String, Object> source = body != null ? body : Map.of();
+    boolean admissionForm =
+        Boolean.TRUE.equals(source.get("admissionForm")) || source.containsKey("firstName");
+    if (!admissionForm) {
+      return quickAddShort(source);
+    }
+    String first = stringOr(source.get("firstName"), "");
+    String middle = stringOr(source.get("middleName"), "");
+    String last = stringOr(source.get("lastName"), "");
+    String name = joinName(first, middle, last);
+    if (name.isBlank()) {
+      name = stringOr(source.get("fullName"), "");
+    }
+    String className = stringOr(source.get("className"), stringOr(source.get("classApplied"), ""));
+    String section = stringOr(source.get("section"), "");
+    String gender = stringOr(source.get("gender"), "");
+    String dob = stringOr(source.get("dateOfBirth"), "");
+    String father = stringOr(source.get("fatherName"), "");
+    String mother = stringOr(source.get("motherName"), "");
+    String guardian = stringOr(source.get("guardianName"), "");
+    String parentName = firstNonBlank(father, mother, guardian, stringOr(source.get("parentName"), ""));
+    String mobile =
+        firstNonBlank(
+            stringOr(source.get("mobile"), ""),
+            stringOr(source.get("fatherMobile"), ""),
+            stringOr(source.get("motherMobile"), ""),
+            stringOr(source.get("guardianMobile"), ""));
+    if (first.isBlank() || last.isBlank()) {
+      throw new StudentException("VALIDATION", "Student first name and last name are required");
+    }
+    if (dob.isBlank() || gender.isBlank() || className.isBlank()) {
+      throw new StudentException("VALIDATION", "Date of birth, gender, and class are required");
+    }
+    if (!List.of("Male", "Female", "Other").contains(gender)) {
+      throw new StudentException("VALIDATION", "Gender must be Male, Female, or Other");
+    }
+    rejectFutureDate(dob, "Date of birth");
+    String admissionDate = stringOr(source.get("admissionDate"), "");
+    if (!admissionDate.isBlank()) {
+      rejectFutureDate(admissionDate, "Admission date");
+    }
+    if (parentName.isBlank() || mobile.isBlank()) {
+      throw new StudentException(
+          "VALIDATION", "A parent or guardian name and a mobile number are required");
+    }
+    String status = stringOr(source.get("status"), "ACTIVE").toUpperCase(Locale.ROOT);
+    if (!status.equals("ACTIVE") && !status.equals("INACTIVE")) {
+      throw new StudentException("VALIDATION", "Student status must be Active or Inactive");
+    }
+
+    String classLabel = section.isBlank() ? className.trim() : className.trim() + "-" + section.trim();
+    String grade = className.trim();
+    if (grade.regionMatches(true, 0, "Grade ", 0, 6)) {
+      grade = grade.substring(6).trim();
+    }
+    Map<String, Object> answers = new LinkedHashMap<>();
+    copyPresent(
+        source,
+        answers,
+        List.of(
+            "middleName",
+            "bloodGroup",
+            "nationality",
+            "religion",
+            "category",
+            "motherTongue",
+            "aadhaar",
+            "rollNo",
+            "academicSessionId",
+            "branchId",
+            "previousSchool",
+            "previousClass",
+            "previousTcNumber",
+            "admissionType",
+            "email",
+            "fatherMobile",
+            "fatherWhatsapp",
+            "fatherEmail",
+            "fatherOccupation",
+            "fatherEducation",
+            "fatherAadhaar",
+            "motherMobile",
+            "motherWhatsapp",
+            "motherEmail",
+            "motherOccupation",
+            "motherEducation",
+            "motherAadhaar",
+            "guardianName",
+            "guardianRelation",
+            "guardianMobile",
+            "guardianEmail",
+            "guardianAddress",
+            "primaryContact",
+            "address",
+            "addressLine2",
+            "city",
+            "district",
+            "state",
+            "pinCode",
+            "permanentAddress",
+            "permanentAddressLine2",
+            "permanentCity",
+            "permanentDistrict",
+            "permanentState",
+            "permanentPin",
+            "medicalInfo",
+            "allergies",
+            "emergencyContactName",
+            "emergencyContactNumber",
+            "previousRemarks",
+            "specialInstructions",
+            "feeStructureKey",
+            "concessionKey",
+            "transportRoute",
+            "pickupPoint",
+            "dropPoint"));
+    String aadhaar = stringOr(answers.get("aadhaar"), null);
+    if (aadhaar != null) {
+      answers.put("aadhaar", aadhaar.replaceAll("\\D", ""));
+    }
+    answers.put("firstName", first);
+    answers.put("lastName", last);
+    answers.put("fullName", name);
+    answers.put("classApplied", classLabel);
+    answers.put("classSection", classLabel);
+    answers.put("classGrade", grade);
+    if (!section.isBlank()) {
+      answers.put("sectionLetter", section.trim());
+    }
+    answers.put("dateOfBirth", dob);
+    answers.put("gender", gender);
+    answers.put("mobile", mobile);
+    answers.put("fatherName", father);
+    answers.put("motherName", mother);
+    if (!admissionDate.isBlank()) {
+      answers.put("admissionDate", admissionDate);
+    }
+    if (Boolean.TRUE.equals(source.get("sameAddress"))) {
+      answers.put("sameAddress", true);
+    }
+    if (Boolean.TRUE.equals(source.get("guardianDifferent"))) {
+      answers.put("guardianDifferent", true);
+    }
+    if (source.get("transportRequired") != null) {
+      answers.put("transportRequired", Boolean.TRUE.equals(source.get("transportRequired")));
+    }
+    String suppliedAdmission = stringOr(source.get("admissionNo"), "");
+    if (!suppliedAdmission.isBlank()) {
+      answers.put("admissionNo", suppliedAdmission);
+    }
+
+    Map<String, Object> payload = new LinkedHashMap<>();
+    payload.put("answers", answers);
+    payload.put("admissionForm", true);
+    payload.put("status", status);
+    payload.put("historyType", "ADMITTED");
+    payload.put("historyMessage", "Admitted from the student form");
+    payload.put("guardians", admissionGuardians(source, father, mother, guardian));
+    return createFromImport(payload);
+  }
+
+  private Map<String, Object> quickAddShort(Map<String, Object> source) {
     String name = stringOr(source.get("fullName"), "");
     String className = stringOr(source.get("className"), stringOr(source.get("classApplied"), ""));
     String section = stringOr(source.get("section"), "");
@@ -718,6 +879,7 @@ public class StudentRecordService {
     answers.put("fatherMobile", mobile.trim());
     String dob = stringOr(source.get("dateOfBirth"), "");
     if (!dob.isBlank()) {
+      rejectFutureDate(dob, "Date of birth");
       answers.put("dateOfBirth", dob.trim());
     }
     String gender = stringOr(source.get("gender"), "");
@@ -763,13 +925,19 @@ public class StudentRecordService {
             : new LinkedHashMap<>(body);
 
     Map<String, Object> answers = mapAnswers(form, sourceAnswers, Map.of());
+    preserveAdmissionAnswers(sourceAnswers, answers);
     StudentGuardianSync.syncFromFlat(answers);
+    boolean admissionForm = Boolean.TRUE.equals(body.get("admissionForm"));
     String admissionNo = stringOr(answers.get("admissionNo"), null);
     if (admissionNo != null && !admissionNo.isBlank()) {
       var existingAdm =
           repository.findByOrganizationIdAndAdmissionNoIgnoreCaseAndDeletedAtIsNull(
               scope.organizationId(), admissionNo);
       if (existingAdm.isPresent()) {
+        if (admissionForm) {
+          throw new StudentException(
+              "VALIDATION", "Admission number already exists: " + admissionNo);
+        }
         return toDto(existingAdm.get());
       }
     } else {
@@ -782,12 +950,28 @@ public class StudentRecordService {
     }
 
     validateMandatory(form, answers);
+    if (admissionForm) {
+      validateFormats(answers);
+      validateAdmissionContacts(answers);
+      assertUniqueAadhaar(scope.organizationId(), answers, null);
+      assertUniqueRollInClass(scope.organizationId(), answers, null);
+    }
 
     StudentRecordEntity entity = new StudentRecordEntity();
     entity.setId(UUID.randomUUID());
     entity.setOrganizationId(scope.organizationId());
     entity.setBranchId(scope.branchId());
     entity.setAcademicSessionId(scope.academicSessionId());
+    if (admissionForm) {
+      String branch = stringOr(answers.get("branchId"), null);
+      String session = stringOr(answers.get("academicSessionId"), null);
+      if (branch != null) {
+        entity.setBranchId(branch);
+      }
+      if (session != null) {
+        entity.setAcademicSessionId(session);
+      }
+    }
     entity.setFormKey(formKey);
     entity.setStatus(stringOr(body.get("status"), "ACTIVE"));
     entity.setAdmissionNo(admissionNo);
@@ -2431,6 +2615,185 @@ public class StudentRecordService {
     dto.put("restoredAt", e.getRestoredAt() != null ? e.getRestoredAt().toString() : null);
     dto.put("restoredBy", e.getRestoredBy());
     return dto;
+  }
+
+  private static final List<String> ADMISSION_ANSWER_KEYS =
+      List.of(
+          "firstName",
+          "middleName",
+          "lastName",
+          "motherTongue",
+          "admissionType",
+          "previousTcNumber",
+          "fatherWhatsapp",
+          "fatherEducation",
+          "fatherAadhaar",
+          "motherWhatsapp",
+          "motherEducation",
+          "motherAadhaar",
+          "guardianName",
+          "guardianRelation",
+          "guardianMobile",
+          "guardianEmail",
+          "guardianAddress",
+          "primaryContact",
+          "addressLine2",
+          "district",
+          "permanentAddress",
+          "permanentAddressLine2",
+          "permanentCity",
+          "permanentDistrict",
+          "permanentState",
+          "permanentPin",
+          "medicalInfo",
+          "allergies",
+          "emergencyContactName",
+          "emergencyContactNumber",
+          "previousRemarks",
+          "specialInstructions",
+          "feeStructureKey",
+          "concessionKey",
+          "transportRoute",
+          "pickupPoint",
+          "dropPoint");
+
+  private static void preserveAdmissionAnswers(Map<String, Object> source, Map<String, Object> answers) {
+    copyPresent(source, answers, ADMISSION_ANSWER_KEYS);
+    if (Boolean.TRUE.equals(source.get("sameAddress"))) {
+      answers.put("sameAddress", true);
+    }
+    if (Boolean.TRUE.equals(source.get("guardianDifferent"))) {
+      answers.put("guardianDifferent", true);
+    }
+    if (source.get("transportRequired") instanceof Boolean required) {
+      answers.put("transportRequired", required);
+    }
+  }
+
+  private static void copyPresent(
+      Map<String, Object> source, Map<String, Object> target, List<String> keys) {
+    for (String key : keys) {
+      String value = stringOr(source.get(key), null);
+      if (value != null) {
+        target.put(key, value);
+      }
+    }
+  }
+
+  private static String joinName(String first, String middle, String last) {
+    StringBuilder name = new StringBuilder();
+    for (String part : List.of(first, middle, last)) {
+      if (part == null || part.isBlank()) {
+        continue;
+      }
+      if (!name.isEmpty()) {
+        name.append(' ');
+      }
+      name.append(part.trim());
+    }
+    return name.toString();
+  }
+
+  private static void rejectFutureDate(String raw, String label) {
+    try {
+      LocalDate date = LocalDate.parse(raw.length() >= 10 ? raw.substring(0, 10) : raw);
+      if (date.isAfter(LocalDate.now())) {
+        throw new StudentException("VALIDATION", label + " cannot be a future date");
+      }
+    } catch (DateTimeParseException ex) {
+      throw new StudentException("VALIDATION", label + " must be a valid date");
+    }
+  }
+
+  private void validateAdmissionContacts(Map<String, Object> answers) {
+    for (String key :
+        List.of(
+            "fatherMobile",
+            "motherMobile",
+            "fatherWhatsapp",
+            "motherWhatsapp",
+            "guardianMobile",
+            "emergencyContactNumber")) {
+      String value = stringOr(answers.get(key), null);
+      if (value != null && !MOBILE_RE.matcher(value).matches()) {
+        throw new StudentException("VALIDATION", "Invalid mobile number");
+      }
+    }
+    for (String key : List.of("fatherEmail", "motherEmail", "guardianEmail")) {
+      String value = stringOr(answers.get(key), null);
+      if (value != null && !EMAIL_RE.matcher(value).matches()) {
+        throw new StudentException("VALIDATION", "Invalid email");
+      }
+    }
+    for (String key : List.of("fatherAadhaar", "motherAadhaar")) {
+      String value = stringOr(answers.get(key), null);
+      if (value != null) {
+        String digits = value.replaceAll("\\D", "");
+        if (!AADHAAR_RE.matcher(digits).matches()) {
+          throw new StudentException("VALIDATION", "Aadhaar must be exactly 12 digits");
+        }
+        answers.put(key, digits);
+      }
+    }
+    String permanentPin = stringOr(answers.get("permanentPin"), null);
+    if (permanentPin != null && !PIN_RE.matcher(permanentPin).matches()) {
+      throw new StudentException("VALIDATION", "Invalid PIN code");
+    }
+  }
+
+  private static List<Map<String, Object>> admissionGuardians(
+      Map<String, Object> source, String father, String mother, String guardian) {
+    String primary = stringOr(source.get("primaryContact"), "FATHER").toUpperCase(Locale.ROOT);
+    List<Map<String, Object>> rows = new ArrayList<>();
+    addGuardian(
+        rows,
+        "Father",
+        father,
+        stringOr(source.get("fatherMobile"), ""),
+        stringOr(source.get("fatherEmail"), ""),
+        "FATHER".equals(primary));
+    addGuardian(
+        rows,
+        "Mother",
+        mother,
+        stringOr(source.get("motherMobile"), ""),
+        stringOr(source.get("motherEmail"), ""),
+        "MOTHER".equals(primary));
+    if (Boolean.TRUE.equals(source.get("guardianDifferent")) && !guardian.isBlank()) {
+      addGuardian(
+          rows,
+          stringOr(source.get("guardianRelation"), "Guardian"),
+          guardian,
+          stringOr(source.get("guardianMobile"), ""),
+          stringOr(source.get("guardianEmail"), ""),
+          "GUARDIAN".equals(primary));
+    }
+    return rows;
+  }
+
+  private static void addGuardian(
+      List<Map<String, Object>> rows,
+      String relation,
+      String name,
+      String mobile,
+      String email,
+      boolean primary) {
+    if (name.isBlank() && mobile.isBlank() && email.isBlank()) {
+      return;
+    }
+    Map<String, Object> row = new LinkedHashMap<>();
+    if (!name.isBlank()) {
+      row.put("fullName", name);
+    }
+    row.put("relation", relation);
+    if (!mobile.isBlank()) {
+      row.put("mobile", mobile);
+    }
+    if (!email.isBlank()) {
+      row.put("email", email);
+    }
+    row.put("isPrimary", primary);
+    rows.add(row);
   }
 
   private static String stringOr(Object value, String fallback) {
