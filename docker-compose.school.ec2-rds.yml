@@ -89,7 +89,7 @@ services:
   # -------------------------------------------------------------------------
   school-settings-service:
     <<: *jvm-service
-    image: ${IMAGE_PREFIX:-sumanthakur30}/school-settings-service:${IMAGE_TAG:-1.0.0}
+    image: ${IMAGE_PREFIX:-sumanthakur30}/school-settings-service:${SETTINGS_IMAGE_TAG:-${IMAGE_TAG:-1.0.0}}
     environment:
       <<: *common-env
       EUREKA_INSTANCE_HOSTNAME: school-settings-service
@@ -153,7 +153,7 @@ services:
 
   admission-service:
     <<: *jvm-service
-    image: ${IMAGE_PREFIX:-sumanthakur30}/admission-service:${IMAGE_TAG:-1.0.0}
+    image: ${IMAGE_PREFIX:-sumanthakur30}/admission-service:${ADMISSION_IMAGE_TAG:-${IMAGE_TAG:-1.0.0}}
     environment:
       <<: *common-env
       EUREKA_INSTANCE_HOSTNAME: admission-service
@@ -194,7 +194,9 @@ services:
       FEE_FORMS_URL: http://form-builder-service:8183
       FEE_WORKFLOWS_URL: http://workflow-service:8184
       FEE_RULES_URL: ${FEE_RULES_URL:-http://rule-engine-service:8185}
+      FEE_NOTIF_CFG_URL: http://school-notification-config-service:8187
       FEE_NOTIF_DELIVERY_URL: http://notification-service:8087
+      FEE_REPORTS_URL: http://report-builder-service:8186
 
   student-service:
     <<: *jvm-service
@@ -315,7 +317,7 @@ services:
   payroll-service:
     <<: *jvm-service
     profiles: ["phase-b"]
-    image: ${IMAGE_PREFIX:-sumanthakur30}/payroll-service:${IMAGE_TAG:-1.0.0}
+    image: ${IMAGE_PREFIX:-sumanthakur30}/payroll-service:${PAYROLL_IMAGE_TAG:-${IMAGE_TAG:-1.0.0}}
     environment:
       <<: *common-env
       EUREKA_INSTANCE_HOSTNAME: payroll-service
@@ -337,7 +339,7 @@ services:
   attendance-service:
     <<: *jvm-service
     profiles: ["phase-b"]
-    image: ${IMAGE_PREFIX:-sumanthakur30}/attendance-service:${IMAGE_TAG:-1.0.0}
+    image: ${IMAGE_PREFIX:-sumanthakur30}/attendance-service:${ATTENDANCE_IMAGE_TAG:-${IMAGE_TAG:-1.0.0}}
     environment:
       <<: *common-env
       EUREKA_INSTANCE_HOSTNAME: attendance-service
@@ -430,7 +432,7 @@ services:
   transport-service:
     <<: *jvm-service
     profiles: ["phase-b"]
-    image: ${IMAGE_PREFIX:-sumanthakur30}/transport-service:${IMAGE_TAG:-1.0.0}
+    image: ${IMAGE_PREFIX:-sumanthakur30}/transport-service:${TRANSPORT_IMAGE_TAG:-${IMAGE_TAG:-1.0.0}}
     environment:
       <<: *common-env
       EUREKA_INSTANCE_HOSTNAME: transport-service
@@ -451,7 +453,7 @@ services:
   school-notification-config-service:
     <<: *jvm-service
     profiles: ["phase-b"]
-    image: ${IMAGE_PREFIX:-sumanthakur30}/school-notification-config-service:${IMAGE_TAG:-1.0.0}
+    image: ${IMAGE_PREFIX:-sumanthakur30}/school-notification-config-service:${NOTIF_CONFIG_IMAGE_TAG:-${IMAGE_TAG:-1.0.0}}
     environment:
       <<: *common-env
       EUREKA_INSTANCE_HOSTNAME: school-notification-config-service
