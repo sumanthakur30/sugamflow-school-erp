@@ -60,6 +60,11 @@ public class FinanceController {
         wrap(() -> service.saveDefinition(FinanceCatalog.TYPE_FEE_STRUCTURE, body)));
   }
 
+  @PutMapping("/standard-fees")
+  public ApiResponse<Map<String, Object>> saveStandardFees(@RequestBody Map<String, Object> body) {
+    return ApiResponse.ok(wrap(() -> service.saveStandardFees(body)));
+  }
+
   @GetMapping("/concessions")
   public ApiResponse<List<Map<String, Object>>> concessions() {
     return ApiResponse.ok(wrap(() -> service.listDefinitions(FinanceCatalog.TYPE_CONCESSION)));

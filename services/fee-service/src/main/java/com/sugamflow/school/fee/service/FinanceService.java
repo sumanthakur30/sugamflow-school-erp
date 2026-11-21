@@ -7,6 +7,7 @@ import com.sugamflow.school.common.tenant.TenantScope;
 import com.sugamflow.school.fee.config.FeeProperties;
 import com.sugamflow.school.fee.finance.FeeConcessionCalculator;
 import com.sugamflow.school.fee.finance.FinanceCatalog;
+import com.sugamflow.school.fee.finance.StandardFeePlan;
 import com.sugamflow.school.fee.persistence.entity.StudentFeeAdjustmentEntity;
 import com.sugamflow.school.fee.integration.ConfigEngineClient;
 import com.sugamflow.school.fee.integration.StudentProfileClient;
@@ -145,6 +146,94 @@ public class FinanceService {
       definitionRepo.save(existing);
     }
     return toDefinitionDto(definitionRepo.save(entity));
+  }
+
+  /**
+   * Saves the school's class-wise fee grid as fee-head and fee-structure versions.
+   * Finance transactions, receipts, and dues are not read or updated.
+   */
+  @Transactional
+  public Map<String, Object> saveStandardFees(Map<String, Object> body) {
+    TenantScope scope = TenantContext.require();
+    requireFee(scope);
+    String session = stringOr(body.get("academicSessionId"), stringOr(scope.academicSessionId(), ""));
+    List<StandardFeePlan.Existing> existing = new ArrayList<>();
+    for (FinanceDefinitionEntity entity :
+        definitionRepo.findByOrganizationIdAndDefinitionTypeAndStatusOrderByDefinitionKeyAsc(
+            scope.organizationId(), FinanceCatalog.TYPE_FEE_STRUCTURE, "ACTIVE")) {
+      Map<String, Object> payload = entity.getPayload() == null ? Map.of() : entity.getPayload();
+      String className = "";
+      String structureSession = "";
+      if (payload.get("eligibility") instanceof Map<?, ?> eligibility) {
+        className = stringOr(eligibility.get("classSection"), "");
+        structureSession = stringOr(eligibility.get("academicSessionId"), "");
+      }
+      existing.add(
+          new StandardFeePlan.Existing(entity.getDefinitionKey(), className, structureSession, payload));
+    }
+    StandardFeePlan.Result plan =
+        StandardFeePlan.build(
+            session,
+            StandardFeePlan.readCategories(body.get("categories")),
+            StandardFeePlan.readClasses(body.get("classes")),
+            existing);
+    int updatedHeads = 0;
+    for (StandardFeePlan.Category category : plan.heads()) {
+      if (upsertFeeHead(scope, category)) {
+        updatedHeads++;
+      }
+    }
+    for (Map<String, Object> structure : plan.structures()) {
+      saveDefinition(FinanceCatalog.TYPE_FEE_STRUCTURE, structure);
+    }
+    for (String key : plan.retireKeys()) {
+      retireActiveDefinition(scope, FinanceCatalog.TYPE_FEE_STRUCTURE, key);
+    }
+    Map<String, Object> out = new LinkedHashMap<>();
+    out.put("savedStructures", plan.structures().size());
+    out.put("retiredStructures", plan.retireKeys().size());
+    out.put("updatedHeads", updatedHeads);
+    out.put("message", "Saved. Fee receipts and dues already recorded are unchanged.");
+    return out;
+  }
+
+  private boolean upsertFeeHead(TenantScope scope, StandardFeePlan.Category category) {
+    var found =
+        definitionRepo
+            .findFirstByOrganizationIdAndDefinitionTypeAndDefinitionKeyAndStatusOrderByVersionDesc(
+                scope.organizationId(), FinanceCatalog.TYPE_FEE_HEAD, category.headKey(), "ACTIVE");
+    Map<String, Object> payload = new LinkedHashMap<>();
+    if (found.isPresent() && found.get().getPayload() != null) {
+      payload.putAll(found.get().getPayload());
+      if (category.label().equals(stringOr(payload.get("label"), ""))
+          && category.frequency().equalsIgnoreCase(stringOr(payload.get("frequency"), ""))) {
+        return false;
+      }
+    } else {
+      payload.put("code", category.headKey());
+      payload.put("category", "OTHER");
+      payload.put("refundable", false);
+      payload.put("gstRate", 0);
+      payload.put("taxable", false);
+    }
+    payload.put("definitionKey", category.headKey());
+    payload.put("label", category.label());
+    payload.put("frequency", category.frequency());
+    payload.put("enabled", true);
+    saveDefinition(FinanceCatalog.TYPE_FEE_HEAD, payload);
+    return true;
+  }
+
+  private void retireActiveDefinition(TenantScope scope, String type, String key) {
+    definitionRepo
+        .findFirstByOrganizationIdAndDefinitionTypeAndDefinitionKeyAndStatusOrderByVersionDesc(
+            scope.organizationId(), type, key, "ACTIVE")
+        .ifPresent(
+            row -> {
+              row.setStatus("SUPERSEDED");
+              row.setUpdatedAt(Instant.now());
+              definitionRepo.save(row);
+            });
   }
 
   @Transactional

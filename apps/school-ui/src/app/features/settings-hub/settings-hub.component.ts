@@ -45,7 +45,8 @@ export class SettingsHubComponent implements OnInit {
   presetStatus = '';
 
   readonly checklist: SetupRow[] = [
-    { label: 'School name, session, classes, and one fee', path: '/admin/settings/setup' },
+    { label: 'School name, session, and classes', path: '/admin/settings/setup' },
+    { label: 'Standard fee structure', feature: 'FEATURE_FEE', path: '/admin/settings/fees' },
     { label: 'Students', feature: 'FEATURE_STUDENT_MASTER', path: '/admin/students' },
     { label: 'Fees', feature: 'FEATURE_FEE', path: '/admin/fee' },
     { label: 'Attendance', feature: 'FEATURE_ATTENDANCE', path: '/admin/attendance' },
@@ -61,9 +62,10 @@ export class SettingsHubComponent implements OnInit {
     { group: 'Modules', title: 'Module settings', detail: 'School-specific keys for admission, fees, payroll, and the other modules. Saving does not remove historical records.', path: '/admin/modules', feature: 'FEATURE_ADMIN_CONFIG' },
     { group: 'Academics', title: 'Classes and sessions', detail: 'Sessions, classes, and sections.', path: '/admin/academic' },
     { group: 'Academics', title: 'Calendar', detail: 'Working days and holidays.', path: '/admin/school-calendar' },
-    { group: 'Students', title: 'Admission numbers and class fees', detail: 'Number format used for the next student, and a tuition structure for one class.', path: '/admin/settings/setup' },
+    { group: 'Students', title: 'Admission numbers', detail: 'Number format used for the next student.', path: '/admin/settings/setup' },
     { group: 'Students', title: 'Admission number and student fields', detail: 'Form layout and extra fields for this school.', path: '/admin/forms', feature: 'FEATURE_FORM_BUILDER' },
-    { group: 'Fees', title: 'Fee collection', detail: 'Structures, receipts, and outstanding fees.', path: '/admin/fee', feature: 'FEATURE_FEE' },
+    { group: 'Fees', title: 'Standard fee structure', detail: 'Fee types and the amount each class pays. Saving does not change receipts already issued.', path: '/admin/settings/fees', feature: 'FEATURE_FEE' },
+    { group: 'Fees', title: 'Fee collection', detail: 'Receipts and outstanding fees. Amounts come from the standard fee structure.', path: '/admin/fee', feature: 'FEATURE_FEE' },
     { group: 'People', title: 'Payroll', detail: 'Salary components already configured for this school.', path: '/admin/payroll', feature: 'FEATURE_PAYROLL' },
     { group: 'People', title: 'Staff access', detail: 'Who can sign in and which actions they can take.', path: '/admin/staff-access', feature: 'FEATURE_STAFF_MASTER' },
     { group: 'Documents', title: 'Document designer', detail: 'One designer for ID cards, certificates, receipts, and report cards.', path: '/admin/reports', feature: 'FEATURE_REPORT_BUILDER' },

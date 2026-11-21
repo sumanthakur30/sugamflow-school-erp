@@ -46,6 +46,11 @@ public class AcademicController {
     return ApiResponse.ok(service.listClasses());
   }
 
+  @GetMapping("/class-catalog")
+  public ApiResponse<List<Map<String, Object>>> classCatalog() {
+    return ApiResponse.ok(service.classCatalog());
+  }
+
   @PostMapping("/classes")
   public ApiResponse<Map<String, Object>> createClass(@RequestBody Map<String, Object> body) {
     return ApiResponse.ok(service.createClass(body));
