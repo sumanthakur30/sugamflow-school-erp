@@ -30,7 +30,7 @@
 
     <form (ngSubmit)="onSubmit()">
       <label>
-        Organization ID
+        School code
         <input
           [(ngModel)]="organizationId"
           (ngModelChange)="onOrgChange()"
@@ -48,7 +48,6 @@
           required
           autocomplete="username"
         />
-        <span class="hint">Scoped as <code>{{ username }}_{{ organizationId }}</code></span>
       </label>
       <label>
         Password

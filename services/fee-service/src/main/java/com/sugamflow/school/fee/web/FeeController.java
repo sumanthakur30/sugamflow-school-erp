@@ -57,6 +57,12 @@ public class FeeController {
     return ApiResponse.ok(service.list(page, size));
   }
 
+  @GetMapping("/collections/bill-balance")
+  public ApiResponse<Map<String, Object>> billBalance(
+      @RequestParam("admissionNo") String admissionNo, @RequestParam("billKey") String billKey) {
+    return ApiResponse.ok(service.billBalance(admissionNo, billKey));
+  }
+
   @GetMapping("/collections/{id}")
   public ApiResponse<Map<String, Object>> get(@PathVariable("id") UUID id) {
     return ApiResponse.ok(service.get(id));
@@ -91,6 +97,15 @@ public class FeeController {
   @GetMapping("/students/{admissionNo}/fee-summary")
   public ApiResponse<Map<String, Object>> feeSummary(
       @PathVariable("admissionNo") String admissionNo) {
+    return ApiResponse.ok(clearanceService.snapshot(admissionNo));
+  }
+
+  /**
+   * Same snapshot when the admission number contains slashes. A path segment cannot carry those.
+   */
+  @GetMapping(value = "/students/fee-summary", params = "admissionNo")
+  public ApiResponse<Map<String, Object>> feeSummaryByQuery(
+      @RequestParam("admissionNo") String admissionNo) {
     return ApiResponse.ok(clearanceService.snapshot(admissionNo));
   }
 

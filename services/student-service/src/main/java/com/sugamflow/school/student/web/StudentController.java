@@ -122,6 +122,11 @@ public class StudentController {
     return ApiResponse.ok(service.timeline(id));
   }
 
+  @PostMapping("/students")
+  public ApiResponse<Map<String, Object>> quickAdd(@RequestBody Map<String, Object> body) {
+    return ApiResponse.ok(service.quickAdd(body));
+  }
+
   @PostMapping("/enroll-from-admission")
   public ApiResponse<Map<String, Object>> enrollFromAdmission(@RequestBody Map<String, Object> body) {
     return ApiResponse.ok(service.enrollFromAdmission(body));

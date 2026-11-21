@@ -1,0 +1,72 @@
+<section class="panel" aria-label="Add student">
+  <h3>Add student</h3>
+  <p class="muted">Name, parent, and class are enough. The admission number is generated. Government IDs can wait.</p>
+  @if (error) {
+    <p class="error" role="alert">{{ error }}</p>
+  }
+  @if (savedId) {
+    <p class="status" role="status">Saved{{ savedNo ? ' as ' + savedNo : '' }}.</p>
+    <p>
+      <a [routerLink]="['/admin/students', savedId, '360']">More details</a>
+      <button type="button" class="secondary" (click)="closed.emit()">Close</button>
+    </p>
+  } @else {
+    <div class="grid three">
+      <label>
+        Student name
+        <input [(ngModel)]="fullName" name="fullName" required />
+      </label>
+      <label>
+        Date of birth
+        <input [(ngModel)]="dateOfBirth" name="dateOfBirth" type="date" />
+      </label>
+      <label>
+        Gender
+        <select [(ngModel)]="gender" name="gender">
+          <option value="">Select</option>
+          <option>Male</option>
+          <option>Female</option>
+          <option>Other</option>
+        </select>
+      </label>
+      <label>
+        Class
+        @if (classes.length) {
+          <select [(ngModel)]="className" name="className">
+            <option value="">Select</option>
+            @for (row of classes; track row.id) {
+              <option [value]="row.name">{{ row.name }}</option>
+            }
+          </select>
+        } @else {
+          <input [(ngModel)]="className" name="className" placeholder="Grade 1" />
+        }
+      </label>
+      <label>
+        Section
+        @if (sections.length) {
+          <select [(ngModel)]="section" name="section">
+            <option value="">Select</option>
+            @for (row of sections; track row.id) {
+              <option [value]="row.name">{{ row.name }}</option>
+            }
+          </select>
+        } @else {
+          <input [(ngModel)]="section" name="section" placeholder="A" />
+        }
+      </label>
+      <label>
+        Parent name
+        <input [(ngModel)]="parentName" name="parentName" />
+      </label>
+      <label>
+        Mobile
+        <input [(ngModel)]="mobile" name="mobile" inputmode="tel" />
+      </label>
+    </div>
+    <p>
+      <button type="button" (click)="save()" [disabled]="saving">{{ saving ? 'Saving…' : 'Save' }}</button>
+      <button type="button" class="secondary" (click)="closed.emit()" [disabled]="saving">Cancel</button>
+    </p>
+  }
+</section>

@@ -4,6 +4,7 @@ import { RouterLink } from '@angular/router';
 import { Observable, Subscription, catchError, forkJoin, of, switchMap, timer, timeout } from 'rxjs';
 import { ApiService, PageResult } from '../../core/api.service';
 import { AuthSessionService } from '../../core/auth-session.service';
+import { roleKey, roleLabel } from '../../core/role-label';
 import { TenantContextService } from '../../core/tenant-context.service';
 
 type Metric = {
@@ -101,7 +102,7 @@ export class RoleDashboardComponent implements OnInit, OnDestroy {
     const orgAtStart = this.auth.getOrganizationId();
     const hadData = this.bundle.students != null || this.bundle.staff != null || this.bundle.finance != null;
     this.error = '';
-    this.role = (this.auth.getRole() || 'STAFF').toUpperCase();
+    this.role = roleKey(this.auth.getRole() || 'STAFF');
     this.wantsFinance = this.isFinanceRole() || this.isLeadershipRole();
     this.wantsTeacher = this.role === 'TEACHER';
     this.pending = 0;
@@ -243,6 +244,9 @@ export class RoleDashboardComponent implements OnInit, OnDestroy {
     }
     this.buildMetrics(this.bundle);
     this.buildActivity(this.bundle);
+    if (key === 'finance') {
+      this.syncFeeRisk();
+    }
     this.unavailable = this.countUnavailable(this.bundle, this.wantsFinance, this.wantsTeacher);
     this.pending = Math.max(0, this.pending - 1);
     if (this.pending === 0) {
@@ -369,9 +373,29 @@ export class RoleDashboardComponent implements OnInit, OnDestroy {
           { title: 'Fee risk', rows: fees },
           { title: 'Expiring documents', rows: documents },
         ];
+        this.syncFeeRisk();
         this.cdr.detectChanges();
       }),
     );
+  }
+
+  roleTitle(): string {
+    return roleLabel(this.role);
+  }
+
+  private syncFeeRisk(): void {
+    const pending = Number(this.bundle.finance?.kpis?.pendingFees ?? 0);
+    const group = this.exceptionGroups.find((item) => item.title === 'Fee risk');
+    if (!group || group.rows.length || !(pending > 0)) {
+      return;
+    }
+    group.rows = [
+      {
+        label: 'Pending fees',
+        value: this.money(pending),
+        route: '/admin/fee',
+      },
+    ];
   }
 
   private isLeadershipRole(): boolean {
@@ -383,22 +407,8 @@ export class RoleDashboardComponent implements OnInit, OnDestroy {
   }
 
   private configureRole(config: any): void {
-    const labels: Record<string, string> = {
-      SHOP_OWNER: 'School owner',
-      SUPER_ADMIN: 'Platform administrator',
-      ADMIN: 'Administrator',
-      PRINCIPAL: 'Principal',
-      TEACHER: 'Teacher',
-      ACCOUNTANT: 'Accounts',
-      ACCOUNTS: 'Accounts',
-      FINANCE: 'Finance',
-      RECEPTION: 'Reception',
-      RECEPTIONIST: 'Reception',
-      LIBRARIAN: 'Library',
-      STAFF: 'Staff',
-    };
-    const roleLabel = labels[this.role] ?? this.role.replace(/_/g, ' ').toLowerCase();
-    this.title = config?.title || `${roleLabel} dashboard`;
+    const roleLabelText = roleLabel(this.role);
+    this.title = config?.title || `${roleLabelText} dashboard`;
     this.subtitle =
       config?.subtitle ||
       `Live overview for ${this.auth.getBranchId()} campus · ${this.auth.getSessionId()}`;
@@ -481,7 +491,10 @@ export class RoleDashboardComponent implements OnInit, OnDestroy {
         id: 'attendance',
         label: 'Attendance records',
         value: data.attendance?.totalElements ?? '—',
-        hint: 'Current campus and session',
+        hint:
+          Number(data.attendance?.totalElements ?? 0) > 0
+            ? 'Marked for this campus and session'
+            : 'Not marked for this session yet',
         route: '/admin/attendance',
         tone: 'purple',
       },
@@ -592,17 +605,14 @@ export class RoleDashboardComponent implements OnInit, OnDestroy {
       TEACHER: ['classes', 'scopedStudents', 'slots', 'attendance'],
     };
     const ids =
-      roleMetricIds[this.role] ??
-      [
-        'students',
-        'inactiveStudents',
-        'staff',
-        'inactiveStaff',
-        'admissions',
-        'feeIncome',
-        'pendingFees',
-        'attendance',
-      ];
+      this.role === 'SHOP_OWNER' || this.role === 'OWNER' || this.role === 'ADMIN' || this.role === 'SUPER_ADMIN'
+        ? ['students', 'pendingFees', 'attendance', 'admissions']
+        : roleMetricIds[this.role] ?? [
+            'students',
+            'pendingFees',
+            'attendance',
+            'admissions',
+          ];
     this.metrics = ids.map((id) => all[id]).filter(Boolean);
   }
 
@@ -770,6 +780,17 @@ export class RoleDashboardComponent implements OnInit, OnDestroy {
           route: '/teacher/report-cards',
         },
         { label: 'My students', description: 'Open assigned roster', route: '/teacher/students' },
+      ],
+      SHOP_OWNER: [
+        { label: 'Add student', description: 'Name, class, and parent', route: '/admin/students', queryParams: { add: '1' } },
+        { label: 'Collect fee', description: 'Take a payment and print a receipt', route: '/admin/fee' },
+        { label: 'Mark attendance', description: 'One class, one date', route: '/admin/attendance' },
+        { label: 'Ask the school', description: 'Read fees and attendance. Nothing is changed.', route: '/admin/ask' },
+      ],
+      OWNER: [
+        { label: 'Add student', description: 'Name, class, and parent', route: '/admin/students', queryParams: { add: '1' } },
+        { label: 'Collect fee', description: 'Take a payment and print a receipt', route: '/admin/fee' },
+        { label: 'Mark attendance', description: 'One class, one date', route: '/admin/attendance' },
       ],
     };
     if (this.role === 'TEACHER') {

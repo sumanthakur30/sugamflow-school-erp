@@ -21,6 +21,7 @@ import { StudentLookupComponent } from '../../shared/student-lookup/student-look
 import { StudentLookupRow } from '../../shared/student-lookup/student-lookup.models';
 import { STUDENT_IDENTITY_FIELD_KEYS } from '../../shared/student-lookup/student-identity';
 import { StudentFeeHistoryComponent } from '../../shared/student-fee-history/student-fee-history.component';
+import { FeeCounterComponent } from './fee-counter.component';
 
 /** Fee form keys filled from Student Master — never typed manually. */
 const IDENTITY_FIELD_KEYS = STUDENT_IDENTITY_FIELD_KEYS;
@@ -38,6 +39,7 @@ type DueFilter = '' | 'has_due' | 'no_due' | 'due_gt_500';
     ListPagerComponent,
     StudentLookupComponent,
     StudentFeeHistoryComponent,
+    FeeCounterComponent,
   ],
   templateUrl: './fee.component.html',
   styleUrls: [
@@ -330,9 +332,15 @@ export class FeeComponent implements OnInit, OnDestroy {
         const list = Array.isArray(rows) ? rows : [];
         this.feeHeads = list
           .map((r) => {
-            const key = String(r.definitionKey || r.key || r.name || '').trim();
-            const label = String(r.label || r.name || r.title || key).trim();
-            const active = r.active !== false && r.enabled !== false && r.status !== 'INACTIVE';
+            const payload = r?.payload && typeof r.payload === 'object' ? r.payload : {};
+            const key = String(r.definitionKey || payload.definitionKey || r.key || r.name || '').trim();
+            const label = String(payload.label || r.label || r.name || r.title || key).trim();
+            const active =
+              payload.active !== false &&
+              r.active !== false &&
+              r.enabled !== false &&
+              payload.status !== 'INACTIVE' &&
+              r.status !== 'INACTIVE';
             return key && active ? { key, label: label || key } : null;
           })
           .filter((x): x is { key: string; label: string } => !!x);
@@ -364,6 +372,8 @@ export class FeeComponent implements OnInit, OnDestroy {
         const mobile = String(row.answers?.mobile ?? '').toLowerCase();
         const feeHead = String(row.answers?.feeHead ?? '').toLowerCase();
         const paymentMode = String(row.answers?.paymentMode ?? '').toLowerCase();
+        const receiptNo = String(row.answers?.receiptNo ?? '').toLowerCase();
+        const payStatus = String(row.answers?.paymentStatus ?? '').toLowerCase();
         const status = String(row.status ?? '').toLowerCase();
         const id = String(row.id ?? '').toLowerCase();
         return (
@@ -372,6 +382,8 @@ export class FeeComponent implements OnInit, OnDestroy {
           mobile.includes(q) ||
           feeHead.includes(q) ||
           paymentMode.includes(q) ||
+          receiptNo.includes(q) ||
+          payStatus.includes(q) ||
           status.includes(q) ||
           id.includes(q)
         );
@@ -385,14 +397,11 @@ export class FeeComponent implements OnInit, OnDestroy {
       items = items.filter((row) => this.matchesDatePreset(row.updatedAt || row.createdAt, this.datePreset));
     }
     if (this.dueFilter === 'has_due') {
-      items = items.filter((row) => String(row.status || '').toUpperCase() !== 'APPROVED');
+      items = items.filter((row) => this.dueAmountValue(row) > 0);
     } else if (this.dueFilter === 'no_due') {
-      items = items.filter((row) => String(row.status || '').toUpperCase() === 'APPROVED');
+      items = items.filter((row) => this.dueAmountValue(row) <= 0);
     } else if (this.dueFilter === 'due_gt_500') {
-      items = items.filter((row) => {
-        if (String(row.status || '').toUpperCase() === 'APPROVED') return false;
-        return Number(row.answers?.amount) > 500;
-      });
+      items = items.filter((row) => this.dueAmountValue(row) > 500);
     }
     if (this.dueAmountMin != null && this.dueAmountMin !== ('' as any)) {
       const min = Number(this.dueAmountMin);
@@ -609,6 +618,27 @@ export class FeeComponent implements OnInit, OnDestroy {
     this.printOfficialReceipt(row);
   }
 
+  downloadReceiptFile(row: any, event?: Event): void {
+    event?.stopPropagation();
+    event?.preventDefault();
+    this.closeMoreMenu();
+    if (!row?.id) return;
+    this.error = '';
+    this.api.getBlob(`/api/fee/collections/${row.id}/receipt`).subscribe({
+      next: (blob) => {
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `${this.collectionIdShort(row)}.pdf`;
+        link.click();
+        setTimeout(() => URL.revokeObjectURL(url), 30_000);
+      },
+      error: () => {
+        this.error = 'The receipt file is not ready yet.';
+      },
+    });
+  }
+
   canPrint(row: any): boolean {
     if (!row?.id) return false;
     if (row.hasFeeReceipt === true || row.hasFeeReceipt === 'true') return true;
@@ -616,8 +646,59 @@ export class FeeComponent implements OnInit, OnDestroy {
   }
 
   collectionIdShort(row: any): string {
+    const receipt = String(row?.answers?.receiptNo || '').trim();
+    if (receipt && receipt.toLowerCase() !== 'null') return receipt;
     const id = String(row?.id || '');
     return id ? `COL-${id.slice(0, 8).toUpperCase()}` : '—';
+  }
+
+  paymentModeText(row: any): string {
+    const payments = row?.answers?.payments;
+    if (Array.isArray(payments) && payments.length) {
+      return payments
+        .map((payment: any) => {
+          const mode = this.modeLabel(payment?.mode);
+          const amount = this.formatMoney(payment?.amount);
+          const reference = String(payment?.reference || '').trim();
+          return reference ? `${mode} ${amount} (${reference})` : `${mode} ${amount}`;
+        })
+        .join(' + ');
+    }
+    return this.modeLabel(row?.answers?.paymentMode);
+  }
+
+  paymentWhen(row: any): string {
+    const raw = String(row?.answers?.paymentDate || '').trim();
+    if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+      const date = new Date(`${raw}T00:00:00`);
+      if (!Number.isNaN(date.getTime())) {
+        return date.toLocaleDateString(undefined, {
+          day: '2-digit',
+          month: 'short',
+          year: 'numeric',
+        });
+      }
+    }
+    return this.formatWhen(row?.updatedAt || row?.createdAt);
+  }
+
+  netAmount(row: any): number | null {
+    const raw = row?.answers?.netPayable;
+    if (raw == null || raw === '') return null;
+    const amount = Number(raw);
+    return Number.isFinite(amount) ? amount : null;
+  }
+
+  private modeLabel(raw: unknown): string {
+    const mode = String(raw || '').trim().toUpperCase();
+    if (!mode || mode === '—') return '—';
+    if (mode === 'CASH') return 'Cash';
+    if (mode === 'UPI') return 'UPI';
+    if (mode === 'CARD') return 'Card';
+    if (mode === 'BANK' || mode === 'BANK_TRANSFER') return 'Bank transfer';
+    if (mode === 'CHEQUE') return 'Cheque';
+    if (mode === 'SPLIT') return 'Split';
+    return mode;
   }
 
   classHint(row: any): string {
@@ -625,8 +706,7 @@ export class FeeComponent implements OnInit, OnDestroy {
   }
 
   dueAmountLabel(row: any): string {
-    if (String(row?.status || '').toUpperCase() === 'APPROVED') return '';
-    const n = Number(row?.answers?.amount);
+    const n = this.dueAmountValue(row);
     if (!n) return '';
     return `Due ${this.formatMoney(n)}`;
   }
@@ -807,9 +887,9 @@ export class FeeComponent implements OnInit, OnDestroy {
     const rollNo = this.escapeHtml(student.rollNo || answers.rollNo || '—');
     const feeHead = this.escapeHtml(this.answer(row, 'feeHead'));
     const feeMonth = this.escapeHtml(this.feeMonthLabel(row));
-    const mode = this.escapeHtml(this.answer(row, 'paymentMode'));
+    const mode = this.escapeHtml(this.paymentModeText(row));
     const amount = this.escapeHtml(this.formatMoney(answers.amount));
-    const status = this.escapeHtml(String(row?.status || '—').toUpperCase());
+    const status = this.escapeHtml(this.paymentLabel(row));
     const when = this.escapeHtml(this.formatWhen(row?.updatedAt || row?.createdAt));
     const receipt =
       answers.receiptRef ||
@@ -978,6 +1058,11 @@ export class FeeComponent implements OnInit, OnDestroy {
       <div class="label">Amount paid</div>
       <div class="value">₹ ${amount}</div>
     </div>
+    ${
+      answers.remaining == null || answers.remaining === ''
+        ? ''
+        : `<p class="note">Balance after this receipt: ₹ ${this.escapeHtml(this.formatMoney(answers.remaining))}</p>`
+    }
 
     <p class="note">This is a computer-generated fee receipt. Please retain for your records.</p>
 
@@ -995,7 +1080,7 @@ export class FeeComponent implements OnInit, OnDestroy {
     const mobile = this.escapeHtml(this.answer(row, 'mobile'));
     const feeHead = this.escapeHtml(this.answer(row, 'feeHead'));
     const feeMonth = this.escapeHtml(this.feeMonthLabel(row));
-    const mode = this.escapeHtml(this.answer(row, 'paymentMode'));
+    const mode = this.escapeHtml(this.paymentModeText(row));
     const amount = this.escapeHtml(this.formatMoney(row?.answers?.amount));
     const status = this.escapeHtml(this.paymentLabel(row));
     const when = this.escapeHtml(this.formatWhen(row?.updatedAt || row?.createdAt));
@@ -1091,6 +1176,8 @@ export class FeeComponent implements OnInit, OnDestroy {
   }
 
   paymentLabel(row: any): string {
+    const balance = String(row?.answers?.paymentStatus || '').toUpperCase();
+    if (balance === 'PAID' || balance === 'PARTIAL' || balance === 'PENDING') return balance;
     const s = String(row?.status || '').toUpperCase();
     if (s === 'APPROVED') return 'PAID';
     if (s === 'REJECTED') return 'REJECTED';
@@ -1101,6 +1188,7 @@ export class FeeComponent implements OnInit, OnDestroy {
   paymentBadgeClass(row: any): string {
     const s = this.paymentLabel(row);
     if (s === 'PAID') return 'badge badge-ok';
+    if (s === 'PARTIAL') return 'badge badge-progress';
     if (s === 'REJECTED') return 'badge badge-bad';
     return 'badge badge-progress';
   }
@@ -1112,6 +1200,11 @@ export class FeeComponent implements OnInit, OnDestroy {
   }
 
   dueAmountValue(row: any): number {
+    const balance = String(row?.answers?.paymentStatus || '').toUpperCase();
+    if (balance === 'PAID' || balance === 'PARTIAL' || balance === 'PENDING') {
+      const remaining = Number(row?.answers?.remaining);
+      return Number.isFinite(remaining) ? Math.max(0, remaining) : 0;
+    }
     if (String(row?.status || '').toUpperCase() === 'APPROVED') return 0;
     const n = Number(row?.answers?.amount);
     return Number.isFinite(n) ? n : 0;
@@ -1180,7 +1273,11 @@ export class FeeComponent implements OnInit, OnDestroy {
         }),
       ),
       summary: admissionNo
-        ? this.api.get<any>(`/api/fee/students/${encodeURIComponent(admissionNo)}/fee-summary`).pipe(
+        ? this.api
+            .get<any>(
+              `/api/fee/students/fee-summary?admissionNo=${encodeURIComponent(admissionNo)}`,
+            )
+            .pipe(
             catchError(() =>
               this.api
                 .get<any>(`/api/fee/clearance/${encodeURIComponent(admissionNo)}`)

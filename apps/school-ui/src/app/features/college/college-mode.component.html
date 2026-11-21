@@ -1,0 +1,29 @@
+<section class="page">
+  <header class="page-head">
+    <h2>College</h2>
+    <p>
+      Programs and semesters use the same class and section records as a school.
+      A primary school does not see this page in its menu.
+    </p>
+  </header>
+  @if (!college) {
+    <p class="panel">
+      This campus is not set as a college.
+      <a routerLink="/admin/settings">Choose College in Settings</a>
+      when this institution needs semesters. Credit hours are not a separate record yet.
+    </p>
+  } @else {
+    <div class="panel">
+      <h3>How to run the term</h3>
+      <ul>
+        <li><a routerLink="/admin/academic">Programs and semesters</a> — a program is a class, a semester is a section.</li>
+        <li><a routerLink="/admin/students">Students</a> — registration is the student record for this session.</li>
+        <li><a routerLink="/admin/exam">Results</a> — enter marks, then publish the report card.</li>
+        <li><a routerLink="/admin/staff-directory">Faculty</a> — the staff list.</li>
+      </ul>
+      <p class="muted">
+        Transcripts use the report card for this session. A separate credit ledger is not stored yet, so this screen does not invent one.
+      </p>
+    </div>
+  }
+</section>

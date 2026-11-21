@@ -217,4 +217,47 @@ public interface FeeCollectionRepository extends JpaRepository<FeeCollectionEnti
       @Param("sessionBlank") boolean sessionBlank,
       @Param("sessionId") String sessionId,
       @Param("limit") int limit);
+
+  /** Earlier receipts for the same student and fee bill. Amount is the payment, not the balance. */
+  @Query(
+      value =
+          """
+          SELECT COALESCE(SUM(NULLIF(answers->>'amount','')::numeric), 0)
+          FROM fee_collection
+          WHERE organization_id = :org
+            AND status IN ('APPROVED', 'IN_PROGRESS')
+            AND answers->>'admissionNo' = :admissionNo
+            AND answers->>'billKey' = :billKey
+          """,
+      nativeQuery = true)
+  Double sumApprovedForBill(
+      @Param("org") String org,
+      @Param("admissionNo") String admissionNo,
+      @Param("billKey") String billKey);
+
+  /** Same clerk request posted twice returns the receipt already stored. */
+  @Query(
+      value =
+          """
+          SELECT CAST(id AS varchar)
+          FROM fee_collection
+          WHERE organization_id = :org
+            AND answers->>'clientRequestId' = :requestId
+          ORDER BY created_at DESC
+          LIMIT 1
+          """,
+      nativeQuery = true)
+  String findIdByClientRequest(@Param("org") String org, @Param("requestId") String requestId);
+
+  /** Holds other payments for this bill until the current receipt is committed. */
+  @Query(
+      value =
+          """
+          WITH locked AS (
+            SELECT pg_advisory_xact_lock(hashtext(CAST(:org AS text)), hashtext(CAST(:lockKey AS text))) AS locked
+          )
+          SELECT 1 FROM locked
+          """,
+      nativeQuery = true)
+  Integer lockBill(@Param("org") String org, @Param("lockKey") String lockKey);
 }

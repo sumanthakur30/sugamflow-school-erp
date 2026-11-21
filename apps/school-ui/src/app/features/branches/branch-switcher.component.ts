@@ -105,6 +105,16 @@ export class BranchSwitcherComponent implements OnInit {
     });
   }
 
+  campusLabel(branch: { name?: string; city?: string }): string {
+    const raw = String(branch.name || 'Campus').trim();
+    const parts = raw.split(/\s*[·•∙|.]\s*/);
+    const tail = parts.length > 1 ? parts[parts.length - 1] : '';
+    const name = tail && /\d/.test(tail) ? parts.slice(0, -1).join(' ').trim() : raw;
+    const city = String(branch.city || '').trim();
+    const cityIsCode = !city || (/[-_]/.test(city) && /\d/.test(city) && !/\s/.test(city));
+    return cityIsCode ? name : `${name} · ${city}`;
+  }
+
   onChange(key: string): void {
     if (!key || key === this.auth.getBranchId()) {
       return;
