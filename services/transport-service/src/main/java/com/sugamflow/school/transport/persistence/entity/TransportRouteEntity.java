@@ -27,6 +27,9 @@ public class TransportRouteEntity {
   @Column(name = "vehicle_no", length = 64)
   private String vehicleNo;
 
+  @Column(length = 1000)
+  private String stops;
+
   @Column(nullable = false)
   private int capacity = 40;
 
@@ -51,6 +54,8 @@ public class TransportRouteEntity {
   public void setRouteName(String routeName) { this.routeName = routeName; }
   public String getVehicleNo() { return vehicleNo; }
   public void setVehicleNo(String vehicleNo) { this.vehicleNo = vehicleNo; }
+  public String getStops() { return stops; }
+  public void setStops(String stops) { this.stops = stops; }
   public int getCapacity() { return capacity; }
   public void setCapacity(int capacity) { this.capacity = capacity; }
   public String getStatus() { return status; }

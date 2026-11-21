@@ -2,6 +2,9 @@ import { Component, OnInit, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
+import { forkJoin, of } from 'rxjs';
+import { catchError } from 'rxjs/operators';
+import { ApiService } from '../../core/api.service';
 import { EntitlementsService } from '../../core/entitlements.service';
 import { InstitutionPreset, InstitutionPresetService, isInstitutionPreset } from '../../core/institution-preset.service';
 import { PlanStatus, planStatus } from './settings-hub.util';
@@ -15,9 +18,10 @@ interface SettingsCard {
 }
 
 interface SetupRow {
+  key: 'year' | 'classes' | 'fee' | 'student';
   label: string;
-  feature?: string;
   path: string;
+  done: boolean;
 }
 
 @Component({
@@ -35,6 +39,7 @@ interface SetupRow {
   ],
 })
 export class SettingsHubComponent implements OnInit {
+  private readonly api = inject(ApiService);
   private readonly entitlements = inject(EntitlementsService);
   private readonly presets = inject(InstitutionPresetService);
 
@@ -44,13 +49,11 @@ export class SettingsHubComponent implements OnInit {
   preset: InstitutionPreset = 'small';
   presetStatus = '';
 
-  readonly checklist: SetupRow[] = [
-    { label: 'School name, session, and classes', path: '/admin/settings/setup' },
-    { label: 'Standard fee structure', feature: 'FEATURE_FEE', path: '/admin/settings/fees' },
-    { label: 'Students', feature: 'FEATURE_STUDENT_MASTER', path: '/admin/students' },
-    { label: 'Fees', feature: 'FEATURE_FEE', path: '/admin/fee' },
-    { label: 'Attendance', feature: 'FEATURE_ATTENDANCE', path: '/admin/attendance' },
-    { label: 'Exams', feature: 'FEATURE_EXAM', path: '/admin/exam' },
+  checklist: SetupRow[] = [
+    { key: 'year', label: 'Academic year', path: '/admin/academic', done: false },
+    { key: 'classes', label: 'Classes', path: '/admin/academic', done: false },
+    { key: 'fee', label: 'One fee structure', path: '/admin/settings/fees', done: false },
+    { key: 'student', label: 'First student', path: '/admin/students', done: false },
   ];
 
   readonly cards: SettingsCard[] = [
@@ -84,11 +87,41 @@ export class SettingsHubComponent implements OnInit {
     if (current?.loadState === 'ready' && current.featureFlags) {
       this.flags = current.featureFlags;
       this.loadState = 'ready';
-      return;
+    } else {
+      this.entitlements.load().subscribe((loaded) => {
+        this.flags = loaded.featureFlags ?? null;
+        this.loadState = loaded.loadState === 'ready' ? 'ready' : 'unavailable';
+      });
     }
-    this.entitlements.load().subscribe((loaded) => {
-      this.flags = loaded.featureFlags ?? null;
-      this.loadState = loaded.loadState === 'ready' ? 'ready' : 'unavailable';
+    this.loadSetup();
+  }
+
+  get setupDone(): number {
+    return this.checklist.filter((row) => row.done).length;
+  }
+
+  private loadSetup(): void {
+    forkJoin({
+      calendar: this.api.get<any>('/api/academic/calendar').pipe(catchError(() => of(null))),
+      academic: this.api.get<any>('/api/academic/bootstrap').pipe(catchError(() => of(null))),
+      fees: this.api.get<any[]>('/api/fee/finance/structures').pipe(catchError(() => of(null))),
+      students: this.api.getPage<any>('/api/student/students', 0, 1).pipe(catchError(() => of(null))),
+    }).subscribe((result) => {
+      const year = String(result.calendar?.academicSessionId ?? '').trim();
+      const classCount = Number(result.academic?.classCount ?? 0);
+      const feeCount = Array.isArray(result.fees) ? result.fees.length : 0;
+      const studentCount = Number(result.students?.totalElements ?? 0);
+      this.checklist = this.checklist.map((row) => ({
+        ...row,
+        done:
+          row.key === 'year'
+            ? year.length > 0
+            : row.key === 'classes'
+              ? classCount > 0
+              : row.key === 'fee'
+                ? feeCount > 0
+                : studentCount > 0,
+      }));
     });
   }
 

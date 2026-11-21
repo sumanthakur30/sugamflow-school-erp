@@ -43,11 +43,13 @@ public class TransportOpsService {
 
   @Transactional(readOnly = true)
   public List<Map<String, Object>> listDefinitions(String type) {
-    requireOps(TenantContext.require());
+    TenantScope scope = TenantContext.require();
+    requireOps(scope);
     return definitionRepo
         .findByOrganizationIdAndDefinitionTypeAndStatusOrderByDefinitionKeyAsc(
-            TenantContext.require().organizationId(), type, "ACTIVE")
+            scope.organizationId(), type, "ACTIVE")
         .stream()
+        .filter(row -> CampusRoutes.visible(scope.branchId(), row.getBranchId()))
         .map(this::toDefinitionDto)
         .toList();
   }
@@ -175,6 +177,7 @@ public class TransportOpsService {
   private Map<String, Object> toDefinitionDto(OpsDefinitionEntity e) {
     Map<String, Object> dto = new LinkedHashMap<>();
     dto.put("id", e.getId());
+    dto.put("branchId", e.getBranchId());
     dto.put("definitionType", e.getDefinitionType());
     dto.put("definitionKey", e.getDefinitionKey());
     dto.put("status", e.getStatus());

@@ -2,6 +2,7 @@ package com.sugamflow.school.transport.service;
 
 import com.sugamflow.school.common.tenant.TenantContext;
 import com.sugamflow.school.common.tenant.TenantScope;
+import com.sugamflow.school.transport.integration.ConfigEngineClient;
 import com.sugamflow.school.transport.persistence.entity.TransportGpsPingEntity;
 import com.sugamflow.school.transport.persistence.repo.TransportGpsPingRepository;
 import com.sugamflow.school.transport.web.TransportException;
@@ -17,15 +18,20 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class TransportGpsService {
 
-  private final TransportGpsPingRepository repository;
+  public static final String FEATURE_GPS = "FEATURE_GPS";
 
-  public TransportGpsService(TransportGpsPingRepository repository) {
+  private final TransportGpsPingRepository repository;
+  private final ConfigEngineClient engines;
+
+  public TransportGpsService(TransportGpsPingRepository repository, ConfigEngineClient engines) {
     this.repository = repository;
+    this.engines = engines;
   }
 
   @Transactional(readOnly = true)
   public List<Map<String, Object>> latest() {
     TenantScope scope = TenantContext.require();
+    requirePilot(scope);
     return repository.findTop50ByOrganizationIdOrderByRecordedAtDesc(scope.organizationId()).stream()
         .map(this::toDto)
         .toList();
@@ -34,6 +40,7 @@ public class TransportGpsService {
   @Transactional
   public Map<String, Object> ping(Map<String, Object> body) {
     TenantScope scope = TenantContext.require();
+    requirePilot(scope);
     String vehicle = text(body.get("vehicleNo"));
     if (vehicle == null) {
       throw new TransportException("VALIDATION", "vehicleNo is required");
@@ -52,6 +59,13 @@ public class TransportGpsService {
     entity.setNote(text(body.get("note")));
     entity.setRecordedAt(Instant.now());
     return toDto(repository.save(entity));
+  }
+
+  private void requirePilot(TenantScope scope) {
+    if (!engines.isFeatureEnabled(scope, FEATURE_GPS)) {
+      throw new TransportException(
+          "FEATURE_OFF", "Live location stays off until this school turns the pilot on.");
+    }
   }
 
   private Map<String, Object> toDto(TransportGpsPingEntity entity) {

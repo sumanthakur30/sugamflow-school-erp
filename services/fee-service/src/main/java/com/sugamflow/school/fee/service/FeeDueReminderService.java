@@ -66,6 +66,13 @@ public class FeeDueReminderService {
     if (Boolean.FALSE.equals(settings.get("notifyOnDue"))) {
       return Map.of("disabled", true, "reminded", 0);
     }
+    if (scheduledRequest(body) && !scheduleEnabled(settings)) {
+      Map<String, Object> held = new LinkedHashMap<>();
+      held.put("scheduled", false);
+      held.put("reminded", 0);
+      held.put("sent", 0);
+      return held;
+    }
     LocalDate asOf = parseDate(body == null ? null : body.get("asOf"), LocalDate.now());
     String onlyAdmission = body == null ? null : str(body.get("admissionNo"));
     int minPendingDays = intOr(settings.get("dueReminderMinPendingDays"), 1);
@@ -120,14 +127,17 @@ public class FeeDueReminderService {
       }
 
       String subject = "Fee due reminder — " + admissionNo;
+      String edited = body == null ? null : str(body.get("message"));
       String bodyText =
-          "Pending fee for admission "
-              + admissionNo
-              + " ("
-              + feeHead
-              + ") is ₹"
-              + amount
-              + ". Please clear dues at the earliest.";
+          edited != null
+              ? edited
+              : "Pending fee for admission "
+                  + admissionNo
+                  + " ("
+                  + feeHead
+                  + ") is ₹"
+                  + amount
+                  + ". Please clear dues at the earliest.";
 
       List<Map<String, Object>> deliveries = new ArrayList<>();
       boolean anySent = false;
@@ -217,11 +227,65 @@ public class FeeDueReminderService {
     return out;
   }
 
+  /** Open dues and the message the office can edit. This does not send anything. */
+  @Transactional(readOnly = true)
+  public List<Map<String, Object>> drafts(String admissionNo) {
+    TenantScope scope = TenantContext.require();
+    Map<String, Object> settings = moduleSettings(engines.getModuleSettings(scope, "fee"));
+    LocalDate asOf = LocalDate.now();
+    int minPendingDays = intOr(settings.get("dueReminderMinPendingDays"), 1);
+    String only = admissionNo == null || admissionNo.isBlank() ? null : admissionNo.trim();
+    List<Map<String, Object>> out = new ArrayList<>();
+    for (FeeCollectionEntity collection : loadOpen(scope)) {
+      if (!OPEN.contains(String.valueOf(collection.getStatus()).toUpperCase(Locale.ROOT))) {
+        continue;
+      }
+      Map<String, Object> answers =
+          collection.getAnswers() == null ? Map.of() : collection.getAnswers();
+      String admission = str(answers.get("admissionNo"));
+      if (admission == null || (only != null && !only.equalsIgnoreCase(admission))) {
+        continue;
+      }
+      BigDecimal amount = toAmount(answers.get("amount"));
+      if (amount.compareTo(BigDecimal.ZERO) <= 0) {
+        continue;
+      }
+      int pendingDays = intOr(answers.get("pendingDays"), 0);
+      LocalDate dueDate = parseDate(answers.get("dueDate"), null);
+      boolean due =
+          (dueDate != null && !dueDate.isAfter(asOf))
+              || (dueDate == null && pendingDays >= minPendingDays);
+      if (!due) {
+        continue;
+      }
+      String feeHead = strOr(answers.get("feeHead"), "FEE");
+      Map<String, Object> row = new LinkedHashMap<>();
+      row.put("collectionId", collection.getId() == null ? null : collection.getId().toString());
+      row.put("admissionNo", admission);
+      row.put("feeHead", feeHead);
+      row.put("amount", amount);
+      row.put(
+          "message",
+          "Pending fee for admission "
+              + admission
+              + " ("
+              + feeHead
+              + ") is ₹"
+              + amount
+              + ". Please clear dues at the earliest.");
+      out.add(row);
+    }
+    return out;
+  }
+
   public int retryPending() {
     List<FeeDueReminderOutboxEntity> retryable =
         outbox.findRetryable(MAX_ATTEMPTS, Instant.now().minus(RETRY_WINDOW), PageRequest.of(0, 100));
     int sent = 0;
     for (FeeDueReminderOutboxEntity row : retryable) {
+      if (!scheduleEnabledFor(row)) {
+        continue;
+      }
       try {
         if (FeeDueReminderOutboxEntity.STATUS_SENT.equals(dispatch(row).getStatus())) {
           sent++;
@@ -231,6 +295,41 @@ public class FeeDueReminderService {
       }
     }
     return sent;
+  }
+
+  private boolean scheduleEnabledFor(FeeDueReminderOutboxEntity row) {
+    TenantScope previous = TenantContext.get().orElse(null);
+    TenantContext.set(
+        new TenantScope(
+            row.getOrganizationId(),
+            row.getBranchId(),
+            row.getAcademicSessionId(),
+            "system",
+            "ADMIN"));
+    try {
+      Map<String, Object> settings = moduleSettings(engines.getModuleSettings(TenantContext.require(), "fee"));
+      return scheduleEnabled(settings);
+    } catch (RuntimeException ex) {
+      return false;
+    } finally {
+      if (previous == null) {
+        TenantContext.clear();
+      } else {
+        TenantContext.set(previous);
+      }
+    }
+  }
+
+  private static boolean scheduledRequest(Map<String, Object> body) {
+    if (body == null) {
+      return false;
+    }
+    Object flag = body.get("scheduled");
+    return Boolean.TRUE.equals(flag) || "true".equalsIgnoreCase(String.valueOf(flag));
+  }
+
+  private static boolean scheduleEnabled(Map<String, Object> settings) {
+    return Boolean.TRUE.equals(settings.get("dueReminderScheduleEnabled"));
   }
 
   private FeeDueReminderOutboxEntity newRow(

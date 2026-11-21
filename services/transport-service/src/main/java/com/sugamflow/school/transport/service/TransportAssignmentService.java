@@ -31,6 +31,7 @@ public class TransportAssignmentService {
   public List<Map<String, Object>> listRoutes() {
     TenantScope scope = TenantContext.require();
     return routes.findByOrganizationIdOrderByRouteNameAsc(scope.organizationId()).stream()
+        .filter(route -> CampusRoutes.visible(scope.branchId(), route.getBranchId()))
         .map(this::routeDto)
         .toList();
   }
@@ -60,6 +61,7 @@ public class TransportAssignmentService {
     route.setRouteKey(key);
     route.setRouteName(name);
     route.setVehicleNo(str(body.get("vehicleNo")));
+    route.setStops(stopsText(body.get("stops")));
     if (body.get("capacity") instanceof Number n) {
       route.setCapacity(Math.max(1, n.intValue()));
     }
@@ -73,6 +75,7 @@ public class TransportAssignmentService {
     return assignments
         .findByOrganizationIdAndStatusOrderByAssignedAtDesc(scope.organizationId(), "ACTIVE")
         .stream()
+        .filter(row -> CampusRoutes.visible(scope.branchId(), row.getBranchId()))
         .map(this::assignDto)
         .toList();
   }
@@ -154,6 +157,8 @@ public class TransportAssignmentService {
     m.put("routeKey", r.getRouteKey());
     m.put("routeName", r.getRouteName());
     m.put("vehicleNo", r.getVehicleNo());
+    m.put("stops", r.getStops());
+    m.put("branchId", r.getBranchId());
     m.put("capacity", r.getCapacity());
     m.put("status", r.getStatus());
     return m;
@@ -189,6 +194,19 @@ public class TransportAssignmentService {
     } catch (Exception ex) {
       return null;
     }
+  }
+
+  private static String stopsText(Object value) {
+    if (value instanceof List<?> list) {
+      String joined =
+          list.stream()
+              .map(item -> item == null ? "" : String.valueOf(item).trim())
+              .filter(item -> !item.isEmpty())
+              .reduce((left, right) -> left + ", " + right)
+              .orElse("");
+      return joined.isEmpty() ? null : joined;
+    }
+    return str(value);
   }
 
   private static String str(Object v) {

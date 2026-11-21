@@ -83,6 +83,7 @@ export class FinanceComponent implements OnInit, OnDestroy {
   error = '';
   status = '';
   busy = false;
+  reminderDraft: { admissionNo: string; studentName: string; message: string; channel: string } | null = null;
   tab: FinanceTab = 'overview';
   globalQ = '';
 
@@ -456,10 +457,69 @@ export class FinanceComponent implements OnInit, OnDestroy {
     window.print();
   }
 
-  remind(row: OutstandingRow): void {
-    this.router.navigate(['/admin/comms'], {
-      queryParams: { student: row.studentName, mobile: row.mobile },
+  remind(row: OutstandingRow, channel = 'SMS'): void {
+    const admissionNo = row.admissionNo && row.admissionNo !== '—' ? row.admissionNo : '';
+    if (!admissionNo) {
+      this.error = 'This demand has no admission number, so a reminder cannot be drafted';
+      return;
+    }
+    const amount = this.formatMoney(row.dueAmount);
+    this.reminderDraft = {
+      admissionNo,
+      studentName: row.studentName,
+      channel: channel.toUpperCase() === 'WHATSAPP' ? 'WHATSAPP' : 'SMS',
+      message: `Pending fee for admission ${admissionNo} is ${amount}. Please clear dues at the earliest.`,
+    };
+    this.api.get<any[]>(`/api/fee/due-reminders/drafts?admissionNo=${encodeURIComponent(admissionNo)}`).subscribe({
+      next: (rows) => {
+        const first = rows?.[0];
+        if (first?.message && this.reminderDraft?.admissionNo === admissionNo) {
+          this.reminderDraft = {
+            ...this.reminderDraft,
+            message: String(first.message),
+            channel: this.reminderDraft.channel,
+          };
+        }
+      },
+      error: () => {
+        // The office can still edit and send the draft shown on this screen.
+      },
     });
+  }
+
+  sendReminderDraft(): void {
+    const draft = this.reminderDraft;
+    if (!draft?.message.trim()) {
+      this.error = 'Write the reminder before sending it';
+      return;
+    }
+    this.busy = true;
+    this.error = '';
+    this.api
+      .post<any>('/api/fee/due-reminders/run', {
+        admissionNo: draft.admissionNo,
+        channel: draft.channel,
+        message: draft.message.trim(),
+      })
+      .subscribe({
+        next: (result) => {
+          this.busy = false;
+          this.reminderDraft = null;
+          if (result?.disabled) {
+            this.status = 'Due reminders are turned off in fee settings';
+            return;
+          }
+          const reminded = Number(result?.reminded || 0);
+          this.status =
+            reminded > 0
+              ? `Reminder sent for ${draft.studentName} and written to the send log`
+              : `No reminder was sent for ${draft.studentName}`;
+        },
+        error: (err) => {
+          this.busy = false;
+          this.error = err?.error?.message ?? 'Could not send the fee reminder';
+        },
+      });
   }
 
   headWidth(value: number): number {
@@ -1072,40 +1132,6 @@ export class FinanceComponent implements OnInit, OnDestroy {
 
   openCollection(row: OutstandingRow): void {
     void this.router.navigate(['/admin/fee'], { queryParams: { id: row.id } });
-  }
-
-  reminderStub(row: OutstandingRow, channel: string): void {
-    const admissionNo = row.admissionNo && row.admissionNo !== '—' ? row.admissionNo : '';
-    if (!admissionNo) {
-      this.error = 'This demand has no admission number, so a reminder cannot be queued';
-      return;
-    }
-    this.busy = true;
-    this.error = '';
-    this.api
-      .post<any>('/api/fee/due-reminders/run', {
-        admissionNo,
-        channel: channel.toUpperCase() === 'WHATSAPP' ? 'WHATSAPP' : channel.toUpperCase(),
-      })
-      .subscribe({
-        next: (result) => {
-          this.busy = false;
-          if (result?.disabled) {
-            this.status = 'Due reminders are turned off in fee settings';
-            return;
-          }
-          const reminded = Number(result?.reminded || 0);
-          const skipped = Number(result?.skipped || 0);
-          this.status =
-            reminded > 0
-              ? `${channel} reminder queued for ${row.studentName} (${reminded} demand${reminded === 1 ? '' : 's'})`
-              : `No reminder queued for ${row.studentName}. ${skipped} demand${skipped === 1 ? '' : 's'} skipped.`;
-        },
-        error: (err) => {
-          this.busy = false;
-          this.error = err?.error?.message ?? 'Could not queue the fee reminder';
-        },
-      });
   }
 
   saveHead(): void {
