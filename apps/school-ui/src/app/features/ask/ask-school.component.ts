@@ -19,68 +19,75 @@ export class AskSchoolComponent {
   question = '';
   asking = false;
   answer = '';
-  rows: Array<{ label: string; value: string }> = [];
+  columns: string[] = [];
+  rows: Array<Record<string, unknown>> = [];
   error = '';
 
-  readonly examples = [
-    'Show students with outstanding fees',
-    'Which class has the lowest attendance this month?',
-    'Show students whose names are on the fee follow-up list in Class 8',
-  ];
+  readonly examples = ['Outstanding fees', 'Low attendance'];
 
   ask(text?: string): void {
     const question = (text ?? this.question).trim();
     this.question = question;
     this.answer = '';
+    this.columns = [];
     this.rows = [];
     this.error = '';
     if (!question) {
       this.error = 'Type a question. This screen only reads records. It does not change them.';
       return;
     }
-    const lower = question.toLowerCase();
-    this.asking = true;
-    if (lower.includes('fee') || lower.includes('outstanding') || lower.includes('due')) {
-      this.answerFees(lower);
+    const name = this.namedQuery(question);
+    if (name === 'outstanding-fees') {
+      this.answerFees(question);
       return;
     }
-    if (lower.includes('attendance')) {
+    if (name === 'low-attendance') {
       this.answerAttendance();
       return;
     }
-    this.asking = false;
     this.answer =
       'I can answer outstanding fees and low attendance from the records you are allowed to see. I cannot post a receipt or change marks.';
   }
 
+  private namedQuery(question: string): 'outstanding-fees' | 'low-attendance' | null {
+    const lower = question.toLowerCase();
+    if (lower.includes('attendance')) {
+      return 'low-attendance';
+    }
+    if (lower.includes('fee') || lower.includes('outstanding') || lower.includes('due')) {
+      return 'outstanding-fees';
+    }
+    return null;
+  }
+
   private answerFees(question: string): void {
-    forkJoin({
-      people: this.api.get<any[]>('/api/fee/defaulters').pipe(catchError(() => of([]))),
-      finance: this.api
-        .get<any>('/api/fee/finance/income-expense?preset=THIS_MONTH')
-        .pipe(catchError(() => of(null))),
-    }).subscribe({
-      next: ({ people, finance }) => {
+    this.asking = true;
+    const named = this.api.get<any[]>('/api/fee/ask/outstanding-fees').pipe(catchError(() => of(null)));
+    const desk = this.api.get<any[]>('/api/fee/defaulters').pipe(catchError(() => of([])));
+    forkJoin({ named, desk }).subscribe({
+      next: ({ named: namedRows, desk: deskRows }) => {
         this.asking = false;
-        const pending = finance?.kpis?.pendingFees;
-        const classHint = question.match(/class\s+([0-9a-z]+)/i)?.[1];
-        let list = people || [];
-        if (classHint) {
-          list = list.filter((row) =>
-            String(row.classSection || row.classApplied || '')
-              .toLowerCase()
-              .includes(classHint.toLowerCase()),
-          );
-        }
-        this.rows = list.slice(0, 12).map((row) => ({
-          label: String(row.studentName || row.admissionNo || 'Student'),
-          value: `${row.classSection || 'Class not on the row'} · ₹${row.amount ?? '—'}`,
+        const source = namedRows ?? (deskRows || []).map((row) => this.feeFigure(row));
+        const classHint = question.match(/class\s+([0-9a-z-]+)/i)?.[1];
+        const list = classHint
+          ? source.filter((row) =>
+              String(row.classSection || '')
+                .toLowerCase()
+                .includes(classHint.toLowerCase()),
+            )
+          : source;
+        this.columns = ['Student', 'Admission no', 'Class', 'Head', 'Due', 'Amount'];
+        this.rows = list.map((row) => ({
+          Student: row.studentName || 'Student',
+          'Admission no': row.admissionNo || '',
+          Class: row.classSection || '',
+          Head: row.feeHead || '',
+          Due: row.dueDate || '',
+          Amount: row.amount ?? '',
         }));
-        const total =
-          pending == null ? '' : ` The fee summary shows ₹${pending} still pending this period.`;
         this.answer = this.rows.length
-          ? `These open fee rows match the question.${total} This list is unpaid collections, not a new balance I calculated.`
-          : `No open fee rows matched.${total} Approved dues may still sit in the fee summary.`;
+          ? 'These are the open dues on the fee desk for this login.'
+          : 'The fee desk has no open dues for this login.';
       },
       error: () => {
         this.asking = false;
@@ -90,37 +97,48 @@ export class AskSchoolComponent {
   }
 
   private answerAttendance(): void {
-    this.api.get<any[]>('/api/attendance/exceptions').subscribe({
-      next: (rows) => {
+    this.asking = true;
+    const named = this.api.get<any[]>('/api/attendance/ask/low-attendance').pipe(catchError(() => of(null)));
+    const desk = this.api.get<any[]>('/api/attendance/exceptions').pipe(catchError(() => of([])));
+    forkJoin({ named, desk }).subscribe({
+      next: ({ named: namedRows, desk: deskRows }) => {
         this.asking = false;
-        const list = rows || [];
-        const byClass = new Map<string, number>();
-        for (const row of list) {
-          const key = String(row.classSection || row.className || 'Class not on the row');
-          byClass.set(key, (byClass.get(key) || 0) + 1);
-        }
-        let lowest = '';
-        let count = -1;
-        for (const [name, n] of byClass) {
-          if (n > count) {
-            lowest = name;
-            count = n;
-          }
-        }
-        this.rows = list.slice(0, 12).map((row) => ({
-          label: String(row.studentName || row.admissionNo || 'Student'),
-          value: `${row.classSection || row.status || 'Flagged'}${row.percent != null ? ' · ' + row.percent + '%' : ''}`,
+        const source = namedRows ?? (deskRows || []).map((row) => this.attendanceFigure(row));
+        this.columns = ['Student', 'Admission no', 'Status', 'Percent'];
+        this.rows = source.map((row) => ({
+          Student: row.studentName || 'Student',
+          'Admission no': row.admissionNo || '',
+          Status: row.status || '',
+          Percent: row.percent != null ? row.percent : '',
         }));
-        this.answer = list.length
-          ? lowest
-            ? `${lowest} has the most students on the low-attendance list (${count}). This is the exception list, not a full class percentage.`
-            : 'These students are on the low-attendance list.'
-          : 'No low-attendance rows were returned for this campus and session.';
+        this.answer = this.rows.length
+          ? 'These are the students on the low-attendance list for this login.'
+          : 'The low-attendance list is empty for this login.';
       },
       error: () => {
         this.asking = false;
         this.error = 'Attendance records could not be read.';
       },
     });
+  }
+
+  private feeFigure(row: any): Record<string, unknown> {
+    return {
+      studentName: row?.studentName,
+      admissionNo: row?.admissionNo,
+      classSection: row?.classSection,
+      feeHead: row?.feeHead,
+      dueDate: row?.dueDate,
+      amount: row?.amount,
+    };
+  }
+
+  private attendanceFigure(row: any): Record<string, unknown> {
+    return {
+      studentName: row?.studentName,
+      admissionNo: row?.admissionNo,
+      status: row?.status,
+      percent: row?.percent,
+    };
   }
 }

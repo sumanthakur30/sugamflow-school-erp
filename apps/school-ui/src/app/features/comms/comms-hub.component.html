@@ -103,6 +103,22 @@
         <div class="compose-grid">
           <div class="message-fields">
             <label>
+              Language
+              <select [(ngModel)]="noticeLanguage" name="noticeLanguage" [disabled]="busy || drafting">
+                <option value="en">English</option>
+                <option value="hi">हिन्दी</option>
+              </select>
+            </label>
+            <label>
+              Occasion
+              <input [(ngModel)]="noticeOccasion" name="noticeOccasion" [disabled]="busy || drafting" placeholder="Monday" />
+            </label>
+            <p>
+              <button type="button" class="secondary" (click)="writeNoticeDraft()" [disabled]="busy || drafting">
+                {{ drafting ? 'Writing…' : 'Write a draft' }}
+              </button>
+            </p>
+            <label>
               <span class="field-title">Title <span class="req">*</span></span>
               <input
                 [(ngModel)]="draft.title"

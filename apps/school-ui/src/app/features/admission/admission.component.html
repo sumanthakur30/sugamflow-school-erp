@@ -32,6 +32,31 @@
         </div>
       }
 
+      <section class="panel">
+        <h3 class="form-section-title">Admission paper</h3>
+        <p>An upload can suggest fields. Nothing is stored until you submit, and the file stays attached to the application.</p>
+        <label class="file-btn">
+          Upload paper
+          <input type="file" accept=".txt,text/plain,application/pdf,image/*" [disabled]="submitting" (change)="onAdmissionPaper($event)" />
+        </label>
+        @if (paperName) {
+          <p role="status">Attached: {{ paperName }}</p>
+        }
+        @if (suggestionNote) {
+          <p role="status">{{ suggestionNote }}</p>
+        }
+        @if (suggestionKeys().length) {
+          <ul>
+            @for (key of suggestionKeys(); track key) {
+              <li>{{ key }}: {{ suggestions[key] }}</li>
+            }
+          </ul>
+          <button type="button" class="secondary" (click)="useSuggestions()" [disabled]="submitting">
+            Use these suggestions
+          </button>
+        }
+      </section>
+
       @if (visibleFormSections().length > 1) {
         <div class="form-tabs" role="tablist" aria-label="Application sections">
           @for (section of visibleFormSections(); track section.id) {

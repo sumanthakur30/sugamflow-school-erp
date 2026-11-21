@@ -57,6 +57,12 @@ public class AdmissionController {
     return ApiResponse.ok(service.get(id));
   }
 
+  @PostMapping("/applications/suggest-fields")
+  public ApiResponse<Map<String, Object>> suggestFields(
+      @RequestBody(required = false) Map<String, Object> body) {
+    return ApiResponse.ok(service.suggestFields(body == null ? Map.of() : body));
+  }
+
   @PostMapping("/applications")
   public ApiResponse<Map<String, Object>> submit(@RequestBody Map<String, Object> body) {
     return ApiResponse.ok(service.submit(body));
