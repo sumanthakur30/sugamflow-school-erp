@@ -731,15 +731,20 @@
         <p>Search a student, or add one with a name, class, and parent.</p>
       </div>
       <div class="head-actions">
-        <button type="button" (click)="showAdd = true">Add student</button>
+        @if (!showAdd) {
+          <button type="button" (click)="openAdd()">Add student</button>
+        }
         <a class="secondary head-link-btn" routerLink="/admin/admission">Applications</a>
       </div>
     </header>
 
-    @if (showAdd && featureEnabled && !loading) {
-      <sf-add-student-panel (closed)="showAdd = false" (created)="reload()" />
+    @if (statusMsg && !selected) {
+      <p class="status panel" role="status" aria-live="polite">{{ statusMsg }}</p>
     }
 
+    @if (showAdd && featureEnabled && !loading) {
+      <sf-add-student-panel (closed)="showAdd = false" (created)="onStudentCreated($event)" />
+    } @else {
     @if (error) {
       <p class="error panel" role="alert">{{ error }}</p>
     }
@@ -872,6 +877,7 @@
           (pageChange)="onPageChange($event)"
         />
       </section>
+    }
     }
   }
 </div>

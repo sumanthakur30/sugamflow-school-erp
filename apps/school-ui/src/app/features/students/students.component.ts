@@ -8,7 +8,7 @@ import { TenantContextService } from '../../core/tenant-context.service';
 import { ModuleBootstrapService } from '../../core/module-bootstrap.service';
 import { ListToolbarComponent } from '../../shared/list-toolbar/list-toolbar.component';
 import { ListPagerComponent } from '../../shared/list-toolbar/list-pager.component';
-import { AddStudentPanelComponent } from './add-student-panel.component';
+import { AddStudentPanelComponent, StudentCreated } from './add-student-panel.component';
 import {
   ListSortOption,
   ListStatusOption,
@@ -266,6 +266,19 @@ export class StudentsComponent implements OnInit, OnDestroy {
       },
       error: (err) => (this.error = err?.error?.message ?? 'Failed to load student'),
     });
+  }
+
+  openAdd(): void {
+    this.showAdd = true;
+    this.statusMsg = '';
+    this.error = '';
+  }
+
+  onStudentCreated(row: StudentCreated): void {
+    this.showAdd = false;
+    const number = row.admissionNo ? ` Admission number ${row.admissionNo}.` : '';
+    this.statusMsg = `Student saved.${number}${row.note || ''}`;
+    this.reload();
   }
 
   reload(): void {
