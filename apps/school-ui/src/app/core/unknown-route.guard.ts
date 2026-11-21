@@ -14,7 +14,10 @@ export const unknownRouteGuard: CanActivateFn = () => {
     return router.createUrlTree(['/login']);
   }
   const role = (auth.getRole() || '').toUpperCase();
-  if (role === 'PARENT' || role === 'GUARDIAN' || role === 'STUDENT') {
+  if (role === 'STUDENT') {
+    return router.createUrlTree(['/student']);
+  }
+  if (role === 'PARENT' || role === 'GUARDIAN') {
     return router.createUrlTree(['/parent']);
   }
   if (role === 'TEACHER') {

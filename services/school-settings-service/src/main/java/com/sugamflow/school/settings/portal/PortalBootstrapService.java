@@ -83,6 +83,9 @@ public class PortalBootstrapService {
         && !(PersonaRoles.isParent(role) || PersonaRoles.isStudent(role))) {
       throw new IllegalArgumentException("Parent portal requires PARENT / STUDENT role");
     }
+    if (PortalCatalog.STUDENT.equalsIgnoreCase(portalKey) && !PersonaRoles.isStudent(role)) {
+      throw new IllegalArgumentException("Student portal requires STUDENT role");
+    }
     if (PortalCatalog.TEACHER.equalsIgnoreCase(portalKey) && !isTeacherPortalRole(role)) {
       throw new IllegalArgumentException("Teacher portal requires TEACHER role");
     }

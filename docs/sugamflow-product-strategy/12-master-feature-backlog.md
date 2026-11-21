@@ -110,6 +110,8 @@ Priority uses the same scale as the gap analysis.
 
 **Acceptance:** A design note, not code, shows how a receipt would become a debit and a credit. No screen is renamed to “balance sheet” in this item.
 
+The note is `15-ledger-posting-from-receipts.md`. Receipt RCP-1042 for ₹5,000 cash tuition becomes a debit to Cash and a credit to Tuition income. The finance screen keeps its name.
+
 ### B-23 Student web
 
-**Acceptance:** Not started until B-10 has been used by parents for a fee cycle.
+**Acceptance:** A student opens `/student` and sees their own attendance, results, report cards, homework, timetable, and notices. Fee payment stays on the parent phone.

@@ -106,6 +106,15 @@ export class PortalShellComponent implements OnInit {
     nav: Array<{ id: string; label: string; route: string }>,
   ): Array<{ id: string; label: string; route: string }> {
     const parent = new Set(['home', 'attendance', 'fees', 'exams', 'report-cards', 'notices', 'homework']);
+    const student = new Set([
+      'home',
+      'attendance',
+      'exams',
+      'report-cards',
+      'notices',
+      'timetable',
+      'homework',
+    ]);
     const teacher = new Set([
       'home',
       'students',
@@ -116,7 +125,8 @@ export class PortalShellComponent implements OnInit {
       'timetable',
       'homework',
     ]);
-    const keep = this.portalKey === 'teacher' ? teacher : parent;
+    const keep =
+      this.portalKey === 'teacher' ? teacher : this.portalKey === 'student' ? student : parent;
     return nav.filter((item) => keep.has(item.id));
   }
 

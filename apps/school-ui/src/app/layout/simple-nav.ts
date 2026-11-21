@@ -33,6 +33,7 @@ const FRIENDLY: Record<string, string> = {
   '/admin/offline': 'Offline attendance',
   '/admin/privacy': 'Student privacy',
   '/parent': 'Parent app',
+  '/student': 'Student',
   '/teacher': 'Teacher app',
 };
 

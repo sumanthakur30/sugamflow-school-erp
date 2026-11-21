@@ -193,7 +193,9 @@ export class PortalHomeComponent implements OnInit, OnDestroy {
               className:
                 answers?.classSection ?? answers?.classApplied ?? primary?.classSection,
               linkedChildren: childCount > 1 ? childCount : undefined,
-              guardianName: this.auth.getSession()?.username,
+              ...(boot.portalKey === 'student'
+                ? {}
+                : { guardianName: this.auth.getSession()?.username }),
             },
             summary: {
               attendancePercent,
@@ -218,7 +220,9 @@ export class PortalHomeComponent implements OnInit, OnDestroy {
           studentName: null,
           admissionNo: null,
           className: null,
-          guardianName: this.auth.getSession()?.username,
+          ...(boot.portalKey === 'student'
+            ? {}
+            : { guardianName: this.auth.getSession()?.username }),
         },
         summary: {
           attendancePercent,
