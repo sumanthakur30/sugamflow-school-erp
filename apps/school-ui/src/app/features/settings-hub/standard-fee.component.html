@@ -1,0 +1,154 @@
+<section class="page">
+  <div class="page-head">
+    <h2>Standard Fee Structure</h2>
+    <p>
+      Academic session {{ sessionId || 'not set' }}. Add the fees this school collects, then enter the amount for each class.
+      A fee is created once and can have a different amount in each class.
+      Saving applies to future fee assignments. Receipts and dues already recorded stay as they are.
+      <a routerLink="/admin/settings">Back to settings</a>
+    </p>
+  </div>
+
+  @if (error) {
+    <p class="error panel" role="alert">{{ error }}</p>
+  }
+  @if (status) {
+    <p class="status panel" role="status">{{ status }}</p>
+  }
+  @if (loading) {
+    <p class="panel">Loading classes and fees…</p>
+  } @else if (!classes.length) {
+    <p class="panel">This campus has no classes yet. <a routerLink="/admin/academic">Add classes</a>, then set the fees.</p>
+  } @else {
+    <div class="panel">
+      <div class="actions">
+        <button type="button" [class.secondary]="view !== 'class'" (click)="view = 'class'">By class</button>
+        <button type="button" [class.secondary]="view !== 'fee'" (click)="view = 'fee'">By fee</button>
+      </div>
+      <p class="muted">{{ categories.length }} fee {{ categories.length === 1 ? 'type' : 'types' }}</p>
+
+      @if (view === 'class') {
+        <p>Class</p>
+        <div class="choices">
+          @for (cls of classes; track cls.name) {
+            <button type="button" [class.secondary]="selectedClass !== cls.name" (click)="selectedClass = cls.name">
+              {{ cls.name }}
+            </button>
+          }
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th class="use">Use</th>
+              <th>Fee</th>
+              <th>Collect</th>
+              <th class="amount">Amount</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (fee of categories; track selectedClass + fee.headKey) {
+              <tr>
+                <td class="use">
+                  <input type="checkbox" [(ngModel)]="cell(selectedClass, fee.headKey).active" [name]="'use-' + selectedClass + fee.headKey" />
+                </td>
+                <td>{{ fee.label }}</td>
+                <td>
+                  <select [(ngModel)]="fee.frequency" [name]="'freq-' + fee.headKey">
+                    @for (option of frequencies; track option.value) {
+                      <option [value]="option.value">{{ option.label }}</option>
+                    }
+                  </select>
+                </td>
+                <td class="amount">
+                  <input [(ngModel)]="cell(selectedClass, fee.headKey).amount" [name]="'amt-' + selectedClass + fee.headKey" type="number" min="0" />
+                </td>
+                <td><button type="button" class="tiny secondary" (click)="removeFee(fee.headKey)">Remove</button></td>
+              </tr>
+            } @empty {
+              <tr>
+                <td colspan="5" class="muted">No fees yet. Add the ones this school collects.</td>
+              </tr>
+            }
+          </tbody>
+        </table>
+        @if (selectedClass) {
+          <p><strong>Total applicable fees</strong> {{ money(classTotal(selectedClass)) }}</p>
+          <p class="muted">This adds the amounts as entered. A monthly fee is not multiplied by twelve.</p>
+        }
+      } @else {
+        <label>
+          Fee
+          <select [(ngModel)]="selectedFee" name="selectedFee">
+            @for (fee of categories; track fee.headKey) {
+              <option [value]="fee.headKey">{{ fee.label }}</option>
+            }
+          </select>
+        </label>
+        @for (fee of categories; track fee.headKey) {
+          @if (fee.headKey === selectedFee) {
+            <label>
+              Collect
+              <select [(ngModel)]="fee.frequency" [name]="'fee-freq-' + fee.headKey">
+                @for (option of frequencies; track option.value) {
+                  <option [value]="option.value">{{ option.label }}</option>
+                }
+              </select>
+            </label>
+            <table>
+              <thead>
+                <tr>
+                  <th>Class</th>
+                  <th class="use">Use</th>
+                  <th class="amount">Amount</th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (cls of classes; track cls.name) {
+                  <tr>
+                    <td>{{ cls.name }}</td>
+                    <td class="use">
+                      <input type="checkbox" [(ngModel)]="cell(cls.name, fee.headKey).active" [name]="'fee-use-' + cls.name + fee.headKey" />
+                    </td>
+                    <td class="amount">
+                      <input [(ngModel)]="cell(cls.name, fee.headKey).amount" [name]="'fee-amt-' + cls.name + fee.headKey" type="number" min="0" />
+                    </td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          }
+        }
+      }
+
+      <div class="add-line">
+        <label>
+          Add a fee
+          <select [(ngModel)]="addKey" name="addKey">
+            <option value="">Select</option>
+            @for (fee of feesToAdd(); track fee.headKey) {
+              <option [value]="fee.headKey">{{ fee.label }}</option>
+            }
+          </select>
+        </label>
+        <button type="button" class="secondary" (click)="addSelected()" [disabled]="!addKey || busy">Add fee</button>
+      </div>
+      <div class="add-line">
+        <label>
+          Custom fee name
+          <input [(ngModel)]="customName" name="customName" />
+        </label>
+        <label>
+          Collect
+          <select [(ngModel)]="customFrequency" name="customFrequency">
+            @for (option of frequencies; track option.value) {
+              <option [value]="option.value">{{ option.label }}</option>
+            }
+          </select>
+        </label>
+        <button type="button" class="secondary" (click)="addCustom()" [disabled]="busy">Add custom fee</button>
+      </div>
+      <button type="button" (click)="save()" [disabled]="busy">Save fee structure</button>
+    </div>
+  }
+</section>
