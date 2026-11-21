@@ -10,23 +10,33 @@ public final class PortalCatalog {
 
   public static final String PARENT = "parent";
   public static final String TEACHER = "teacher";
+  public static final String STUDENT = "student";
   public static final String MODULE_PARENT = "parent_portal";
   public static final String MODULE_TEACHER = "teacher_portal";
+  public static final String MODULE_STUDENT = "student_portal";
   public static final String FLAG_PARENT = "FEATURE_PARENT_APP";
   public static final String FLAG_TEACHER = "FEATURE_TEACHER_APP";
 
   private PortalCatalog() {}
 
   public static boolean isKnown(String portalKey) {
-    return PARENT.equalsIgnoreCase(portalKey) || TEACHER.equalsIgnoreCase(portalKey);
+    return PARENT.equalsIgnoreCase(portalKey)
+        || TEACHER.equalsIgnoreCase(portalKey)
+        || STUDENT.equalsIgnoreCase(portalKey);
   }
 
   public static String moduleKey(String portalKey) {
-    return PARENT.equalsIgnoreCase(portalKey) ? MODULE_PARENT : MODULE_TEACHER;
+    if (PARENT.equalsIgnoreCase(portalKey)) {
+      return MODULE_PARENT;
+    }
+    if (STUDENT.equalsIgnoreCase(portalKey)) {
+      return MODULE_STUDENT;
+    }
+    return MODULE_TEACHER;
   }
 
   public static String featureFlag(String portalKey) {
-    return PARENT.equalsIgnoreCase(portalKey) ? FLAG_PARENT : FLAG_TEACHER;
+    return TEACHER.equalsIgnoreCase(portalKey) ? FLAG_TEACHER : FLAG_PARENT;
   }
 
   public static Map<String, Object> defaultParentSettings() {
@@ -87,6 +97,33 @@ public final class PortalCatalog {
     return s;
   }
 
+  public static Map<String, Object> defaultStudentSettings() {
+    Map<String, Object> s = new LinkedHashMap<>();
+    s.put("enabled", true);
+    s.put("moduleKey", MODULE_STUDENT);
+    s.put("requiredFeatureFlag", FLAG_PARENT);
+    s.put("title", "Student");
+    s.put("subtitle", "Your attendance, results, and notices");
+    s.put("roleCode", "STUDENT");
+    s.put(
+        "profile",
+        Map.of(
+            "studentName", "Asha Kumar",
+            "admissionNo", "ADM-1001",
+            "className", "Grade 8-A"));
+    s.put(
+        "summary",
+        Map.of(
+            "attendancePercent", "94%",
+            "latestExamLabel", "Unit Test 2 — A",
+            "noticesCount", 1));
+    s.put("nav", studentNav());
+    s.put("widgets", studentWidgets());
+    s.put("sections", studentSections());
+    s.put("notices", defaultNotices("student"));
+    return s;
+  }
+
   private static List<Map<String, Object>> parentNav() {
     List<Map<String, Object>> nav = new ArrayList<>();
     nav.add(navItem("home", "Home", "/parent", null));
@@ -123,6 +160,18 @@ public final class PortalCatalog {
     return nav;
   }
 
+  private static List<Map<String, Object>> studentNav() {
+    List<Map<String, Object>> nav = new ArrayList<>();
+    nav.add(navItem("home", "Home", "/student", null));
+    nav.add(navItem("attendance", "Attendance", "/student/attendance", "FEATURE_ATTENDANCE"));
+    nav.add(navItem("exams", "Results", "/student/exams", "FEATURE_EXAM"));
+    nav.add(navItem("report-cards", "Report cards", "/student/report-cards", "FEATURE_EXAM"));
+    nav.add(navItem("homework", "Homework", "/student/homework", "FEATURE_LMS"));
+    nav.add(navItem("timetable", "Timetable", "/student/timetable", null));
+    nav.add(navItem("notices", "Notices", "/student/notices", null));
+    return nav;
+  }
+
   private static Map<String, Object> navItem(
       String id, String label, String route, String flag) {
     Map<String, Object> m = new LinkedHashMap<>();
@@ -150,6 +199,14 @@ public final class PortalCatalog {
     w.add(stat("attendance_today", "Today", "attendanceToday", "/teacher/attendance", 2));
     w.add(stat("pending_marks", "Marks due", "pendingMarks", "/teacher/gradebook", 3));
     w.add(listWidget("notices", "Notices", 4));
+    return w;
+  }
+
+  private static List<Map<String, Object>> studentWidgets() {
+    List<Map<String, Object>> w = new ArrayList<>();
+    w.add(stat("attendance_summary", "Attendance", "attendancePercent", "/student/attendance", 1));
+    w.add(stat("latest_result", "Latest result", "latestExamLabel", "/student/exams", 2));
+    w.add(listWidget("notices", "Notices", 3));
     return w;
   }
 
@@ -194,6 +251,23 @@ public final class PortalCatalog {
     return sections;
   }
 
+  private static Map<String, Object> studentSections() {
+    Map<String, Object> sections = new LinkedHashMap<>();
+    sections.put(
+        "attendance",
+        section("Attendance", "/api/attendance/marks/mine", "No submitted attendance yet."));
+    sections.put(
+        "exams",
+        section("Exam results", "/api/exam/marks/published", "No published results yet."));
+    sections.put(
+        "report-cards",
+        section("Report cards", "/api/exam/report-cards/mine", "No published report cards yet."));
+    sections.put(
+        "homework",
+        section("Homework", "/api/exam/homework/mine", "No homework assigned yet."));
+    return sections;
+  }
+
   private static Map<String, Object> teacherSections() {
     Map<String, Object> sections = new LinkedHashMap<>();
     sections.put(
@@ -226,12 +300,16 @@ public final class PortalCatalog {
     List<Map<String, Object>> notices = new ArrayList<>();
     Map<String, Object> n1 = new LinkedHashMap<>();
     n1.put("id", "n1");
-    n1.put("title", "Parent".equalsIgnoreCase(audience) ? "PTM next Friday" : "Submit unit marks");
+    boolean parent = "Parent".equalsIgnoreCase(audience);
+    boolean student = "Student".equalsIgnoreCase(audience);
+    n1.put("title", parent ? "PTM next Friday" : student ? "Assembly on Friday" : "Submit unit marks");
     n1.put(
         "body",
-        "Parent".equalsIgnoreCase(audience)
+        parent
             ? "Parent-teacher meeting for Grade 8 on Friday 3pm."
-            : "Please finalize Unit Test 2 marks by Friday.");
+            : student
+                ? "Assembly for Grade 8 on Friday 9am."
+                : "Please finalize Unit Test 2 marks by Friday.");
     notices.add(n1);
     Map<String, Object> n2 = new LinkedHashMap<>();
     n2.put("id", "n2");

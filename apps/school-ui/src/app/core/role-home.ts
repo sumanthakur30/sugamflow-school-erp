@@ -1,7 +1,10 @@
 /** Landing route after login. Parent and teacher homes are themselves feature-gated. */
 export function roleHome(role: string | null | undefined): string {
   const normalized = (role || '').toUpperCase();
-  if (normalized === 'PARENT' || normalized === 'GUARDIAN' || normalized === 'STUDENT') {
+  if (normalized === 'STUDENT') {
+    return '/student';
+  }
+  if (normalized === 'PARENT' || normalized === 'GUARDIAN') {
     return '/parent';
   }
   if (normalized === 'TEACHER') {
