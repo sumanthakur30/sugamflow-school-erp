@@ -32,27 +32,28 @@
   </div>
 
   <div class="panel">
-    <h3>Configuration</h3>
+    <h3>Setup</h3>
+    <p role="status">
+      @if (setupDone === checklist.length) {
+        Setup complete. Support can see this on the school settings screen.
+      } @else {
+        {{ setupDone }} of {{ checklist.length }} done. Support can see this list.
+      }
+    </p>
     <table>
       <thead>
         <tr>
-          <th>Area</th>
+          <th>Step</th>
           <th>Status</th>
           <th></th>
         </tr>
       </thead>
       <tbody>
-        @for (row of checklist; track row.label) {
+        @for (row of checklist; track row.key) {
           <tr>
             <td>{{ row.label }}</td>
-            <td>{{ statusLabel(row.feature) }}</td>
-            <td>
-              @if (statusOf(row.feature) === 'active') {
-                <a [routerLink]="row.path">Open</a>
-              } @else if (statusOf(row.feature) === 'not-on-plan') {
-                <a routerLink="/admin/subscription">See plan</a>
-              }
-            </td>
+            <td>{{ row.done ? 'Done' : 'Still open' }}</td>
+            <td><a [routerLink]="row.path">Open</a></td>
           </tr>
         }
       </tbody>

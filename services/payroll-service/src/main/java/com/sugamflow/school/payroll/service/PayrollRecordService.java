@@ -183,6 +183,7 @@ public class PayrollRecordService {
     }
     validateMandatory(form, answers);
     normalizePayAmounts(answers);
+    stampUnpaidLeave(scope, answers);
     PayrollRecordEntity parent = resolveParentForSubmit(scope, runType, parentId, answers);
     rejectDuplicatePeriod(scope, answers, runType, parentId);
 
@@ -932,6 +933,28 @@ public class PayrollRecordService {
         "approvedLeaveDays",
         approvedLeave.approvedDays(scope, yearMonth, employeeId, employeeName));
     entity.setAnswers(answers);
+  }
+
+  /**
+   * Copies unpaid absence days onto the slip. The run stays a draft until a person confirms it.
+   */
+  private void stampUnpaidLeave(TenantScope scope, Map<String, Object> answers) {
+    String employeeId = stringOr(answers.get("employeeId"), "");
+    String monthName = stringOr(answers.get("month"), "");
+    String year = stringOr(answers.get("year"), "");
+    int month = monthNumber(monthName);
+    int yearNumber = yearNumber(year);
+    if (employeeId.isBlank() || month < 1 || yearNumber < 1) {
+      return;
+    }
+    String yearMonth = YearMonth.of(yearNumber, month).toString();
+    try {
+      answers.put(
+          "unpaidLeaveDays",
+          StaffLeaveDays.unpaidDays(staffAttendance.sheet(scope, yearMonth), employeeId));
+    } catch (RuntimeException ex) {
+      // The person can still open the run. Finalizing still waits for a submitted month.
+    }
   }
 
   private static String payrollMonth(PayrollRecordEntity entity) {

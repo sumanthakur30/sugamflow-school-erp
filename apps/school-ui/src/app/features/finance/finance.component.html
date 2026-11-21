@@ -169,7 +169,17 @@
                 <div class="exec-hint">{{ row.classSection }}</div>
               </div>
               <strong class="due-amt">{{ formatMoney(row.dueAmount) }}</strong>
-              <button type="button" class="tiny" (click)="remind(row)">Send reminder</button>
+              <button type="button" class="tiny" (click)="remind(row)">Draft reminder</button>
+            </div>
+          }
+          @if (reminderDraft) {
+            <div class="reminder-draft">
+              <p>Draft for {{ reminderDraft.studentName }}. Nothing is sent until you confirm.</p>
+              <textarea rows="3" [(ngModel)]="reminderDraft.message" name="reminderDraft"></textarea>
+              <div class="actions">
+                <button type="button" (click)="sendReminderDraft()" [disabled]="busy">Send this reminder</button>
+                <button type="button" class="secondary" (click)="reminderDraft = null">Cancel</button>
+              </div>
             </div>
           }
           @if (!outstanding.length) {
@@ -251,10 +261,10 @@
                     <button type="button" class="tiny secondary" (click)="openCollection(row)">
                       Open
                     </button>
-                    <button type="button" class="tiny secondary" (click)="reminderStub(row, 'WhatsApp')" title="WhatsApp">
+                    <button type="button" class="tiny secondary" (click)="remind(row, 'WHATSAPP')" title="WhatsApp">
                       WA
                     </button>
-                    <button type="button" class="tiny secondary" (click)="reminderStub(row, 'SMS')" title="SMS">
+                    <button type="button" class="tiny secondary" (click)="remind(row, 'SMS')" title="SMS">
                       SMS
                     </button>
                   </td>
