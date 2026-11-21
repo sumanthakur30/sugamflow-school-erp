@@ -1,5 +1,6 @@
 package com.sugamflow.school.payroll.service;
 
+import com.sugamflow.school.common.security.PersonaRoles;
 import com.sugamflow.school.common.tenant.TenantContext;
 import com.sugamflow.school.common.tenant.TenantScope;
 import com.sugamflow.school.common.api.PageQuery;
@@ -105,6 +106,7 @@ public class PayrollRecordService {
   public PageResult<Map<String, Object>> list(Integer page, Integer size) {
     TenantScope scope = TenantContext.require();
     requireFeature(scope);
+    requirePayrollRead(scope);
     PageQuery q = PageQuery.of(page, size); Pageable pageable = PageRequest.of(q.page(), q.size());
     Page<PayrollRecordEntity> result;
     if (scope.branchId() != null && !scope.branchId().isBlank() && scope.academicSessionId() != null && !scope.academicSessionId().isBlank()) {
@@ -117,6 +119,7 @@ public class PayrollRecordService {
   public Map<String, Object> get(UUID id) {
     TenantScope scope = TenantContext.require();
     requireFeature(scope);
+    requirePayrollRead(scope);
     return toDto(requireRecord(id, scope.organizationId()));
   }
 
@@ -125,6 +128,7 @@ public class PayrollRecordService {
   public Map<String, Object> issuePayslip(UUID id) {
     TenantScope scope = TenantContext.require();
     requireFeature(scope);
+    requirePayrollRead(scope);
     PayrollRecordEntity entity = requireRecord(id, scope.organizationId());
     String status = entity.getStatus() == null ? "" : entity.getStatus().trim().toUpperCase();
     if (!"APPROVED".equals(status)) {
@@ -798,6 +802,13 @@ public class PayrollRecordService {
       return list.stream().map(String::valueOf).toList();
     }
     return List.of("EMAIL", "IN_APP");
+  }
+
+  private static void requirePayrollRead(TenantScope scope) {
+    String role = PersonaRoles.normalize(scope.roleCode());
+    if (PersonaRoles.isPortalReadOnly(role) || PersonaRoles.isTeacher(role)) {
+      throw new PayrollException("FORBIDDEN", "Payroll is not available for role: " + role);
+    }
   }
 
   private void requireFeature(TenantScope scope) {
