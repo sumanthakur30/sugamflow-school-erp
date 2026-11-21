@@ -1,9 +1,13 @@
 .git
+**/.git
 .tmp*
 **/.tmp*
+**/.angular
 **/node_modules
 **/dist
 **/target
 **/*.tgz
 **/*.log
+*.log
 tmp-*.sh
+**/tmp-*
