@@ -57,4 +57,29 @@ public class StaffAttendanceClient {
           "Staff attendance for " + yearMonth + " could not be confirmed");
     }
   }
+
+  /** The submitted or draft staff sheet. Used to copy unpaid days onto a slip. */
+  public Map<String, Object> sheet(TenantScope scope, String yearMonth) {
+    String base = properties.getIntegrations().getAttendanceBaseUrl();
+    if (base == null || base.isBlank()) {
+      throw new PayrollException(
+          "ATTENDANCE_REQUIRED", "Staff attendance service is not configured");
+    }
+    String url = base.replaceAll("/$", "") + "/api/attendance/staff/months/" + yearMonth;
+    Map<String, Object> envelope =
+        restClientBuilder
+            .build()
+            .get()
+            .uri(url)
+            .headers(h -> TenantHeaders.apply(h, scope))
+            .retrieve()
+            .body(MAP_TYPE);
+    Object data = envelope == null ? null : envelope.get("data");
+    if (data instanceof Map<?, ?> sheet) {
+      @SuppressWarnings("unchecked")
+      Map<String, Object> copy = new java.util.LinkedHashMap<>((Map<String, Object>) sheet);
+      return copy;
+    }
+    return Map.of();
+  }
 }

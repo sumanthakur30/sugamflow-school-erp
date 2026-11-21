@@ -116,6 +116,12 @@ public class FeeController {
     return ApiResponse.ok(clearanceService.snapshot(admissionNo));
   }
 
+  @GetMapping("/due-reminders/drafts")
+  public ApiResponse<List<Map<String, Object>>> dueReminderDrafts(
+      @RequestParam(value = "admissionNo", required = false) String admissionNo) {
+    return ApiResponse.ok(dueReminders.drafts(admissionNo));
+  }
+
   @PostMapping("/due-reminders/run")
   public ApiResponse<Map<String, Object>> runDueReminders(
       @RequestBody(required = false) Map<String, Object> body) {
