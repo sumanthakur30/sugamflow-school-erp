@@ -39,7 +39,6 @@ class FinanceServiceWebhookIdempotencyTest {
   @Mock private FeeCollectionService feeCollections;
   @Mock private StudentProfileClient studentProfiles;
   @Mock private StudentFeeAdjustmentService feeAdjustments;
-  @Mock private FeeClearanceService clearance;
 
   @AfterEach
   void clear() {
@@ -107,7 +106,6 @@ class FinanceServiceWebhookIdempotencyTest {
         feeCollections,
         studentProfiles,
         feeAdjustments,
-        clearance,
         new ObjectMapper());
   }
 

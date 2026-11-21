@@ -35,7 +35,6 @@ class FinanceServiceStandardFeeHistoryTest {
   @Mock private FeeCollectionService feeCollections;
   @Mock private StudentProfileClient studentProfiles;
   @Mock private StudentFeeAdjustmentService feeAdjustments;
-  @Mock private FeeClearanceService clearance;
 
   @AfterEach
   void clear() {
@@ -54,7 +53,6 @@ class FinanceServiceStandardFeeHistoryTest {
             feeCollections,
             studentProfiles,
             feeAdjustments,
-            clearance,
             new ObjectMapper());
     TenantContext.set(new TenantScope("SCH-A", "main", "2026-27", "admin", "ADMIN"));
     when(engines.isFeatureEnabled(any(), eq(FeeCollectionService.FEATURE_FEE))).thenReturn(true);
