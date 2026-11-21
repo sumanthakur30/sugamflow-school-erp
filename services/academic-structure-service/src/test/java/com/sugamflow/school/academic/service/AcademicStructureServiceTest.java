@@ -40,6 +40,16 @@ class AcademicStructureServiceTest {
   }
 
   @Test
+  void anotherSchoolCannotUpdateThisClass() {
+    TenantContext.set(new TenantScope("SCH-B", "main", "2025-26", "admin_SCH-B", "ADMIN"));
+    UUID id = UUID.randomUUID();
+    when(classes.findByIdAndOrganizationId(id, "SCH-B")).thenReturn(java.util.Optional.empty());
+    AcademicException error =
+        assertThrows(AcademicException.class, () -> service.updateClass(id, Map.of("name", "Class 1")));
+    assertEquals("Class not found", error.getMessage());
+  }
+
+  @Test
   void parentCannotCreateClass() {
     TenantContext.set(new TenantScope("NAT-01", "main", "2025-26", "parent_NAT-01", "PARENT"));
     assertThrows(

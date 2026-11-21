@@ -207,6 +207,17 @@
 }
 
 @media (max-width: 640px) {
+  .portal-shell nav {
+    flex-wrap: wrap;
+    overflow-x: hidden;
+  }
+
+  .portal-shell nav a {
+    flex: 1 1 auto;
+    white-space: normal;
+    text-align: center;
+  }
+
   .portal-shell main {
     padding: 0.85rem 0.7rem 2.5rem;
   }

@@ -4,12 +4,14 @@ import com.sugamflow.school.common.api.ApiResponse;
 import com.sugamflow.school.student.privacy.SchoolPrivacyService;
 import com.sugamflow.school.student.privacy.SchoolPrivacyViews.CompleteCommand;
 import com.sugamflow.school.student.privacy.SchoolPrivacyViews.ConsentCommand;
+import com.sugamflow.school.student.privacy.SchoolPrivacyViews.ModelConsentCommand;
 import com.sugamflow.school.student.privacy.SchoolPrivacyViews.ConsentView;
 import com.sugamflow.school.student.privacy.SchoolPrivacyViews.NoticeView;
 import com.sugamflow.school.student.privacy.SchoolPrivacyViews.PurposeView;
 import com.sugamflow.school.student.privacy.SchoolPrivacyViews.RequestCommand;
 import com.sugamflow.school.student.privacy.SchoolPrivacyViews.RequestView;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -41,6 +43,16 @@ public class SchoolPrivacyController {
   @PostMapping("/consents")
   public ApiResponse<ConsentView> consent(@RequestBody ConsentCommand command) {
     return ApiResponse.ok(service.setConsent(command.purposeCode(), command.action()));
+  }
+
+  @GetMapping("/model-and-bulk")
+  public ApiResponse<Map<String, Object>> modelAndBulk() {
+    return ApiResponse.ok(Map.of("allowed", service.modelAndBulkGranted()));
+  }
+
+  @PostMapping("/model-and-bulk")
+  public ApiResponse<ConsentView> grantModelAndBulk(@RequestBody ModelConsentCommand command) {
+    return ApiResponse.ok(service.grantModelAndBulk(command.action(), command.childRef()));
   }
 
   @PostMapping("/requests")

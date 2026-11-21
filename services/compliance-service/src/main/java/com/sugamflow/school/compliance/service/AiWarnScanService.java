@@ -168,7 +168,7 @@ public class AiWarnScanService {
 
     boolean fallbackUsed = false;
     String provider = "heuristic";
-    if (properties.getAi().isConfigured()) {
+    if (properties.getAi().isConfigured() && masterDataClient.modelAndBulkAllowed(scope)) {
       try {
         String tip = callExternalTip(students.size(), staff.size(), findings.size());
         if (tip != null && !tip.isBlank()) {
