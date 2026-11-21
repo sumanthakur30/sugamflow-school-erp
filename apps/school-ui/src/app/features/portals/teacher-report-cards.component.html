@@ -1,7 +1,11 @@
 <section class="page">
   <div class="page-head">
-    <h2>Report cards</h2>
-    <p>Assemble a term report card per student from gradebook marks and download printable PDFs.</p>
+    <h2>{{ language.t('reportCards') }}</h2>
+    <p>{{ language.t('reportCardsNote') }}</p>
+    <div>
+      <button type="button" class="secondary" (click)="language.set('en')">{{ language.t('english') }}</button>
+      <button type="button" class="secondary" (click)="language.set('hi')">{{ language.t('hindi') }}</button>
+    </div>
   </div>
 
   @if (error) {
@@ -55,14 +59,14 @@
           (click)="downloadClass()"
           [disabled]="busy || !sectionId || !completeCount"
         >
-          Download class cards
+          {{ language.t('downloadClassCards') }}
         </button>
       </div>
 
       @if ((report.missingMarks || []).length) {
         <div class="panel" role="status">
-          <h3>Missing marks</h3>
-          <p>These are not printed as zero. A saved zero is included on the card.</p>
+          <h3>{{ language.t('missingMarks') }}</h3>
+          <p>{{ language.t('missingMarksNote') }}</p>
           <ul>
             @for (gap of report.missingMarks; track gap.admissionNo + gap.subject + gap.exam) {
               <li>{{ gap.studentName || gap.admissionNo }} — {{ gap.subject }}{{ gap.exam ? ' (' + gap.exam + ')' : '' }}</li>
