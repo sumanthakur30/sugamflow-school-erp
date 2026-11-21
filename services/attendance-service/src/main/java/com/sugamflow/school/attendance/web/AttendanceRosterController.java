@@ -1,6 +1,7 @@
 package com.sugamflow.school.attendance.web;
 
 import com.sugamflow.school.attendance.service.AttendanceRosterService;
+import com.sugamflow.school.attendance.service.LowAttendanceFigures;
 import com.sugamflow.school.common.api.ApiResponse;
 import java.time.LocalDate;
 import java.util.List;
@@ -37,6 +38,12 @@ public class AttendanceRosterController {
   @GetMapping("/exceptions")
   public ApiResponse<List<Map<String, Object>>> exceptions() {
     return ApiResponse.ok(service.exceptions());
+  }
+
+  /** Named Ask query. Same rows as the low-attendance list, without any other figure. */
+  @GetMapping("/ask/low-attendance")
+  public ApiResponse<List<Map<String, Object>>> lowAttendance() {
+    return ApiResponse.ok(LowAttendanceFigures.fromDesk(service.exceptions()));
   }
 
   @GetMapping("/roster/summary")

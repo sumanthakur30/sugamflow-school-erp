@@ -30,6 +30,12 @@ public class CommsHubController {
     return ApiResponse.ok(service.list());
   }
 
+  @PostMapping("/notice-drafts")
+  public ApiResponse<Map<String, Object>> noticeDraft(
+      @RequestBody(required = false) Map<String, Object> body) {
+    return ApiResponse.ok(service.noticeDraft(body == null ? Map.of() : body));
+  }
+
   @PostMapping("/announcements")
   public ApiResponse<Map<String, Object>> create(@RequestBody Map<String, Object> body) {
     return ApiResponse.ok(service.create(body));

@@ -28,11 +28,19 @@
     }
     @if (rows.length) {
       <table>
+        <thead>
+          <tr>
+            @for (column of columns; track column) {
+              <th>{{ column }}</th>
+            }
+          </tr>
+        </thead>
         <tbody>
-          @for (row of rows; track row.label + row.value) {
+          @for (row of rows; track $index) {
             <tr>
-              <td>{{ row.label }}</td>
-              <td>{{ row.value }}</td>
+              @for (column of columns; track column) {
+                <td>{{ row[column] }}</td>
+              }
             </tr>
           }
         </tbody>
