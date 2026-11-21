@@ -14,7 +14,10 @@ import com.sugamflow.school.common.tenant.TenantContext;
 import com.sugamflow.school.common.tenant.TenantScope;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -68,6 +71,63 @@ public class AcademicStructureService {
     return found.stream().map(AcademicMapper::classToMap).collect(Collectors.toList());
   }
 
+  /**
+   * Classes for admission. The school's own row is used when it already means a
+   * standard step. Missing steps are suggestions until the school saves them.
+   * An inactive row hides that step.
+   */
+  @Transactional(readOnly = true)
+  public List<Map<String, Object>> classCatalog() {
+    Map<String, AcademicClassEntity> byKey = new LinkedHashMap<>();
+    List<AcademicClassEntity> custom = new ArrayList<>();
+    for (AcademicClassEntity row : loadClasses(TenantContext.require())) {
+      String key = AcademicLadder.key(row.getName());
+      AcademicLadder.Step step = AcademicLadder.find(key);
+      if (step == null) {
+        custom.add(row);
+        continue;
+      }
+      AcademicClassEntity current = byKey.get(key);
+      if (current == null || preferClass(row, current)) {
+        byKey.put(key, row);
+      }
+    }
+
+    List<Map<String, Object>> out = new ArrayList<>();
+    for (AcademicLadder.Step step : AcademicLadder.STEPS) {
+      AcademicClassEntity existing = byKey.get(step.key());
+      if (existing != null) {
+        if (!active(existing.getStatus())) {
+          continue;
+        }
+        Map<String, Object> mapped = AcademicMapper.classToMap(existing);
+        mapped.put("sequenceNo", step.sequence());
+        mapped.put("suggested", false);
+        out.add(mapped);
+        continue;
+      }
+      Map<String, Object> suggested = new LinkedHashMap<>();
+      suggested.put("id", null);
+      suggested.put("name", step.name());
+      suggested.put("sequenceNo", step.sequence());
+      suggested.put("status", "SUGGESTED");
+      suggested.put("suggested", true);
+      out.add(suggested);
+    }
+    for (AcademicClassEntity extra : custom) {
+      if (!active(extra.getStatus())) {
+        continue;
+      }
+      Map<String, Object> mapped = AcademicMapper.classToMap(extra);
+      mapped.put("suggested", false);
+      out.add(mapped);
+    }
+    out.sort(
+        Comparator.comparingInt((Map<String, Object> row) -> intValue(row.get("sequenceNo")))
+            .thenComparing(row -> String.valueOf(row.get("name")), String.CASE_INSENSITIVE_ORDER));
+    return out;
+  }
+
   @Transactional
   public Map<String, Object> createClass(Map<String, Object> body) {
     TenantScope scope = requireStaff();
@@ -75,6 +135,7 @@ public class AcademicStructureService {
     if (name == null) {
       throw AcademicException.badRequest("Class name is required");
     }
+    rejectDuplicateClass(scope, name);
     AcademicClassEntity e = new AcademicClassEntity();
     e.setId(UUID.randomUUID());
     stampTenant(e, scope);
@@ -94,7 +155,14 @@ public class AcademicStructureService {
             .findByIdAndOrganizationId(id, scope.organizationId())
             .orElseThrow(() -> AcademicException.notFound("Class"));
     if (RequestValues.str(body, "name") != null) {
-      e.setName(RequestValues.str(body, "name"));
+      String next = RequestValues.str(body, "name");
+      String key = AcademicLadder.key(next);
+      for (AcademicClassEntity other : loadClasses(scope)) {
+        if (!other.getId().equals(e.getId()) && key.equals(AcademicLadder.key(other.getName()))) {
+          throw AcademicException.badRequest("Class already exists: " + other.getName());
+        }
+      }
+      e.setName(next);
     }
     if (body.containsKey("code")) {
       e.setCode(RequestValues.str(body, "code"));
@@ -151,6 +219,7 @@ public class AcademicStructureService {
     classes
         .findByIdAndOrganizationId(classId, scope.organizationId())
         .orElseThrow(() -> AcademicException.badRequest("Unknown classId"));
+    rejectDuplicateSection(scope, classId, name);
     ClassSectionEntity e = new ClassSectionEntity();
     e.setId(UUID.randomUUID());
     stampTenant(e, scope);
@@ -382,6 +451,52 @@ public class AcademicStructureService {
           "Academic structure changes require a staff role: " + scope.roleCode());
     }
     return scope;
+  }
+
+  private List<AcademicClassEntity> loadClasses(TenantScope scope) {
+    return hasSessionScope(scope)
+        ? classes.findByOrganizationIdAndBranchIdAndAcademicSessionIdOrderBySequenceNoAscNameAsc(
+            scope.organizationId(), scope.branchId(), scope.academicSessionId())
+        : classes.findByOrganizationIdOrderBySequenceNoAscNameAsc(scope.organizationId());
+  }
+
+  private void rejectDuplicateClass(TenantScope scope, String name) {
+    String key = AcademicLadder.key(name);
+    for (AcademicClassEntity existing : loadClasses(scope)) {
+      if (key.equals(AcademicLadder.key(existing.getName()))) {
+        throw AcademicException.badRequest("Class already exists: " + existing.getName());
+      }
+    }
+  }
+
+  private void rejectDuplicateSection(TenantScope scope, UUID classId, String name) {
+    String wanted = name.trim().toLowerCase(Locale.ROOT);
+    for (ClassSectionEntity existing :
+        sections.findByOrganizationIdAndClassIdOrderByNameAsc(scope.organizationId(), classId)) {
+      if (existing.getName() != null && existing.getName().trim().toLowerCase(Locale.ROOT).equals(wanted)) {
+        throw AcademicException.badRequest("Section already exists: " + existing.getName());
+      }
+    }
+  }
+
+  private static boolean preferClass(AcademicClassEntity candidate, AcademicClassEntity current) {
+    boolean candidateActive = active(candidate.getStatus());
+    boolean currentActive = active(current.getStatus());
+    if (candidateActive != currentActive) {
+      return candidateActive;
+    }
+    return candidate.getSequenceNo() < current.getSequenceNo();
+  }
+
+  private static boolean active(String status) {
+    return status == null || status.isBlank() || "ACTIVE".equalsIgnoreCase(status);
+  }
+
+  private static int intValue(Object raw) {
+    if (raw instanceof Number number) {
+      return number.intValue();
+    }
+    return 0;
   }
 
   private static boolean hasSessionScope(TenantScope scope) {

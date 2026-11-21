@@ -541,6 +541,15 @@ export const routes: Routes = [
           import('./features/college/college-mode.component').then((m) => m.CollegeModeComponent),
       },
       {
+        path: 'admin/settings/fees',
+        canActivate: [featureGuard],
+        data: { feature: 'FEATURE_FEE' },
+        loadComponent: () =>
+          import('./features/settings-hub/standard-fee.component').then(
+            (m) => m.StandardFeeComponent,
+          ),
+      },
+      {
         path: 'admin/settings/setup',
         canActivate: [featureGuard],
         data: { roles: [...PLATFORM_ADMIN_ROLES, 'PRINCIPAL'] },

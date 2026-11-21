@@ -85,12 +85,28 @@
       <label>
         Nationality
         <span class="optional-tag">Optional</span>
-        <input [(ngModel)]="nationality" name="nationality" />
+        <select [(ngModel)]="nationality" name="nationality">
+          <option value="">Select</option>
+          @for (row of nationalities; track row) {
+            <option [value]="row">{{ row }}</option>
+          }
+        </select>
+        @if (nationality === 'Other') {
+          <input [(ngModel)]="otherNationality" name="otherNationality" placeholder="Nationality" />
+        }
       </label>
       <label>
         Religion
         <span class="optional-tag">Optional</span>
-        <input [(ngModel)]="religion" name="religion" />
+        <select [(ngModel)]="religion" name="religion">
+          <option value="">Select</option>
+          @for (row of religions; track row) {
+            <option [value]="row">{{ row }}</option>
+          }
+        </select>
+        @if (religion === 'Other') {
+          <input [(ngModel)]="otherReligion" name="otherReligion" placeholder="Religion" />
+        }
       </label>
       <label>
         Category
@@ -101,11 +117,22 @@
             <option [value]="row">{{ row }}</option>
           }
         </select>
+        @if (category === 'Other') {
+          <input [(ngModel)]="otherCategory" name="otherCategory" placeholder="Category" />
+        }
       </label>
       <label>
         Mother tongue
         <span class="optional-tag">Optional</span>
-        <input [(ngModel)]="motherTongue" name="motherTongue" />
+        <select [(ngModel)]="motherTongue" name="motherTongue">
+          <option value="">Select</option>
+          @for (row of motherTongues; track row) {
+            <option [value]="row">{{ row }}</option>
+          }
+        </select>
+        @if (motherTongue === 'Other') {
+          <input [(ngModel)]="otherMotherTongue" name="otherMotherTongue" placeholder="Mother tongue" />
+        }
       </label>
       <label>
         Aadhaar number
@@ -161,10 +188,14 @@
           <input [(ngModel)]="classQuery" name="classQuery" type="search" placeholder="Search class" />
           <select [(ngModel)]="className" name="className" (ngModelChange)="onClassChange()">
             <option value="">Select</option>
-            @for (row of filteredClasses; track row.id) {
+            @for (row of filteredClasses; track row.name) {
               <option [value]="row.name">{{ row.name }}</option>
             }
+            <option value="__other__">Other</option>
           </select>
+          @if (className === '__other__') {
+            <input [(ngModel)]="otherClass" name="otherClass" placeholder="Class name" (ngModelChange)="onClassChange()" />
+          }
         } @else {
           <input [(ngModel)]="className" name="className" placeholder="Class" />
         }
@@ -175,14 +206,18 @@
       <label>
         Section
         <span class="optional-tag">Optional</span>
-        @if (sections.length) {
+        @if (classes.length) {
           <input [(ngModel)]="sectionQuery" name="sectionQuery" type="search" placeholder="Search section" />
           <select [(ngModel)]="section" name="section">
             <option value="">Select</option>
-            @for (row of filteredSections; track row.id) {
+            @for (row of sectionChoices; track row.name) {
               <option [value]="row.name">{{ row.name }}</option>
             }
+            <option value="__other__">Other</option>
           </select>
+          @if (section === '__other__') {
+            <input [(ngModel)]="otherSection" name="otherSection" placeholder="Section name" />
+          }
         } @else {
           <input [(ngModel)]="section" name="section" placeholder="A" />
         }
@@ -509,7 +544,9 @@
             <option [value]="row.key">{{ row.label }}</option>
           }
         </select>
-        @if (!feeStructures.length) {
+        @if (feeStructureKey) {
+          <span class="hint">Selected from the standard fees for this class. A receipt is not created here.</span>
+        } @else if (!feeStructures.length) {
           <span class="hint">No fee structure is configured yet.</span>
         }
       </label>
@@ -522,11 +559,13 @@
           }
         </select>
       </label>
-      <label class="check">
-        <input type="checkbox" [(ngModel)]="transportRequired" name="transportRequired" />
-        Transport required
-      </label>
-      @if (transportRequired) {
+      @if (transportEnabled) {
+        <label class="check">
+          <input type="checkbox" [(ngModel)]="transportRequired" name="transportRequired" />
+          Transport required
+        </label>
+      }
+      @if (transportEnabled && transportRequired) {
         <label>
           Transport route
           <select [(ngModel)]="transportRoute" name="transportRoute">

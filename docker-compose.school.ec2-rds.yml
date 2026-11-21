@@ -255,7 +255,7 @@ services:
 
   academic-structure-service:
     <<: *jvm-service
-    image: ${IMAGE_PREFIX:-sumanthakur30}/academic-structure-service:${IMAGE_TAG:-1.0.0}
+    image: ${IMAGE_PREFIX:-sumanthakur30}/academic-structure-service:${ACADEMIC_IMAGE_TAG:-${IMAGE_TAG:-1.0.0}}
     environment:
       <<: *common-env
       EUREKA_INSTANCE_HOSTNAME: academic-structure-service

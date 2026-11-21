@@ -225,6 +225,59 @@ export class AcademicComponent implements OnInit, OnDestroy {
     this.classDraft = { name: '', code: '', sequenceNo: 0 };
   }
 
+  addStandardClasses(): void {
+    this.busy = true;
+    this.error = '';
+    this.api.get<any[]>('/api/academic/class-catalog').subscribe({
+      next: (rows) => {
+        const missing = (rows || []).filter((row) => row?.suggested);
+        if (!missing.length) {
+          this.busy = false;
+          this.status = 'Standard classes are already set up.';
+          return;
+        }
+        forkJoin(
+          missing.map((row) =>
+            this.api.post('/api/academic/classes', {
+              name: row.name,
+              sequenceNo: row.sequenceNo,
+            }),
+          ),
+        ).subscribe({
+          next: () => {
+            this.busy = false;
+            this.status = 'Standard classes added.';
+            this.reload();
+          },
+          error: (err) => {
+            this.busy = false;
+            this.error = err?.error?.message ?? 'Could not add the standard classes.';
+          },
+        });
+      },
+      error: (err) => {
+        this.busy = false;
+        this.error = err?.error?.message ?? 'Could not load the class list.';
+      },
+    });
+  }
+
+  setClassStatus(row: any): void {
+    const status = row?.status === 'INACTIVE' ? 'ACTIVE' : 'INACTIVE';
+    this.busy = true;
+    this.api.put(`/api/academic/classes/${row.id}`, { status }).subscribe({
+      next: () => {
+        this.busy = false;
+        this.status = status === 'INACTIVE' ? `${row.name} hidden from admission.` : `${row.name} is active.`;
+        this.reload();
+      },
+      error: (err) => {
+        this.busy = false;
+        this.error = err?.error?.message ?? 'Could not update the class.';
+      },
+    });
+  }
+
   saveClass(): void {
     if (!this.classDraft.name.trim()) {
       this.error = 'Class name is required';
