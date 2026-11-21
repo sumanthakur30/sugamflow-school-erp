@@ -16,6 +16,7 @@ import com.sugamflow.school.fee.persistence.entity.FeeCollectionEntity;
 import com.sugamflow.school.fee.persistence.repo.FeeCollectionRepository;
 import com.sugamflow.school.fee.web.FeeException;
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.Instant;
 import java.util.Locale;
 import java.util.ArrayList;
@@ -126,6 +127,27 @@ public class FeeCollectionService {
     return PageResult.of(result.map(this::toDto).getContent(), q.page(), q.size(), result.getTotalElements());
   }
 
+  /** Approved amount already received for this student and fee bill. */
+  @Transactional(readOnly = true)
+  public Map<String, Object> billBalance(String admissionNo, String billKey) {
+    TenantScope scope = TenantContext.require();
+    requireFeature(scope);
+    String admission = admissionNo == null ? "" : admissionNo.trim();
+    String bill = billKey == null ? "" : billKey.trim();
+    BigDecimal paid = BigDecimal.ZERO;
+    if (!admission.isBlank() && !bill.isBlank()) {
+      Double sum = repository.sumApprovedForBill(scope.organizationId(), admission, bill);
+      if (sum != null) {
+        paid = BigDecimal.valueOf(sum).setScale(2, RoundingMode.HALF_UP);
+      }
+    }
+    Map<String, Object> out = new LinkedHashMap<>();
+    out.put("admissionNo", admission);
+    out.put("billKey", bill);
+    out.put("previouslyPaid", paid);
+    return out;
+  }
+
   /** Open fee collections with a positive amount — the clerk defaulter list. */
   @Transactional(readOnly = true)
   public List<Map<String, Object>> defaulters() {
@@ -234,6 +256,20 @@ public class FeeCollectionService {
             ? new LinkedHashMap<>((Map<String, Object>) m)
             : new LinkedHashMap<>();
 
+    String requestId = stringOr(answers.get("clientRequestId"), "");
+    if (requestId.length() > 80) {
+      requestId = requestId.substring(0, 80);
+      answers.put("clientRequestId", requestId);
+    }
+    if (!requestId.isBlank()) {
+      repository.lockBill(scope.organizationId(), "req:" + requestId);
+      String existingId = repository.findIdByClientRequest(scope.organizationId(), requestId);
+      if (existingId != null && !existingId.isBlank()) {
+        return toDetailDto(requireCollection(UUID.fromString(existingId), scope.organizationId()));
+      }
+    }
+    applyDeskPayment(scope, answers);
+
     Map<String, Object> form = engines.getForm(scope, formKey);
     if (form == null) {
       throw new FeeException("FORM_MISSING", "Form definition not found: " + formKey);
@@ -265,6 +301,11 @@ public class FeeCollectionService {
     entity.setCurrentStepSequence(first.sequence());
     entity.setCurrentStepName(first.name());
     entity.setAssigneeRole(first.assignRole());
+    if (stringOr(answers.get("receiptNo"), "").isBlank()) {
+      answers.put(
+          "receiptNo",
+          "RCPT-" + entity.getId().toString().substring(0, 8).toUpperCase(Locale.ROOT));
+    }
     entity.setAnswers(answers);
     entity.setMatchedActions(matched);
     entity.setCreatedBy(scope.userId());
@@ -288,7 +329,17 @@ public class FeeCollectionService {
       intents.add(recordNotification(scope, entity, "FEE_RULE_NOTIFY"));
     }
     entity.setNotificationIntents(intents);
-    return toDetailDto(repository.save(entity));
+    FeeCollectionEntity saved = repository.save(entity);
+    boolean requireApproval =
+        Boolean.TRUE.equals(moduleSettingsMap(module).get("requireCollectionApproval"));
+    if (!requireApproval) {
+      int guard = 0;
+      while (!"APPROVED".equals(saved.getStatus()) && guard++ < 8) {
+        approve(saved, scope, workflow, "Collected at the desk");
+        saved = repository.findById(saved.getId()).orElse(saved);
+      }
+    }
+    return toDetailDto(saved);
   }
 
   /** Isolated submit so demand generation is not rolled back when collection validation fails. */
@@ -956,6 +1007,207 @@ public class FeeCollectionService {
       }
     }
     return "";
+  }
+
+  /**
+   * Desk receipts carry the fee lines and each payment mode on the same collection row.
+   * A later installment is a new row, so earlier receipts stay as they were saved.
+   */
+  private void applyDeskPayment(TenantScope scope, Map<String, Object> answers) {
+    boolean desk =
+        answers.get("feeLines") instanceof List<?> || answers.get("payments") instanceof List<?>;
+    if (!desk) {
+      return;
+    }
+    List<Map<String, Object>> lines = cleanFeeLines(answers.get("feeLines"));
+    BigDecimal feeAmount;
+    if (!lines.isEmpty()) {
+      feeAmount = sumMoney(lines);
+      answers.put("feeLines", lines);
+      answers.put("feeHead", feeHeadLabel(lines));
+      answers.put("feeAmount", money(feeAmount));
+    } else {
+      feeAmount = decimalOr(answers.get("feeAmount"));
+      if (feeAmount.signum() <= 0) {
+        feeAmount = decimalOr(answers.get("amount"));
+      }
+      answers.put("feeAmount", money(feeAmount));
+    }
+
+    BigDecimal discount = decimalOr(answers.get("discount")).setScale(2, RoundingMode.HALF_UP);
+    BigDecimal lateFee = decimalOr(answers.get("lateFee")).setScale(2, RoundingMode.HALF_UP);
+    if (discount.signum() < 0 || lateFee.signum() < 0) {
+      throw new FeeException("VALIDATION", "Discount and late fee cannot be negative");
+    }
+    BigDecimal net = feeAmount.add(lateFee).subtract(discount).setScale(2, RoundingMode.HALF_UP);
+    if (net.signum() < 0) {
+      throw new FeeException("VALIDATION", "Discount cannot be more than the fee plus late fee");
+    }
+
+    List<Map<String, Object>> payments = cleanPayments(answers.get("payments"));
+    if (payments.isEmpty()) {
+      BigDecimal single = decimalOr(answers.get("amount")).setScale(2, RoundingMode.HALF_UP);
+      if (single.signum() > 0) {
+        Map<String, Object> row = new LinkedHashMap<>();
+        row.put("mode", stringOr(answers.get("paymentMode"), "CASH").toUpperCase(Locale.ROOT));
+        row.put("amount", money(single));
+        row.put("reference", stringOr(answers.get("reference"), ""));
+        payments = List.of(row);
+      }
+    }
+    if (payments.isEmpty()) {
+      throw new FeeException("VALIDATION", "Enter the amount being paid");
+    }
+    for (Map<String, Object> payment : payments) {
+      String mode = String.valueOf(payment.get("mode"));
+      String reference = stringOr(payment.get("reference"), "");
+      if (!"CASH".equals(mode) && reference.isBlank()) {
+        throw new FeeException("VALIDATION", "Enter a reference for " + modeLabel(mode));
+      }
+    }
+    BigDecimal paying = sumMoney(payments);
+    if (paying.signum() <= 0) {
+      throw new FeeException("VALIDATION", "Enter the amount being paid");
+    }
+
+    String admission = stringOr(answers.get("admissionNo"), "");
+    String session = stringOr(answers.get("academicSession"), "");
+    if (session.isBlank() && scope.academicSessionId() != null) {
+      session = scope.academicSessionId();
+    }
+    String billKey = buildBillKey(session, admission, lines, stringOr(answers.get("feeHead"), ""));
+    if (!billKey.isBlank()) {
+      repository.lockBill(scope.organizationId(), "bill:" + billKey);
+    }
+    BigDecimal previously = BigDecimal.ZERO;
+    if (!admission.isBlank() && !billKey.isBlank()) {
+      Double sum = repository.sumApprovedForBill(scope.organizationId(), admission, billKey);
+      if (sum != null) {
+        previously = BigDecimal.valueOf(sum).setScale(2, RoundingMode.HALF_UP);
+      }
+    }
+    BigDecimal due = net.subtract(previously).setScale(2, RoundingMode.HALF_UP);
+    if (due.signum() <= 0) {
+      throw new FeeException("VALIDATION", "This fee is already paid");
+    }
+    if (paying.compareTo(due) > 0) {
+      throw new FeeException("VALIDATION", "Payment is more than the balance due");
+    }
+    BigDecimal remaining = due.subtract(paying).setScale(2, RoundingMode.HALF_UP);
+    answers.put("payments", payments);
+    answers.put("amount", money(paying));
+    answers.put("currentPayment", money(paying));
+    answers.put("paymentMode", paymentModeOf(payments));
+    answers.put("discount", money(discount));
+    answers.put("lateFee", money(lateFee));
+    answers.put("netPayable", money(net));
+    answers.put("previouslyPaid", money(previously));
+    answers.put("remaining", money(remaining));
+    answers.put("paymentStatus", remaining.signum() == 0 ? "PAID" : "PARTIAL");
+    answers.put("billKey", billKey);
+    answers.put("academicSession", session);
+  }
+
+  private static List<Map<String, Object>> cleanFeeLines(Object raw) {
+    List<Map<String, Object>> lines = new ArrayList<>();
+    if (!(raw instanceof List<?> items)) {
+      return lines;
+    }
+    for (Object item : items) {
+      if (!(item instanceof Map<?, ?> source)) {
+        continue;
+      }
+      String label = stringOr(source.get("label"), "");
+      BigDecimal amount = decimalOr(source.get("amount")).setScale(2, RoundingMode.HALF_UP);
+      if (label.isBlank() || amount.signum() <= 0) {
+        continue;
+      }
+      String key = stringOr(source.get("key"), label);
+      Map<String, Object> line = new LinkedHashMap<>();
+      line.put("key", key.trim().toUpperCase(Locale.ROOT));
+      line.put("label", label);
+      line.put("amount", money(amount));
+      lines.add(line);
+    }
+    if (lines.isEmpty() && raw instanceof List<?> && !((List<?>) raw).isEmpty()) {
+      throw new FeeException("VALIDATION", "Each selected fee needs an amount");
+    }
+    return lines;
+  }
+
+  private static List<Map<String, Object>> cleanPayments(Object raw) {
+    List<Map<String, Object>> payments = new ArrayList<>();
+    if (!(raw instanceof List<?> items)) {
+      return payments;
+    }
+    for (Object item : items) {
+      if (!(item instanceof Map<?, ?> source)) {
+        continue;
+      }
+      BigDecimal amount = decimalOr(source.get("amount")).setScale(2, RoundingMode.HALF_UP);
+      if (amount.signum() <= 0) {
+        continue;
+      }
+      String mode = stringOr(source.get("mode"), "CASH").toUpperCase(Locale.ROOT).replace(' ', '_');
+      Map<String, Object> payment = new LinkedHashMap<>();
+      payment.put("mode", mode);
+      payment.put("amount", money(amount));
+      payment.put("reference", stringOr(source.get("reference"), ""));
+      payments.add(payment);
+    }
+    return payments;
+  }
+
+  private static BigDecimal sumMoney(List<Map<String, Object>> rows) {
+    BigDecimal total = BigDecimal.ZERO;
+    for (Map<String, Object> row : rows) {
+      total = total.add(decimalOr(row.get("amount")));
+    }
+    return total.setScale(2, RoundingMode.HALF_UP);
+  }
+
+  private static String feeHeadLabel(List<Map<String, Object>> lines) {
+    List<String> labels = new ArrayList<>();
+    for (Map<String, Object> line : lines) {
+      labels.add(String.valueOf(line.get("label")));
+    }
+    return String.join(", ", labels);
+  }
+
+  private static String paymentModeOf(List<Map<String, Object>> payments) {
+    String mode = String.valueOf(payments.get(0).get("mode"));
+    for (Map<String, Object> payment : payments) {
+      if (!mode.equals(String.valueOf(payment.get("mode")))) {
+        return "SPLIT";
+      }
+    }
+    return mode;
+  }
+
+  private static String buildBillKey(
+      String session, String admission, List<Map<String, Object>> lines, String feeHead) {
+    List<String> keys = new ArrayList<>();
+    for (Map<String, Object> line : lines) {
+      keys.add(String.valueOf(line.get("key")));
+    }
+    keys.sort(String::compareTo);
+    String heads = keys.isEmpty() ? feeHead.trim().toLowerCase(Locale.ROOT) : String.join(",", keys);
+    String raw = session.trim() + "|" + admission.trim() + "|" + heads;
+    return raw.length() > 240 ? raw.substring(0, 240) : raw;
+  }
+
+  private static String money(BigDecimal value) {
+    return value.setScale(2, RoundingMode.HALF_UP).toPlainString();
+  }
+
+  private static String modeLabel(String mode) {
+    return switch (mode) {
+      case "UPI" -> "UPI";
+      case "CARD" -> "Card";
+      case "BANK", "BANK_TRANSFER" -> "Bank transfer";
+      case "CHEQUE" -> "Cheque";
+      default -> mode;
+    };
   }
 
   private static String stringOr(Object value, String fallback) {

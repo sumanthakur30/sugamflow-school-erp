@@ -1,0 +1,42 @@
+<section class="page">
+  <header class="page-head">
+    <h2>Ask the school</h2>
+    <p>
+      Questions use the records this login can already open. Nothing here posts a payment or edits marks.
+      <a routerLink="/admin/dashboard">Back to home</a>
+    </p>
+  </header>
+  <section class="panel">
+    <label>
+      Question
+      <input [(ngModel)]="question" name="question" (keyup.enter)="ask()" />
+    </label>
+    <p>
+      <button type="button" (click)="ask()" [disabled]="asking">{{ asking ? 'Looking…' : 'Ask' }}</button>
+    </p>
+    <p class="muted">Examples</p>
+    <ul>
+      @for (example of examples; track example) {
+        <li><button type="button" class="secondary" (click)="ask(example)">{{ example }}</button></li>
+      }
+    </ul>
+    @if (error) {
+      <p class="error" role="alert">{{ error }}</p>
+    }
+    @if (answer) {
+      <p role="status">{{ answer }}</p>
+    }
+    @if (rows.length) {
+      <table>
+        <tbody>
+          @for (row of rows; track row.label + row.value) {
+            <tr>
+              <td>{{ row.label }}</td>
+              <td>{{ row.value }}</td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    }
+  </section>
+</section>

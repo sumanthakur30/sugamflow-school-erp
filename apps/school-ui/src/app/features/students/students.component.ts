@@ -8,6 +8,7 @@ import { TenantContextService } from '../../core/tenant-context.service';
 import { ModuleBootstrapService } from '../../core/module-bootstrap.service';
 import { ListToolbarComponent } from '../../shared/list-toolbar/list-toolbar.component';
 import { ListPagerComponent } from '../../shared/list-toolbar/list-pager.component';
+import { AddStudentPanelComponent } from './add-student-panel.component';
 import {
   ListSortOption,
   ListStatusOption,
@@ -21,7 +22,7 @@ import { parseListViewParams } from '../../shared/list-toolbar/list-view-route';
 @Component({
   selector: 'sf-students',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink, ListToolbarComponent, ListPagerComponent],
+  imports: [CommonModule, FormsModule, RouterLink, ListToolbarComponent, ListPagerComponent, AddStudentPanelComponent],
   templateUrl: './students.component.html',
   styleUrls: [
     '../../shared/admin-page.scss',
@@ -63,6 +64,7 @@ export class StudentsComponent implements OnInit, OnDestroy {
   savingGuardians = false;
 
   editOpen = false;
+  showAdd = false;
   editAnswers: Record<string, unknown> = {};
   editReason = '';
   savingProfile = false;
@@ -238,6 +240,7 @@ export class StudentsComponent implements OnInit, OnDestroy {
     this.editOpen = false;
     this.deleteOpen = false;
     this.showAudit = false;
+    this.showAdd = params.get('add') === '1';
     this.resetGuardianDraft();
     this.statusMsg = '';
   }

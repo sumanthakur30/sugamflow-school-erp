@@ -81,78 +81,6 @@
     </div>
   </header>
 
-  <!-- SugamFlow-style module strip: split tabs -->
-  <nav class="module-nav" aria-label="Primary modules" data-sf-nav-keep>
-    <div class="module-nav-row">
-      <button
-        type="button"
-        class="module-sidebar-toggle"
-        data-sf-nav-keep
-        [class.active]="!sidebarCollapsed || mobileNavOpen"
-        (click)="toggleSidebar($event)"
-        aria-label="Toggle sidebar"
-        [attr.aria-expanded]="!sidebarCollapsed"
-      >
-        <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
-          <path fill="currentColor" d="M4 6h16v2H4V6zm0 5h16v2H4v-2zm0 5h16v2H4v-2z" />
-        </svg>
-      </button>
-
-      <div class="module-tabs-scroll">
-        <div class="module-tabs">
-          @for (group of topGroups; track group.id) {
-            <div
-              class="module-split"
-              [class.open]="isTopOpen(group.id)"
-              [class.active]="isGroupActive(group)"
-            >
-              <a
-                class="module-split-primary"
-                [routerLink]="groupHome(group)"
-                (click)="goNav(groupHome(group), $event)"
-              >
-                {{ group.label }}
-              </a>
-              <button
-                type="button"
-                class="module-split-caret"
-                data-sf-nav-keep
-                [attr.aria-expanded]="isTopOpen(group.id)"
-                [attr.aria-label]="'Open ' + group.label + ' menu'"
-                (click)="openTopMenu(group.id, $event)"
-              >
-                <span class="caret" aria-hidden="true"></span>
-              </button>
-            </div>
-          }
-        </div>
-      </div>
-    </div>
-  </nav>
-
-  <!-- Floating submenu — outside overflow parents (SugamFlow Bootstrap pattern) -->
-  @if (openTopId) {
-    <div
-      class="module-flyout"
-      role="menu"
-      data-sf-nav-keep
-      [attr.aria-label]="openGroupLabel() + ' menu'"
-      [ngStyle]="dropdownStyle"
-      (click)="$event.stopPropagation()"
-    >
-      @for (item of openGroupItems(); track item.label) {
-        <a
-          role="menuitem"
-          [routerLink]="item.path"
-          routerLinkActive="active"
-          (click)="goNav(item.path, $event)"
-        >
-          {{ item.label }}
-        </a>
-      }
-    </div>
-  }
-
   @if (mobileNavOpen) {
     <div class="nav-scrim" (click)="closeMobileNav()" aria-hidden="true"></div>
   }
@@ -187,54 +115,32 @@
           </div>
         }
 
-        <nav class="sidebar-nav">
-          <div class="sidebar-mobile-primary">
-            <p class="sidebar-hint">Modules</p>
-            @for (group of topGroups; track group.id) {
-              <div class="side-group" [class.active]="isGroupActive(group)">
-                <button
-                  type="button"
-                  class="side-group-toggle"
-                  [attr.aria-expanded]="isSideExpanded('m-' + group.id)"
-                  (click)="toggleSideSection('m-' + group.id, $event)"
-                >
-                  <span class="side-icon" [attr.data-icon]="group.icon"></span>
-                  <span class="side-label">{{ group.label }}</span>
-                  <span class="side-chevron" [class.open]="isSideExpanded('m-' + group.id)"></span>
-                </button>
-                @if (isSideExpanded('m-' + group.id)) {
-                  <div class="side-links">
-                    @for (item of group.items; track item.label) {
-                      <a
-                        [routerLink]="item.path"
-                        routerLinkActive="active"
-                        (click)="goNav(item.path, $event)"
-                      >
-                        {{ item.label }}
-                      </a>
-                    }
-                  </div>
-                }
-              </div>
+        <nav class="sidebar-nav" aria-label="School menu">
+          <div class="side-links side-links--primary">
+            @for (item of primaryLinks; track item.path) {
+              <a
+                [routerLink]="item.path"
+                routerLinkActive="active"
+                (click)="goNav(item.path, $event)"
+              >
+                {{ item.label }}
+              </a>
             }
-            <p class="sidebar-hint sidebar-hint--more">More</p>
           </div>
-
-          @for (group of sideGroups; track group.id) {
-            <div class="side-group" [class.active]="isGroupActive(group)">
+          @if (moreLinks.length) {
+            <div class="side-group">
               <button
                 type="button"
                 class="side-group-toggle"
-                [attr.aria-expanded]="isSideExpanded(group.id)"
-                (click)="toggleSideSection(group.id, $event)"
+                [attr.aria-expanded]="isSideExpanded('more')"
+                (click)="toggleSideSection('more', $event)"
               >
-                <span class="side-icon" [attr.data-icon]="group.icon"></span>
-                <span class="side-label">{{ group.label }}</span>
-                <span class="side-chevron" [class.open]="isSideExpanded(group.id)"></span>
+                <span class="side-label">More</span>
+                <span class="side-chevron" [class.open]="isSideExpanded('more')"></span>
               </button>
-              @if (isSideExpanded(group.id)) {
+              @if (isSideExpanded('more')) {
                 <div class="side-links">
-                  @for (item of group.items; track item.label) {
+                  @for (item of moreLinks; track item.path + item.label) {
                     <a
                       [routerLink]="item.path"
                       routerLinkActive="active"

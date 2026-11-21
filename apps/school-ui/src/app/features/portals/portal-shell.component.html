@@ -36,7 +36,9 @@
 
     <div class="session">
       <p class="session-label">{{ sessionLabel() }}</p>
-      <button type="button" class="logout secondary-link" (click)="goAdmin()">School Admin</button>
+      @if (showAdminLink()) {
+        <button type="button" class="logout secondary-link" (click)="goAdmin()">School office</button>
+      }
       <button type="button" class="logout" data-sf-nav-keep (click)="logout($event)">Sign out</button>
     </div>
   </aside>

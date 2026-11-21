@@ -728,13 +728,17 @@
     <header class="page-head list-head">
       <div>
         <h2>Students</h2>
-        <p>Search and open student profiles, guardians, and related school records.</p>
+        <p>Search a student, or add one with a name, class, and parent.</p>
       </div>
       <div class="head-actions">
-        <a class="secondary head-link-btn" routerLink="/admin/student-directory">Directory</a>
-        <a class="secondary head-link-btn" routerLink="/admin/admission">Admissions</a>
+        <button type="button" (click)="showAdd = true">Add student</button>
+        <a class="secondary head-link-btn" routerLink="/admin/admission">Applications</a>
       </div>
     </header>
+
+    @if (showAdd && featureEnabled && !loading) {
+      <sf-add-student-panel (closed)="showAdd = false" (created)="reload()" />
+    }
 
     @if (error) {
       <p class="error panel" role="alert">{{ error }}</p>

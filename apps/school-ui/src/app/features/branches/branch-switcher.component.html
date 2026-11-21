@@ -11,7 +11,7 @@
     >
       @for (b of branches; track b.branchKey) {
         <option [value]="b.branchKey" [disabled]="b.status === 'INACTIVE'">
-          {{ b.name }}@if (b.city) { · {{ b.city }} }
+          {{ campusLabel(b) }}
         </option>
       }
     </select>

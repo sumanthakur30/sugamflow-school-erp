@@ -12,6 +12,22 @@
   }
 
   <div class="panel">
+    <h3>School</h3>
+    <p class="muted">Session in use: {{ sessionId || 'not set' }}. Classes for that session are added on the academic screen.</p>
+    <label>
+      School name
+      <input [(ngModel)]="schoolName" name="schoolName" />
+    </label>
+    <p>
+      <button type="button" (click)="saveSchoolName()" [disabled]="busy">Save school name</button>
+      <a routerLink="/admin/academic">Add classes</a>
+    </p>
+    @if (nameStatus) {
+      <p role="status">{{ nameStatus }}</p>
+    }
+  </div>
+
+  <div class="panel">
     <h3>Admission number</h3>
     <p class="muted">Next number preview: {{ preview() }}</p>
     <div class="grid two">

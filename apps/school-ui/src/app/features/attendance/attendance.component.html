@@ -212,14 +212,9 @@
   } @else {
     <header class="page-head list-head">
       <div>
-        <h2>Attendance</h2>
-        <p>Mark a class roster in bulk, or review workflow attendance records.</p>
+        <h2>Mark attendance</h2>
+        <p>Choose a class and date, mark who is not present, then submit.</p>
       </div>
-      @if (featureEnabled && !loading && viewMode === 'records') {
-        <div class="head-actions">
-          <button type="button" (click)="openForm()">+ New single record</button>
-        </div>
-      }
     </header>
 
     @if (error) {
@@ -234,6 +229,8 @@
     } @else if (!featureEnabled && !error) {
       <p class="panel">Attendance is not enabled for this plan (FEATURE_ATTENDANCE).</p>
     } @else {
+      <details class="panel">
+        <summary>Staff attendance and older records</summary>
       <div class="panel mode-tabs" role="tablist" aria-label="Attendance modes">
         <button
           type="button"
@@ -266,6 +263,7 @@
           Staff
         </button>
       </div>
+      </details>
 
       @if (viewMode === 'roster') {
         <sf-attendance-roster
