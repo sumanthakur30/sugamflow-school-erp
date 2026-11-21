@@ -25,6 +25,17 @@ public class SchoolPrivacyService {
   public static final String NOTICE_VERSION = "2026.10";
   public static final String SCHOOL_OPERATIONS = "SCHOOL_OPERATIONS";
   public static final String OPTIONAL_UPDATES = "OPTIONAL_SCHOOL_UPDATES";
+  public static final String MODEL_AND_BULK_MESSAGES = "MODEL_AND_BULK_MESSAGES";
+
+  /**
+   * Draft only. Do not return this sentence from the parent or school privacy screen until counsel
+   * has approved it.
+   */
+  public static final String MODEL_AND_BULK_PURPOSE_DRAFT =
+      "DRAFT FOR COUNSEL REVIEW — NOT FOR DISPLAY. The school asks permission before a person "
+          + "uses an external model to draft a notice, or before the school sends a bulk message "
+          + "that is not a required fee, attendance, or exam notice. This permission can be "
+          + "withdrawn. It does not allow student records to be used to train a public model.";
 
   private static final Set<String> REQUEST_TYPES =
       Set.of("ACCESS", "CORRECTION", "ERASURE", "GRIEVANCE");
@@ -122,6 +133,50 @@ public class SchoolPrivacyService {
   }
 
   @Transactional
+  public ConsentView grantModelAndBulk(String action, String childRef) {
+    ensureNotice();
+    TenantScope scope = requireAdmin();
+    String decision = required(action, "action").toUpperCase();
+    if (!decision.equals("GRANT") && !decision.equals("WITHDRAW")) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Action must be GRANT or WITHDRAW.");
+    }
+    Instant now = Instant.now();
+    SchoolPrivacyConsentEntity row =
+        consents
+            .findByOrganizationIdAndSubjectRefAndPurposeCode(
+                scope.organizationId(), subjectRef(scope), MODEL_AND_BULK_MESSAGES)
+            .orElseGet(() -> newConsent(scope, MODEL_AND_BULK_MESSAGES, now));
+    row.setChildRef(clip(childRef, 64));
+    row.setPurposeText(MODEL_AND_BULK_PURPOSE_DRAFT);
+    if ("GRANT".equals(decision)) {
+      row.setStatus("GRANTED");
+      row.setGrantedAt(now);
+      row.setWithdrawnAt(null);
+    } else {
+      row.setStatus("WITHDRAWN");
+      row.setWithdrawnAt(now);
+    }
+    row.setNoticeCode(NOTICE_CODE);
+    row.setNoticeVersion(NOTICE_VERSION);
+    SchoolPrivacyConsentEntity saved = consents.save(row);
+    return new ConsentView(
+        saved.getPurposeCode(), saved.getStatus(), saved.getGrantedAt(), saved.getWithdrawnAt());
+  }
+
+  @Transactional(readOnly = true)
+  public boolean modelAndBulkGranted() {
+    return modelGranted(TenantContext.require());
+  }
+
+  @Transactional(readOnly = true)
+  public void requireModelAndBulk() {
+    if (!modelGranted(TenantContext.require())) {
+      throw new ResponseStatusException(
+          HttpStatus.FORBIDDEN, "Model and bulk-message consent is not granted.");
+    }
+  }
+
+  @Transactional
   public RequestView submit(RequestCommand command) {
     ensureNotice();
     TenantScope scope = TenantContext.require();
@@ -185,6 +240,14 @@ public class SchoolPrivacyService {
     row.setResponseNote(clip(command == null ? null : command.note(), 2000));
     row.setUpdatedAt(Instant.now());
     return toView(requests.save(row));
+  }
+
+  private boolean modelGranted(TenantScope scope) {
+    return consents
+        .findByOrganizationIdAndSubjectRefAndPurposeCode(
+            scope.organizationId(), subjectRef(scope), MODEL_AND_BULK_MESSAGES)
+        .map(row -> "GRANTED".equals(row.getStatus()) && row.getWithdrawnAt() == null)
+        .orElse(false);
   }
 
   private boolean optionalAllowed(TenantScope scope) {

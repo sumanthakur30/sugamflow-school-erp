@@ -2,6 +2,7 @@ package com.sugamflow.school.cms.service;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.sugamflow.school.cms.integration.ModelConsentClient;
 import com.sugamflow.school.cms.integration.SubscriptionEntitlementsClient;
 import java.util.LinkedHashMap;
 import java.util.Locale;
@@ -23,6 +24,7 @@ public class CmsAiAssistService {
   private static final String FEATURE = "FEATURE_WEBSITE_AI";
 
   private final SubscriptionEntitlementsClient entitlementsClient;
+  private final ModelConsentClient modelConsent;
   private final RestClient.Builder restClientBuilder;
   private final ObjectMapper objectMapper;
   private final String apiUrl;
@@ -31,12 +33,14 @@ public class CmsAiAssistService {
 
   public CmsAiAssistService(
       SubscriptionEntitlementsClient entitlementsClient,
+      ModelConsentClient modelConsent,
       RestClient.Builder restClientBuilder,
       ObjectMapper objectMapper,
       @Value("${cms.ai.api-url:}") String apiUrl,
       @Value("${cms.ai.api-key:}") String apiKey,
       @Value("${cms.ai.model:gpt-4o-mini}") String model) {
     this.entitlementsClient = entitlementsClient;
+    this.modelConsent = modelConsent;
     this.restClientBuilder = restClientBuilder;
     this.objectMapper = objectMapper;
     this.apiUrl = apiUrl == null ? "" : apiUrl.trim();
@@ -54,6 +58,11 @@ public class CmsAiAssistService {
     String tone = string(body.get("tone"), "warm and professional");
 
     Map<String, Object> local = localDraft(kind, topic, tone);
+    if (!apiUrl.isBlank() && !apiKey.isBlank() && !modelConsent.allowed(organizationId)) {
+      local.put("fallbackUsed", true);
+      local.put("fallbackReason", "Model and bulk-message consent is not granted.");
+      return local;
+    }
     if (!apiUrl.isBlank() && !apiKey.isBlank()) {
       try {
         Map<String, Object> external = callExternal(kind, topic, tone);

@@ -93,7 +93,7 @@ export class PortalSectionComponent implements OnInit, OnDestroy {
         const section = boot?.sections?.[this.sectionKey];
         this.title = section?.title || this.sectionKey;
         this.emptyMessage = section?.emptyMessage || this.defaultEmptyMessage;
-        this.apiPath = section?.apiPath || '';
+        this.apiPath = this.livePath(this.sectionKey, section?.apiPath || '');
         if (!boot?.featureEnabled) {
           this.loading = false;
           this.rows = [];
@@ -131,6 +131,11 @@ export class PortalSectionComponent implements OnInit, OnDestroy {
     return SECTION_COLUMNS[this.sectionKey] || SECTION_COLUMNS['students'];
   }
 
+  get dueTotalLabel(): string {
+    const total = this.rows.reduce((sum, row) => sum + this.balanceDue(row), 0);
+    return this.formatCurrency(total);
+  }
+
   get filteredRows(): PortalRow[] {
     const query = this.searchQuery.trim().toLocaleLowerCase();
     return this.rows.filter((row) => {
@@ -144,7 +149,7 @@ export class PortalSectionComponent implements OnInit, OnDestroy {
       return this.columns.some((column) =>
         String(this.rawCellValue(row, column) ?? '').toLocaleLowerCase().includes(query),
       );
-    });
+    }).sort((left, right) => Number(this.canPay(right)) - Number(this.canPay(left)));
   }
 
   get statusOptions(): string[] {
@@ -170,6 +175,21 @@ export class PortalSectionComponent implements OnInit, OnDestroy {
     this.statusFilter = '';
   }
 
+  /** Stored portal settings still name a few retired list routes. */
+  private livePath(sectionKey: string, apiPath: string): string {
+    const current: Record<string, string> = {
+      '/api/fee/records': '/api/fee/collections',
+      '/api/attendance/records': '/api/attendance/marks/mine',
+      '/api/attendance/marks': '/api/attendance/marks/mine',
+      '/api/exam/records': '/api/exam/marks/published',
+      '/api/exam/marks': '/api/exam/marks/published',
+    };
+    if (sectionKey === 'fees' && !apiPath) {
+      return '/api/fee/collections';
+    }
+    return current[apiPath] || apiPath;
+  }
+
   private load(apiPath: string): void {
     this.loading = true;
     this.error = '';
@@ -187,15 +207,47 @@ export class PortalSectionComponent implements OnInit, OnDestroy {
   }
 
   canPay(row: PortalRow): boolean {
-    if (this.sectionKey !== 'fees') {
+    return this.sectionKey === 'fees' && this.balanceDue(row) > 0 && !this.isSettled(row);
+  }
+
+  canReceipt(row: PortalRow): boolean {
+    if (this.sectionKey !== 'fees' || !row?.id) {
       return false;
     }
-    const status = String(row?.status || '').toUpperCase();
-    return status !== 'APPROVED' && status !== 'REJECTED';
+    const status = String(row.status || '').toUpperCase();
+    return status !== 'REJECTED' && this.isSettled(row);
+  }
+
+  payableLabel(row: PortalRow): string {
+    return this.formatCurrency(this.balanceDue(row));
+  }
+
+  downloadReceipt(row: PortalRow): void {
+    if (!row?.id) {
+      return;
+    }
+    this.busy = true;
+    this.error = '';
+    this.api.getBlob(`/api/fee/collections/${row.id}/receipt`).subscribe({
+      next: (blob) => {
+        this.busy = false;
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        const receiptNo = String(row.answers?.['receiptNo'] || row.id).trim();
+        link.download = `fee-receipt-${receiptNo}.pdf`;
+        link.click();
+        setTimeout(() => URL.revokeObjectURL(url), 30_000);
+      },
+      error: () => {
+        this.busy = false;
+        this.error = 'The receipt file is not ready yet.';
+      },
+    });
   }
 
   payOnline(row: PortalRow): void {
-    const amount = Number(row?.answers?.['amount'] ?? 0);
+    const amount = this.balanceDue(row);
     if (!amount || amount <= 0) {
       this.error = 'A payable amount is not available for this fee.';
       return;
@@ -324,6 +376,18 @@ export class PortalSectionComponent implements OnInit, OnDestroy {
   }
 
   displayValue(row: PortalRow, column: DisplayColumn): string {
+    if (this.sectionKey === 'fees' && column.kind === 'currency') {
+      const due = this.balanceDue(row);
+      return this.formatCurrency(due > 0 ? due : this.recordedAmount(row));
+    }
+    if (this.sectionKey === 'fees' && column.kind === 'status') {
+      if (this.balanceDue(row) > 0 && !this.isSettled(row)) {
+        return 'Due';
+      }
+      if (this.isSettled(row) && String(row.status || '').toUpperCase() !== 'REJECTED') {
+        return 'Paid';
+      }
+    }
     const value = this.rawCellValue(row, column);
     if (column.kind === 'date') {
       return this.formatDate(value);
@@ -402,6 +466,27 @@ export class PortalSectionComponent implements OnInit, OnDestroy {
     return Number.isNaN(date.getTime())
       ? String(value)
       : new Intl.DateTimeFormat('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }).format(date);
+  }
+
+  private balanceDue(row: PortalRow): number {
+    const remaining = Number(row?.answers?.['remaining']);
+    if (Number.isFinite(remaining)) {
+      return Math.max(0, remaining);
+    }
+    if (this.isSettled(row)) {
+      return 0;
+    }
+    return Math.max(0, this.recordedAmount(row));
+  }
+
+  private recordedAmount(row: PortalRow): number {
+    const amount = Number(row?.answers?.['netPayable'] ?? row?.answers?.['amount'] ?? 0);
+    return Number.isFinite(amount) ? amount : 0;
+  }
+
+  private isSettled(row: PortalRow): boolean {
+    const status = String(row?.status || row?.answers?.['paymentStatus'] || '').toUpperCase();
+    return ['APPROVED', 'PAID', 'CAPTURED'].includes(status);
   }
 
   private formatCurrency(value: unknown): string {

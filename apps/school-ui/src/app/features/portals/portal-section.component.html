@@ -16,8 +16,13 @@
     </button>
   </div>
 
+  @if (sectionKey === 'attendance') {
+    <p class="panel">These are the marks the teacher submitted. A roll that is still a draft is not shown.</p>
+  }
+
   @if (sectionKey === 'fees') {
-    <p class="panel">Open dues stay with the school fee desk. This page shows the fee records already collected or demanded for the linked student.</p>
+    <p class="panel">Pay an open due here. After the school records the payment, the receipt stays on this page.</p>
+    <p class="due-total">Due now {{ dueTotalLabel }}</p>
   }
 
   @if (error) {
@@ -119,7 +124,11 @@
                   <td data-label="Action" class="action-cell">
                     @if (canPay(row)) {
                       <button type="button" class="pay-button" (click)="payOnline(row)" [disabled]="busy">
-                        {{ busy ? 'Please wait…' : 'Pay online' }}
+                        {{ busy ? 'Please wait…' : 'Pay ' + payableLabel(row) }}
+                      </button>
+                    } @else if (canReceipt(row)) {
+                      <button type="button" class="pay-button" (click)="downloadReceipt(row)" [disabled]="busy">
+                        Receipt
                       </button>
                     } @else {
                       <span class="muted">No action needed</span>
