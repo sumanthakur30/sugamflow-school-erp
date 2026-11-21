@@ -11,6 +11,7 @@ import static org.mockito.Mockito.when;
 import com.sugamflow.school.common.tenant.TenantContext;
 import com.sugamflow.school.common.tenant.TenantScope;
 import com.sugamflow.school.exam.integration.AcademicClient;
+import com.sugamflow.school.exam.integration.AttendanceSummaryClient;
 import com.sugamflow.school.exam.integration.StudentAccessClient;
 import com.sugamflow.school.exam.integration.StudentDirectoryClient;
 import com.sugamflow.school.exam.persistence.entity.ExamDefinitionEntity;
@@ -37,6 +38,7 @@ class ReportCardServiceTest {
   @Mock private StudentDirectoryClient directory;
   @Mock private StudentAccessClient studentAccess;
   @Mock private GradingSupport grading;
+  @Mock private AttendanceSummaryClient attendance;
   @InjectMocks private ReportCardService service;
 
   @AfterEach
@@ -133,5 +135,89 @@ class ReportCardServiceTest {
     // 30/100 = 30% -> below 33 -> FAIL, grade F
     assertEquals("F", student.get("overallGrade"));
     assertEquals("FAIL", student.get("result"));
+  }
+
+  @Test
+  void missingMarkIsListedAndASavedZeroStillCounts() {
+    TenantContext.set(new TenantScope("demo-school", "main", "2025-26", "admin", "SHOP_OWNER"));
+    UUID sectionId = UUID.randomUUID();
+    UUID mathId = UUID.randomUUID();
+    UUID sciId = UUID.randomUUID();
+    UUID ashaId = UUID.randomUUID();
+    UUID rohanId = UUID.randomUUID();
+    UUID mathDef = UUID.randomUUID();
+    UUID sciDef = UUID.randomUUID();
+
+    when(academic.getSection(any(), eq(sectionId.toString())))
+        .thenReturn(Map.of("studentLabel", "Grade 8-A"));
+    when(academic.listSubjects(any()))
+        .thenReturn(
+            List.of(
+                Map.of("id", mathId.toString(), "name", "Mathematics"),
+                Map.of("id", sciId.toString(), "name", "Science")));
+    ExamDefinitionEntity math = def(mathDef, sectionId, mathId, "100");
+    math.setName("Unit test");
+    ExamDefinitionEntity science = def(sciDef, sectionId, sciId, "50");
+    science.setName("Half yearly");
+    when(definitions.findByOrganizationIdAndSectionIdAndTermKeyAndStatusOrderByNameAsc(
+            "demo-school", sectionId, "TERM1", "PUBLISHED"))
+        .thenReturn(List.of(math, science));
+
+    ExamMarkEntity ashaMath = mark(ashaId, "0");
+    ExamMarkEntity ashaScience = mark(ashaId, "40");
+    ExamMarkEntity rohanMath = mark(rohanId, "0");
+    when(marks.findByExamDefinitionIdOrderByStudentNameAsc(mathDef))
+        .thenReturn(List.of(ashaMath, rohanMath));
+    when(marks.findByExamDefinitionIdOrderByStudentNameAsc(sciDef)).thenReturn(List.of(ashaScience));
+    when(directory.listByClassSection(any(), eq("Grade 8-A"), anyInt()))
+        .thenReturn(
+            List.of(
+                Map.of("id", ashaId.toString(), "admissionNo", "ADM-1", "fullName", "Asha"),
+                Map.of("id", rohanId.toString(), "admissionNo", "ADM-2", "fullName", "Rohan")));
+
+    Map<String, Object> report = service.sectionTermReport(sectionId, "TERM1", true);
+    @SuppressWarnings("unchecked")
+    List<Map<String, Object>> students = (List<Map<String, Object>>) report.get("students");
+    Map<String, Object> asha = studentNamed(students, "Asha");
+    Map<String, Object> rohan = studentNamed(students, "Rohan");
+
+    assertEquals(0, ((BigDecimal) subject(asha, "Mathematics").get("marksObtained")).compareTo(BigDecimal.ZERO));
+    assertEquals(new BigDecimal("40"), subject(asha, "Science").get("marksObtained"));
+    assertEquals(Boolean.TRUE, asha.get("complete"));
+
+    assertEquals(0, ((BigDecimal) subject(rohan, "Mathematics").get("marksObtained")).compareTo(BigDecimal.ZERO));
+    assertNull(subject(rohan, "Science").get("marksObtained"));
+    assertEquals(Boolean.FALSE, rohan.get("complete"));
+
+    @SuppressWarnings("unchecked")
+    List<Map<String, Object>> missing = (List<Map<String, Object>>) report.get("missingMarks");
+    assertEquals(1, missing.size());
+    assertEquals("Rohan", missing.get(0).get("studentName"));
+    assertEquals("Science", missing.get(0).get("subject"));
+    assertEquals("Half yearly", missing.get(0).get("exam"));
+  }
+
+  private static ExamMarkEntity mark(UUID studentId, String obtained) {
+    ExamMarkEntity entity = new ExamMarkEntity();
+    entity.setStudentId(studentId);
+    entity.setMarksObtained(new BigDecimal(obtained));
+    return entity;
+  }
+
+  @SuppressWarnings("unchecked")
+  private static Map<String, Object> studentNamed(List<Map<String, Object>> students, String name) {
+    return students.stream()
+        .filter(row -> name.equals(row.get("studentName")))
+        .findFirst()
+        .orElseThrow();
+  }
+
+  @SuppressWarnings("unchecked")
+  private static Map<String, Object> subject(Map<String, Object> student, String name) {
+    List<Map<String, Object>> subjects = (List<Map<String, Object>>) student.get("subjects");
+    return subjects.stream()
+        .filter(row -> name.equals(row.get("name")))
+        .findFirst()
+        .orElseThrow();
   }
 }
