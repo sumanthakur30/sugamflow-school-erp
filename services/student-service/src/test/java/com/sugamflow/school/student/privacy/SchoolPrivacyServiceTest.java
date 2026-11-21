@@ -72,6 +72,28 @@ class SchoolPrivacyServiceTest {
   }
 
   @Test
+  void modelAndBulkStaysOffUntilThisSchoolGrantsItAndIsNotShownAsNoticeText() {
+    assertFalse(service.modelAndBulkGranted());
+    assertThrows(ResponseStatusException.class, () -> service.requireModelAndBulk());
+    String shown = service.purposes().stream().map(p -> p.description()).reduce("", (a, b) -> a + b);
+    assertFalse(shown.contains("DRAFT FOR COUNSEL"));
+
+    service.grantModelAndBulk("GRANT", "child-1");
+    assertTrue(service.modelAndBulkGranted());
+    assertEquals("child-1", storedConsents.get(0).getChildRef());
+    assertEquals(SchoolPrivacyService.MODEL_AND_BULK_PURPOSE_DRAFT, storedConsents.get(0).getPurposeText());
+    assertEquals("user-1", storedConsents.get(0).getSubjectRef());
+
+    TenantContext.set(new TenantScope("org-2", "branch-1", "session-1", "user-1", "ADMIN"));
+    assertFalse(service.modelAndBulkGranted());
+
+    TenantContext.set(new TenantScope("org-1", "branch-1", "session-1", "user-1", "ADMIN"));
+    service.grantModelAndBulk("WITHDRAW", "child-1");
+    assertFalse(service.modelAndBulkGranted());
+    org.junit.jupiter.api.Assertions.assertNotNull(storedConsents.get(storedConsents.size() - 1).getWithdrawnAt());
+  }
+
+  @Test
   void schoolOperationsCannotBeWithdrawn() {
     ResponseStatusException ex =
         assertThrows(

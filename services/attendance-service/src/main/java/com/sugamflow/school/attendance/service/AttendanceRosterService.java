@@ -394,6 +394,7 @@ public class AttendanceRosterService {
       return List.of();
     }
     List<Map<String, Object>> out = new ArrayList<>();
+    Map<UUID, String> classLabels = new LinkedHashMap<>();
     for (String studentId : access.studentIds()) {
       UUID id = parseUuid(studentId);
       if (id == null) {
@@ -406,7 +407,7 @@ public class AttendanceRosterService {
         if (session == null || "DRAFT".equals(session.getStatus())) {
           continue;
         }
-        out.add(markToMap(m, session));
+        out.add(parentMark(scope, m, session, classLabels));
       }
     }
     for (String admission : access.admissionNos()) {
@@ -421,10 +422,41 @@ public class AttendanceRosterService {
         if (session == null || "DRAFT".equals(session.getStatus())) {
           continue;
         }
-        out.add(markToMap(m, session));
+        out.add(parentMark(scope, m, session, classLabels));
       }
     }
     return out;
+  }
+
+  private Map<String, Object> parentMark(
+      TenantScope scope,
+      AttendanceMarkEntity mark,
+      AttendanceSessionEntity session,
+      Map<UUID, String> classLabels) {
+    Map<String, Object> row = markToMap(mark, session);
+    row.put("markStatus", mark.getStatus());
+    row.put("attendanceDate", session.getAttendanceDate().toString());
+    row.put("classSection", classLabel(scope, session, classLabels));
+    return row;
+  }
+
+  private String classLabel(
+      TenantScope scope, AttendanceSessionEntity session, Map<UUID, String> classLabels) {
+    return classLabels.computeIfAbsent(
+        session.getSectionId(),
+        id -> {
+          try {
+            Map<String, Object> section = academic.getSection(scope, id.toString());
+            if (section == null) {
+              return "";
+            }
+            String label =
+                firstNonBlank(asString(section.get("studentLabel")), asString(section.get("name")));
+            return label == null ? "" : label;
+          } catch (RuntimeException ex) {
+            return "";
+          }
+        });
   }
 
   private Map<String, Object> transition(UUID sessionId, String status) {

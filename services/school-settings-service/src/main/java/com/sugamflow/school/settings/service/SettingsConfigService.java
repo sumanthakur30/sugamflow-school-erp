@@ -423,7 +423,8 @@ public class SettingsConfigService {
       case "/api/attendance/records",
           "/api/exam/records",
           "/api/exam/marks",
-          "/api/attendance/marks" -> true;
+          "/api/attendance/marks",
+          "/api/fee/records" -> true;
       default -> false;
     };
   }
