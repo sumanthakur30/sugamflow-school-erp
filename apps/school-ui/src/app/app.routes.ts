@@ -527,6 +527,20 @@ export const routes: Routes = [
           ),
       },
       {
+        path: 'admin/ask',
+        canActivate: [featureGuard],
+        data: { roles: [...PLATFORM_ADMIN_ROLES, 'PRINCIPAL', 'ACCOUNTANT'] },
+        loadComponent: () =>
+          import('./features/ask/ask-school.component').then((m) => m.AskSchoolComponent),
+      },
+      {
+        path: 'admin/college',
+        canActivate: [featureGuard],
+        data: { roles: [...PLATFORM_ADMIN_ROLES, 'PRINCIPAL'] },
+        loadComponent: () =>
+          import('./features/college/college-mode.component').then((m) => m.CollegeModeComponent),
+      },
+      {
         path: 'admin/settings/setup',
         canActivate: [featureGuard],
         data: { roles: [...PLATFORM_ADMIN_ROLES, 'PRINCIPAL'] },

@@ -685,6 +685,54 @@ public class StudentRecordService {
   }
 
   /**
+   * Short desk enrollment: name, class, parent, and mobile. Admission number uses the school format.
+   * Government IDs stay on the student profile.
+   */
+  @Transactional
+  public Map<String, Object> quickAdd(Map<String, Object> body) {
+    Map<String, Object> source = body != null ? body : Map.of();
+    String name = stringOr(source.get("fullName"), "");
+    String className = stringOr(source.get("className"), stringOr(source.get("classApplied"), ""));
+    String section = stringOr(source.get("section"), "");
+    String mobile = stringOr(source.get("mobile"), "");
+    String parentName = stringOr(source.get("parentName"), "");
+    if (name.isBlank() || className.isBlank() || mobile.isBlank() || parentName.isBlank()) {
+      throw new StudentException(
+          "VALIDATION", "Student name, class, parent name, and mobile are required");
+    }
+    String classLabel = section.isBlank() ? className.trim() : className.trim() + "-" + section.trim();
+    String grade = className.trim();
+    if (grade.regionMatches(true, 0, "Grade ", 0, 6)) {
+      grade = grade.substring(6).trim();
+    }
+    Map<String, Object> answers = new LinkedHashMap<>();
+    answers.put("fullName", name.trim());
+    answers.put("classApplied", classLabel);
+    answers.put("classSection", classLabel);
+    answers.put("classGrade", grade);
+    if (!section.isBlank()) {
+      answers.put("sectionLetter", section.trim());
+    }
+    answers.put("mobile", mobile.trim());
+    answers.put("fatherName", parentName.trim());
+    answers.put("fatherMobile", mobile.trim());
+    String dob = stringOr(source.get("dateOfBirth"), "");
+    if (!dob.isBlank()) {
+      answers.put("dateOfBirth", dob.trim());
+    }
+    String gender = stringOr(source.get("gender"), "");
+    if (!gender.isBlank()) {
+      answers.put("gender", gender.trim());
+    }
+    Map<String, Object> payload = new LinkedHashMap<>();
+    payload.put("answers", answers);
+    payload.put("status", "ACTIVE");
+    payload.put("historyType", "ADDED");
+    payload.put("historyMessage", "Added from the student list");
+    return createFromImport(payload);
+  }
+
+  /**
    * Create (or upsert by admissionNo) a student from Import Workbench. Body: answers map matching
    * student_master form keys. Idempotent when admissionNo already exists for the org.
    *
@@ -750,11 +798,11 @@ public class StudentRecordService {
 
     List<Map<String, Object>> history = new ArrayList<>();
     Map<String, Object> event = new LinkedHashMap<>();
-    event.put("type", "IMPORTED");
+    event.put("type", stringOr(body.get("historyType"), "IMPORTED"));
     event.put("at", Instant.now().toString());
     event.put("userId", scope.userId());
     event.put("role", scope.roleCode());
-    event.put("message", "Created from Import Workbench");
+    event.put("message", stringOr(body.get("historyMessage"), "Created from Import Workbench"));
     history.add(event);
     entity.setHistory(history);
 

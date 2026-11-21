@@ -3,6 +3,7 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { ApiService } from '../../core/api.service';
+import { AuthSessionService } from '../../core/auth-session.service';
 import { previewAdmissionNumber } from './admission-number.util';
 
 @Component({
@@ -14,11 +15,16 @@ import { previewAdmissionNumber } from './admission-number.util';
 })
 export class SchoolSetupComponent implements OnInit {
   private readonly api = inject(ApiService);
+  private readonly auth = inject(AuthSessionService);
 
   busy = false;
   error = '';
   admissionStatus = '';
   feeStatus = '';
+  nameStatus = '';
+  schoolName = '';
+  sessionId = '';
+  private themeDoc: Record<string, unknown> | null = null;
   private admissionDoc: Record<string, unknown> | null = null;
 
   prefix = 'ADM';
@@ -32,6 +38,16 @@ export class SchoolSetupComponent implements OnInit {
   frequency = 'Y';
 
   ngOnInit(): void {
+    this.sessionId = this.auth.getSessionId();
+    this.api.get<any>('/api/config/design-studio/theme').subscribe({
+      next: (theme) => {
+        this.themeDoc = theme;
+        this.schoolName = String(theme?.branding?.schoolName || '');
+      },
+      error: () => {
+        this.schoolName = '';
+      },
+    });
     this.api.get<any>('/api/config/modules/admission').subscribe({
       next: (doc) => {
         this.admissionDoc = doc;
@@ -44,6 +60,34 @@ export class SchoolSetupComponent implements OnInit {
       },
       error: () => {
         this.error = 'Admission settings could not be loaded.';
+      },
+    });
+  }
+
+  saveSchoolName(): void {
+    const name = this.schoolName.trim();
+    if (!name) {
+      this.error = 'Enter the school name.';
+      return;
+    }
+    const theme = {
+      ...(this.themeDoc || {}),
+      branding: {
+        ...((this.themeDoc?.['branding'] as Record<string, unknown>) || {}),
+        schoolName: name,
+      },
+    };
+    this.busy = true;
+    this.error = '';
+    this.api.put('/api/config/design-studio/theme', theme).subscribe({
+      next: (saved) => {
+        this.busy = false;
+        this.themeDoc = saved as Record<string, unknown>;
+        this.nameStatus = 'School name saved.';
+      },
+      error: (err) => {
+        this.busy = false;
+        this.error = err?.error?.message ?? 'School name was not saved.';
       },
     });
   }

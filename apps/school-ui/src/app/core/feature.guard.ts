@@ -4,6 +4,7 @@ import { map } from 'rxjs';
 import { AuthSessionService } from './auth-session.service';
 import { EntitlementsService } from './entitlements.service';
 import { featureDeniedUrl, roleHome } from './role-home';
+import { roleKey } from './role-label';
 
 /** Route data: { feature?: string, roles?: string[], permissions?: string[] } */
 export const featureGuard: CanActivateFn = (route) => {
@@ -18,10 +19,10 @@ export const featureGuard: CanActivateFn = (route) => {
   const feature = route.data?.['feature'] as string | undefined;
   const roles = route.data?.['roles'] as string[] | undefined;
   const permissions = route.data?.['permissions'] as string[] | undefined;
-  const role = (auth.getRole() || '').toUpperCase();
+  const role = roleKey(auth.getRole());
 
   if (roles?.length) {
-    const ok = roles.map((r) => r.toUpperCase()).includes(role);
+    const ok = roles.some((allowed) => roleKey(allowed) === role);
     if (!ok) {
       const home = roleHome(role);
       // Prevent infinite redirects when home is this same guarded route.

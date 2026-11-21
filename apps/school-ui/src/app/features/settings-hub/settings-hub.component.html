@@ -12,6 +12,26 @@
   }
 
   <div class="panel">
+    <h3>What kind of institution is this?</h3>
+    <p class="muted">
+      A small school starts with students, fees, attendance, and exams.
+      Large school adds transport, library, payroll, and campuses when the subscription includes them.
+    </p>
+    <label>
+      Institution
+      <select [ngModel]="preset" (ngModelChange)="savePreset($event)" name="preset">
+        <option value="small">Small school</option>
+        <option value="large">Large school</option>
+        <option value="coaching">Coaching or batch institute</option>
+        <option value="college">College</option>
+      </select>
+    </label>
+    @if (presetStatus) {
+      <p role="status">{{ presetStatus }}</p>
+    }
+  </div>
+
+  <div class="panel">
     <h3>Configuration</h3>
     <table>
       <thead>
