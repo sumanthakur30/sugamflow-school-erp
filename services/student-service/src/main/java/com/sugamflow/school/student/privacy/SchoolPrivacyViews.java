@@ -32,6 +32,8 @@ public final class SchoolPrivacyViews {
 
   public record ConsentCommand(String purposeCode, String action) {}
 
+  public record ModelConsentCommand(String action, String childRef) {}
+
   public record RequestCommand(String dataCategory, String subjectLabel, String requestType, String detail) {}
 
   public record CompleteCommand(String note) {}

@@ -35,6 +35,32 @@ public class MasterDataClient {
     this.properties = properties;
   }
 
+  /** Fail closed. A missing consent row, or a failed call, means the external model must not run. */
+  public boolean modelAndBulkAllowed(TenantScope scope) {
+    try {
+      String url =
+          properties.getIntegrations().getStudentBaseUrl().replaceAll("/$", "")
+              + "/api/student/privacy/model-and-bulk";
+      Map<String, Object> envelope =
+          restClientBuilder
+              .build()
+              .get()
+              .uri(url)
+              .headers(h -> TenantHeaders.apply(h, scope))
+              .retrieve()
+              .body(MAP_TYPE);
+      if (envelope == null) {
+        return false;
+      }
+      Object data = envelope.get("data");
+      Object allowed = data instanceof Map<?, ?> map ? map.get("allowed") : envelope.get("allowed");
+      return Boolean.TRUE.equals(allowed);
+    } catch (Exception ex) {
+      log.info("Model consent check failed closed: {}", ex.getMessage());
+      return false;
+    }
+  }
+
   public List<Map<String, Object>> listStudentProjections(TenantScope scope) {
     Map<String, Map<String, Object>> byId = new LinkedHashMap<>();
     for (Map<String, Object> row : pageAll(scope, studentDirectoryUrl(0), "directory")) {

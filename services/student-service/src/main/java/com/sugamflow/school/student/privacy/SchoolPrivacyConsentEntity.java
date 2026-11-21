@@ -19,8 +19,14 @@ public class SchoolPrivacyConsentEntity {
   @Column(name = "subject_ref", nullable = false, length = 128)
   private String subjectRef;
 
+  @Column(name = "child_ref", length = 64)
+  private String childRef;
+
   @Column(name = "purpose_code", nullable = false, length = 80)
   private String purposeCode;
+
+  @Column(name = "purpose_text")
+  private String purposeText;
 
   @Column(name = "legal_ground", nullable = false, length = 20)
   private String legalGround;
@@ -52,8 +58,12 @@ public class SchoolPrivacyConsentEntity {
   public void setOrganizationId(String organizationId) { this.organizationId = organizationId; }
   public String getSubjectRef() { return subjectRef; }
   public void setSubjectRef(String subjectRef) { this.subjectRef = subjectRef; }
+  public String getChildRef() { return childRef; }
+  public void setChildRef(String childRef) { this.childRef = childRef; }
   public String getPurposeCode() { return purposeCode; }
   public void setPurposeCode(String purposeCode) { this.purposeCode = purposeCode; }
+  public String getPurposeText() { return purposeText; }
+  public void setPurposeText(String purposeText) { this.purposeText = purposeText; }
   public String getLegalGround() { return legalGround; }
   public void setLegalGround(String legalGround) { this.legalGround = legalGround; }
   public String getNoticeCode() { return noticeCode; }
