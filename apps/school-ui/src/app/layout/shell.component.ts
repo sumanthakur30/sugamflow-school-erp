@@ -125,11 +125,11 @@ export class ShellComponent implements OnInit {
 
   refreshNav(): void {
     const role = roleKey(this.auth.getRole());
-    const portalOnly = role === 'PARENT' || role === 'STUDENT';
     const teacherPortal = role === 'TEACHER';
 
     const keep = (item: NavItem): boolean => {
-      if (portalOnly) return item.path === '/parent';
+      if (role === 'PARENT' || role === 'GUARDIAN') return item.path === '/parent';
+      if (role === 'STUDENT') return item.path === '/student';
       if (teacherPortal) {
         return item.path === '/teacher' || item.path === '/admin/dashboard';
       }

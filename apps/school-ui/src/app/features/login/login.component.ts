@@ -11,7 +11,8 @@ export type LoginDestination =
   | 'accountant'
   | 'reception'
   | 'librarian'
-  | 'parent';
+  | 'parent'
+  | 'student';
 
 interface DestinationOption {
   value: LoginDestination;
@@ -52,6 +53,7 @@ export class LoginComponent implements OnInit {
     { value: 'reception', label: 'Reception', path: '/admin/dashboard', activeRole: 'RECEPTION' },
     { value: 'librarian', label: 'Librarian', path: '/admin/library', activeRole: 'LIBRARIAN' },
     { value: 'parent', label: 'Parent App', path: '/parent', activeRole: 'PARENT' },
+    { value: 'student', label: 'Student', path: '/student', activeRole: 'STUDENT' },
   ];
   error = '';
   success = '';
@@ -107,7 +109,9 @@ export class LoginComponent implements OnInit {
     // If user opened Parent portal deep-link but types a staff/admin username, switch destination.
     const guessed = this.guessDestination(this.username);
     if (
-      (this.destination === 'parent' || this.destination === 'teacher') &&
+      (this.destination === 'parent' ||
+        this.destination === 'teacher' ||
+        this.destination === 'student') &&
       (guessed === 'admin' || guessed === 'principal')
     ) {
       this.destination = guessed;
@@ -161,7 +165,14 @@ export class LoginComponent implements OnInit {
     selected: DestinationOption
   ): DestinationOption {
     const r = (role || '').toUpperCase();
+    const isStudentRole = r === 'STUDENT';
     const isParentRole = r === 'PARENT' || r.includes('PARENT');
+    if (selected.value === 'parent' && isStudentRole) {
+      return this.destinations.find((d) => d.value === 'student') ?? selected;
+    }
+    if (selected.value === 'student' && isParentRole && !isStudentRole) {
+      return this.destinations.find((d) => d.value === 'parent') ?? selected;
+    }
     const isStaffAdmin =
       r.includes('OWNER') ||
       r.includes('ADMIN') ||
@@ -172,6 +183,12 @@ export class LoginComponent implements OnInit {
       r === 'RECEPTION' ||
       r === 'LIBRARIAN';
 
+    if (selected.value === 'student' && !isStudentRole && isStaffAdmin) {
+      if (r.includes('TEACHER')) {
+        return this.destinations.find((d) => d.value === 'teacher') ?? this.destinations[0];
+      }
+      return this.destinations.find((d) => d.value === 'admin') ?? this.destinations[0];
+    }
     if (selected.value === 'parent' && !isParentRole && isStaffAdmin) {
       if (r.includes('TEACHER')) {
         return this.destinations.find((d) => d.value === 'teacher') ?? this.destinations[0];
@@ -190,12 +207,16 @@ export class LoginComponent implements OnInit {
     if (dest.value !== 'teacher' && (returnUrl === '/teacher' || returnUrl.startsWith('/teacher/'))) {
       return dest.path;
     }
+    if (dest.value !== 'student' && (returnUrl === '/student' || returnUrl.startsWith('/student/'))) {
+      return dest.path;
+    }
     return returnUrl;
   }
 
   private guessDestination(username: string): LoginDestination {
     const u = (username || '').trim().toLowerCase();
     if (!u) return 'admin';
+    if (/(^student$|student)/.test(u)) return 'student';
     if (/(parent|guardian|mother|father)/.test(u)) return 'parent';
     if (/(teacher|class.?teacher|faculty)/.test(u)) return 'teacher';
     if (/(account|finance|cashier|accounts)/.test(u)) return 'accountant';

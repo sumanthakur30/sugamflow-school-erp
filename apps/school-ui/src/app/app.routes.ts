@@ -122,6 +122,58 @@ export const routes: Routes = [
     ],
   },
   {
+    path: 'student',
+    canActivate: [authGuard, featureGuard],
+    loadComponent: () =>
+      import('./features/portals/portal-shell.component').then((m) => m.PortalShellComponent),
+    data: {
+      portalKey: 'student',
+      feature: 'FEATURE_PARENT_APP',
+      roles: ['STUDENT', ...CAMPUS_ADMIN_ROLES],
+    },
+    children: [
+      {
+        path: '',
+        loadComponent: () =>
+          import('./features/portals/portal-home.component').then((m) => m.PortalHomeComponent),
+      },
+      {
+        path: 'attendance',
+        loadComponent: () =>
+          import('./features/portals/portal-section.component').then(
+            (m) => m.PortalSectionComponent,
+          ),
+        data: { sectionKey: 'attendance' },
+      },
+      {
+        path: 'exams',
+        loadComponent: () =>
+          import('./features/portals/portal-section.component').then(
+            (m) => m.PortalSectionComponent,
+          ),
+        data: { sectionKey: 'exams' },
+      },
+      {
+        path: 'report-cards',
+        loadComponent: () =>
+          import('./features/portals/parent-report-cards.component').then(
+            (m) => m.ParentReportCardsComponent,
+          ),
+      },
+      {
+        path: 'homework',
+        canActivate: [featureGuard],
+        data: { feature: 'FEATURE_LMS' },
+        loadComponent: () =>
+          import('./features/portals/parent-homework.component').then(
+            (m) => m.ParentHomeworkComponent,
+          ),
+      },
+      portalPage('timetable', 'Timetable', 'timetable'),
+      portalPage('notices', 'Notices', 'notices'),
+    ],
+  },
+  {
     path: 'teacher',
     canActivate: [authGuard, featureGuard],
     loadComponent: () =>
