@@ -1,3 +1,17 @@
+:host {
+  display: block;
+  position: relative;
+  z-index: 2;
+}
+
+:host:has(.slu-host-open) {
+  z-index: 20;
+}
+
+.fee-desk {
+  overflow: visible;
+}
+
 .fee-desk h4 {
   margin: 0 0 0.75rem;
   font-size: 0.95rem;
