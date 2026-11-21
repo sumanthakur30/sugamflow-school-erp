@@ -282,6 +282,7 @@ export const SIDE_NAV: NavGroup[] = [
           roles: ['SHOP_OWNER', 'SUPER_ADMIN', 'ADMIN'],
         },
         { path: '/parent', label: 'Parent App', feature: 'FEATURE_PARENT_APP' },
+        { path: '/student', label: 'Student', feature: 'FEATURE_PARENT_APP' },
         { path: '/teacher', label: 'Teacher App', feature: 'FEATURE_TEACHER_APP' },
       ],
     },

@@ -42,7 +42,7 @@ public class SettingsConfigService {
       List.of(
           "admission", "attendance", "fee", "student", "staff", "payroll", "transport", "hostel", "exam", "library",
           "lms",
-          "parent_portal", "teacher_portal", "offline",
+          "parent_portal", "teacher_portal", "student_portal", "offline",
           "communication", "inventory", "notification", "security", "ai", "dashboard", "workflow",
           "printing");
 
@@ -175,6 +175,9 @@ public class SettingsConfigService {
               if (PortalCatalog.MODULE_TEACHER.equals(moduleKey)) {
                 settings.putAll(PortalCatalog.defaultTeacherSettings());
               }
+              if (PortalCatalog.MODULE_STUDENT.equals(moduleKey)) {
+                settings.putAll(PortalCatalog.defaultStudentSettings());
+              }
               if (OfflineCatalog.MODULE_KEY.equals(moduleKey)) {
                 settings.putAll(OfflineCatalog.defaultSettings());
               }
@@ -301,6 +304,15 @@ public class SettingsConfigService {
       }
       return changed;
     }
+    if (PortalCatalog.MODULE_STUDENT.equals(ms.getModuleKey())) {
+      Map<String, Object> settings =
+          ms.getSettings() != null ? new LinkedHashMap<>(ms.getSettings()) : new LinkedHashMap<>();
+      boolean changed = applyStudentPortalDefaults(settings);
+      if (changed) {
+        ms.setSettings(settings);
+      }
+      return changed;
+    }
     if (OfflineCatalog.MODULE_KEY.equals(ms.getModuleKey())) {
       Map<String, Object> settings =
           ms.getSettings() != null ? new LinkedHashMap<>(ms.getSettings()) : new LinkedHashMap<>();
@@ -327,6 +339,10 @@ public class SettingsConfigService {
 
   private static boolean applyTeacherPortalDefaults(Map<String, Object> settings) {
     return mergePortalDefaults(settings, PortalCatalog.defaultTeacherSettings());
+  }
+
+  private static boolean applyStudentPortalDefaults(Map<String, Object> settings) {
+    return mergePortalDefaults(settings, PortalCatalog.defaultStudentSettings());
   }
 
   /**

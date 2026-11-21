@@ -114,7 +114,7 @@ Status words:
 | Admin shell | Working | Simple daily nav plus More |
 | Parent web | Partial | Attendance, fees, exams, report cards, homework |
 | Teacher web | Partial | Students, attendance, gradebook, report cards, homework |
-| Student web | Absent | No student route parallel to parent and teacher |
+| Student web | Partial | `/student` shows attendance, results, and notices. Fee payment stays on the parent phone |
 | Native mobile apps | Absent in this repo | |
 | Ask | Partial | Three example questions, keyword dispatch, read-only |
 | AI settings | Partial | Boolean flags |
